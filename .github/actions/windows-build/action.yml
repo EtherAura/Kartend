@@ -29,7 +29,8 @@ inputs:
     description: >-
       Value for CMAKE_C/CXX_COMPILER_LAUNCHER (e.g. "sccache"), or empty for
       none. When "sccache" the caller must have run mozilla-actions/sccache-action
-      first; this action then also sets SCCACHE_GHA_ENABLED for configure + build.
+      first; this action then also sets SCCACHE_GHA_ENABLED and
+      SCCACHE_IDLE_TIMEOUT for configure + build.
     default: ''
   stage:
     description: >-
@@ -106,6 +107,15 @@ runs:
       env:
         VCPKG_BINARY_SOURCES: 'clear;files,${{ github.workspace }}\vcpkg-cache,readwrite'
         SCCACHE_GHA_ENABLED: ${{ inputs.compiler-launcher == 'sccache' && 'true' || '' }}
+        # Kartend-cdklm: keep the sccache server alive for the whole job.
+        # Its default idle timeout is 600s, and this build spends ~62 min
+        # LINKING after the last compile — so by the time the caller's
+        # "sccache stats" step ran, the server that did the work had long
+        # since exited and the client silently started a fresh one, which
+        # duly reported "Compile requests 0". That zero was a measurement
+        # artifact and made the compiler cache look completely dead. 0
+        # disables the idle shutdown; the runner VM is discarded anyway.
+        SCCACHE_IDLE_TIMEOUT: ${{ inputs.compiler-launcher == 'sccache' && '0' || '' }}
       run: |
         $cmakeArgs = @(
           '-S', '.', '-B', 'build', '-G', 'Ninja',
@@ -126,6 +136,15 @@ runs:
       shell: pwsh
       env:
         SCCACHE_GHA_ENABLED: ${{ inputs.compiler-launcher == 'sccache' && 'true' || '' }}
+        # Kartend-cdklm: keep the sccache server alive for the whole job.
+        # Its default idle timeout is 600s, and this build spends ~62 min
+        # LINKING after the last compile — so by the time the caller's
+        # "sccache stats" step ran, the server that did the work had long
+        # since exited and the client silently started a fresh one, which
+        # duly reported "Compile requests 0". That zero was a measurement
+        # artifact and made the compiler cache look completely dead. 0
+        # disables the idle shutdown; the runner VM is discarded anyway.
+        SCCACHE_IDLE_TIMEOUT: ${{ inputs.compiler-launcher == 'sccache' && '0' || '' }}
       run: cmake --build build --parallel
 
     - name: Stage with windeployqt + bundled runtime DLLs

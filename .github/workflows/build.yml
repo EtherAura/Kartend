@@ -832,12 +832,31 @@ jobs:
   # .zip artifact.
   windows-build-test:
     runs-on: windows-latest
-    # Warm runs have crept from ~45 min to ~1h20-1h30 (Kartend-cdklm tracks
-    # profiling that growth) — a green main run once cleared the old 90-min
-    # cap by 13 seconds. 120 restores real margin over a warm run and still
-    # bounds a true hang: the known hang shapes are themselves bounded well
-    # below this (per-test TIMEOUT properties in the ctest phase, re-run
+    # Warm Release runs are 78-109 min; the Debug leg is 12-43 min. 120 keeps
+    # real margin (a green main run once cleared the old 90-min cap by 13s)
+    # and still bounds a true hang, since the known hang shapes are bounded
+    # well below it (per-test TIMEOUT properties in the ctest phase, re-run
     # timeout + step timeout on the diagnostics step; Kartend-yjw52).
+    #
+    # Kartend-cdklm profiled where that time actually goes (run 29763522815,
+    # Release, 79.7 min "Build kartend + tests" = 96% of the job):
+    #
+    #   all compiles   11.8 min
+    #   all links      62.3 min   over 254 link lines (~15 s each)
+    #
+    # So this is a LINK-bound job, not a compile-bound one. That kills the
+    # obvious theories: sccache hit rate and vcpkg cache health together can
+    # only ever reclaim part of ~12 min. The cost is /GL + /LTCG — MSVC
+    # whole-program optimisation, Release-only, propagated to every consumer
+    # through kartend_utils's INTERFACE_LINK_OPTIONS (see
+    # cmake/CompilerFlags.cmake) — being paid once per test executable for
+    # ~250 executables that are never shipped. It is also exactly why the
+    # LTO-free Debug leg is 3-6x faster.
+    #
+    # Two ways out, both tracked, neither safe to do casually: Kartend-wjgjy
+    # (link the app code once as a shared library, cutting the executable
+    # count) and Kartend-qwxy2 (stop paying LTCG on CI test exes, which
+    # trades away CI's only pre-tag check that the LTO link is clean).
     timeout-minutes: 120
     # h4j5s: matrix Release + Debug so Q_ASSERT / debug checks run on Windows
     # too, not just the Release pipeline. fail-fast off so one leg's failure
