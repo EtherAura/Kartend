@@ -542,6 +542,11 @@ jobs:
           ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
 
+      # NOTE: deliberately no -DKARTEND_SLIM_DEBUG_INFO=ON here, unlike the
+      # ASan job. -g1 breaks this job's suppressions — see the
+      # KARTEND_SLIM_DEBUG_INFO block in CMakeLists.txt. The TSan tree is only
+      # ~3.5 GB anyway (vs ~28 GB for ASan), so it was never disk-constrained
+      # and has nothing to gain from the trade.
       - name: Configure CMake (Debug + TSan)
         env:
           CC: clang
@@ -553,7 +558,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DKARTEND_BUILD_TESTS=ON \
             -DKARTEND_ENABLE_TSAN=ON \
-            -DKARTEND_SLIM_DEBUG_INFO=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 

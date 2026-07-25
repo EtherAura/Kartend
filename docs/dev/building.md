@@ -307,7 +307,7 @@ build-dir artifact, not a code or `CMakeLists` bug.
 | `KARTEND_ENABLE_SANITIZERS` | `OFF` | Enable ASan+UBSan (requires `Debug`; configure errors otherwise) |
 | `KARTEND_ENABLE_TSAN` | `OFF` | Enable ThreadSanitizer (requires `Debug`; **mutually exclusive** with `KARTEND_ENABLE_SANITIZERS`) |
 | `KARTEND_ENABLE_COVERAGE` | `OFF` | Enable gcov/lcov instrumentation (Debug only) |
-| `KARTEND_SLIM_DEBUG_INFO` | `OFF` | Emit line tables only (`-g1`) instead of full DWARF. CI's instrumented jobs set this to stay under the runner disk ceiling — it cuts a Debug+ASan test binary from ~513 MiB to ~343 MiB and links faster. Sanitizer stack traces keep `file:line`; what you lose is local-variable inspection in gdb, so leave it `OFF` when debugging a sanitizer finding locally. |
+| `KARTEND_SLIM_DEBUG_INFO` | `OFF` | Emit line tables only (`-g1`) instead of full DWARF. The ASan and coverage CI jobs set this to stay under the runner disk ceiling — it cuts a Debug+ASan test binary from ~513 MiB to ~343 MiB and links faster. Sanitizer stack traces keep `file:line`; what you lose is local-variable inspection in gdb, so leave it `OFF` when debugging a sanitizer finding locally. **Never set it on a TSan build:** the suppressions anchor on inlined template frames that `-g1` stops qualifying, so documented false positives turn into red builds — see [sanitizer-suppressions.md](sanitizer-suppressions.md). |
 | `KARTEND_PORTABLE_RELEASE` | `OFF` | Drop `-march=native`/`-O3`/fast-math for distro packaging; keeps LTO + hardening |
 | `KARTEND_LINKER_MAP` | `OFF` | Emit `kartend.map` next to `.backups/reports/` in Debug builds |
 | `KARTEND_USE_PGO` | `OFF` | Enable Profile-Guided Optimization |

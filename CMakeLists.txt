@@ -201,12 +201,29 @@ endif()
 # executable is why Kartend-wjgjy (link the app code once as a shared library
 # instead of statically into all ~240 test exes) is the real structural fix.
 #
-# Diagnostics are unaffected: verified on the CI toolchain (Ubuntu 24.04)
-# that sanitizer stack traces stay identical down to file:line:col under -g1
-# for GCC 13 + ASan, Clang 18 + ASan and Clang 18 + TSan. -g1 keeps line
-# tables and drops only local-variable DWARF, i.e. exactly the part CI never
-# reads. It stays opt-in so a developer debugging a sanitizer finding in gdb
-# still gets full DWARF by default.
+# Stack traces are unaffected: verified on the CI toolchain (Ubuntu 24.04)
+# that they stay identical down to file:line:col under -g1 for GCC 13 + ASan,
+# Clang 18 + ASan and Clang 18 + TSan. -g1 keeps line tables and drops only
+# local-variable DWARF. It stays opt-in so a developer debugging a sanitizer
+# finding in gdb still gets full DWARF by default.
+#
+# DO NOT ENABLE THIS FOR THE TSan JOBS. Traces surviving is not the same as
+# SUPPRESSIONS surviving, which is what actually bit us (run 30158366991, 3
+# failures). tests/suppressions/tsan.txt anchors Group D2 on frames that exist
+# only as INLINED template frames — `race:NonPromiseTaskResolver` matches the
+# class-qualified name of an inlined frame in qtconcurrentstoredfunctioncall.h.
+# -g1 drops the class-scope DWARF the symbolizer needs to qualify those frames,
+# so they come back as a bare `run`, the anchor stops matching, and documented
+# QtConcurrent false positives fire as real failures. The traces looked fine —
+# they were just spelled differently enough to miss the suppression.
+#
+# ASan/LSan is genuinely safe, not merely lucky: tests/suppressions/lsan.txt
+# anchors on out-of-line symbols (QThreadPool::QThreadPool,
+# ScanService::ScanService) and library names, all resolvable from .symtab
+# without inline reconstruction.
+#
+# The trade never favoured TSan anyway — its tree is ~3.5 GB against ASan's
+# ~28 GB, so it was never the job near the disk ceiling.
 if (KARTEND_SLIM_DEBUG_INFO)
   if (NOT (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
     message(WARNING "KARTEND_SLIM_DEBUG_INFO is only supported on GCC/Clang")

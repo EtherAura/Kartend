@@ -251,6 +251,19 @@ entry still fires (else delete and remove the bd ID).
 - **Don't suppress to make CI green for one PR.** The next PR
   inherits the suppression and now everyone has to remember why
   it's there.
+- **Don't reduce debug info on the TSan build.** Suppressions are
+  matched against *symbolized* frame names, so the debug-info level is
+  part of this file's contract, not an unrelated build knob. Group D2
+  anchors (`NonPromiseTaskResolver` and friends) name frames that exist
+  only as **inlined** template frames; `-g1` drops the class-scope DWARF
+  the symbolizer needs to qualify them, they resolve as a bare `run`,
+  and the anchors silently stop matching. Kartend-bkidv did exactly this
+  and turned three documented QtConcurrent false positives back into red
+  builds (run 30158366991). The stack traces still looked correct —
+  file:line and all — they were just spelled differently enough to miss
+  the anchor, which is what makes this failure mode easy to misread as a
+  new real race. LSan is not exposed the same way: its anchors are
+  out-of-line symbols and library names.
 
 ## Related code
 

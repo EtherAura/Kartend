@@ -80,6 +80,9 @@ jobs:
           ccache --set-config=sloppiness=pch_defines,time_macros
           ccache --zero-stats
 
+      # No -DKARTEND_SLIM_DEBUG_INFO=ON: -g1 breaks the TSan suppressions (see
+      # the KARTEND_SLIM_DEBUG_INFO block in CMakeLists.txt), and this tree is
+      # ~3.5 GB so it has nothing to gain from it.
       - name: Configure CMake (Debug + TSan)
         env:
           CC: clang
@@ -91,7 +94,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DKARTEND_BUILD_TESTS=ON \
             -DKARTEND_ENABLE_TSAN=ON \
-            -DKARTEND_SLIM_DEBUG_INFO=ON \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
