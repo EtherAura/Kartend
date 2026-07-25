@@ -27,7 +27,8 @@ include_directories(
 )
 
 # ---------------------------------------------------------------------------
-# STATIC twins of the per-area OBJECT libs — TEST linking only (Kartend-j0yin).
+# Link twins of the per-area OBJECT libs — TEST linking only (Kartend-j0yin,
+# made SHARED where possible by Kartend-wjgjy).
 #
 # The app target keeps linking the OBJECT libs directly (Kartend-q3vfq kept
 # them OBJECT for layering enforcement; nothing here touches that). For the
@@ -38,28 +39,80 @@ include_directories(
 # object set of every linked area (a 13 GB debug tests/ dir, link-dominated
 # edit-test cycles).
 #
-# Each twin archives the SAME object files ($<TARGET_OBJECTS:...> — objects
-# compile exactly once, shared with the app link). A STATIC archive restores
-# normal per-member linker semantics: only the object files that resolve a
-# referenced symbol are pulled into the test binary.
+# Each twin reuses the SAME object files ($<TARGET_OBJECTS:...> — objects
+# compile exactly once, shared with the app link).
 #
 # The INTERFACE link from the twin back to its OBJECT lib forwards the full
 # usage surface (include dirs, compile definitions, transitive Qt deps, the
 # Release LTO INTERFACE_LINK_OPTIONS on kartend_utils) WITHOUT putting raw
 # .o files on consumers' link lines: OBJECT libs reached through
 # INTERFACE_LINK_LIBRARIES contribute usage requirements only (verified —
-# the consumer's link line contains just the archive).
+# the consumer's link line contains just the twin).
 #
-# Qt caveat: an archive member whose only contribution is a static-init side
-# effect (qrc resource registration, namespace-scope qRegisterMetaType) is
-# dropped when nothing references a symbol in it. AUTOMOC is safe — each
-# area's moc TUs land in one mocs_compilation.o whose meta-object symbols are
-# referenced by the class TUs that get pulled in. If a future test trips the
-# static-init case, link that single test against the OBJECT libs instead
-# (kartend_add_test falls back automatically when no _static twin exists).
+# Qt caveat, STATIC twins only (Windows, and any non-Debug config — see the
+# two constraints below): an archive member
+# whose only contribution is a static-init side effect (qrc resource
+# registration, namespace-scope qRegisterMetaType) is dropped when nothing
+# references a symbol in it. AUTOMOC is safe — each area's moc TUs land in one
+# mocs_compilation.o whose meta-object symbols are referenced by the class TUs
+# that get pulled in. If a future test trips the static-init case, link that
+# single test against the OBJECT libs instead (kartend_add_test falls back
+# automatically when no _static twin exists). A SHARED twin does not have this
+# failure mode at all: a shared library links every object it was given, so
+# static-init side effects always survive.
+#
+# Kartend-wjgjy: the twins are SHARED in Debug on ELF, STATIC everywhere
+# else. Two independent constraints produce that scoping — both are recorded
+# below because each looks like unnecessary caution until you hit it. A
+# STATIC twin still copies every archive member it resolves INTO each of the
+# ~240 test executables, so the app code landed on disk a couple of hundred
+# times: a Debug+ASan tree hit 28 GB and a 72 GB CI runner ran out of disk
+# mid-link (Kartend-dbkuy). A SHARED twin exists once and the executables
+# reference it, which is the same trade every distro makes.
+#
+# CONSTRAINT 1 — ELF only. The area libs already build with
+# POSITION_INDEPENDENT_CODE ON (src/CMakeLists.txt) so the SAME objects feed
+# the shared twin with no extra compile, and this project sets no
+# VISIBILITY_PRESET — default ELF visibility exports everything, so tests that
+# reach internal symbols keep working with no export annotations. Neither
+# holds on MSVC: a Windows DLL exports nothing without __declspec(dllexport)
+# or WINDOWS_EXPORT_ALL_SYMBOLS, and the latter does not reliably cover DATA
+# symbols such as Q_OBJECT's staticMetaObject. Windows therefore keeps the
+# STATIC twins. Kartend-qwxy2 tracks the Windows link cost separately — its
+# 62 min is /LTCG, not archive copying, so it needs a different fix anyway.
+#
+# CONSTRAINT 2 — Debug only, and this one is not conservatism either.
+# CompilerFlags.cmake applies HARDENING_COMPILE_OPTS under
+# $<$<NOT:$<CONFIG:Debug>>:...>, and that set includes -fPIE. PIE code picks
+# the local-exec TLS model, which is legal in an executable and ILLEGAL in a
+# shared object, so a Release shared twin dies at link:
+#
+#   ld: relocation R_X86_64_TPOFF32 against
+#       `_ZGVZN16CacheDiskStorage14cacheDirectoryEvE11ensuredRoot'
+#       can not be used when making a shared object;
+#       local-exec is incompatible with -shared
+#
+# (the guard variable for `thread_local QString ensuredRoot` in
+# cachediskstorage.cpp). Making Release work would mean compiling the area
+# objects -fPIC instead of -fPIE, which changes codegen for the SHIPPED
+# binary to buy nothing: Release test trees carry no -g, so they were never
+# the ones hitting the disk ceiling. The 28 GB tree that failed CI
+# (Kartend-dbkuy) is Debug+ASan, and Debug is exactly where this applies.
+#
+# An empty CMAKE_BUILD_TYPE (multi-config generators) falls through to STATIC,
+# which is the safe default.
+if (WIN32)
+  set(KARTEND_TEST_TWIN_TYPE STATIC)
+elseif (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(KARTEND_TEST_TWIN_TYPE STATIC)
+else()
+  set(KARTEND_TEST_TWIN_TYPE SHARED)
+endif()
+message(STATUS "Test link twins: ${KARTEND_TEST_TWIN_TYPE}")
+
 if (TARGET kartend_utils)
   foreach(_kartend_area IN LISTS KARTEND_AREA_LIBS)
-    add_library(${_kartend_area}_static STATIC
+    add_library(${_kartend_area}_static ${KARTEND_TEST_TWIN_TYPE}
       $<TARGET_OBJECTS:${_kartend_area}>)
     target_link_libraries(${_kartend_area}_static INTERFACE ${_kartend_area})
   endforeach()

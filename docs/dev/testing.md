@@ -265,10 +265,20 @@ kartend_add_test(NAME ClassName
 #   LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 ```
 
-   The helper rewrites each area lib to its `_static` twin (an archive of
-   the same object files, declared at the top of `tests/CMakeLists.txt`) so
-   the linker dead-strips unreferenced objects instead of embedding every
-   area `.o` the way a direct `OBJECT`-lib link does. Extra per-target
+   The helper rewrites each area lib to its `_static` twin (declared at the
+   top of `tests/CMakeLists.txt`, reusing the same object files so nothing
+   recompiles), instead of embedding every area `.o` the way a direct
+   `OBJECT`-lib link does.
+
+   In **Debug on ELF** the twin is a *shared* library, so the app code exists
+   once on disk instead of inside each of ~240 test binaries — that took a
+   Debug tree from 17 GB to 3.9 GB, and the Debug+ASan tree is what had been
+   exhausting CI runners' disks. Everywhere else it stays a static archive:
+   Windows would need explicit DLL export annotations, and non-Debug configs
+   compile with `-fPIE` hardening, whose local-exec TLS model cannot be linked
+   into a shared object. Neither is a loss — Release test trees carry no `-g`
+   and were never near the ceiling. The target name keeps the `_static`
+   suffix in all cases. Extra per-target
    tweaks (`set_tests_properties`, `target_include_directories`,
    `target_compile_definitions`, conditional links) go as trailing
    statements referencing the derived target name.
