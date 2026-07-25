@@ -23,12 +23,23 @@ installs:
 | `qt6-base-dev`, `qt6-multimedia-dev`, `qt6-tools-dev`, `libqt6sql6-sqlite` | Qt 6.4.2 (Ubuntu 24.04's pinned version) |
 | `libzstd-dev`, `qtkeychain-qt6-dev` | Optional dependencies that flip features on |
 | `clang-tidy`, `clang-format-19`, `cppcheck`, `jq` | Maintenance / static-analysis tooling |
-| `libtsan2`, `libasan8`, `libubsan1` | Sanitizer runtime libs |
+| `libtsan2`, `libasan8`, `libubsan1`, `libclang-rt-18-dev` | Sanitizer runtime libs (the last one covers clang's static runtimes) |
+| `llvm-18` | `llvm-symbolizer` — clang's sanitizers need it to print `file:line` instead of bare addresses |
 | `pulseaudio` | QtMultimedia tests SIGILL under TSan without a running PulseAudio session |
 
 The Dockerfile also symlinks `clang-format-19` → `clang-format` so
 the pre-commit hook and `--format-check` runner pick up the pinned
 v19 binary even on a host without it.
+
+Likewise `llvm-symbolizer` → `/usr/lib/llvm-18/bin/llvm-symbolizer`.
+Ubuntu's `llvm-18` package installs only version-suffixed names, and
+the sanitizer runtimes look for the unsuffixed one on `PATH`, so
+without that symlink a clang-built TSan or ASan failure reproduces
+here as address-only frames — much harder to read than the same
+failure on real CI. GCC-built sanitizer binaries are unaffected (they
+fall back to `addr2line`), which is why this went unnoticed for a
+while: only the clang paths — including the `thread-sanitizer` job —
+were degraded.
 
 ### Build it
 

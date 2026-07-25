@@ -34,9 +34,19 @@ FROM ubuntu:24.04
 # libclang-rt-18-dev: clang's static sanitizer runtimes
 # (libclang_rt.tsan-x86_64.a etc.) — without it the thread-sanitizer repro
 # fails at link; libtsan2/libasan8 only cover gcc's shared runtimes.
+#
+# llvm-18: ships llvm-symbolizer, which clang's sanitizer runtimes need to
+# turn a stack frame into file:line (Kartend-viynx). Without it a clang-built
+# ASan/TSan repro prints "invalid path to external symbolizer!" and then
+# address-only frames — useless next to the same failure on real CI, whose
+# ubuntu-24.04 image has the symbolizer. The gap hid for a long time because
+# GCC-built sanitizer binaries in this image DO symbolize (gcc falls back to
+# addr2line from binutils), so only the clang paths are affected — and the
+# thread-sanitizer job is the clang one. ~117 MB, which is the price of a
+# readable TSan trace.
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      clang g++ libtsan2 libasan8 libubsan1 libclang-rt-18-dev \
+      clang g++ libtsan2 libasan8 libubsan1 libclang-rt-18-dev llvm-18 \
       cmake ninja-build lld ccache git python3 pulseaudio \
       unzip p7zip-full \
       qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev \
@@ -46,6 +56,11 @@ RUN apt-get update \
  `# build.yml's "Verify pinned clang-format version" step fails CI if this` \
  `# literal drifts from that source of truth (Kartend-gv2xq).` \
  && ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format \
+ `# llvm-18 installs /usr/lib/llvm-18/bin/llvm-symbolizer and` \
+ `# /usr/bin/llvm-symbolizer-18, but NOT a plain "llvm-symbolizer" on PATH —` \
+ `# which is the exact name the sanitizer runtimes look for. The symlink is` \
+ `# what actually fixes the traces; installing the package alone does not.` \
+ && ln -sf /usr/lib/llvm-18/bin/llvm-symbolizer /usr/local/bin/llvm-symbolizer \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
