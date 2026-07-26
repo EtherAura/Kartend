@@ -197,7 +197,11 @@ void DatabaseManager::queueWorkerWrite(std::function<bool(QSqlDatabase &)> op,
   // Queued onto the worker's thread: the closure runs against the worker's
   // connection (m_db there), never the GUI-thread connection. Ordering is
   // preserved (single worker thread, FIFO event queue), so successive
-  // increment-style writes for the same item still apply in order.
+  // increment-style writes for the same item still apply in order — EXCEPT
+  // when one of them hits lock contention and is requeued (Kartend-rctcv),
+  // which lets a later write overtake it. Harmless for these callers: the
+  // usage write is an increment (order-independent) and the history append is
+  // ordered by its own stamped time, not by insertion order.
   //
   // The completion hop targets qApp (alive while any loop runs) and checks
   // the QPointer ON THE GUI THREAD — resolving a QPointer on the worker
@@ -207,17 +211,25 @@ void DatabaseManager::queueWorkerWrite(std::function<bool(QSqlDatabase &)> op,
   QMetaObject::invokeMethod(
       m_worker,
       [w = m_worker, op = std::move(op), onCompleted = std::move(onCompleted), self, context]() {
-        w->runWrite(op, context);
+        // Kartend-rctcv: hand the hop to runWrite instead of firing it once
+        // runWrite returns. A contended write now settles on a LATER event-loop
+        // turn, so invalidating here would re-open the Kartend-4tprf hole from
+        // the other side — the cache would be invalidated, re-populated by the
+        // details-pane read, and only then would the write land.
+        std::function<void()> onSettled;
         if (onCompleted) {
-          QMetaObject::invokeMethod(
-              qApp,
-              [self, onCompleted]() {
-                if (self) {
-                  onCompleted();
-                }
-              },
-              Qt::QueuedConnection);
+          onSettled = [self, onCompleted]() {
+            QMetaObject::invokeMethod(
+                qApp,
+                [self, onCompleted]() {
+                  if (self) {
+                    onCompleted();
+                  }
+                },
+                Qt::QueuedConnection);
+          };
         }
+        w->runWrite(op, context, std::move(onSettled));
       },
       Qt::QueuedConnection);
 }

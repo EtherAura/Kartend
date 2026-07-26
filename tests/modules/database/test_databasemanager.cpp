@@ -67,6 +67,7 @@ private slots:
 
   // Worker-write contention (Kartend-cbtml) ----------------------------------
   void testRecordItemLaunch_survivesHeldWriteLock();
+  void testRecordItemLaunch_survivesWriteLockOutlastingInlineLadder();
 
 private:
   std::unique_ptr<SessionManager> m_session;
@@ -642,6 +643,59 @@ void TestDatabaseManager::testRecordItemLaunch_survivesHeldWriteLock() {
       scalar(insp, QStringLiteral("SELECT COUNT(*) FROM launch_history WHERE collection_uuid='%1'")
                        .arg(uuid)),
       1, 10000);
+}
+
+void TestDatabaseManager::testRecordItemLaunch_survivesWriteLockOutlastingInlineLadder() {
+  // Kartend-rctcv: the sibling test above holds the lock for 1.2s, comfortably
+  // inside runWrite's INLINE ladder (5 attempts x 500ms busy_timeout + 1.5s of
+  // backoff ~= 4s). A real scan transaction can outlast that, and when it did,
+  // the inline ladder exhausted and the write was DROPPED — permanently, with
+  // only a log line. That is what failed CI on macOS Release: playCount stayed
+  // 0 and no later retry ever recovered it.
+  //
+  // Hold the lock PAST the inline budget so the write can only survive via the
+  // deferred requeue ladder (1/2/4/8/16s on the worker's event loop). Pre-fix
+  // this test fails; the write is gone by ~4s and no timeout can wait it back.
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QVERIFY(runSql(insp, "DELETE FROM items"));
+  QVERIFY(runSql(insp, "DELETE FROM collections"));
+  QVERIFY(runSql(insp, "DELETE FROM launch_history"));
+  const QString uuid = QStringLiteral("long-locked-write-uuid");
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO collections (id, name, last_scanned, uuid) "
+                                      "VALUES (1, 'LongLocked', 'x', '%1')")
+                           .arg(uuid)));
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO items (collection_id, path, name, "
+                                      "last_modified, collection_uuid) "
+                                      "VALUES (1, '/m/longlocked.bin', 'longlocked', 'x', '%1')")
+                           .arg(uuid)));
+
+  QVERIFY(runSql(insp, "BEGIN IMMEDIATE"));
+  db.recordItemLaunch(uuid, QStringLiteral("/m/longlocked.bin"));
+  db.recordHistoryEntry(uuid, QStringLiteral("/m/longlocked.bin"), QStringLiteral("longlocked"),
+                        /*maxEntries=*/50);
+  // 6s > the ~4s inline budget, so the inline ladder is guaranteed to exhaust
+  // and hand off to the deferred rungs (which retry at ~5s, ~7.5s, ~12s, ~20s,
+  // ~36s — any release before ~36s is picked up, so a slow runner that stretches
+  // the schedule still lands the write rather than flaking).
+  QTest::qWait(6000);
+  QVERIFY(runSql(insp, "COMMIT"));
+
+  // Both writes land on a deferred rung once the lock clears.
+  QTRY_COMPARE_WITH_TIMEOUT(
+      scalar(insp, QStringLiteral("SELECT play_count FROM items WHERE collection_uuid='%1' "
+                                  "AND path='/m/longlocked.bin'")
+                       .arg(uuid)),
+      1, 45000);
+  QTRY_COMPARE_WITH_TIMEOUT(
+      scalar(insp, QStringLiteral("SELECT COUNT(*) FROM launch_history WHERE collection_uuid='%1'")
+                       .arg(uuid)),
+      1, 45000);
 }
 
 QTEST_MAIN(TestDatabaseManager)

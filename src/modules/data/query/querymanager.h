@@ -127,8 +127,19 @@ public slots:
   /// contention — runWrite then retries with bounded exponential backoff so a
   /// concurrent scan transaction on the scan-worker connection cannot drop
   /// the write. @p context labels the retry/loss warnings.
+  ///
+  /// Kartend-rctcv: exhausting that inline ladder no longer DROPS the write. It
+  /// is requeued onto this worker's own event loop with a second, longer
+  /// backoff ladder, so a scan transaction that outlives the inline budget only
+  /// DELAYS the write instead of silently losing the play-count / history row.
+  /// @p onSettled runs exactly once, on the worker thread, when the op finally
+  /// settles — landed, permanently failed, or abandoned once the whole budget
+  /// is spent or teardown begins. Callers that invalidate caches on completion
+  /// MUST use it: runWrite no longer necessarily finishes synchronously, so
+  /// firing the hop after it returns would invalidate before the write lands.
   void runWrite(const std::function<bool(QSqlDatabase &)> &op,
-                const QString &context = QStringLiteral("QueryManager::runWrite"));
+                const QString &context = QStringLiteral("QueryManager::runWrite"),
+                std::function<void()> onSettled = {});
 
 signals:
   void itemsLoaded(const QStringList &filePaths, const QHash<QString, QString> &fileNames,
@@ -244,6 +255,12 @@ private:
   [[nodiscard]] int fetchItemCountImpl(const CollectionContext &context,
                                        const QList<CollectionConfig> &allCollections,
                                        const QString &filter);
+
+  /// One rung of runWrite's retry schedule (Kartend-rctcv). @p deferral is 0 for
+  /// the initial inline ladder and 1..MAX_WRITE_DEFERRALS for each requeued
+  /// attempt. Always runs on the worker thread; see runWrite for the contract.
+  void runWriteRung(std::function<bool(QSqlDatabase &)> op, const QString &context,
+                    std::function<void()> onSettled, int deferral);
 
   ISessionManager *m_sessionManager;
   QSqlDatabase m_db;

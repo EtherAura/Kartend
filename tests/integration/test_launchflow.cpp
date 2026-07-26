@@ -181,6 +181,15 @@ QString scanAndResolveItemPath(MainWindow *win, const QString &uuid) {
   return rows.isEmpty() ? QString{} : rows.first().path;
 }
 
+// Kartend-rctcv: a queued worker write that lands inside a scan's write lock is
+// retried on an inline ladder (~4s) and then REQUEUED five times at 1/2/4/8/16s,
+// so the write settles at worst ~38s after the launch. The old 10s here was
+// shorter than that budget: on a slow runner the assertion could fail while the
+// write was still legitimately pending. Wait past the whole budget instead, so a
+// failure means the write was genuinely lost rather than merely late. Costs
+// nothing on a green run — QTRY returns as soon as the row appears.
+constexpr int WORKER_WRITE_SETTLE_TIMEOUT_MS = 45000;
+
 } // namespace
 
 void TestLaunchFlow::testDetachedLaunchRecordsUsageStatsAndHistory() {
@@ -226,10 +235,11 @@ void TestLaunchFlow::testDetachedLaunchRecordsUsageStatsAndHistory() {
 
   // recordItemLaunch / recordHistoryEntry are queued worker writes — QTRY
   // until they land in the real SQLite file.
-  QTRY_COMPARE_WITH_TIMEOUT(db->loadItemUsageStats(uuid, scannedPath).playCount, qint64(1), 10000);
+  QTRY_COMPARE_WITH_TIMEOUT(db->loadItemUsageStats(uuid, scannedPath).playCount, qint64(1),
+                            WORKER_WRITE_SETTLE_TIMEOUT_MS);
   QVERIFY(!db->loadItemUsageStats(uuid, scannedPath).lastPlayed.isEmpty());
 
-  QTRY_COMPARE_WITH_TIMEOUT(db->historyEntryCount(), qint64(1), 10000);
+  QTRY_COMPARE_WITH_TIMEOUT(db->historyEntryCount(), qint64(1), WORKER_WRITE_SETTLE_TIMEOUT_MS);
   const auto history = db->loadRecentHistory(10);
   QCOMPARE(history.size(), 1);
   QCOMPARE(history.first().path, scannedPath);
@@ -295,10 +305,12 @@ void TestLaunchFlow::testTrackedLaunchRecordsPlaySession() {
 
   QTRY_COMPARE_WITH_TIMEOUT(started.count(), 1, 10000);
   // launch is recorded when the child actually starts (Kartend-yu1e5).
-  QTRY_COMPARE_WITH_TIMEOUT(db->loadItemUsageStats(uuid, scannedPath).playCount, qint64(1), 10000);
+  QTRY_COMPARE_WITH_TIMEOUT(db->loadItemUsageStats(uuid, scannedPath).playCount, qint64(1),
+                            WORKER_WRITE_SETTLE_TIMEOUT_MS);
 
   // The script sleeps ~1s; wait for the child to exit and the queued
   // play-session write to land.
   QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 15000);
-  QTRY_VERIFY_WITH_TIMEOUT(db->loadItemUsageStats(uuid, scannedPath).totalPlaySeconds >= 1, 10000);
+  QTRY_VERIFY_WITH_TIMEOUT(db->loadItemUsageStats(uuid, scannedPath).totalPlaySeconds >= 1,
+                           WORKER_WRITE_SETTLE_TIMEOUT_MS);
 }

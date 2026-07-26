@@ -16,6 +16,7 @@
 #include <QString>
 #include <QStringList>
 #include <QThread>
+#include <QTimer>
 
 #include "errorutils.h"
 #include "querymanagerhelpers.h"
@@ -133,19 +134,30 @@ void QueryManager::invalidateUsageSensitiveCaches() {
   m_cachedPlaylistScopeKey.clear();
 }
 
-void QueryManager::runWrite(const std::function<bool(QSqlDatabase &)> &op, const QString &context) {
+void QueryManager::runWrite(const std::function<bool(QSqlDatabase &)> &op, const QString &context,
+                            std::function<void()> onSettled) {
   assertOwnerThread();
   if (!op) {
     return;
   }
+  runWriteRung(op, context, std::move(onSettled), /*deferral=*/0);
+}
+
+void QueryManager::runWriteRung(std::function<bool(QSqlDatabase &)> op, const QString &context,
+                                std::function<void()> onSettled, int deferral) {
+  assertOwnerThread();
   // Kartend-dbqt5: the worker connection opens lazily on the first query
   // slot. A queued write dispatched before any read (launch-on-startup
   // stats, the startup orphan purge) used to be SILENTLY dropped here when
   // no query had opened the connection yet — ensure it like the query
   // slots do (ensureDatabaseAvailable falls back to full init on a
   // never-registered cold-start connection; ensureDatabaseConnection alone
-  // refuses those).
+  // refuses those). Re-checked on every rung: a requeued attempt resumes on
+  // whatever connection state the deferral window left behind.
   if (!m_db.isOpen() && !ensureDatabaseAvailable("QueryManager::runWrite")) {
+    if (onSettled) {
+      onSettled();
+    }
     return;
   }
   // Kartend-cbtml: the scan worker is a SEPARATE connection that holds long
@@ -158,17 +170,27 @@ void QueryManager::runWrite(const std::function<bool(QSqlDatabase &)> &op, const
   // attempt additionally waits busy_timeout inside SQLite before reporting
   // busy. The op returns true when settled (success, or a permanent failure
   // it already logged) and false only on transient lock contention.
+  //
+  // Kartend-rctcv: this inline ladder runs ONCE, on the first rung. Its sleeps
+  // block the worker thread, so every later rung is a SINGLE attempt — the
+  // waiting happens off-thread in the requeue timer below, where the event
+  // loop stays free to serve reads (and to let the lock holder finish).
   constexpr int MAX_ATTEMPTS = 5;
   constexpr int BASE_DELAY_MS = 100;
-  for (int attempt = 1; attempt <= MAX_ATTEMPTS; ++attempt) {
+  const int attempts = (deferral == 0) ? MAX_ATTEMPTS : 1;
+  for (int attempt = 1; attempt <= attempts; ++attempt) {
     if (op(m_db)) {
-      if (attempt > 1) {
-        qCWarning(lcQueryManager).nospace() << context << ": worker write landed on attempt "
-                                            << attempt << " after database-is-locked contention";
+      if (attempt > 1 || deferral > 0) {
+        qCWarning(lcQueryManager).nospace()
+            << context << ": worker write landed on attempt " << attempt << " of deferral "
+            << deferral << " after database-is-locked contention";
+      }
+      if (onSettled) {
+        onSettled();
       }
       return;
     }
-    if (attempt == MAX_ATTEMPTS) {
+    if (attempt == attempts) {
       break;
     }
     // Mirror the Kartend-kfnv7 teardown bail: sleeping through the remaining
@@ -176,15 +198,54 @@ void QueryManager::runWrite(const std::function<bool(QSqlDatabase &)> &op, const
     if (teardownRequested()) {
       qCWarning(lcQueryManager).nospace()
           << context << ": worker write abandoned during teardown (attempt " << attempt << "/"
-          << MAX_ATTEMPTS << ", database locked)";
+          << attempts << ", database locked)";
+      if (onSettled) {
+        onSettled();
+      }
       return;
     }
     qCWarning(lcQueryManager).nospace()
         << context << ": worker write hit database-is-locked (attempt " << attempt << "/"
-        << MAX_ATTEMPTS << "), backing off " << (BASE_DELAY_MS * (1 << (attempt - 1))) << "ms";
+        << attempts << "), backing off " << (BASE_DELAY_MS * (1 << (attempt - 1))) << "ms";
     QThread::msleep(BASE_DELAY_MS * (1 << (attempt - 1)));
   }
+
+  // Kartend-rctcv: the inline budget is spent and the database is still locked.
+  // Requeue rather than drop — losing the write here is what silently cost a
+  // launch its play_count increment and its history row. Bounded: 1/2/4/8/16s,
+  // ~31s of deferral on top of the inline ~4s, after which a lock this durable
+  // is a stuck holder rather than a scan we can outwait.
+  constexpr int MAX_WRITE_DEFERRALS = 5;
+  constexpr int DEFERRAL_BASE_DELAY_MS = 1000;
+  if (deferral >= MAX_WRITE_DEFERRALS) {
+    qCWarning(lcQueryManager).nospace()
+        << context << ": worker write LOST after " << MAX_WRITE_DEFERRALS
+        << " deferrals — database stayed locked (long-running scan transaction?)";
+    if (onSettled) {
+      onSettled();
+    }
+    return;
+  }
+  if (teardownRequested()) {
+    qCWarning(lcQueryManager).nospace()
+        << context << ": worker write abandoned during teardown (deferral " << deferral
+        << ", database locked)";
+    if (onSettled) {
+      onSettled();
+    }
+    return;
+  }
+  const int delayMs = DEFERRAL_BASE_DELAY_MS * (1 << deferral);
   qCWarning(lcQueryManager).nospace()
-      << context << ": worker write LOST after " << MAX_ATTEMPTS
-      << " attempts — database stayed locked (long-running scan transaction?)";
+      << context << ": worker write still locked after the inline ladder; requeueing (deferral "
+      << (deferral + 1) << "/" << MAX_WRITE_DEFERRALS << ") in " << delayMs << "ms";
+  // `this` as the timer's context object: the callback is delivered on the
+  // worker thread (where this object lives, so assertOwnerThread holds on the
+  // next rung) and is silently dropped if the QueryManager dies first — the
+  // deferral must never outlive the connection it writes to.
+  QTimer::singleShot(
+      delayMs, this,
+      [this, op = std::move(op), context, onSettled = std::move(onSettled), deferral]() mutable {
+        runWriteRung(std::move(op), context, std::move(onSettled), deferral + 1);
+      });
 }
