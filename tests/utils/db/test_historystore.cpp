@@ -46,9 +46,11 @@ private slots:
   void recordLaunch_rejectsEmptyKeys();
   void recordLaunch_fallsBackToBasenameWhenNameEmpty();
   void loadRecent_returnsNewestFirst();
+  void loadRecent_ordersByLaunchedAtNotInsertionOrder();
   void loadRecent_clampsLimit();
   void count_returnsCurrentRowCount();
   void trimToMaxEntries_dropsOldestRowsOnly();
+  void trimToMaxEntries_keepsNewestByLaunchedAtNotId();
   void trimToMaxEntries_isNoopWhenWithinCap();
   void trimToMaxEntries_unlimitedForNonPositiveCap();
   void clearAll_wipesEverything();
@@ -136,6 +138,34 @@ void TestHistoryStore::loadRecent_returnsNewestFirst() {
   closeAndRemove(db, conn);
 }
 
+void TestHistoryStore::loadRecent_ordersByLaunchedAtNotInsertionOrder() {
+  // Kartend-neb85: the sibling above inserts in chronological order, so id
+  // order and launched_at order agree and it passes under either ORDER BY.
+  // Drive them APART, which is exactly what a lock-contended launch does: its
+  // write is deferred, so it inserts LAST (highest id) while carrying the
+  // EARLIEST stamp. Ordering by id would surface it as the newest entry.
+  const QString conn = "history_order_by_time";
+  auto db = openMemoryDb(conn);
+  seedDatabase(db);
+
+  const QDateTime base = QDateTime::currentDateTimeUtc();
+  // Inserted first (id 1) but stamped LATEST.
+  QVERIFY(HistoryStore::recordLaunch(db, "u1", "/g/late", "Late", base.addSecs(60)).isOk());
+  // Inserted last (id 2) but stamped EARLIEST — the deferred launch.
+  QVERIFY(HistoryStore::recordLaunch(db, "u1", "/g/early", "Early", base).isOk());
+
+  auto rows = HistoryStore::loadRecent(db, 10).value();
+  QCOMPARE(rows.size(), 2);
+  QCOMPARE(rows[0].name, QStringLiteral("Late"));
+  QCOMPARE(rows[1].name, QStringLiteral("Early"));
+  // The point of the test: the newest-first row is the LOWER id.
+  QVERIFY2(rows[0].id < rows[1].id,
+           "fixture no longer exercises the divergence — insertion order must "
+           "disagree with chronological order for this test to mean anything");
+
+  closeAndRemove(db, conn);
+}
+
 void TestHistoryStore::loadRecent_clampsLimit() {
   const QString conn = "history_clamp";
   auto db = openMemoryDb(conn);
@@ -186,6 +216,38 @@ void TestHistoryStore::trimToMaxEntries_dropsOldestRowsOnly() {
   QCOMPARE(rows.size(), 2);
   QCOMPARE(rows[0].name, QStringLiteral("Game 5"));
   QCOMPARE(rows[1].name, QStringLiteral("Game 4"));
+
+  closeAndRemove(db, conn);
+}
+
+void TestHistoryStore::trimToMaxEntries_keepsNewestByLaunchedAtNotId() {
+  // Kartend-neb85: the sibling above inserts chronologically, so "keep the
+  // highest ids" and "keep the newest launches" pick the same rows and it
+  // cannot distinguish the two rules. Here a deferred launch inserts LAST
+  // (highest id) while being the OLDEST by stamp — so the two rules disagree
+  // about which row to evict, and the cap must be enforced on launch time.
+  const QString conn = "history_trim_by_time";
+  auto db = openMemoryDb(conn);
+  seedDatabase(db);
+
+  const QDateTime base = QDateTime::currentDateTimeUtc();
+  // id 1, middle by time.
+  QVERIFY(HistoryStore::recordLaunch(db, "u1", "/g/mid", "Mid", base.addSecs(60)).isOk());
+  // id 2, newest by time.
+  QVERIFY(HistoryStore::recordLaunch(db, "u1", "/g/new", "New", base.addSecs(120)).isOk());
+  // id 3 (highest), but OLDEST by time — the deferred write.
+  QVERIFY(HistoryStore::recordLaunch(db, "u1", "/g/old", "Old", base).isOk());
+
+  auto removed = HistoryStore::trimToMaxEntries(db, 2);
+  QVERIFY(removed.isOk());
+  QCOMPARE(removed.value(), qint64(1));
+
+  // "Old" must be the casualty despite holding the highest id. Trimming by id
+  // would have evicted "Mid" and kept the oldest launch in the log.
+  auto rows = HistoryStore::loadRecent(db, 10).value();
+  QCOMPARE(rows.size(), 2);
+  QCOMPARE(rows[0].name, QStringLiteral("New"));
+  QCOMPARE(rows[1].name, QStringLiteral("Mid"));
 
   closeAndRemove(db, conn);
 }

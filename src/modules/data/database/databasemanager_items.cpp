@@ -247,9 +247,15 @@ void DatabaseManager::recordItemLaunch(const QString &collectionUuid, const QStr
   // nothing invalidated again after the write landed — so the stale count
   // stuck for the session. Same for the smart-playlist scope key: a re-open
   // between invalidate and write-completion cached a stale scope.
+  // Kartend-neb85: stamp the launch HERE, on the queueing thread, and carry it
+  // into the closure. The worker may not reach this write for up to ~38s under
+  // lock contention (Kartend-rctcv's deferred requeue), so letting the store
+  // stamp at execution time would record when the SQL ran — and a deferred
+  // launch would then read as NEWER than one that actually followed it.
+  const QDateTime launchedAt = QDateTime::currentDateTimeUtc();
   queueWorkerWrite(
-      [collectionUuid, path](QSqlDatabase &db) -> bool {
-        auto result = UsageStatsStore::recordLaunch(db, collectionUuid, path);
+      [collectionUuid, path, launchedAt](QSqlDatabase &db) -> bool {
+        auto result = UsageStatsStore::recordLaunch(db, collectionUuid, path, launchedAt);
         if (result.isError()) {
           // Transient lock contention (a scan transaction on the scan-worker
           // connection) -> let runWrite retry instead of dropping the launch
@@ -373,15 +379,19 @@ void DatabaseManager::recordHistoryEntry(const QString &collectionUuid, const QS
   // Also fires on launch (same hook as recordItemLaunch). The history log is
   // read only by the history dialog, so route the append + trim onto the worker
   // connection instead of blocking the launch on the UI thread (Kartend-fkvs).
+  // Kartend-neb85: stamped on the queueing thread — see recordItemLaunch. Both
+  // launch writes take their stamp the same way, so a single launch's usage row
+  // and history row agree even when only one of them is deferred.
+  const QDateTime launchedAt = QDateTime::currentDateTimeUtc();
   queueWorkerWrite(
-      [collectionUuid, path, name, maxEntries](QSqlDatabase &db) -> bool {
+      [collectionUuid, path, name, maxEntries, launchedAt](QSqlDatabase &db) -> bool {
         // Append + trim in one transaction so a crash between them can't leave
         // the history table over the cap (Kartend-5rcf). If the transaction
         // can't start, fall back to the prior autocommit behaviour rather than
         // dropping the write — the guard is inert then (no rollback on scope
         // exit), exactly the old inTransaction-gated handling.
         KartendDb::DbTransaction txn(db, "DatabaseManager::recordHistoryEntry");
-        auto result = HistoryStore::recordLaunch(db, collectionUuid, path, name);
+        auto result = HistoryStore::recordLaunch(db, collectionUuid, path, name, launchedAt);
         if (result.isError()) {
           // Guard dtor rolls back iff the BEGIN succeeded; on transient lock
           // contention runWrite re-runs the whole append+trim (Kartend-cbtml).

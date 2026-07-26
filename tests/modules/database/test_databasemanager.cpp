@@ -68,6 +68,7 @@ private slots:
   // Worker-write contention (Kartend-cbtml) ----------------------------------
   void testRecordItemLaunch_survivesHeldWriteLock();
   void testRecordItemLaunch_survivesWriteLockOutlastingInlineLadder();
+  void testRecordItemLaunch_deferredWriteKeepsItsLaunchTimeOrder();
 
 private:
   std::unique_ptr<SessionManager> m_session;
@@ -298,6 +299,13 @@ bool runSql(QSqlDatabase &db, const QString &sql) {
 int scalar(QSqlDatabase &db, const QString &sql) {
   QSqlQuery q(db);
   return (q.exec(sql) && q.next()) ? q.value(0).toInt() : -1;
+}
+
+/// Text-column counterpart of scalar(), for the ISO-8601 timestamp columns.
+/// Empty string on no-row/failure so callers can assert non-emptiness first.
+QString scalarText(QSqlDatabase &db, const QString &sql) {
+  QSqlQuery q(db);
+  return (q.exec(sql) && q.next()) ? q.value(0).toString() : QString();
 }
 } // namespace
 
@@ -696,6 +704,85 @@ void TestDatabaseManager::testRecordItemLaunch_survivesWriteLockOutlastingInline
       scalar(insp, QStringLiteral("SELECT COUNT(*) FROM launch_history WHERE collection_uuid='%1'")
                        .arg(uuid)),
       1, 45000);
+}
+
+void TestDatabaseManager::testRecordItemLaunch_deferredWriteKeepsItsLaunchTimeOrder() {
+  // Kartend-neb85: end-to-end proof that a deferred write records WHEN THE
+  // LAUNCH HAPPENED, not when its SQL finally ran. Launch A goes into a held
+  // write lock and is requeued past the inline ladder; launch B is issued only
+  // after the lock clears. A therefore lands in the table AFTER B, but happened
+  // BEFORE it — so A's last_played must still sort earlier. Pre-fix the stores
+  // stamped at execution time and A would read as the newer launch.
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QVERIFY(runSql(insp, "DELETE FROM items"));
+  QVERIFY(runSql(insp, "DELETE FROM collections"));
+  QVERIFY(runSql(insp, "DELETE FROM launch_history"));
+  const QString uuid = QStringLiteral("stamp-order-uuid");
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO collections (id, name, last_scanned, uuid) "
+                                      "VALUES (1, 'StampOrder', 'x', '%1')")
+                           .arg(uuid)));
+  for (const char *p : {"/m/first.bin", "/m/second.bin"}) {
+    QVERIFY(runSql(insp, QStringLiteral("INSERT INTO items (collection_id, path, name, "
+                                        "last_modified, collection_uuid) "
+                                        "VALUES (1, '%1', 'n', 'x', '%2')")
+                             .arg(QString::fromLatin1(p), uuid)));
+  }
+
+  // A: issued into a held lock, so its write is deferred past the ~4s inline
+  // ladder. launched_at is stamped NOW, at queue time.
+  QVERIFY(runSql(insp, "BEGIN IMMEDIATE"));
+  db.recordItemLaunch(uuid, QStringLiteral("/m/first.bin"));
+  db.recordHistoryEntry(uuid, QStringLiteral("/m/first.bin"), QStringLiteral("first"),
+                        /*maxEntries=*/50);
+  // Well past the inline budget AND past launched_at's one-second resolution,
+  // so A and B cannot collide on the same timestamp string.
+  QTest::qWait(6000);
+  QVERIFY(runSql(insp, "COMMIT"));
+
+  // B: issued after the lock cleared, so it writes promptly — and is genuinely
+  // the later launch.
+  db.recordItemLaunch(uuid, QStringLiteral("/m/second.bin"));
+  db.recordHistoryEntry(uuid, QStringLiteral("/m/second.bin"), QStringLiteral("second"),
+                        /*maxEntries=*/50);
+
+  const QString playCountSql =
+      QStringLiteral("SELECT play_count FROM items WHERE collection_uuid='%1' AND path='%2'");
+  QTRY_COMPARE_WITH_TIMEOUT(scalar(insp, playCountSql.arg(uuid, "/m/first.bin")), 1, 45000);
+  QTRY_COMPARE_WITH_TIMEOUT(scalar(insp, playCountSql.arg(uuid, "/m/second.bin")), 1, 45000);
+  QTRY_COMPARE_WITH_TIMEOUT(
+      scalar(insp, QStringLiteral("SELECT COUNT(*) FROM launch_history WHERE collection_uuid='%1'")
+                       .arg(uuid)),
+      2, 45000);
+
+  const QString lastPlayedSql =
+      QStringLiteral("SELECT last_played FROM items WHERE collection_uuid='%1' AND path='%2'");
+  const QString aPlayed = scalarText(insp, lastPlayedSql.arg(uuid, "/m/first.bin"));
+  const QString bPlayed = scalarText(insp, lastPlayedSql.arg(uuid, "/m/second.bin"));
+  QVERIFY(!aPlayed.isEmpty() && !bPlayed.isEmpty());
+  // ISO-8601 UTC is fixed-width, so lexicographic order IS chronological order.
+  QVERIFY2(aPlayed < bPlayed,
+           qPrintable(QStringLiteral("deferred launch stamped at/after the later launch: "
+                                     "A=%1 B=%2")
+                          .arg(aPlayed, bPlayed)));
+
+  // Same guarantee on the history log, which additionally has to ORDER BY
+  // launched_at rather than id for this to surface correctly (Kartend-neb85).
+  const QString aHist = scalarText(
+      insp,
+      QStringLiteral("SELECT launched_at FROM launch_history WHERE path='%1'").arg("/m/first.bin"));
+  const QString bHist =
+      scalarText(insp, QStringLiteral("SELECT launched_at FROM launch_history WHERE path='%1'")
+                           .arg("/m/second.bin"));
+  QVERIFY(!aHist.isEmpty() && !bHist.isEmpty());
+  QVERIFY2(aHist < bHist, qPrintable(QStringLiteral("deferred history row stamped at/after the "
+                                                    "later launch: A=%1 B=%2")
+                                         .arg(aHist, bHist)));
 }
 
 QTEST_MAIN(TestDatabaseManager)

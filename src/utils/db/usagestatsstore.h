@@ -1,6 +1,7 @@
 #ifndef USAGESTATSSTORE_H
 #define USAGESTATSSTORE_H
 
+#include <QDateTime>
 #include <QHash>
 #include <QList>
 #include <QString>
@@ -77,11 +78,21 @@ struct CollectionUsage {
 [[nodiscard]] ErrorUtils::Result<ItemUsageStats>
 loadForItem(QSqlDatabase &db, const QString &collectionUuid, const QString &path);
 
-/// Increments `play_count` and stamps `last_played` to the current UTC time.
-/// Called from LaunchManager after a successful launch. Failure is logged but
-/// non-fatal — usage tracking is best-effort.
+/// Increments `play_count` and stamps `last_played`. Called from LaunchManager
+/// after a successful launch. Failure is logged but non-fatal — usage tracking
+/// is best-effort.
+///
+/// Kartend-neb85: @p stamp is when the launch HAPPENED, and callers that queue
+/// this onto a worker must pass it from the queueing thread. Stamping inside
+/// here records when the SQL finally ran, which is not the same instant: a
+/// write that hits SQLite lock contention is retried and can be requeued for
+/// up to ~38s (Kartend-rctcv), so a contended launch would otherwise stamp
+/// LATER than one that actually came after it. An invalid stamp — the default,
+/// used by tests and any synchronous caller — falls back to the current UTC
+/// time, preserving the original behaviour.
 [[nodiscard]] ErrorUtils::Result<bool> recordLaunch(QSqlDatabase &db, const QString &collectionUuid,
-                                                    const QString &path);
+                                                    const QString &path,
+                                                    const QDateTime &stamp = {});
 
 /// Adds `seconds` to `total_play_seconds`. Called from LaunchManager when a
 /// runtime-tracked child process exits (pipeline). `seconds` must

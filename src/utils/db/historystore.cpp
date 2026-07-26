@@ -27,21 +27,29 @@ constexpr const char *INSERT_SQL =
     "INSERT INTO launch_history (collection_uuid, path, name, launched_at) "
     "VALUES (?, ?, ?, ?)";
 
+// Kartend-neb85: ordered by launched_at, NOT by id. Ids stopped tracking launch
+// order once launches began carrying their queue-time stamp — a lock-contended
+// write inserts later (higher id) while carrying an earlier launched_at. id
+// DESC remains as the tiebreaker for same-second launches; launched_at is
+// ISO-8601 to one-second resolution and its fixed-width format sorts correctly
+// as text, so a lexicographic ORDER BY is a true chronological order.
 constexpr const char *SELECT_RECENT_SQL = "SELECT id, collection_uuid, path, name, launched_at "
-                                          "FROM launch_history ORDER BY id DESC LIMIT ?";
+                                          "FROM launch_history "
+                                          "ORDER BY launched_at DESC, id DESC LIMIT ?";
 
 constexpr const char *COUNT_SQL = "SELECT COUNT(*) FROM launch_history";
 
-// Trim by deleting any row whose id is strictly older than the Nth-most-
-// recent id. A subquery with LIMIT/OFFSET is the simplest way to express
-// "keep the most recent N rows" in SQLite without a window function. The
-// strict `<` matters: with `<=` we'd also drop the Nth-most-recent row
-// itself, leaving only N-1 rows behind. When the table holds <= N rows,
-// OFFSET runs past the end, the subquery returns NULL, and `id < NULL` is
-// false — DELETE removes nothing.
-constexpr const char *TRIM_SQL = "DELETE FROM launch_history WHERE id < "
+// Keep the N newest rows under the same (launched_at, id) order the reader
+// uses; delete the rest. Kartend-neb85 replaced an `id < (… LIMIT 1 OFFSET ?)`
+// cutoff, which expressed "keep the N highest ids" — after the stamp change
+// that could evict a genuinely NEWER entry in favour of a deferred older one.
+// NOT IN over an explicit keep-set states the intent directly and sidesteps the
+// old form's strict-`<` and NULL-at-OFFSET subtleties: when the table holds
+// <= N rows the subquery returns every id and nothing is deleted. `id` is the
+// primary key, so it is never NULL — which is the one input NOT IN mishandles.
+constexpr const char *TRIM_SQL = "DELETE FROM launch_history WHERE id NOT IN "
                                  "(SELECT id FROM launch_history "
-                                 "ORDER BY id DESC LIMIT 1 OFFSET ?)";
+                                 "ORDER BY launched_at DESC, id DESC LIMIT ?)";
 
 constexpr const char *CLEAR_SQL = "DELETE FROM launch_history";
 
@@ -52,7 +60,8 @@ int clampLimit(int limit) {
 } // namespace
 
 ErrorUtils::Result<bool> recordLaunch(QSqlDatabase &db, const QString &collectionUuid,
-                                      const QString &path, const QString &name) {
+                                      const QString &path, const QString &name,
+                                      const QDateTime &stamp) {
   if (!db.isOpen()) {
     return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
                                  "HistoryStore::recordLaunch");
@@ -73,7 +82,9 @@ ErrorUtils::Result<bool> recordLaunch(QSqlDatabase &db, const QString &collectio
   // Denormalize the visible name so deletion of the items row doesn't
   // leave history rows looking blank.
   q.addBindValue(name.isEmpty() ? QFileInfo(path).completeBaseName() : name);
-  q.addBindValue(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+  // Kartend-neb85: the caller's launch-time stamp when it has one; now only as
+  // a fallback (see the header for why the worker path must not stamp here).
+  q.addBindValue((stamp.isValid() ? stamp : QDateTime::currentDateTimeUtc()).toString(Qt::ISODate));
   if (!q.exec()) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to record history entry",
                                "HistoryStore::recordLaunch")
@@ -144,11 +155,10 @@ ErrorUtils::Result<qint64> trimToMaxEntries(QSqlDatabase &db, qint64 maxEntries)
                                "HistoryStore::trimToMaxEntries")
         .withDetails(q.lastError().text());
   }
-  // OFFSET is zero-based: OFFSET=maxEntries-1 picks the (maxEntries)th
-  // newest id (the cutoff we want to keep). The DELETE clause uses strict
-  // `<`, so the cutoff row itself survives and exactly maxEntries rows
-  // remain.
-  q.addBindValue(maxEntries - 1);
+  // Kartend-neb85: binds the keep-COUNT directly. The previous form bound an
+  // OFFSET (maxEntries - 1) to locate a cutoff id; the NOT IN keep-set takes
+  // the limit itself, so exactly maxEntries rows survive.
+  q.addBindValue(maxEntries);
   if (!q.exec()) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to trim history",
                                "HistoryStore::trimToMaxEntries")

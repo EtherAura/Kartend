@@ -122,7 +122,7 @@ ErrorUtils::Result<ItemUsageStats> loadForItem(QSqlDatabase &db, const QString &
 }
 
 ErrorUtils::Result<bool> recordLaunch(QSqlDatabase &db, const QString &collectionUuid,
-                                      const QString &path) {
+                                      const QString &path, const QDateTime &stamp) {
   if (!db.isOpen()) {
     return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
                                  "UsageStatsStore::recordLaunch");
@@ -139,7 +139,10 @@ ErrorUtils::Result<bool> recordLaunch(QSqlDatabase &db, const QString &collectio
                                "UsageStatsStore::recordLaunch")
         .withDetails(q.lastError().text());
   }
-  q.addBindValue(QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+  // Kartend-neb85: prefer the caller's launch-time stamp; fall back to now for
+  // synchronous callers that pass nothing (see the header for why the worker
+  // path must not stamp here).
+  q.addBindValue((stamp.isValid() ? stamp : QDateTime::currentDateTimeUtc()).toString(Qt::ISODate));
   q.addBindValue(collectionUuid);
   q.addBindValue(path);
   if (!q.exec()) {

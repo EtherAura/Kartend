@@ -1,6 +1,7 @@
 #ifndef HISTORYSTORE_H
 #define HISTORYSTORE_H
 
+#include <QDateTime>
 #include <QList>
 #include <QString>
 
@@ -35,13 +36,26 @@ struct HistoryEntry {
 /// name when the caller already has it; otherwise the dialog falls back to
 /// the path's basename. Failure is logged but non-fatal; the launch path
 /// never blocks on history tracking.
+///
+/// Kartend-neb85: @p stamp is when the launch HAPPENED — see the identical
+/// note on UsageStatsStore::recordLaunch. An invalid stamp (the default) falls
+/// back to the current UTC time.
 [[nodiscard]] ErrorUtils::Result<bool> recordLaunch(QSqlDatabase &db, const QString &collectionUuid,
-                                                    const QString &path, const QString &name);
+                                                    const QString &path, const QString &name,
+                                                    const QDateTime &stamp = {});
 
-/// Most recent entries first (descending id, which matches descending
-/// launched_at because ids are monotonic per session). `limit` is clamped
-/// internally to [1, 100000] so callers can pass user-driven values without
-/// sanitizing.
+/// Most recent entries first, ordered by `launched_at` with id as tiebreaker.
+///
+/// Kartend-neb85: this used to order by id alone, on the reasoning that ids
+/// are monotonic per session so id order matched launch order. That stopped
+/// being true once launches began carrying their queue-time stamp: a write
+/// deferred by lock contention inserts LATER (higher id) while carrying an
+/// EARLIER launched_at, which would surface an older launch above a newer one.
+/// The id tiebreaker still resolves same-second launches, which is the common
+/// case given launched_at has one-second resolution.
+///
+/// `limit` is clamped internally to [1, 100000] so callers can pass
+/// user-driven values without sanitizing.
 [[nodiscard]] ErrorUtils::Result<QList<HistoryEntry>> loadRecent(QSqlDatabase &db, int limit);
 
 /// Total number of rows currently in the table. Used by the dialog header
