@@ -184,6 +184,13 @@ case "$ARG" in
     image="$(awk -F= '/^-P ubuntu-24.04=/ { print $2 }' "$(dirname "$0")/../.actrc" | tr -d ' ')"
     image="${image#*=}"
     : "${image:=ghcr.io/catthehacker/ubuntu:full-24.04}"
+    # Kartend-75w9n deliberately did NOT add --user here, unlike the docker:*
+    # subcommands. This is the interactive escape hatch — the reason to open it
+    # is usually to apt-get something or poke at the runner image, both of which
+    # need root. The trade-off is that anything you BUILD in here lands
+    # root-owned on the host, same failure the docker:* runs used to have; run
+    # `sudo rm -rf build/<dir>` afterwards, or build under /tmp inside the
+    # container instead of in the bind mount.
     exec docker run --rm -it \
       -v "$(cd "$(dirname "$0")/.." && pwd):/work" \
       -w /work \
@@ -250,15 +257,45 @@ case "$ARG" in
   # .scripts/Dockerfile.ci -t kartend-ci .` — re-running auto-skips when the
   # cache is warm. Subcommands here assume the image already exists; build
   # it explicitly if `docker images kartend-ci` is empty.
+  #
+  # Kartend-75w9n — every docker:* run below passes
+  #   --user "$(id -u):$(id -g)" -e HOME=/tmp
+  # The repo is bind-mounted read-write, so a container running as root leaves
+  # its build tree (build/ninja-maintenance, build/Release-clang, build/TSan)
+  # root-owned ON THE HOST. The host user then cannot delete it, and a native
+  # `.scripts/build.sh --maintenance` dies at "Prepare build directory". It
+  # hides well: each block re-creates its own build dir as root, so repeating
+  # the SAME subcommand self-heals and only the host user is stuck.
+  #
+  # HOME=/tmp because a uid with no /etc/passwd entry gets HOME=/, which is not
+  # writable for a non-root user — ccache defaults its cache_dir to
+  # $HOME/.cache/ccache and would fail to create it. /tmp keeps that cache
+  # exactly as ephemeral as it already was: the image sets HOME=/root and these
+  # containers are --rm, so the ccache directory has never survived a run and
+  # no cross-run hit rate is being given up here.
   docker:tidy|docker:maintenance|docker:maintenance-check)
     info "running kartend-ci maintenance-check (clang-tidy + format + IWYU + cppcheck)"
     info "this matches the CI maintenance-check job exactly — same image, same Qt, same clang version"
-    exec docker run --rm -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
-      # clang-format pin (19) is owned by .scripts/lib/clang-format-version.sh;
-      # CI verifies this literal stays in sync (Kartend-gv2xq).
-      ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format
+    exec docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+      -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
+      # Kartend-75w9n: the clang-format pin used to be symlinked into
+      # /usr/local/bin here at runtime, which was both redundant and the ONLY
+      # step in this block that required root — Dockerfile.ci already bakes the
+      # identical symlink at image-build time, where it belongs. The pin itself
+      # is owned by .scripts/lib/clang-format-version.sh and CI verifies the
+      # literal stays in sync (Kartend-gv2xq).
       cd /src
-      rm -rf build/ninja-maintenance
+      # Kartend-75w9n: a tree left by a PRE-fix root-owned run cannot be removed
+      # by the unprivileged user we now run as, and cmake would then fail deep in
+      # "Prepare build directory" with a bare Permission denied. Say what to do.
+      if ! rm -rf build/ninja-maintenance 2>/dev/null; then
+        echo "ERROR: cannot remove build/ninja-maintenance as $(id -u):$(id -g)."
+        echo "It is almost certainly root-owned, left by a docker:* run from before"
+        echo "Kartend-75w9n made these containers run as the invoking user."
+        echo "Clear it once on the HOST, then re-run this command:"
+        echo "    sudo rm -rf build/ninja-maintenance"
+        exit 1
+      fi
       bash .scripts/build.sh --maintenance --format-check
       rc=$?
       echo
@@ -272,9 +309,16 @@ case "$ARG" in
 
   docker:build|docker:release|docker:release-clang)
     info "running kartend-ci Release+clang build (matches CI's build (Release, clang) matrix cell)"
-    exec docker run --rm -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
+    exec docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+      -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
       cd /src
-      rm -rf build/Release-clang
+      # See the Kartend-75w9n note in docker:tidy for why this is guarded.
+      if ! rm -rf build/Release-clang 2>/dev/null; then
+        echo "ERROR: cannot remove build/Release-clang as $(id -u):$(id -g) —"
+        echo "root-owned leftover from a pre-Kartend-75w9n run. On the HOST:"
+        echo "    sudo rm -rf build/Release-clang"
+        exit 1
+      fi
       cmake -S . -B build/Release-clang -G Ninja -DCMAKE_BUILD_TYPE=Release -DKARTEND_BUILD_TESTS=ON -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
       cmake --build build/Release-clang --parallel
       QT_QPA_PLATFORM=offscreen ctest --test-dir build/Release-clang --output-on-failure -LE benchmark
@@ -283,10 +327,17 @@ case "$ARG" in
 
   docker:tsan|docker:thread-sanitizer)
     info "running kartend-ci TSan build (matches CI thread-sanitizer job)"
-    exec docker run --rm -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
+    exec docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+      -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
       cd /src
       pulseaudio --start --exit-idle-time=-1 2>/dev/null || true
-      rm -rf build/TSan
+      # See the Kartend-75w9n note in docker:tidy for why this is guarded.
+      if ! rm -rf build/TSan 2>/dev/null; then
+        echo "ERROR: cannot remove build/TSan as $(id -u):$(id -g) —"
+        echo "root-owned leftover from a pre-Kartend-75w9n run. On the HOST:"
+        echo "    sudo rm -rf build/TSan"
+        exit 1
+      fi
       cmake -S . -B build/TSan -G Ninja -DCMAKE_BUILD_TYPE=Debug -DKARTEND_BUILD_TESTS=ON -DKARTEND_ENABLE_TSAN=ON
       cmake --build build/TSan --parallel
       # -LE benchmark matches every CI ctest invocation (Kartend-egd3a): the
