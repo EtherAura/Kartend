@@ -12,9 +12,12 @@
 // CachedCountsService.
 #include "databasemanager.h"
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
 
+#include <QDeadlineTimer>
+#include <QElapsedTimer>
 #include <QMetaType>
 #include <QSemaphore>
 #include <QStandardPaths>
@@ -40,6 +43,57 @@ namespace {
 /// DatabaseManager instances (e.g. one per integration-test fixture) don't
 /// collide in QSqlDatabase's process-global connection registry.
 std::atomic<quint64> g_connectionInstanceId{0};
+
+/// Total wall-clock the destructor may spend joining worker threads, SHARED
+/// across all of them rather than allotted per thread.
+///
+/// Kartend-c5byx: each join used to get a flat `wait(2000)` whose timeout
+/// tripped a Q_ASSERT_X, which promotes a WALL-CLOCK budget to a correctness
+/// assertion. That is only sound on an unloaded machine. Under `ctest -j`
+/// several test processes tear down MainWindows simultaneously, and a perfectly
+/// healthy worker can miss a 2s scheduling window purely from CPU
+/// oversubscription — aborting the suite (SIGABRT, "Subprocess aborted") on a
+/// run where nothing was actually wrong. Re-running that suite alone then
+/// passes, which is precisely the reported symptom.
+///
+/// The assert is gone (the destructor warns and leaks instead), so what is left
+/// to buy is simply: give a merely-slow thread longer to land, so tests leak
+/// fewer threads across their thousands of ctor/dtor cycles. The tempting fix
+/// — a per-thread second chance — silently doubles the ceiling, because this
+/// destructor joins TWO threads back to back. testDestructDuringActiveScan_
+/// returnsWithinBoundedTime bounds the whole destructor at 6000ms and budgets
+/// "2000ms × 2 threads plus slack" to get there; a 2000ms per-thread grace
+/// pushes the worst case to 1500 (flush) + 4000 + 4000 = 9500ms and breaks it.
+/// An earlier 30s attempt already measured 6114ms under fault injection.
+///
+/// A shared pool keeps the ceiling exactly where it was — 2 × 2000ms total, so
+/// teardown is never slower than before in any build — while still letting one
+/// starved thread wait up to the full 4000ms whenever the other lands quickly,
+/// which is the common case under contention and the one c5byx actually hit.
+/// Because the total cannot grow, this needs no debug/release split: release
+/// shutdown is bounded identically.
+constexpr int TOTAL_THREAD_JOIN_BUDGET_MS = 4000;
+
+/// Join `thread` within whatever remains of the shared `budgetMs`, decrementing
+/// it by the time actually consumed. Returns false if the thread did not finish
+/// (either genuinely stuck, or the pool was already drained by an earlier join).
+///
+/// Callers must quit() every thread BEFORE joining any of them — quit() is
+/// asynchronous, so signalling up front lets the threads unwind concurrently
+/// instead of the second one only starting to shut down once the first has
+/// consumed its share of the pool.
+bool joinThreadWithin(QThread *thread, int &budgetMs) {
+  if (budgetMs <= 0) {
+    // Pool drained. Still poll once: a thread that already finished should be
+    // reaped and deleted rather than leaked on a technicality.
+    return thread->wait(QDeadlineTimer(0));
+  }
+  QElapsedTimer spent;
+  spent.start();
+  const bool joined = thread->wait(QDeadlineTimer(budgetMs));
+  budgetMs -= static_cast<int>(std::min<qint64>(spent.elapsed(), budgetMs));
+  return joined;
+}
 } // namespace
 
 DatabaseManager::DatabaseManager(const ApplicationContext *ctx, QObject *parent)
@@ -243,39 +297,61 @@ DatabaseManager::~DatabaseManager() {
     (void)flushed->tryAcquire(1, FLUSH_WAIT_MS); // best-effort; timeout = proceed to quit
   }
 
-  // Quit + bounded wait. If the worker thread doesn't return within the
-  // budget, intentionally leak it (set pointer to nullptr) rather than let
-  // ~QThread qFatal on a still-running thread. The OS will reclaim threads
-  // and SQLite handles at process exit (we use std::_Exit in main).
-  constexpr int SHUTDOWN_WAIT_MS = 2000;
-  // The leak paths below (timed-out wait → forget the thread pointer) are
-  // safe in production because main.cpp std::_Exits and the OS reaps
-  // the thread + its SQLite handle on process exit. They're NOT safe in
-  // tests, which run thousands of MainWindow ctor/dtor cycles inside one
-  // QApplication and would accumulate leaked threads. Surface a debug-only
-  // qFatal here so a regression that makes 2s actually insufficient
-  // (e.g. a deadlock in the worker) is caught immediately in CI rather
-  // than silently leaking. Release builds keep the leak-and-move-on
-  // semantics because qFatal mid-shutdown isn't useful to end users.
+  // Quit both, then join both against one shared budget
+  // (TOTAL_THREAD_JOIN_BUDGET_MS / joinThreadWithin). If a thread doesn't
+  // return within what's left of it, intentionally leak it (set pointer to
+  // nullptr) rather than let ~QThread qFatal on a still-running thread. The OS
+  // will reclaim threads and SQLite handles at process exit (we use std::_Exit
+  // in main).
+  //
+  // The leak paths below (timed-out wait → forget the thread pointer) are safe
+  // in production because main.cpp std::_Exits and the OS reaps the thread +
+  // its SQLite handle on process exit.
+  //
+  // Kartend-c5byx: this used to Q_ASSERT_X on timeout, i.e. qFatal/SIGABRT in
+  // debug, to stop a wedged worker degrading into a silent thread leak in the
+  // test binary. That was the flake. A timeout here is a WALL-CLOCK event, not
+  // proof of a defect: the worker may simply have been descheduled, which is
+  // ordinary under `ctest -j`. Reproduced deterministically by freezing the
+  // process across a teardown (SIGSTOP does not stop CLOCK_MONOTONIC, so the
+  // wait deadline expires exactly as it would under severe starvation): the
+  // asserting build aborted 2/2 in testDestructDuringActiveScan, the
+  // non-asserting build did not.
+  //
+  // It also contradicted the documented design. testDestructDuringActiveScan_
+  // returnsWithinBoundedTime describes teardown as "falling through to an
+  // intentional thread-leak RATHER THAN qFatal-on-running-QThread", and bounds
+  // the destructor at 6000ms — a contract an abort cannot satisfy and a long
+  // grace period would breach.
+  //
+  // So: warn loudly and leak, in every build. A genuine worker deadlock still
+  // gets caught — by that same bounded-time test, which is a far more precise
+  // detector than a timeout that a busy machine can trip on its own.
+  // Signal both before joining either, so they unwind concurrently and a slow
+  // worker doesn't serialise behind the other's share of the pool.
+  if (m_workerThread) m_workerThread->quit();
+  if (m_scanThread) m_scanThread->quit();
+
+  int joinBudgetMs = TOTAL_THREAD_JOIN_BUDGET_MS;
   if (m_workerThread) {
-    m_workerThread->quit();
-    if (m_workerThread->wait(SHUTDOWN_WAIT_MS)) {
+    if (joinThreadWithin(m_workerThread, joinBudgetMs)) {
       delete m_workerThread;
     } else {
-      Q_ASSERT_X(false, "DatabaseManager::~DatabaseManager",
-                 "m_workerThread did not finish within SHUTDOWN_WAIT_MS — leaked. "
-                 "Likely a worker-side deadlock or a slot blocking on the GUI thread.");
+      qCWarning(lcDatabaseManager)
+          << "query worker thread did not finish within the shutdown budget — leaking it. "
+             "If this is reproducible on an idle machine, suspect a worker-side deadlock or a "
+             "slot blocking on the GUI thread.";
     }
     m_workerThread = nullptr;
   }
   if (m_scanThread) {
-    m_scanThread->quit();
-    if (m_scanThread->wait(SHUTDOWN_WAIT_MS)) {
+    if (joinThreadWithin(m_scanThread, joinBudgetMs)) {
       delete m_scanThread;
     } else {
-      Q_ASSERT_X(false, "DatabaseManager::~DatabaseManager",
-                 "m_scanThread did not finish within SHUTDOWN_WAIT_MS — leaked. "
-                 "Likely a worker-side deadlock or a slot blocking on the GUI thread.");
+      qCWarning(lcDatabaseManager)
+          << "scan worker thread did not finish within the shutdown budget — leaking it. "
+             "If this is reproducible on an idle machine, suspect a worker-side deadlock or a "
+             "slot blocking on the GUI thread.";
     }
     m_scanThread = nullptr;
   }

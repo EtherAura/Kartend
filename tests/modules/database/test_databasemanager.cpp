@@ -146,10 +146,13 @@ void TestDatabaseManager::testDestructAfterInitDatabase_closesConnectionCleanly(
 void TestDatabaseManager::testDestructDuringActiveScan_returnsWithinBoundedTime() {
   // Kicks off a scan against a populated media directory, then destructs
   // mid-flight. The destructor calls requestCancelScan() on both worker and
-  // scan QueryManagers, then quit()+wait(SHUTDOWN_WAIT_MS=2000ms) on each
-  // QThread, falling through to an intentional thread-leak rather than
-  // qFatal-on-running-QThread if the budget expires. Either branch must
-  // return within a reasonable wall-clock bound.
+  // scan QueryManagers, quit()s both QThreads, then joins them against one
+  // SHARED TOTAL_THREAD_JOIN_BUDGET_MS=4000ms pool, falling through to an
+  // intentional thread-leak rather than qFatal-on-running-QThread if the pool
+  // runs out. Either branch must return within a reasonable wall-clock bound.
+  //
+  // The pool is shared rather than per-thread precisely so this bound holds:
+  // a per-thread second chance would let two slow joins stack (Kartend-c5byx).
   m_session = std::make_unique<SessionManager>();
 
   // Build a media directory large enough that a scan does meaningful work.
@@ -190,8 +193,10 @@ void TestDatabaseManager::testDestructDuringActiveScan_returnsWithinBoundedTime(
   // wait for completion — the goal is to destruct mid-scan.
   QCoreApplication::processEvents();
 
-  // Destruction must return within the per-thread 2000ms budget × 2 threads,
-  // plus connection teardown slack. 6000ms is generous on slow CI.
+  // Destruction must return within the shared 4000ms join pool, plus the
+  // pre-join flush wait and connection teardown slack. 6000ms is generous on
+  // slow CI. The pool being shared is what keeps this ceiling flat no matter
+  // how the time splits between the two threads.
   QElapsedTimer timer;
   timer.start();
   delete db;
