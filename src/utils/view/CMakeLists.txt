@@ -9,6 +9,8 @@ target_sources(kartend_utils PRIVATE
   videoutils.cpp
   artworkcandidates.h
   artworkutils.h
+  detailsformat.h
+  durationformat.h
   gridutils.h
   imagedecodeutils.h
   kdecolorscheme.h

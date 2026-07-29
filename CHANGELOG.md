@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Play counts and history no longer go missing when the database is
+  busy.** A write that found the database locked was retried a few times
+  and then discarded outright, so launching an item while something else
+  held the database could leave no trace of it in your play counts or
+  history at all. Contended writes are now requeued instead of dropped —
+  up to five times, backing off between attempts — and the views that
+  depend on them refresh once the write has actually landed rather than
+  when it was handed off.
+- **"Recently played" now reflects when you launched something, not when
+  the database got around to recording it.** Launch times were stamped at
+  the moment the queued write ran, so a launch delayed by a busy database
+  could be recorded as happening *later* than one that genuinely followed
+  it — leaving history and recently-played lists in an order that
+  contradicted what you did. Launch times are now captured when the launch
+  happens, and history is ordered by that time.
+- **Two more strings can now be translated.** The "never" shown for an item
+  that has never been scanned, and the seconds-suffix duration format, live
+  in header-only helpers that were left out of their directory's build
+  source list. The string extractor therefore never saw them, and no amount
+  of refreshing the translator seed would have picked them up — they stayed
+  English in every locale. Both are now extracted.
 - **DAT Manager — the audit status filter can now be translated.** The ten
   entries in the Audit page's status-filter dropdown ("All", "Files I own",
   "Catalogue completeness", and the individual statuses) were marked for

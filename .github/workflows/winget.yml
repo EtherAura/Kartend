@@ -18,6 +18,12 @@ name: Winget Submission
 # microsoft/winget-pkgs#404966 — see Kartend-3qqck). From the first
 # merged version onward, this workflow handles every release.
 #
+# Until that bootstrap PR merges, a release cut would fail this
+# workflow for a reason entirely outside our control (a Microsoft
+# moderator has to merge it). The "package bootstrapped" gate below
+# turns that into a green run carrying a warning, and lifts itself
+# automatically the moment the manifest appears upstream.
+#
 # Setup (one-time, on the user side):
 #
 #   1. Fork microsoft/winget-pkgs to your GitHub account.
@@ -31,11 +37,35 @@ name: Winget Submission
 # Until WINGET_PAT is set, this workflow is a no-op — the gating step
 # emits a warning and exits 0. So the workflow can land in main before
 # the secret is configured without breaking the release pipeline.
+#
+# Verifying without a release: run this workflow from the Actions tab
+# ("Run workflow"), give it an existing tag, and leave "dry-run" ticked.
+# It resolves the tag, evaluates both gates, and writes the verdict to the
+# run summary without touching winget-pkgs. Note GitHub only offers the
+# "Run workflow" button once this file is on the DEFAULT branch, so the
+# manual path is not available from a PR branch.
 
 on:
   workflow_run:
     workflows: [Release]
     types: [completed]
+
+  # Manual entry point so the gates above can be exercised WITHOUT cutting a
+  # release. Everything here is release-triggered and silently-skippable, which
+  # is exactly how the unset-WINGET_PAT no-op went unnoticed across two whole
+  # releases (v0.0.16 and v0.0.17 submitted nothing; see Kartend-3qqck). A
+  # workflow nobody can run is a workflow nobody checks. See Kartend-cne85.
+  workflow_dispatch:
+    inputs:
+      release-tag:
+        description: 'Release tag to evaluate (e.g. v0.0.17).'
+        required: true
+        type: string
+      dry-run:
+        description: 'Report what the gates decide, but do not submit to winget-pkgs.'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -43,16 +73,62 @@ permissions:
 jobs:
   publish-winget:
     runs-on: windows-latest
-    # Two gates: Release must have actually succeeded, and the
-    # triggering run must have been on a tag (head_branch is the
-    # tag name for tag-pushed runs, e.g. "v0.0.10"). main-branch
-    # pushes also re-run Release in some configurations; the tag
-    # filter avoids submitting a manifest off a non-release run.
+    # For the release path, two gates: Release must have actually succeeded,
+    # and the triggering run must have been on a tag (head_branch is the tag
+    # name for tag-pushed runs, e.g. "v0.0.10"). main-branch pushes also
+    # re-run Release in some configurations; the tag filter avoids submitting
+    # a manifest off a non-release run.
+    #
+    # A manual dispatch carries none of those workflow_run fields, so it is
+    # admitted on its own terms and the tag comes from the input instead —
+    # resolved once, in the "Resolve release tag" step below.
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      startsWith(github.event.workflow_run.head_branch, 'v')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+
+    env:
+      # Single source of truth for the package id: the bootstrap gate
+      # derives the upstream manifest path from it, and the submit step
+      # passes it to winget-releaser. Keeping one copy means the gate
+      # can't drift into checking a different package than we publish.
+      WINGET_IDENTIFIER: EtherAura.Kartend
 
     steps:
+      - name: Resolve release tag
+        # The tag lives in a different place per trigger — workflow_run
+        # carries it as head_branch, dispatch as an input. Resolve it once
+        # here so every downstream step reads a single output and no step
+        # has to know which event it is running under.
+        id: tag
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+          INPUT_TAG: ${{ inputs.release-tag }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$INPUT_TAG"
+          else
+            tag="$RUN_TAG"
+          fi
+
+          # The release path already enforces this in the job-level `if:`,
+          # but a dispatch input is free text — reject a malformed tag here
+          # rather than letting winget-releaser fail confusingly later.
+          case "$tag" in
+            v*) ;;
+            *)
+              echo "::error::Release tag '$tag' does not look like a version tag (expected a leading 'v', e.g. v0.0.17)."
+              exit 1
+              ;;
+          esac
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: $tag (trigger: $EVENT_NAME)"
+
       - name: Check WINGET_PAT secret presence
         # GitHub Actions can't reference `secrets.X` inside `if:` for
         # security reasons; check via env var instead and emit a
@@ -71,8 +147,127 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Submit to winget-pkgs
+      - name: Check package bootstrapped upstream
+        # winget-releaser can only UPDATE an existing package, so submitting
+        # before the first manifest has merged upstream is a guaranteed hard
+        # failure. Probe the manifest directory in microsoft/winget-pkgs and
+        # skip (green, with a warning) when it isn't there yet.
+        #
+        # Only 404 means "not bootstrapped". Any other non-200 — rate limit,
+        # outage, auth change — fails the step deliberately: silently treating
+        # those as "not bootstrapped" would disable winget submission for every
+        # future release with nothing but a warning to show for it.
+        id: bootstrap
         if: steps.check.outputs.configured == 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          # winget-pkgs lays packages out as
+          #   manifests/<lowercased first letter>/<Publisher>/<Package>[/<Suffix>...]
+          # i.e. every dot in the identifier becomes a path separator
+          # (Microsoft.PowerToys -> manifests/m/Microsoft/PowerToys).
+          first=$(printf '%s' "$WINGET_IDENTIFIER" | cut -c1 | tr '[:upper:]' '[:lower:]')
+          path="manifests/$first/$(printf '%s' "$WINGET_IDENTIFIER" | tr '.' '/')"
+          url="https://api.github.com/repos/microsoft/winget-pkgs/contents/$path"
+
+          # Body goes to a relative file rather than /dev/null: this job runs
+          # on windows-latest, so `bash` is Git Bash driving native curl.exe,
+          # and a literal /dev/null argument depends on MSYS path translation.
+          # A plain filename sidesteps that entirely.
+          #
+          # curl's own exit code is captured separately from the HTTP status —
+          # a DNS/TLS/timeout failure must report as itself, not fall through
+          # `set -e` as an unexplained step failure.
+          set +e
+          status=$(curl -sS --max-time 30 -o winget-probe-body.json -w '%{http_code}' \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$url")
+          curl_rc=$?
+          set -e
+
+          if [ "$curl_rc" -ne 0 ]; then
+            echo "::error::curl exited $curl_rc probing $url — network/TLS failure, cannot determine whether $WINGET_IDENTIFIER is bootstrapped upstream."
+            exit 1
+          fi
+
+          case "$status" in
+            200)
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              echo "Found $path upstream; proceeding with submission."
+              ;;
+            404)
+              echo "exists=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Skipping winget submission: $WINGET_IDENTIFIER has no merged manifest upstream yet ($path is absent), and winget-releaser is update-only. The bootstrap PR is microsoft/winget-pkgs#404966 — once a moderator merges it this gate lifts itself and submission resumes automatically. See Kartend-3qqck."
+              ;;
+            *)
+              echo "::error::Unexpected HTTP $status probing $url — cannot tell whether $WINGET_IDENTIFIER is bootstrapped upstream."
+              exit 1
+              ;;
+          esac
+
+      - name: Report gate outcomes
+        # The whole failure mode this workflow keeps hitting is "went green,
+        # did nothing, nobody noticed". Write the decision to the run summary
+        # so a dispatch (or a release run) says plainly whether it submitted
+        # and, if not, which gate stopped it.
+        if: always() && steps.tag.outcome == 'success'
+        shell: bash
+        env:
+          CONFIGURED: ${{ steps.check.outputs.configured }}
+          BOOTSTRAPPED: ${{ steps.bootstrap.outputs.exists }}
+          BOOTSTRAP_OUTCOME: ${{ steps.bootstrap.outcome }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          TRIGGER: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          # Order matters: a failed probe leaves `exists` empty, which is
+          # indistinguishable from "absent upstream" unless the step outcome
+          # is consulted first. Reporting an API outage as "not bootstrapped
+          # yet" would point at the wrong gate entirely.
+          if [ "$CONFIGURED" != "true" ]; then
+            verdict='**Skipped** — `WINGET_PAT` secret is not configured.'
+          elif [ "$BOOTSTRAP_OUTCOME" = "failure" ]; then
+            verdict='**Failed** — could not determine whether the package is bootstrapped upstream (API or network error). This is not a "not published yet" result; see the step log.'
+          elif [ "$BOOTSTRAPPED" != "true" ]; then
+            verdict='**Skipped** — package has no merged manifest upstream yet (winget-releaser is update-only).'
+          elif [ "$DRY_RUN" = "true" ]; then
+            verdict='**Dry run** — all gates passed; submission was intentionally not attempted.'
+          else
+            verdict='**Submitted** — winget-releaser ran against winget-pkgs.'
+          fi
+
+          {
+            echo "### Winget submission"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Package | \`$WINGET_IDENTIFIER\` |"
+            echo "| Tag | \`$TAG\` |"
+            echo "| Trigger | \`$TRIGGER\` |"
+            echo "| \`WINGET_PAT\` configured | \`${CONFIGURED:-false}\` |"
+            echo "| Bootstrapped upstream | \`${BOOTSTRAPPED:-unknown}\` |"
+            echo
+            echo "$verdict"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Submit to winget-pkgs
+        # The dry-run gate is dispatch-only. Written as "not a dispatch OR
+        # dry-run is off" rather than "not (dispatch AND dry-run)" so that on
+        # a real release the first operand is already true and `||`
+        # short-circuits — the `inputs` context, which is not populated for
+        # workflow_run events, is never consulted at all. A release must not
+        # be able to silently degrade into a no-op via this condition.
+        if: >-
+          steps.check.outputs.configured == 'true' &&
+          steps.bootstrap.outputs.exists == 'true' &&
+          (github.event_name != 'workflow_dispatch' || !inputs.dry-run)
         # vedantmgoyal9/winget-releaser handles tag-to-version
         # detection, regex-based installer URL extraction from the
         # release assets, fork sync against microsoft/winget-pkgs,
@@ -88,12 +283,12 @@ jobs:
         #
         # release-tag is required because we're triggered by
         # workflow_run rather than the release event — the action
-        # can't auto-detect the tag from the event context. Source
-        # it from workflow_run.head_branch, which carries the tag
-        # name for tag-pushed runs.
+        # can't auto-detect the tag from the event context. It comes
+        # from the "Resolve release tag" step, which normalises the
+        # workflow_run and dispatch cases into one output.
         uses: vedantmgoyal9/winget-releaser@4ffc7888bffd451b357355dc214d43bb9f23917e # v2
         with:
-          identifier: EtherAura.Kartend
+          identifier: ${{ env.WINGET_IDENTIFIER }}
           installers-regex: '-windows-x64-setup\.exe$'
-          release-tag: ${{ github.event.workflow_run.head_branch }}
+          release-tag: ${{ steps.tag.outputs.tag }}
           token: ${{ secrets.WINGET_PAT }}

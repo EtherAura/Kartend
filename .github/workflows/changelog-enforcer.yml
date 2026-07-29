@@ -1,18 +1,30 @@
 name: CHANGELOG Enforcer
 
-# Fails a pull request if it touches user-visible code (src/ outside tests/)
-# without adding a corresponding entry under [Unreleased] in CHANGELOG.md.
-# Doc-only, test-only, and CI-only PRs are auto-exempted by the path check;
-# anything else can opt out by adding the `no-changelog` label.
+# Fails a change that touches user-visible code (src/ outside tests/) without
+# adding a corresponding entry under [Unreleased] in CHANGELOG.md. Doc-only,
+# test-only, and CI-only changes are auto-exempted by the path check; anything
+# else can opt out with the `no-changelog` label (PRs) or a `[no-changelog]`
+# marker in a commit message (pushes).
 #
 # Rationale: CHANGELOG.md has lagged code several times in the past
 # (Kartend-pbed); manual discipline is fragile. This gate is a lightweight,
-# label-overridable backstop that runs in a fraction of a second so it
-# doesn't slow the per-PR matrix.
+# overridable backstop that runs in a fraction of a second so it doesn't slow
+# the per-PR matrix.
+#
+# Kartend-78gv3: it used to run on `pull_request` only, which meant it never
+# ran at all for work pushed straight to main — and most work here is. The
+# gate was not broken (82 green runs), it was bypassed: v0.0.17..main was 23
+# linear commits with no PR among them, and two user-visible db fixes
+# (Kartend-rctcv, Kartend-neb85) shipped with no CHANGELOG entry as a direct
+# result. The push leg below closes that hole. It is necessarily
+# after-the-fact — it cannot block a push that already landed — but it turns
+# a silent omission into a red run on main while the change is still fresh.
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
@@ -30,25 +42,51 @@ jobs:
 
       - name: Check for CHANGELOG entry
         env:
+          EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.event.pull_request.base.ref }}
           PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
           set -euo pipefail
 
-          # Opt-out: PR carries the `no-changelog` label.
+          # Opt-out: PR carries the `no-changelog` label. Empty on a push,
+          # where the commit-message marker below serves the same purpose.
           if printf '%s' "$PR_LABELS" | grep -q '"no-changelog"'; then
             echo "::notice::PR has the 'no-changelog' label — skipping CHANGELOG check."
             exit 0
           fi
 
-          BASE_SHA="$(git rev-parse "origin/${BASE_REF}")"
-          MERGE_BASE="$(git merge-base "${BASE_SHA}" HEAD)"
+          # The two triggers need different diff bases.
+          if [ "$EVENT_NAME" = "push" ]; then
+            # github.event.before is the branch tip prior to the push. It is
+            # all-zeros when the ref was just created, and after a force-push
+            # it can name a commit this checkout does not have — verify the
+            # object exists rather than letting `git diff` abort the run.
+            if [ -n "$BEFORE_SHA" ] \
+               && [ "$BEFORE_SHA" != "0000000000000000000000000000000000000000" ] \
+               && git cat-file -e "${BEFORE_SHA}^{commit}" 2>/dev/null; then
+              RANGE_BASE="$BEFORE_SHA"
+            else
+              echo "::notice::No usable previous tip for this push (new ref or force-push); falling back to HEAD~1."
+              RANGE_BASE="$(git rev-parse 'HEAD~1')"
+            fi
 
-          CHANGED=$(git diff --name-only "${MERGE_BASE}" HEAD)
-          echo "Changed files since merge base ${MERGE_BASE}:"
+            # Push counterpart of the `no-changelog` label: any commit in the
+            # pushed range may carry a [no-changelog] marker.
+            if git log --format=%B "${RANGE_BASE}..HEAD" | grep -qF '[no-changelog]'; then
+              echo "::notice::A commit in this push carries [no-changelog] — skipping CHANGELOG check."
+              exit 0
+            fi
+          else
+            BASE_SHA="$(git rev-parse "origin/${BASE_REF}")"
+            RANGE_BASE="$(git merge-base "${BASE_SHA}" HEAD)"
+          fi
+
+          CHANGED=$(git diff --name-only "${RANGE_BASE}" HEAD)
+          echo "Changed files since ${RANGE_BASE}:"
           printf '  %s\n' $CHANGED
 
-          # Decide if the PR touches user-visible code:
+          # Decide if the change touches user-visible code:
           # - any src/ file outside src/.../tests subdirs counts
           # - tests/, docs/, .github/, .scripts/, CONTRIBUTING.md, CHANGELOG.md
           #   itself, top-level configs are exempt
@@ -69,7 +107,7 @@ jobs:
           done <<<"$CHANGED"
 
           if [ "$USER_VISIBLE" -eq 0 ]; then
-            echo "::notice::PR doesn't touch user-visible code — CHANGELOG entry not required."
+            echo "::notice::Change doesn't touch user-visible code — CHANGELOG entry not required."
             exit 0
           fi
 
@@ -77,12 +115,12 @@ jobs:
           # least one line beneath the [Unreleased] header. A no-op edit
           # (e.g., trailing whitespace) shouldn't count.
           if ! printf '%s\n' "$CHANGED" | grep -qx 'CHANGELOG.md'; then
-            echo "::error::PR modifies user-visible code under src/ but does not update CHANGELOG.md."
-            echo "Add an entry under [Unreleased], or apply the 'no-changelog' label for refactor-only / internal changes."
+            echo "::error::Change modifies user-visible code under src/ but does not update CHANGELOG.md."
+            echo "Add an entry under [Unreleased]. For refactor-only / internal changes, opt out with the 'no-changelog' label on a PR, or a [no-changelog] marker in the commit message when pushing."
             exit 1
           fi
 
-          ADDED=$(git diff "${MERGE_BASE}" HEAD -- CHANGELOG.md \
+          ADDED=$(git diff "${RANGE_BASE}" HEAD -- CHANGELOG.md \
             | awk '/^\+\+\+ / { in_file = 1; next } in_file && /^\+[^+]/ { print }' \
             | grep -cE '^\+[^[:space:]]' || true)
           if [ "$ADDED" -eq 0 ]; then

@@ -123,17 +123,30 @@ jobs:
           appstreamcli validate --pedantic packaging/*.metainfo.xml
           desktop-file-validate packaging/*.desktop
 
-      - name: Check translation-source drift (lupdate, non-fatal)
+      - name: Check translation-source drift (lupdate)
         # Kartend-pnlot.3: translations/kartend_en.ts (the translator seed) is
         # refreshed manually — `cmake --build <builddir> --target
         # update_translations` — which is easy to forget after touching tr()
         # strings, and nothing else in CI runs lupdate at all. Cheap,
         # configure-less cross-check: run lupdate straight over src/ into a
         # temp .ts and compare message counts against the committed seed.
-        # Count comparison (not a byte diff) because a project-less lupdate
-        # walk isn't guaranteed to match the CMake qt_add_lupdate extraction
-        # byte-for-byte; for the same reason drift is a ::warning, not a
-        # failure — it flags rot, it can't prove staleness.
+        #
+        # Kartend-ny9fy: this was a ::warning for fear that a project-less
+        # lupdate walk might not match the CMake qt_add_lupdate extraction,
+        # making a mismatch unable to prove staleness. That caution backfired:
+        # the step reported a real two-message delta on every main run for
+        # weeks and everyone ignored it because the job stayed green, while
+        # two user-facing strings sat untranslatable (Kartend-6gig9).
+        #
+        # It is now fatal. The two extractions can only diverge over files
+        # lupdate sees but the build does not, and src/ has no platform-gated
+        # sources at all — no if(WIN32)/if(APPLE) in any src/ CMakeLists — so
+        # the walk and the target cover the same files. The one way they do
+        # diverge, a file missing from target_sources, is itself the bug this
+        # check exists to catch, so failing on it is correct rather than a
+        # false positive. If platform-conditional sources are ever added,
+        # revisit: the honest fix then is to drive the check from the
+        # generated <build>/.lupdate project instead of a bare walk.
         run: |
           # lupdate lands in different places per distro: on PATH, as
           # lupdate6 (Arch), or off PATH in /usr/lib/qt6/bin (Debian/Ubuntu's
@@ -155,7 +168,46 @@ jobs:
           live=$(( total - stale ))
           echo "Fresh lupdate extract: $fresh messages; committed kartend_en.ts: $live live ($stale vanished/obsolete)."
           if [ "$fresh" -ne "$live" ]; then
-            echo "::warning file=translations/kartend_en.ts::Translation seed looks stale: a fresh lupdate extract over src/ finds $fresh messages but the committed kartend_en.ts carries $live. Refresh with 'cmake --build <builddir> --target update_translations' and commit the result (docs/dev/i18n.md)."
+            # Name the actual strings rather than just the counts. Kartend-6gig9
+            # sat as an ignored two-message delta for weeks and diagnosing it
+            # meant diffing the two .ts files by hand; printing the offenders
+            # makes the cause obvious from the log alone.
+            python3 - "$RUNNER_TEMP/kartend_fresh.ts" translations/kartend_en.ts <<'PYEOF'
+          import sys, xml.etree.ElementTree as ET
+
+          def messages(path):
+              root, out = ET.parse(path).getroot(), {}
+              for ctx in root.findall('context'):
+                  name = ctx.findtext('name') or ''
+                  for m in ctx.findall('message'):
+                      loc = m.find('location')
+                      where = f"{loc.get('filename')}:{loc.get('line')}" if loc is not None else '?'
+                      out[(name, m.findtext('source') or '')] = where
+              return out
+
+          fresh, seed = messages(sys.argv[1]), messages(sys.argv[2])
+          for label, delta, hint in (
+              ("in source but MISSING from the seed", {k: v for k, v in fresh.items() if k not in seed},
+               "these strings cannot be translated at all today"),
+              ("in the seed but NO LONGER in source", {k: v for k, v in seed.items() if k not in fresh},
+               "these are leftovers a refresh would drop"),
+          ):
+              if not delta:
+                  continue
+              print(f"\n{len(delta)} message(s) {label} ({hint}):")
+              for (ctx, src), where in sorted(delta.items()):
+                  print(f"  [{ctx}] {src!r}\n      {where}")
+          PYEOF
+            echo "::error file=translations/kartend_en.ts::Translation seed is stale: a fresh lupdate extract over src/ finds $fresh messages but the committed kartend_en.ts carries $live. See the message list above."
+            echo "Two things cause this, and they need different fixes:"
+            echo "  1. The seed was not refreshed after tr()/translate() strings changed."
+            echo "     Fix: cmake --build <builddir> --target update_translations, then commit translations/kartend_en.ts (docs/dev/i18n.md)."
+            echo "  2. A source file is missing from target_sources in its directory's CMakeLists.txt."
+            echo "     qt_add_lupdate only scans files listed there, so refreshing will NOT help — the strings"
+            echo "     can never reach the seed. This is Kartend-6gig9: two header-only formatters were left out"
+            echo "     of src/utils/view/CMakeLists.txt and stayed untranslatable across two seed refreshes."
+            echo "     If a refresh does not clear this, check that every file named above is listed."
+            exit 1
           fi
 
   build:

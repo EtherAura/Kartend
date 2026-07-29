@@ -4042,6 +4042,14 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
 </context>
 <context>
+    <name>DetailsFormat</name>
+    <message>
+        <location filename="../src/utils/view/detailsformat.h" line="+86"/>
+        <source>never</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>DetailsPane</name>
     <message>
         <location filename="../src/ui/widgets/panes/detailspane.ui" line="+14"/>
@@ -4322,6 +4330,14 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     <message>
         <location line="+39"/>
         <source>Video</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>DurationFormat</name>
+    <message>
+        <location filename="../src/utils/view/durationformat.h" line="+29"/>
+        <source>%1s</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -6702,7 +6718,17 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+5"/>
+        <source>&amp;Import</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>&amp;Export</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+17"/>
         <source>&amp;View</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6718,16 +6744,21 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+17"/>
+        <source>Too&amp;ls</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
         <source>&amp;Help</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+5"/>
         <source>Se&amp;ttings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+13"/>
         <source>Exit</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6853,7 +6884,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+5"/>
-        <source>Open &amp;Random Item</source>
+        <source>&amp;Open Random Item</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -7254,12 +7285,12 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>MenuController</name>
     <message>
-        <location filename="../src/core/menucontroller.cpp" line="+344"/>
+        <location filename="../src/core/menucontroller.cpp" line="+378"/>
         <source>Fullscreen</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+98"/>
+        <location line="+91"/>
         <source>Keyboard Shortcuts</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7279,12 +7310,12 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+26"/>
+        <location line="+17"/>
         <source>DAT Audit…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+18"/>
         <source>Scraper Providers...</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7309,7 +7340,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+13"/>
         <source>Export Collection as Kart...</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7319,17 +7350,17 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+13"/>
+        <location line="+12"/>
         <source>Export Current Theme...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+14"/>
         <source>Layout Profiles...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+13"/>
         <source>Collection Health...</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7359,12 +7390,12 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+15"/>
         <source>New Library Wizard...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+18"/>
         <source>Presentation Profiles...</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7406,7 +7437,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+64"/>
+        <location line="+46"/>
         <source>Collection</source>
         <translation type="unfinished"></translation>
     </message>
