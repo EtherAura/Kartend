@@ -247,29 +247,11 @@ void MenuController::setupActionDetailsPaneOrientation() {
   m_orientationActionTop = addOrientation(tr("Top"), DetailsPanePosition::Top);
   m_orientationActionBottom = addOrientation(tr("Bottom"), DetailsPanePosition::Bottom);
 
-  // Sit immediately after Show Details Pane so the pair reads as a single
-  // group — the action's neighbor in the View menu (.ui order) is the
-  // separator before the Layout submenu, and we want the orientation submenu
-  // placed before that separator. Walk the action list to find the slot
-  // explicitly so the .ui can be re-ordered later without breaking placement.
-  QAction *showSidebarAct = m_ctx.ui->actionShowSidebar;
-  const QList<QAction *> existing = m_ctx.ui->menuView->actions();
-  QAction *insertBefore = nullptr;
-  bool sawShowSidebar = false;
-  for (QAction *act : existing) {
-    if (sawShowSidebar) {
-      insertBefore = act;
-      break;
-    }
-    if (act == showSidebarAct) {
-      sawShowSidebar = true;
-    }
-  }
-  if (insertBefore) {
-    m_ctx.ui->menuView->insertMenu(insertBefore, m_orientationMenu);
-  } else {
-    m_ctx.ui->menuView->addMenu(m_orientationMenu);
-  }
+  // Sits beside the Layout submenu, in the "how the view is arranged" group
+  // below the visibility toggles. mainwindow.ui's View menu ends with
+  // menuLayout, and setupMenuBar() calls this right after setupLayoutActions(),
+  // so a plain append lands in the right slot (Kartend-7lsh1).
+  m_ctx.ui->menuView->addMenu(m_orientationMenu);
 
   // Initial sync — picks up the active collection's persisted position so the
   // checkmark is correct on first menu open without waiting for a switch.

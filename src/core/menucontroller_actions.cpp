@@ -72,34 +72,33 @@ void MenuController::setupActionOpenRandomItem() {
   });
 }
 
-// File menu entry for importing a.kart package.
+// File → Import entry for importing a.kart package.
 void MenuController::setupActionImportKart() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_importKartAction = new QAction(tr("Import Kart..."), this);
   m_ctx.mainWindow->addAction(m_importKartAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addSeparator();
-    m_ctx.ui->menuFile->addAction(m_importKartAction);
+  if (m_ctx.ui->menuImport) {
+    m_ctx.ui->menuImport->addAction(m_importKartAction);
   }
   connect(m_importKartAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onImportKart) m_ctx.onImportKart();
   });
 }
 
-// File menu entry for exporting the active collection as a.kart.
+// File → Export entry for exporting the active collection as a.kart.
 void MenuController::setupActionExportKart() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_exportKartAction = new QAction(tr("Export Collection as Kart..."), this);
   m_ctx.mainWindow->addAction(m_exportKartAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addAction(m_exportKartAction);
+  if (m_ctx.ui->menuExport) {
+    m_ctx.ui->menuExport->addAction(m_exportKartAction);
   }
   connect(m_exportKartAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onExportKart) m_ctx.onExportKart();
   });
 }
 
-// File menu entry for importing a shareable theme preset (.kartend-theme.json).
+// File → Import entry for a shareable theme preset (.kartend-theme.json).
 // Distinct from Kart import — themes carry only the visual settings, not the
 // collection's media paths / launcher / scraper config, so they can be shared
 // across collections with completely different content.
@@ -107,9 +106,8 @@ void MenuController::setupActionImportTheme() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_importThemeAction = new QAction(tr("Import Theme..."), this);
   m_ctx.mainWindow->addAction(m_importThemeAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addSeparator();
-    m_ctx.ui->menuFile->addAction(m_importThemeAction);
+  if (m_ctx.ui->menuImport) {
+    m_ctx.ui->menuImport->addAction(m_importThemeAction);
   }
   connect(m_importThemeAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onImportTheme) m_ctx.onImportTheme();
@@ -120,20 +118,23 @@ void MenuController::setupActionExportTheme() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_exportThemeAction = new QAction(tr("Export Current Theme..."), this);
   m_ctx.mainWindow->addAction(m_exportThemeAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addAction(m_exportThemeAction);
+  if (m_ctx.ui->menuExport) {
+    m_ctx.ui->menuExport->addAction(m_exportThemeAction);
   }
   connect(m_exportThemeAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onExportTheme) m_ctx.onExportTheme();
   });
 }
 
+// View-menu entry: named layout snapshots live with the layout controls they
+// capture, below a separator from the live Layout / orientation toggles.
 void MenuController::setupActionLayoutProfiles() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_layoutProfilesAction = new QAction(tr("Layout Profiles..."), this);
   m_ctx.mainWindow->addAction(m_layoutProfilesAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addAction(m_layoutProfilesAction);
+  if (m_ctx.ui->menuView) {
+    m_ctx.ui->menuView->addSeparator();
+    m_ctx.ui->menuView->addAction(m_layoutProfilesAction);
   }
   connect(m_layoutProfilesAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onManageLayoutProfiles) m_ctx.onManageLayoutProfiles();
@@ -144,8 +145,8 @@ void MenuController::setupActionCollectionHealth() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_collectionHealthAction = new QAction(tr("Collection Health..."), this);
   m_ctx.mainWindow->addAction(m_collectionHealthAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addAction(m_collectionHealthAction);
+  if (m_ctx.ui->menuTools) {
+    m_ctx.ui->menuTools->addAction(m_collectionHealthAction);
   }
   connect(m_collectionHealthAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onShowCollectionHealth) m_ctx.onShowCollectionHealth();
@@ -156,8 +157,8 @@ void MenuController::setupActionVariantGrouping() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_variantGroupingAction = new QAction(tr("Duplicates and variants..."), this);
   m_ctx.mainWindow->addAction(m_variantGroupingAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addAction(m_variantGroupingAction);
+  if (m_ctx.ui->menuTools) {
+    m_ctx.ui->menuTools->addAction(m_variantGroupingAction);
   }
   connect(m_variantGroupingAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onShowVariantGrouping) m_ctx.onShowVariantGrouping();
@@ -168,8 +169,8 @@ void MenuController::setupActionBulkEdit() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_bulkEditAction = new QAction(tr("Bulk Edit Items..."), this);
   m_ctx.mainWindow->addAction(m_bulkEditAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addAction(m_bulkEditAction);
+  if (m_ctx.ui->menuTools) {
+    m_ctx.ui->menuTools->addAction(m_bulkEditAction);
   }
   connect(m_bulkEditAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onBulkEdit) m_ctx.onBulkEdit();
@@ -180,8 +181,8 @@ void MenuController::setupActionReviewMissingMetadata() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_reviewMissingMetadataAction = new QAction(tr("Review Missing Metadata..."), this);
   m_ctx.mainWindow->addAction(m_reviewMissingMetadataAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addAction(m_reviewMissingMetadataAction);
+  if (m_ctx.ui->menuTools) {
+    m_ctx.ui->menuTools->addAction(m_reviewMissingMetadataAction);
   }
   connect(m_reviewMissingMetadataAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onReviewMissingMetadata) m_ctx.onReviewMissingMetadata();
@@ -192,8 +193,8 @@ void MenuController::setupActionArtworkWizard() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_artworkWizardAction = new QAction(tr("Assign Missing Artwork..."), this);
   m_ctx.mainWindow->addAction(m_artworkWizardAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addAction(m_artworkWizardAction);
+  if (m_ctx.ui->menuTools) {
+    m_ctx.ui->menuTools->addAction(m_artworkWizardAction);
   }
   connect(m_artworkWizardAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onArtworkWizard) m_ctx.onArtworkWizard();
@@ -214,12 +215,21 @@ void MenuController::setupActionBindingVisualizer() {
   });
 }
 
+// Heads the File menu — "create a new thing" is the conventional first entry.
+// Anchored ahead of Soft Refresh rather than appended, since appending would
+// land it below Exit.
 void MenuController::setupActionNewLibraryWizard() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_newLibraryWizardAction = new QAction(tr("New Library Wizard..."), this);
   m_ctx.mainWindow->addAction(m_newLibraryWizardAction);
   if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addAction(m_newLibraryWizardAction);
+    QAction *const anchor = m_ctx.ui->actionSoftRefresh;
+    if (anchor) {
+      m_ctx.ui->menuFile->insertAction(anchor, m_newLibraryWizardAction);
+      m_ctx.ui->menuFile->insertSeparator(anchor);
+    } else {
+      m_ctx.ui->menuFile->addAction(m_newLibraryWizardAction);
+    }
   }
   connect(m_newLibraryWizardAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onNewLibraryWizard) m_ctx.onNewLibraryWizard();
@@ -230,8 +240,8 @@ void MenuController::setupActionPresentationProfiles() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_presentationProfilesAction = new QAction(tr("Presentation Profiles..."), this);
   m_ctx.mainWindow->addAction(m_presentationProfilesAction);
-  if (m_ctx.ui->menuFile) {
-    m_ctx.ui->menuFile->addAction(m_presentationProfilesAction);
+  if (m_ctx.ui->menuView) {
+    m_ctx.ui->menuView->addAction(m_presentationProfilesAction);
   }
   connect(m_presentationProfilesAction, &QAction::triggered, this, [this]() {
     if (m_ctx.onPresentationProfiles) m_ctx.onPresentationProfiles();

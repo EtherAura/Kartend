@@ -9,6 +9,7 @@
 #include <QByteArray>
 #include <QList>
 #include <QMainWindow>
+#include <QMenu>
 #include <QString>
 #include <QTest>
 
@@ -19,6 +20,17 @@ namespace {
 const QList<QByteArray> kLayoutActionNames = {
     QByteArrayLiteral("actionLayoutGrid"), QByteArrayLiteral("actionLayoutList"),
     QByteArrayLiteral("actionLayoutCoverFlow"), QByteArrayLiteral("actionLayoutHorizontal")};
+
+// Non-separator entry texts of a menu, in display order.
+QStringList visibleEntries(const QMenu *menu) {
+  QStringList out;
+  if (!menu) return out;
+  const auto actions = menu->actions();
+  for (const QAction *action : actions) {
+    if (!action->isSeparator()) out << action->text();
+  }
+  return out;
+}
 
 } // namespace
 
@@ -169,4 +181,120 @@ void TestMenuController::syncLayoutActions_checksExactlyActiveViewType() {
              qPrintable(QStringLiteral("missing action %1").arg(QString::fromLatin1(name))));
     QCOMPARE(action->isChecked(), name == expectedAction);
   }
+}
+
+// --- menu composition (Kartend-7lsh1) ------------------------------------
+//
+// setupMenuBar() builds each menu by appending, so call order is display
+// order. Before Kartend-7lsh1 the dynamic File entries appended *past* the
+// .ui's trailing Exit, stranding it mid-menu with 14 items below it, and the
+// .ui's About / About Qt sat above every dynamic Help entry. These pin the
+// resulting composition so a newly-added action can't silently re-break it.
+
+void TestMenuController::setupMenuBar_keepsExitLastInFileMenu() {
+  QMainWindow win;
+  Ui_MainWindow ui;
+  ui.setupUi(&win);
+
+  GeneralSettings settings;
+  MenuController controller;
+  MenuControllerContext ctx;
+  ctx.ui = &ui;
+  ctx.mainWindow = &win;
+  ctx.getGeneralSettings = [&settings] { return &settings; };
+  controller.setContext(ctx);
+
+  controller.setupMenuBar();
+
+  QVERIFY(ui.menuFile);
+  const QStringList entries = visibleEntries(ui.menuFile);
+  QVERIFY2(!entries.isEmpty(), "File menu is empty");
+  QCOMPARE(entries.last(), ui.actionExit->text());
+
+  // New Library Wizard heads the menu, above the refresh pair.
+  QCOMPARE(entries.first(), QStringLiteral("New Library Wizard..."));
+
+  // The whole point of the reorganization: File stays small. The old layout
+  // was 25 rows; anything approaching that is a regression in grouping.
+  QVERIFY2(entries.size() <= 12,
+           qPrintable(QStringLiteral("File menu grew to %1 entries; move new tools to the Tools "
+                                     "menu instead of appending to File")
+                          .arg(entries.size())));
+}
+
+void TestMenuController::setupMenuBar_keepsAboutAtTailOfHelpMenu() {
+  QMainWindow win;
+  Ui_MainWindow ui;
+  ui.setupUi(&win);
+
+  GeneralSettings settings;
+  MenuController controller;
+  MenuControllerContext ctx;
+  ctx.ui = &ui;
+  ctx.mainWindow = &win;
+  ctx.getGeneralSettings = [&settings] { return &settings; };
+  controller.setContext(ctx);
+
+  controller.setupMenuBar();
+
+  QVERIFY(ui.menuHelp);
+  const QStringList entries = visibleEntries(ui.menuHelp);
+  QVERIFY2(entries.size() >= 2, "Help menu should hold more than About / About Qt");
+  QCOMPARE(entries.at(entries.size() - 2), ui.actionAbout->text());
+  QCOMPARE(entries.last(), ui.actionAboutQt->text());
+}
+
+void TestMenuController::setupMenuBar_routesLibraryToolsToToolsMenu() {
+  QMainWindow win;
+  Ui_MainWindow ui;
+  ui.setupUi(&win);
+
+  GeneralSettings settings;
+  MenuController controller;
+  MenuControllerContext ctx;
+  ctx.ui = &ui;
+  ctx.mainWindow = &win;
+  ctx.getGeneralSettings = [&settings] { return &settings; };
+  controller.setContext(ctx);
+
+  controller.setupMenuBar();
+
+  QVERIFY(ui.menuTools);
+  const QStringList tools = visibleEntries(ui.menuTools);
+  // The five LibraryToolsController dialogs plus the two scan/catalogue tools.
+  for (const QString &expected :
+       {QStringLiteral("Collection Health..."), QStringLiteral("Review Missing Metadata..."),
+        QStringLiteral("Assign Missing Artwork..."), QStringLiteral("Duplicates and variants..."),
+        QStringLiteral("Bulk Edit Items...")}) {
+    QVERIFY2(tools.contains(expected),
+             qPrintable(QStringLiteral("Tools menu missing %1").arg(expected)));
+  }
+  // ...and none of them leaked back into File.
+  const QStringList file = visibleEntries(ui.menuFile);
+  QVERIFY2(!file.contains(QStringLiteral("Bulk Edit Items...")),
+           "library tools belong in Tools, not File");
+}
+
+void TestMenuController::setupMenuBar_groupsImportAndExportIntoSubmenus() {
+  QMainWindow win;
+  Ui_MainWindow ui;
+  ui.setupUi(&win);
+
+  GeneralSettings settings;
+  MenuController controller;
+  MenuControllerContext ctx;
+  ctx.ui = &ui;
+  ctx.mainWindow = &win;
+  ctx.getGeneralSettings = [&settings] { return &settings; };
+  controller.setContext(ctx);
+
+  controller.setupMenuBar();
+
+  QVERIFY(ui.menuImport);
+  QVERIFY(ui.menuExport);
+  QCOMPARE(visibleEntries(ui.menuImport),
+           QStringList({QStringLiteral("Import Kart..."), QStringLiteral("Import Theme...")}));
+  QCOMPARE(visibleEntries(ui.menuExport),
+           QStringList({QStringLiteral("Export Collection as Kart..."),
+                        QStringLiteral("Export Current Theme...")}));
 }

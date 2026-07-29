@@ -113,45 +113,69 @@ bool MenuController::connectVisibilityToggle(QAction *action,
 }
 
 void MenuController::setupMenuBar() {
+  // Call order IS display order for every helper that appends to a menu, so
+  // these are grouped by target menu and listed top-to-bottom as they appear
+  // on screen. Appending past the .ui's trailing entry is what previously
+  // stranded Exit mid-File and pushed About above the rest of Help
+  // (Kartend-7lsh1) — keep new helpers in their menu's block.
+
+  // --- File -------------------------------------------------------------
+  // New Library Wizard anchors itself above Soft Refresh; the rest of the
+  // File skeleton (refresh pair, Recent/Most Launched, Import/Export
+  // submenus, Exit) is static in mainwindow.ui.
+  setupActionNewLibraryWizard();
+  setupActionRefresh();
+  setupRecentMenu();
+  setupMostLaunchedMenu();
+  setupActionOpenRandomItem();
+  // Import/Export pairs land in the File → Import ▸ / Export ▸ submenus.
+  setupActionImportKart();
+  setupActionImportTheme();
+  setupActionExportKart();
+  setupActionExportTheme();
   setupActionExit();
+
+  // --- View -------------------------------------------------------------
   setupActionShowMenuBar();
   setupActionShowToolbar();
   setupActionShowSidebar();
-  setupActionSettings();
-  setupActionRefresh();
-  setupSortActions();
-  setupActionAbout();
-  setupActionAboutQt();
+  setupLayoutActions();
+  setupActionDetailsPaneOrientation();
   setupFullscreenAction();
-  setupShortcutsAction();
-  setupStatisticsAction();
-  setupFirstRunWizardAction();
+  setupActionLayoutProfiles();
+  setupActionPresentationProfiles();
+
+  // --- Sort -------------------------------------------------------------
+  setupSortActions();
+
+  // --- Tools ------------------------------------------------------------
+  setupBatchScrapeAction();
+  setupDatAuditAction();
+  setupActionCollectionHealth();
+  setupActionReviewMissingMetadata();
+  setupActionArtworkWizard();
+  setupActionVariantGrouping();
+  setupActionBulkEdit();
+
+  // --- Settings ---------------------------------------------------------
+  setupActionSettings();
+
+  // --- Help -------------------------------------------------------------
   // Scraper Credentials moved out of the Help menu; the editor now
   // lives inline under Settings → Scrapers → Credentials. setup
   // helper is kept (still wired through MenuControllerContext) but
   // unregistered from the menu so the action object isn't shown.
-  setupBatchScrapeAction();
-  setupDatAuditAction();
-  setupGridWidthActions();
-  setupActionOpenRandomItem();
-  setupActionImportKart();
-  setupActionExportKart();
-  setupActionImportTheme();
-  setupActionExportTheme();
-  setupActionLayoutProfiles();
-  setupActionCollectionHealth();
-  setupActionVariantGrouping();
-  setupActionBulkEdit();
-  setupActionReviewMissingMetadata();
-  setupActionArtworkWizard();
+  setupShortcutsAction();
+  setupStatisticsAction();
   setupActionBindingVisualizer();
-  setupActionNewLibraryWizard();
-  setupActionPresentationProfiles();
+  setupFirstRunWizardAction();
   setupActionScraperProviders();
-  setupRecentMenu();
-  setupMostLaunchedMenu();
-  setupLayoutActions();
-  setupActionDetailsPaneOrientation();
+  setupActionAbout();
+  setupActionAboutQt();
+
+  // --- Not menu-resident ------------------------------------------------
+  setupGridWidthActions();
+
   setupHamburgerMenu();
   applyPersistedViewState();
 }
@@ -215,11 +239,21 @@ void MenuController::setupActionAbout() {
       m_ctx.onShowAbout();
     }
   });
+  // About / About Qt are the conventional tail of the Help menu, so they are
+  // registered here rather than in mainwindow.ui — the .ui's entries would
+  // otherwise sit above every dynamically-appended Help action.
+  if (m_ctx.ui->menuHelp) {
+    m_ctx.ui->menuHelp->addSeparator();
+    m_ctx.ui->menuHelp->addAction(m_ctx.ui->actionAbout);
+  }
 }
 
 void MenuController::setupActionAboutQt() {
   if (!m_ctx.ui) return;
   connectMenuAction(m_ctx.ui->actionAboutQt, []() { QApplication::aboutQt(); });
+  if (m_ctx.ui->menuHelp) {
+    m_ctx.ui->menuHelp->addAction(m_ctx.ui->actionAboutQt);
+  }
 }
 
 void MenuController::setupActionRefresh() {
@@ -423,19 +457,12 @@ void MenuController::applyPersistedViewState() {
 void MenuController::insertFullscreenInViewMenu(QAction *fullscreenAction) {
   if (!m_ctx.ui || !m_ctx.ui->menuView) return;
 
-  QList<QAction *> acts = m_ctx.ui->menuView->actions();
-  QAction *insertBefore = nullptr;
-  for (QAction *action : acts) {
-    if (action == m_ctx.ui->actionSettings) {
-      insertBefore = action;
-      break;
-    }
-  }
-  if (insertBefore) {
-    m_ctx.ui->menuView->insertAction(insertBefore, fullscreenAction);
-  } else {
-    m_ctx.ui->menuView->addAction(fullscreenAction);
-  }
+  // Tail of the View menu's arrangement group, after Layout and Details Pane
+  // Orientation — setupMenuBar() calls this straight after those two, so
+  // appending is the correct placement. (This previously scanned menuView for
+  // actionSettings, which lives in menuSettings and so never matched; the
+  // append fallback was the only live path.)
+  m_ctx.ui->menuView->addAction(fullscreenAction);
 }
 
 void MenuController::setupShortcutsAction() {
@@ -517,24 +544,15 @@ void MenuController::setupBatchScrapeAction() {
       })) {
     return;
   }
-  if (m_ctx.ui && m_ctx.ui->menuFile) {
-    // Tuck Scraper above Exit so the destructive action stays at the
-    // bottom. The File menu currently ends with separator + Exit; we
-    // insert before that final separator.
-    QAction *exitAction = m_ctx.ui->actionExit;
-    if (exitAction) {
-      m_ctx.ui->menuFile->insertAction(exitAction, m_batchScrapeAction);
-      m_ctx.ui->menuFile->insertSeparator(exitAction);
-    } else {
-      m_ctx.ui->menuFile->addAction(m_batchScrapeAction);
-    }
+  if (m_ctx.ui && m_ctx.ui->menuTools) {
+    m_ctx.ui->menuTools->addAction(m_batchScrapeAction);
   }
 }
 
 void MenuController::setupDatAuditAction() {
-  // File-menu entry that opens the standalone DAT Audit window (scan folders
+  // Tools-menu entry that opens the standalone DAT Audit window (scan folders
   // against DAT catalogues; report have/missing/wrong-name/unknown; export
-  // CSV / fixdat / miss-list). Sits next to Scraper, above Exit.
+  // CSV / fixdat / miss-list). Sits next to Scraper.
   m_datAuditAction = new QAction(tr("DAT Audit…"), this);
   if (!connectMenuAction(m_datAuditAction, [this]() {
         if (m_ctx.onRunDatAudit) {
@@ -543,13 +561,11 @@ void MenuController::setupDatAuditAction() {
       })) {
     return;
   }
-  if (m_ctx.ui && m_ctx.ui->menuFile) {
-    QAction *exitAction = m_ctx.ui->actionExit;
-    if (exitAction) {
-      m_ctx.ui->menuFile->insertAction(exitAction, m_datAuditAction);
-    } else {
-      m_ctx.ui->menuFile->addAction(m_datAuditAction);
-    }
+  if (m_ctx.ui && m_ctx.ui->menuTools) {
+    m_ctx.ui->menuTools->addAction(m_datAuditAction);
+    // Separator between the two scan/catalogue tools above and the
+    // per-collection library tools that follow.
+    m_ctx.ui->menuTools->addSeparator();
   }
 }
 
@@ -626,6 +642,7 @@ void MenuController::setupHamburgerMenu() {
   if (m_ctx.ui->menuFile) popup->addAction(m_ctx.ui->menuFile->menuAction());
   if (m_ctx.ui->menuView) popup->addAction(m_ctx.ui->menuView->menuAction());
   if (m_ctx.ui->menuSort) popup->addAction(m_ctx.ui->menuSort->menuAction());
+  if (m_ctx.ui->menuTools) popup->addAction(m_ctx.ui->menuTools->menuAction());
   if (m_ctx.ui->menuSettings) popup->addAction(m_ctx.ui->menuSettings->menuAction());
   if (m_ctx.ui->menuHelp) popup->addAction(m_ctx.ui->menuHelp->menuAction());
 

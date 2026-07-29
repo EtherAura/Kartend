@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The menu bar has been reorganized, and File is no longer a dumping
+  ground.** File had grown to 25 entries — every new dialog was appended to
+  it — and because they were appended *after* the entry that ends the menu,
+  **Exit** sat stranded in the middle with fourteen items below it. Library
+  maintenance now lives in a new **Tools** menu (Scraper, DAT Audit,
+  Collection Health, Review Missing Metadata, Assign Missing Artwork,
+  Duplicates and Variants, Bulk Edit); the four import/export entries are
+  grouped into **Import ▸** and **Export ▸** submenus; and Layout Profiles
+  and Presentation Profiles moved to **View**, next to the layout controls
+  they capture. File is down to eleven rows, opening with New Library Wizard
+  and ending, once again, with Exit. **Help** was mis-ordered the same way —
+  About and About Qt appeared above everything else — and now closes the
+  menu as expected. Nothing was removed; every entry is still reachable, and
+  the hamburger menu shown when the menu bar is hidden mirrors the new
+  layout.
+
 ### Fixed
 
 - **Play counts and history no longer go missing when the database is

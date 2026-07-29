@@ -80,12 +80,15 @@ viewport — see below.
 Top of the window. Default visibility persists in `[General]
 showMenuBar`; toggle with `F10`.
 
-Menus, in order:
+Menus, in order: **File**, **View**, **Sort**, **Tools**, **Settings**,
+**Help**.
 
 ### File
 
 | Item | Shortcut | Effect |
 |------|----------|--------|
+| **New Library Wizard…** | | Multi-step guided creation of a new collection. See [Getting Started → New Library Wizard](Getting-Started.md#new-library-wizard). |
+| (separator) |
 | **Soft Refresh** | `F5` | Re-render the current view without re-scanning the database. |
 | **Rescan Collection** | `Ctrl+F5` | Drop and rebuild the database for the current collection (re-reads the media + artwork directories). |
 | (separator) |
@@ -93,23 +96,15 @@ Menus, in order:
 | **Most Launched ▶** | (submenu) | Top 10 items by play count. Click to launch directly. |
 | **Open Random Item** | `Ctrl+Shift+R` | Pick and launch a random item from the current collection. |
 | (separator) |
-| **Import Kart…** | | Opens file picker → import a `.kart` backup. A preflight dialog reviews the bundle before any disk writes. See [Backup & Migration](Backup-and-Migration.md). |
-| **Export Collection as Kart…** | | Opens file picker → export the active collection as `.kart`, bundling its config, items, per-item metadata, and playlists. |
-| (separator) |
-| **Import Theme…** | | Apply a `*.kartend-theme.json` theme preset to the active collection — with a per-field change preview before anything writes. See [Themes & Appearance → Theme presets](Themes-and-Appearance.md#theme-presets). |
-| **Export Current Theme…** | | Save the active collection's appearance as a `*.kartend-theme.json` preset. |
-| **Layout Profiles…** | | Save / apply / delete named layout snapshots. See [Themes & Appearance → Layout profiles](Themes-and-Appearance.md#layout-profiles). |
-| **Presentation Profiles…** | | Save / apply / delete named attract / marquee / splash bundles. See [Themes & Appearance → Presentation profiles](Themes-and-Appearance.md#presentation-profiles). |
-| (separator) |
-| **New Library Wizard…** | | Multi-step guided creation of a new collection. See [Getting Started → New Library Wizard](Getting-Started.md#new-library-wizard). |
-| **Assign Missing Artwork…** | | Walks items missing artwork through a fuzzy-ranked candidate picker. See [Artwork → Artwork Assignment Wizard](Artwork.md#artwork-assignment-wizard). |
-| **Review Missing Metadata…** | | One-item-at-a-time queue for items with empty title / description / genre / artwork. See [Item Metadata → Missing-metadata review](Item-Metadata.md#missing-metadata-review). |
-| **Bulk Edit Items…** | | Collection-wide tag / pin / hide / continue-later / rating changes. See [Item Metadata → Bulk edit](Item-Metadata.md#bulk-edit-dialog). |
-| **Duplicates and Variants…** | | Group same-basename items per collection (e.g. the FLAC + MKV pairing of a concert recording) and launch a chosen variant. See [Collections → Variant Inspector](Collections.md#variant-inspector). |
-| **Collection Health…** | | Diagnostic dashboard listing missing files, missing artwork, and launcher issues across collections. See [Collections → Collection Health Dashboard](Collections.md#collection-health-dashboard). |
-| **Scraper…** | | Unified scrape dialog (tree of collections + items, media-type checkboxes, auto/interactive toggle). Replaces the older Help → *Batch Scrape Current Collection* entry. See [Scraper](Scraper.md). |
+| **Import ▶** | (submenu) | *Import Kart…* — file picker → import a `.kart` backup; a preflight dialog reviews the bundle before any disk writes (see [Backup & Migration](Backup-and-Migration.md)). *Import Theme…* — apply a `*.kartend-theme.json` preset to the active collection, with a per-field change preview (see [Themes & Appearance → Theme presets](Themes-and-Appearance.md#theme-presets)). |
+| **Export ▶** | (submenu) | *Export Collection as Kart…* — export the active collection as `.kart`, bundling its config, items, per-item metadata, and playlists. *Export Current Theme…* — save the active collection's appearance as a `*.kartend-theme.json` preset. |
 | (separator) |
 | **Exit** | `Ctrl+Q` | Quit. |
+
+Themes carry only the visual settings, not media paths / launcher /
+scraper config, so a theme can be shared across collections with
+completely different content — which is why Kart and Theme import sit
+side by side but stay distinct entries.
 
 ### View
 
@@ -122,6 +117,9 @@ Menus, in order:
 | **Layout ▶** | (submenu) | Choose Grid / List / Cover Flow / Horizontal. Mirrors `Ctrl+1..4`. |
 | **Details Pane Orientation ▶** | (submenu) | Right / Left / Top / Bottom. See [Sidebar & Details Pane](Sidebar-and-Details-Pane.md). |
 | **Fullscreen** | `F11` | Toggle fullscreen (persistent). Added dynamically; some platforms expose a window-manager equivalent. |
+| (separator) |
+| **Layout Profiles…** | | Save / apply / delete named layout snapshots. See [Themes & Appearance → Layout profiles](Themes-and-Appearance.md#layout-profiles). |
+| **Presentation Profiles…** | | Save / apply / delete named attract / marquee / splash bundles. See [Themes & Appearance → Presentation profiles](Themes-and-Appearance.md#presentation-profiles). |
 
 ### Sort
 
@@ -142,6 +140,23 @@ Menus, in order:
 
 All sort options are checkable radio entries — exactly one is active.
 
+### Tools
+
+Library maintenance, grouped away from File so the everyday entries stay
+short. The first pair scans against external sources; the rest operate on
+the active collection.
+
+| Item | Effect |
+|------|--------|
+| **Scraper…** | Unified scrape dialog (tree of collections + items, media-type checkboxes, auto/interactive toggle). See [Scraper](Scraper.md). |
+| **DAT Audit…** | Scan folders against DAT catalogues; report have / missing / wrong-name / unknown, and export CSV / fixdat / miss-list. See [DAT Audit](DAT-Audit.md). |
+| (separator) |
+| **Collection Health…** | Diagnostic dashboard listing missing files, missing artwork, and launcher issues across collections. See [Collections → Collection Health Dashboard](Collections.md#collection-health-dashboard). |
+| **Review Missing Metadata…** | One-item-at-a-time queue for items with empty title / description / genre / artwork. See [Item Metadata → Missing-metadata review](Item-Metadata.md#missing-metadata-review). |
+| **Assign Missing Artwork…** | Walks items missing artwork through a fuzzy-ranked candidate picker. See [Artwork → Artwork Assignment Wizard](Artwork.md#artwork-assignment-wizard). |
+| **Duplicates and Variants…** | Group same-basename items per collection (e.g. the FLAC + MKV pairing of a concert recording) and launch a chosen variant. See [Collections → Variant Inspector](Collections.md#variant-inspector). |
+| **Bulk Edit Items…** | Collection-wide tag / pin / hide / continue-later / rating changes. See [Item Metadata → Bulk edit](Item-Metadata.md#bulk-edit-dialog). |
+
 ### Settings
 
 | Item | Shortcut | Effect |
@@ -157,7 +172,6 @@ All sort options are checkable radio entries — exactly one is active.
 | **Binding Visualizer…** | | Interactive keyboard + gamepad binding reference with press-to-identify. See [Input & Controls → Binding Visualizer](Input-and-Controls.md#binding-visualizer). |
 | **Setup Wizard…** | | Re-run the first-run setup wizard. The auto-launch on first run is one-shot (controlled by `[General] firstRunComplete`); this entry lets you re-enter the flow manually. |
 | **Scraper Providers…** | | Read-only registry of built-in metadata providers, their categories, and credential status. See [Scraper → Provider Registry](Scraper.md#provider-registry). |
-| **Scraper Credentials…** | | Per-provider credential editor. Same dialog as Settings → Scrapers → Credentials. |
 | (separator) |
 | **About** | | App info dialog (name, version, license). |
 | **About Qt** | | Standard Qt info dialog. |

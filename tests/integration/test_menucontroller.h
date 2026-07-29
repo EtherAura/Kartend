@@ -27,6 +27,10 @@ private slots:
   void syncSortActions_reflectsExcludeSubfoldersToggle();
   void syncLayoutActions_checksExactlyActiveViewType_data();
   void syncLayoutActions_checksExactlyActiveViewType();
+  void setupMenuBar_keepsExitLastInFileMenu();
+  void setupMenuBar_keepsAboutAtTailOfHelpMenu();
+  void setupMenuBar_routesLibraryToolsToToolsMenu();
+  void setupMenuBar_groupsImportAndExportIntoSubmenus();
 };
 
 #endif // KARTEND_TESTS_TEST_MENUCONTROLLER_H
