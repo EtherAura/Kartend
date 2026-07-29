@@ -37,6 +37,7 @@
     <binary>kartend</binary>
   </provides>
   <releases>
+    <release version="0.0.18" date="2026-07-29"/>
     <release version="0.0.17" date="2026-07-19">
       <description>
         <p>Windows packaging fix:</p>

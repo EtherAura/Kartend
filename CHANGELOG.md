@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.18] - 2026-07-29
+
 ### Changed
 
 - **The menu bar has been reorganized, and File is no longer a dumping
@@ -126,20 +128,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remembered as complete instead of being re-scraped on every run. The provider is
   asked once; if it later starts supplying the type, that's picked up automatically.
 
-## [0.0.15] - 2026-07-04
-
-### Fixed
-
-- **DAT audit:** when one file's content is listed by more than one catalogue
-  entry (e.g. a non-merged clone set that re-lists a shared entry), the audit
-  no longer reports the duplicate entry as Missing while the file is present.
-
 ## Older releases
 
-Releases 0.0.1 through 0.0.14 are archived in
+Releases 0.0.1 through 0.0.15 are archived in
 [docs/changelogs/v0.0.x.md](docs/changelogs/v0.0.x.md).
 
-[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.17...HEAD
+[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.18...HEAD
+[0.0.18]: https://github.com/EtherAura/Kartend/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/EtherAura/Kartend/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/EtherAura/Kartend/compare/v0.0.15...v0.0.16
-[0.0.15]: https://github.com/EtherAura/Kartend/compare/v0.0.14...v0.0.15
