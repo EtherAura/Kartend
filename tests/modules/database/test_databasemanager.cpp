@@ -146,7 +146,7 @@ void TestDatabaseManager::testDestructAfterInitDatabase_closesConnectionCleanly(
 void TestDatabaseManager::testDestructDuringActiveScan_returnsWithinBoundedTime() {
   // Kicks off a scan against a populated media directory, then destructs
   // mid-flight. The destructor calls requestCancelScan() on both worker and
-  // scan QueryManagers, quit()s both QThreads, then joins them against one
+  // scan QueryManagers, then quits and joins each QThread in turn against one
   // SHARED TOTAL_THREAD_JOIN_BUDGET_MS=4000ms pool, falling through to an
   // intentional thread-leak rather than qFatal-on-running-QThread if the pool
   // runs out. Either branch must return within a reasonable wall-clock bound.

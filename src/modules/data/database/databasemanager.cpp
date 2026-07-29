@@ -74,15 +74,24 @@ std::atomic<quint64> g_connectionInstanceId{0};
 /// shutdown is bounded identically.
 constexpr int TOTAL_THREAD_JOIN_BUDGET_MS = 4000;
 
-/// Join `thread` within whatever remains of the shared `budgetMs`, decrementing
-/// it by the time actually consumed. Returns false if the thread did not finish
-/// (either genuinely stuck, or the pool was already drained by an earlier join).
+/// Quit `thread` and join it within whatever remains of the shared `budgetMs`,
+/// decrementing it by the time actually consumed. Returns false if the thread
+/// did not finish (either genuinely stuck, or the pool was already drained by
+/// an earlier join).
 ///
-/// Callers must quit() every thread BEFORE joining any of them — quit() is
-/// asynchronous, so signalling up front lets the threads unwind concurrently
-/// instead of the second one only starting to shut down once the first has
-/// consumed its share of the pool.
-bool joinThreadWithin(QThread *thread, int &budgetMs) {
+/// Each thread is quit HERE, immediately before its own join, and callers must
+/// keep these calls sequential — one thread fully joined before the next is
+/// quit. Hoisting the quit() calls so both threads unwind concurrently looks
+/// like free parallelism and is not: each worker owns a QueryManager whose
+/// destructor closes a QSqlDatabase and calls QSqlDatabase::removeDatabase(),
+/// which mutates Qt's process-global connection registry. Serialised teardown
+/// means those two destructors can never overlap. Running them concurrently
+/// trips ThreadSanitizer with "unlock of an unlocked mutex (or by a wrong
+/// thread)" inside ~QueryManager (querymanager.cpp:78) — observed in CI on
+/// DatabaseManager and ScrapeResultSelectionModel, reproducibly, across two
+/// runs of the same commit. The serialisation is load-bearing, not incidental.
+bool quitAndJoinWithin(QThread *thread, int &budgetMs) {
+  thread->quit();
   if (budgetMs <= 0) {
     // Pool drained. Still poll once: a thread that already finished should be
     // reaped and deleted rather than leaked on a technicality.
@@ -298,7 +307,7 @@ DatabaseManager::~DatabaseManager() {
   }
 
   // Quit both, then join both against one shared budget
-  // (TOTAL_THREAD_JOIN_BUDGET_MS / joinThreadWithin). If a thread doesn't
+  // (TOTAL_THREAD_JOIN_BUDGET_MS / quitAndJoinWithin). If a thread doesn't
   // return within what's left of it, intentionally leak it (set pointer to
   // nullptr) rather than let ~QThread qFatal on a still-running thread. The OS
   // will reclaim threads and SQLite handles at process exit (we use std::_Exit
@@ -327,14 +336,13 @@ DatabaseManager::~DatabaseManager() {
   // So: warn loudly and leak, in every build. A genuine worker deadlock still
   // gets caught — by that same bounded-time test, which is a far more precise
   // detector than a timeout that a busy machine can trip on its own.
-  // Signal both before joining either, so they unwind concurrently and a slow
-  // worker doesn't serialise behind the other's share of the pool.
-  if (m_workerThread) m_workerThread->quit();
-  if (m_scanThread) m_scanThread->quit();
-
+  // Strictly sequential: each thread is quit and fully joined before the next
+  // is touched, so the two ~QueryManager teardowns can never overlap. See
+  // quitAndJoinWithin — concurrent teardown races Qt's global QSqlDatabase
+  // connection registry.
   int joinBudgetMs = TOTAL_THREAD_JOIN_BUDGET_MS;
   if (m_workerThread) {
-    if (joinThreadWithin(m_workerThread, joinBudgetMs)) {
+    if (quitAndJoinWithin(m_workerThread, joinBudgetMs)) {
       delete m_workerThread;
     } else {
       qCWarning(lcDatabaseManager)
@@ -345,7 +353,7 @@ DatabaseManager::~DatabaseManager() {
     m_workerThread = nullptr;
   }
   if (m_scanThread) {
-    if (joinThreadWithin(m_scanThread, joinBudgetMs)) {
+    if (quitAndJoinWithin(m_scanThread, joinBudgetMs)) {
       delete m_scanThread;
     } else {
       qCWarning(lcDatabaseManager)
