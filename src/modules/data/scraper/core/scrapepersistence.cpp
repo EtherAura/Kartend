@@ -15,7 +15,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
-#include <QSaveFile>
 #include <QSet>
 #include <QString>
 #include <QStringList>
@@ -50,26 +49,12 @@ namespace {
 // (Kartend-2mol7).
 
 bool writeBytesAtomically(const QString &filePath, const QByteArray &bytes) {
-  // Caller already mkpath'd the parent dir. QSaveFile writes to a temp sibling
-  // and commit() atomically renames it into place, so a crash or short write
-  // mid-stream leaves the previous file (or none) rather than a truncated one.
-  // This is reused for the metadata sidecar, where partial JSON is worse than a
-  // corrupt thumbnail and would fail to parse on the next load (Kartend-z2bh1).
-  QSaveFile f(filePath);
-  if (!f.open(QIODevice::WriteOnly)) {
-    return false;
-  }
-  if (f.write(bytes) != bytes.size()) {
-    f.cancelWriting();
-    return false;
-  }
-  if (!f.commit()) {
-    return false;
-  }
-  // Durable-write contract: the rename above isn't crash-safe until the
-  // parent directory entry itself is flushed (same as kartwriter et al).
-  PathUtils::syncDirectory(QFileInfo(filePath).absolutePath());
-  return true;
+  // Thin seam over PathUtils::atomicWriteFile (Kartend-7dq4h) — identical
+  // semantics to the hand-rolled QSaveFile + parent-fsync this replaced.
+  // Kept as a named local function because the scrape write paths cite it
+  // for the metadata sidecar, where partial JSON is worse than a corrupt
+  // thumbnail and would fail to parse on the next load (Kartend-z2bh1).
+  return PathUtils::atomicWriteFile(filePath, bytes);
 }
 
 bool isStandardArtworkType(const QString &type) {

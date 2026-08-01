@@ -25,7 +25,6 @@
 #include <QPalette>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QSaveFile>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSortFilterProxyModel>

@@ -26,6 +26,14 @@ namespace {
 // copy-to-.tmp / remove-dest / rename dance, which left no destination at all if
 // interrupted between the remove and the rename, and never fsync'd (Kartend-g2ox).
 // `context` is the caller name woven into error messages.
+//
+// DELIBERATE NON-ADOPTER of PathUtils::atomicWriteFile (Kartend-7dq4h): the
+// mechanics are identical, but this is the config-profile replace path — its
+// per-stage Result<void> errors (source-read vs open vs short-write vs
+// commit, each with paths) surface in user-facing dialogs, and the helper
+// flattens all of that into a bool plus its own log lines. The QSettings
+// writeIniFile handler below can't migrate either: QSettings owns and
+// hands over the QSaveFile device itself.
 ErrorUtils::Result<void> atomicReplaceFile(const QString &srcPath, const QString &destPath,
                                            const char *context) {
   QFile source(srcPath);

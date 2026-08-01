@@ -148,10 +148,9 @@ bool saveMediaTypes(const QString &filePath, const QList<MediaType> &mediaTypes)
   }
   QJsonObject root;
   root["medias"] = medias;
-  return ScreenScraperJsonCache::writeJsonCompact(
-      filePath, root, "ScreenScraperMediaTypeCache::saveMediaTypes",
-      "Failed to create ScreenScraper media-type cache directory",
-      "Failed to write ScreenScraper media-type cache");
+  return ScreenScraperJsonCache::writeJsonCompact(filePath, root,
+                                                  "ScreenScraperMediaTypeCache::saveMediaTypes",
+                                                  "Failed to write ScreenScraper media-type cache");
 }
 
 bool isCacheStale(const QString &filePath) {

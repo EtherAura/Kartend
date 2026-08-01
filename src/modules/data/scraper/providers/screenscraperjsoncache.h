@@ -13,15 +13,15 @@
 
 #include <QByteArray>
 #include <QDateTime>
-#include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLatin1Char>
-#include <QSaveFile>
 #include <QStandardPaths>
 #include <QString>
+
+#include "pathutils.h"
 
 namespace ScreenScraperJsonCache {
 
@@ -63,43 +63,25 @@ inline QJsonArray unwrapArray(const QJsonObject &root, const char *key) {
   return {};
 }
 
-// mkpath + atomically write the JSON object as Compact. Logs and returns false
-// on any failure. Kartend-fux2w: previously a plain QFile truncate-write with
-// an unchecked write() — a crash or ENOSPC mid-write left a truncated JSON
-// with a FRESH mtime, which isStale() then treated as valid for the whole TTL
-// (days of parse-fail-on-every-load). QSaveFile publishes the new content
-// only on a fully-successful commit; otherwise the old file survives intact.
+// Atomically write the JSON object as Compact via PathUtils::atomicWriteFile
+// (mkpath + QSaveFile + parent-dir fsync — Kartend-7dq4h; the hand-rolled
+// version here never fsync'd the directory, so a crash right after commit
+// could lose the rename). Kartend-fux2w is why atomicity matters at all:
+// previously a plain QFile truncate-write with an unchecked write() — a
+// crash or ENOSPC mid-write left a truncated JSON with a FRESH mtime, which
+// isStale() then treated as valid for the whole TTL (days of
+// parse-fail-on-every-load). The helper logs the failing stage itself; the
+// caller-context warning here names which cache write failed.
 inline bool writeJsonCompact(const QString &filePath, const QJsonObject &root, const char *context,
-                             const char *mkdirErrMsg, const char *writeErrMsg) {
+                             const char *writeErrMsg) {
   if (filePath.isEmpty()) {
     return false;
   }
-  const QString dir = QFileInfo(filePath).absolutePath();
-  if (!QDir().mkpath(dir)) {
-    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
-                                                           mkdirErrMsg, context)
-                             .withDetails(dir));
-    return false;
-  }
-  QSaveFile f(filePath);
-  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
-                                                           writeErrMsg, context)
-                             .withDetails(f.errorString()));
-    return false;
-  }
   const QByteArray payload = QJsonDocument(root).toJson(QJsonDocument::Compact);
-  if (f.write(payload) != payload.size()) {
-    f.cancelWriting();
+  if (!PathUtils::atomicWriteFile(filePath, payload)) {
     ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
                                                            writeErrMsg, context)
-                             .withDetails(f.errorString()));
-    return false;
-  }
-  if (!f.commit()) {
-    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::FileWriteError,
-                                                           writeErrMsg, context)
-                             .withDetails(f.errorString()));
+                             .withDetails(filePath));
     return false;
   }
   return true;

@@ -204,9 +204,9 @@ bool saveSystems(const QString &filePath, const QList<ScreenScraperSystems::Syst
   }
   QJsonObject root;
   root["systemes"] = systemes;
-  return ScreenScraperJsonCache::writeJsonCompact(
-      filePath, root, "ScreenScraperSystemCache::saveSystems",
-      "Failed to create ScreenScraper cache directory", "Failed to write ScreenScraper cache");
+  return ScreenScraperJsonCache::writeJsonCompact(filePath, root,
+                                                  "ScreenScraperSystemCache::saveSystems",
+                                                  "Failed to write ScreenScraper cache");
 }
 
 bool isCacheStale(const QString &filePath) {
