@@ -1,6 +1,6 @@
 target_sources(kartend_chrome PRIVATE
   artworkpreviewoverlay.cpp
-  overlaylayermanager.cpp
+  overlayzorderregistry.cpp
   artworkpreviewoverlay.h
-  overlaylayermanager.h
+  overlayzorderregistry.h
 )

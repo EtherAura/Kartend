@@ -14,15 +14,22 @@
 //
 // To exercise the protected event handlers we use a thin subclass that
 // re-exports them as public methods, plus QSignalSpy for emission checks.
+//
+// The suite also hosts the OverlayZOrderRegistry cases — it is the only
+// suite linking kartend_chrome, whose public include surface carries
+// chrome/overlays.
 #include "coverflowwidget.h"
+#include "overlayzorderregistry.h"
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
 
 #include <QApplication>
+#include <QImage>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPointF>
 #include <QSignalSpy>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QWheelEvent>
 
@@ -101,8 +108,14 @@ private slots:
   // Gallery state
   void setGalleryStaleIndexDropped();
   void setGalleryAcceptedAtSelectedIndex();
-  void setGalleryAcceptedAtCurrentOwner();
+  void setGalleryStalePushForPreviousOwnerDropped();
   void setGalleryClearsActiveIndex();
+
+  // OverlayZOrderRegistry (chrome/overlays): entry order must stay sorted
+  // ascending by layer no matter the registration order, because restack()
+  // raises in stored order.
+  void overlayRegistryOutOfOrderRegistrationRestacksSorted();
+  void overlayRegistryReregisterMovesEntryToNewLayer();
 
   // Property setters (early-out on identical value)
   void setCornerRadiusClampsNegative();
@@ -432,29 +445,43 @@ void TestCoverFlowWidget::setGalleryAcceptedAtSelectedIndex() {
   QCOMPARE(w.selectedIndex(), 3);
 }
 
-void TestCoverFlowWidget::setGalleryAcceptedAtCurrentOwner() {
+void TestCoverFlowWidget::setGalleryStalePushForPreviousOwnerDropped() {
   TestableCoverFlow w;
+  w.resize(600, 400);
   w.setCards(makeCards(10));
   w.setSelectedIndex(3, false);
+  auto *preview = w.findChild<VideoPreviewWidget *>();
+  QVERIFY(preview);
+  w.show();
+
   QList<CoverFlowGalleryEntry> entries;
   CoverFlowGalleryEntry e;
   e.label = "cover";
   e.path = "/cover.png";
   entries << e;
-  // First push establishes 3 as the gallery owner.
+  // First push is accepted (3 is the selection) and makes 3 the gallery
+  // owner; then the selection moves on, leaving 3 only as the stale owner.
   w.setGalleryForIndex(3, entries);
-  // Move selection to 4. A fresh push for 3 should be accepted because
-  // 3 is still the gallery owner (replace path), even though selection
-  // has moved on. This protects against the resolver order being
-  // back-to-back: caller sees the selection update later.
   w.setSelectedIndex(4, false);
+
+  // An accepted push runs applyVideoPreviewState, which hides a visible
+  // preview when no video source resolves — so a manually-shown preview
+  // being hidden is the observable fingerprint of the accepted path.
+  preview->show();
   QList<CoverFlowGalleryEntry> moreEntries;
   CoverFlowGalleryEntry e2;
   e2.label = "screen";
   e2.path = "/screen.png";
   moreEntries << e2;
+  // A late result for the previous owner must be dropped: accepting it
+  // would resurrect the dismissed card's gallery under the new selection.
   w.setGalleryForIndex(3, moreEntries);
-  QCOMPARE(w.selectedIndex(), 4);
+  QVERIFY(preview->isVisible());
+
+  // Control: the same push for the current selection is accepted (the
+  // side-effect pipeline runs and hides the sourceless preview).
+  w.setGalleryForIndex(4, moreEntries);
+  QVERIFY(!preview->isVisible());
 }
 
 void TestCoverFlowWidget::setGalleryClearsActiveIndex() {
@@ -475,44 +502,127 @@ void TestCoverFlowWidget::setGalleryClearsActiveIndex() {
   QCOMPARE(w.cardCount(), 10);
 }
 
+// ----- OverlayZOrderRegistry -----
+
+namespace {
+
+// QWidget::raise() moves the widget to the end of its parent's child list,
+// so after restack() the children order among the overlays is the stacking
+// order — later index paints on top.
+int childIndexOf(const QWidget &parent, const QWidget *child) {
+  return static_cast<int>(parent.children().indexOf(child));
+}
+
+} // namespace
+
+void TestCoverFlowWidget::overlayRegistryOutOfOrderRegistrationRestacksSorted() {
+  QWidget parent;
+  auto *loading = new QWidget(&parent);
+  auto *selection = new QWidget(&parent);
+  auto *search = new QWidget(&parent);
+
+  OverlayZOrderRegistry registry;
+  // Register in an order that contradicts the layer ranking — the registry
+  // must keep its entries sorted by layer, not by registration order, or
+  // restack() raises the overlays into the wrong stacking order.
+  registry.registerOverlay(loading, OverlayZOrderRegistry::Layer::Loading);
+  registry.registerOverlay(selection, OverlayZOrderRegistry::Layer::SelectionHighlight);
+  registry.registerOverlay(search, OverlayZOrderRegistry::Layer::SearchLoading);
+  registry.restack();
+
+  QVERIFY(childIndexOf(parent, selection) < childIndexOf(parent, search));
+  QVERIFY(childIndexOf(parent, search) < childIndexOf(parent, loading));
+}
+
+void TestCoverFlowWidget::overlayRegistryReregisterMovesEntryToNewLayer() {
+  QWidget parent;
+  auto *first = new QWidget(&parent);
+  auto *second = new QWidget(&parent);
+  auto *third = new QWidget(&parent);
+
+  OverlayZOrderRegistry registry;
+  registry.registerOverlay(first, OverlayZOrderRegistry::Layer::Splash);
+  registry.registerOverlay(second, OverlayZOrderRegistry::Layer::Backdrop);
+  registry.registerOverlay(third, OverlayZOrderRegistry::Layer::SelectionHighlight);
+  // Re-registration reassigns the layer AND repositions the entry — a
+  // stale in-place update would leave `first` stacked above `third`.
+  registry.registerOverlay(first, OverlayZOrderRegistry::Layer::Backdrop);
+  registry.restack();
+
+  QVERIFY(childIndexOf(parent, second) < childIndexOf(parent, third));
+  QVERIFY(childIndexOf(parent, first) < childIndexOf(parent, third));
+}
+
 // ----- Property setters -----
 
 void TestCoverFlowWidget::setCornerRadiusClampsNegative() {
   TestableCoverFlow w;
-  w.setCornerRadius(-50);
-  // No public getter — verify by passing 0 next, which should early-out
-  // (already 0 from the clamp). No crash + stable state means the clamp
-  // landed.
-  w.setCornerRadius(0);
+  QCOMPARE(w.cornerRadius(), 0);
   w.setCornerRadius(12);
-  w.setCornerRadius(12); // early-out path
-  QCOMPARE(w.cardCount(), 0);
+  QCOMPARE(w.cornerRadius(), 12);
+  // Negative input is floored to 0, not stored raw (a negative radius
+  // would corrupt the rounded-rect clip path in paint).
+  w.setCornerRadius(-50);
+  QCOMPARE(w.cornerRadius(), 0);
 }
 
 void TestCoverFlowWidget::setFontSizeClampsTooSmall() {
   TestableCoverFlow w;
-  w.setFontSize(2);  // clamps to 6
-  w.setFontSize(-1); // clamps to 6
+  // Sizes below the 6pt floor clamp up to it — a 2pt title strip would be
+  // unreadable and a non-positive size is invalid for QFont.
+  w.setFontSize(2);
+  QCOMPARE(w.fontSize(), 6);
+  w.setFontSize(-1);
+  QCOMPARE(w.fontSize(), 6);
+  // Ordinary values above the floor pass through unchanged.
   w.setFontSize(20);
-  w.setFontSize(20); // early-out path
+  QCOMPARE(w.fontSize(), 20);
 }
 
 void TestCoverFlowWidget::setTileColorClearsPixmapCache() {
+  // Populate the artwork pixmap cache the way production does: a real
+  // artwork file on a card, decoded by the async load a paint pass kicks
+  // off. grab() drives paintEvent without a shown window.
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString artPath = dir.filePath(QStringLiteral("card.png"));
+  {
+    QImage img(32, 32, QImage::Format_ARGB32);
+    img.fill(Qt::darkCyan);
+    QVERIFY(img.save(artPath));
+  }
+
   TestableCoverFlow w;
-  w.setCards(makeCards(5));
-  // Tile color change must invalidate the pixmap cache (placeholders
-  // depend on tile color). We can't read the cache directly; verify the
-  // call sequence runs without crashing across changes.
-  w.setTileColor(QStringLiteral("#ff0000"));
-  w.setTileColor(QStringLiteral("#ff0000")); // early-out
+  w.resize(400, 300);
+  QList<CoverFlowCardData> cards = makeCards(3);
+  cards[0].artworkPath = artPath;
+  w.setCards(cards);
+  QCOMPARE(w.pixmapCacheSize(), 0);
+
+  (void)w.grab(); // paint pass schedules the artwork decode
+  QTRY_VERIFY(w.pixmapCacheSize() > 0);
+
+  // Same color → early-out: the cache must survive.
+  w.setTileColor(QString()); // matches the default empty tile color
+  QVERIFY(w.pixmapCacheSize() > 0);
+
+  // A genuine tile-color change invalidates every cached pixmap —
+  // placeholders bake the tile color in, so stale entries would repaint
+  // with the old color.
   w.setTileColor(QStringLiteral("#00ff00"));
+  QCOMPARE(w.tileColor(), QStringLiteral("#00ff00"));
+  QCOMPARE(w.pixmapCacheSize(), 0);
 }
 
 void TestCoverFlowWidget::setHideTitlesUpdatesFlag() {
   TestableCoverFlow w;
+  QVERIFY(!w.hideTitles());
   w.setHideTitles(true);
-  w.setHideTitles(true); // early-out
+  QVERIFY(w.hideTitles());
+  w.setHideTitles(true); // early-out keeps the value
+  QVERIFY(w.hideTitles());
   w.setHideTitles(false);
+  QVERIFY(!w.hideTitles());
 }
 
 // ----- Center-rect maintenance (paint-free layout) -----

@@ -4,7 +4,7 @@
 // hold timer so an in-progress zoom burst keeps the HUD visible.
 #include "textzoomhud.h"
 
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 
 #include <QEvent>
 #include <QGraphicsOpacityEffect>

@@ -9,6 +9,7 @@
 #include "errorpresentation.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
+#include "imainwindow.h"
 #include "interactionstateholder.h"
 #include "isettingsmanager.h"
 #include "itemartwork.h"
@@ -43,6 +44,30 @@ Q_LOGGING_CATEGORY(lcDetailsPaneManager, "kartend.detailspanemanager", QtWarning
       qCDebug(lcDetailsPaneManager) << msg;                                                        \
     }                                                                                              \
   } while (0)
+
+namespace {
+/// Route an interactive per-click collections save through the main window's
+/// debounced save stage. The manager holds no MainWindow reference — resolve
+/// the IMainWindow role from the items page's top-level window, the same
+/// cross-cast the ui-layer dialogs use for their host. When no host resolves
+/// (headless tests, unanchored setups) fall back to the historical inline
+/// immediate save so persistence never silently vanishes. Callers mutate the
+/// live collection list before calling this, so only the disk write defers;
+/// a save still pending at quit is covered by the shutdown path's
+/// synchronous persist.
+void requestCollectionsSave(const QWidget *anchor, const ApplicationContext *ctx,
+                            const QList<CollectionConfig> *collections) {
+  if (auto *host = dynamic_cast<IMainWindow *>(anchor ? anchor->window() : nullptr)) {
+    host->requestDebouncedCollectionsSave();
+    return;
+  }
+  if (auto *sm = ctx ? ctx->settingsManager() : nullptr) {
+    if (collections) {
+      ErrorPresentation::reportSaveResult(sm->saveCollections(*collections), "collections", false);
+    }
+  }
+}
+} // namespace
 
 // DetailsPaneManagerSetup getter definitions (non-manager fields only — sibling
 // managers are read directly from ctx at runtime).
@@ -119,7 +144,7 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
     // and any registered overlay's later bringToFront()/restack() buries
     // the preview. Null ctx (unwired test scenarios) degrades to the
     // overlay's existing raise() fallback.
-    m_DetailsPane->setOverlayLayerManager(m_ctx ? m_ctx->ui.overlayLayerManager : nullptr);
+    m_DetailsPane->setOverlayLayerManager(m_ctx ? m_ctx->ui.overlayZOrderRegistry : nullptr);
     connect(m_DetailsPane, &DetailsPane::editArtworkRequested, this,
             &DetailsPaneManager::openArtworkLinksDialog);
     connect(m_DetailsPane, &DetailsPane::editMetadataRequested, this,
@@ -155,10 +180,10 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
         return;
       }
       (*m_collections)[m_currentCollectionIndex].sidebar.sidebarWidth = width;
-      if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-        ErrorPresentation::reportSaveResult(sm->saveCollections(*m_collections), "collections",
-                                            false);
-      }
+      // Commit fires once per drag release, but repeated resize fiddling is
+      // a per-click burst — coalesce the INI rewrites through the debounced
+      // save stage (the width itself already lives in m_collections).
+      requestCollectionsSave(m_itemsPage, m_ctx, m_collections);
     });
     // height-drag handlers for Top/Bottom dock. Mirror the width
     // pair — live setFixedHeight() during the drag, persist on commit. In
@@ -183,10 +208,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
         return;
       }
       (*m_collections)[m_currentCollectionIndex].sidebar.sidebarHeight = height;
-      if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-        ErrorPresentation::reportSaveResult(sm->saveCollections(*m_collections), "collections",
-                                            false);
-      }
+      // Same burst rationale as the width commit above.
+      requestCollectionsSave(m_itemsPage, m_ctx, m_collections);
     });
     // tabs: persist the user's tab choice per collection, then re-push the
     // current selection so the new tab gets a fresh population pass — each
@@ -199,10 +222,9 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
         return;
       }
       (*m_collections)[m_currentCollectionIndex].sidebar.sidebarActiveTab = tab;
-      if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-        ErrorPresentation::reportSaveResult(sm->saveCollections(*m_collections), "collections",
-                                            false);
-      }
+      // Tab flipping is a rapid per-click path — debounce the persistence;
+      // the immediate refresh below reads the already-updated field.
+      requestCollectionsSave(m_itemsPage, m_ctx, m_collections);
       if (!m_currentItemFilePath.isEmpty()) {
         // Tab switch is a deliberate user action — refresh immediately so
         // the newly-selected tab's content paints without the debounce
@@ -617,9 +639,10 @@ void DetailsPaneManager::saveSidebarStateForCollection(int collectionIndex, bool
     return;
   }
   (*m_collections)[collectionIndex].sidebar.sidebarVisible = visible;
-  if (auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr) {
-    ErrorPresentation::reportSaveResult(sm->saveCollections(*m_collections), "collections", false);
-  }
+  // Runs on every sidebar toggle and on rapid collection switches — both
+  // per-click-capable paths — so coalesce the disk write; the visibility
+  // flag itself is already committed to the live list above.
+  requestCollectionsSave(m_itemsPage, m_ctx, m_collections);
 }
 
 // Persists the sidebar visibility state by collection name, forwarding to

@@ -3,7 +3,7 @@
 // up indefinitely until hideOverlay() is invoked.
 #include "nowplayingoverlay.h"
 
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 
 #include <QApplication>
 #include <QEvent>

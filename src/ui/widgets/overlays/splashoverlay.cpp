@@ -1,7 +1,7 @@
 // Transient splash overlay shown on startup and when the main window regains focus.
 #include "splashoverlay.h"
 
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 
 #include <QApplication>
 #include <QEvent>

@@ -143,11 +143,11 @@ struct ApplicationContext {
     LoadingOverlay *loadingOverlay = nullptr;
     /// Centralized z-order coordinator for overlays. Lower-layer managers
     /// that own an overlay widget (SelectionOverlayManager,
-    /// SearchLoadingOverlay) pick this up via ctx->ui.overlayLayerManager
+    /// SearchLoadingOverlay) pick this up via ctx->ui.overlayZOrderRegistry
     /// and forward it through their own setLayerManager() to register their
     /// owned widget. Optional — null means each overlay falls back to
     /// direct QWidget::raise().
-    OverlayZOrderRegistry *overlayLayerManager = nullptr;
+    OverlayZOrderRegistry *overlayZOrderRegistry = nullptr;
   } ui;
 
   // ─────────────────────────────────────────────────────────────────────────

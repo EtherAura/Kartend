@@ -1,7 +1,7 @@
 // Full-window detail page overlay for the selected item.
 #include "detailpageoverlay.h"
 
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 
 #include <QApplication>
 #include <QEvent>

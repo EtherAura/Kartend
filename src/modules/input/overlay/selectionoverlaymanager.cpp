@@ -4,7 +4,7 @@
 #include "interactionstateholder.h"
 #include "itemwidget.h"
 #include "overlayhelpers.h"
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 #include "uiconstants/collectionicon.h"
 #include "uiconstants/selection.h"
 #include "uiconstants/widget.h"

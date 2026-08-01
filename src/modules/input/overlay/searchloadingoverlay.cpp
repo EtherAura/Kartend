@@ -1,7 +1,7 @@
 // Provides a subtle loading overlay during search operations.
 #include "searchloadingoverlay.h"
 
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 #include "uiconstants/overlay.h"
 #include <QGraphicsOpacityEffect>
 #include <QLabel>

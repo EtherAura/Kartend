@@ -1,7 +1,7 @@
 // Semi-transparent loading overlay with spinner animation and progress bar.
 #include "loadingoverlay.h"
 
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 
 #include <QApplication>
 #include <QEvent>

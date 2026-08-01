@@ -3,7 +3,7 @@
 
 #include "artworkutils.h"
 #include "extensionutils.h"
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 #include "uiconstants/artwork.h"
 #include "uiconstants/metadata.h"
 #include "videopreviewwidget.h"

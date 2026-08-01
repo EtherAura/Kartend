@@ -9,7 +9,7 @@
 #include "detailspane.h"
 #include "extensionutils.h"
 #include "imagedecodeutils.h"
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 #include "uiconstants/icons.h"
 #include "uiconstants/metadata.h"
 #include "uiconstants/timing.h"

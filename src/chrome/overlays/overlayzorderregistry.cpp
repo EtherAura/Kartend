@@ -1,4 +1,4 @@
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 
 #include <algorithm>
 
@@ -17,14 +17,16 @@ void OverlayZOrderRegistry::registerOverlay(QWidget *overlay, Layer layer) {
     return;
   }
   purgeDestroyed();
-  // Idempotent: update the layer assignment in place if already present.
-  for (Entry &e : m_entries) {
-    if (e.widget.data() == overlay) {
-      e.layer = layer;
-      return;
-    }
-  }
-  m_entries.append(Entry{overlay, layer});
+  // Idempotent: drop any existing entry first so a re-registration moves the
+  // overlay into its new layer's bracket instead of mutating a stale slot.
+  m_entries.removeIf([overlay](const Entry &e) { return e.widget.data() == overlay; });
+  // m_entries must stay sorted ascending by layer — restack() iterates in
+  // stored order and bringToFront()'s insertion assumes it. Insert before the
+  // first entry whose layer strictly exceeds the new one, i.e. at the end of
+  // the new layer's bracket (mirrors bringToFront's insertion point).
+  auto insertAt = std::find_if(m_entries.begin(), m_entries.end(),
+                               [layer](const Entry &e) { return e.layer > layer; });
+  m_entries.insert(insertAt, Entry{overlay, layer});
 }
 
 void OverlayZOrderRegistry::unregisterOverlay(QWidget *overlay) {

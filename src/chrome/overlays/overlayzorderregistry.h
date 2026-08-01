@@ -1,5 +1,5 @@
-#ifndef OVERLAYLAYERMANAGER_H
-#define OVERLAYLAYERMANAGER_H
+#ifndef OVERLAYZORDERREGISTRY_H
+#define OVERLAYZORDERREGISTRY_H
 
 #include <QList>
 #include <QObject>
@@ -106,4 +106,4 @@ private:
   QList<Entry> m_entries;
 };
 
-#endif // OVERLAYLAYERMANAGER_H
+#endif // OVERLAYZORDERREGISTRY_H
