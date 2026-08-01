@@ -34,6 +34,16 @@ public:
   /// per-item video-lookup path.
   [[nodiscard]] static const QStringList &videoBaseExtensions();
 
+  /// Canonical lowercase archive extensions (no dots). The single source of
+  /// truth for "is this an archive" — LaunchManager::isArchiveFile and
+  /// RomHasher::isArchivePath both delegate here so a file the launcher
+  /// unpacks is also unpacked for scraper hash-ID.
+  [[nodiscard]] static const QStringList &archiveBaseExtensions();
+
+  /// True when `path` ends in one of archiveBaseExtensions() (case-
+  /// insensitive suffix match, so "disc.tar.gz" matches via ".gz").
+  [[nodiscard]] static bool isArchivePath(const QString &path);
+
   /// Probe @p dir for "<baseName>.<ext>" across @p extensions, each tried in
   /// lowercase then uppercase; returns the first existing path, else empty.
   /// Shared by artwork and preview-video file lookup.

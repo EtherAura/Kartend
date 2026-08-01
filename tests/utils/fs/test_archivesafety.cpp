@@ -7,6 +7,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QString>
@@ -36,6 +37,7 @@ private slots:
   void sevenZipFallbackAcceptsPlainTarAndRejectsLinks();
   void isSecurityRejectionSeparatesUnsafeFromToolFailure();
   void missingArchiveFailsClosed();
+  void zeroParsedEntriesFailsClosedWithoutSecurityVerdict();
 
 private:
   // Builds a tar at `tarPath` from the contents of `srcDir` using bsdtar.
@@ -221,6 +223,59 @@ void TestArchiveSafety::isSecurityRejectionSeparatesUnsafeFromToolFailure() {
   QVERIFY2(toolMissing.isError(), "an unavailable listing tool must error");
   QVERIFY2(!ArchiveSafety::isSecurityRejection(toolMissing.error()),
            "a tool-unavailable failure must NOT read as a security rejection");
+}
+
+void TestArchiveSafety::zeroParsedEntriesFailsClosedWithoutSecurityVerdict() {
+  KARTEND_SKIP_QPROCESS_UNDER_TSAN();
+  // A listing run that yields zero parseable entries used to inspect NOTHING
+  // and return success — fail-open on any output shape the parser didn't
+  // recognise. The scanners now refuse that case. The fixture is a VALID but
+  // genuinely empty tar (created from an empty file list): bsdtar's flat
+  // listing cannot distinguish "empty archive" from "unparseable output"
+  // (both print nothing on a zero-exit run), so its scanner must refuse —
+  // with a NON-security error, so scanArchiveEntries' fallback chain still
+  // consults the next tool. 7z CAN tell the two apart (its "----------"
+  // entry-table separator is printed even with no rows after it), so the 7z
+  // scanner passes the same empty archive.
+  //
+  // There is no parse seam to inject a fabricated listing (runListing is
+  // fused to QProcess), so this pins the behaviour through the real tools.
+  if (QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
+    QSKIP("bsdtar not available to build the fixture");
+  }
+  QTemporaryDir out;
+  QVERIFY(out.isValid());
+  // An empty -T/--files-from source produces a valid tar with zero entries
+  // (unlike taring an empty directory, which still emits a "./" entry).
+  const QString emptyListPath = out.path() + QStringLiteral("/empty-list.txt");
+  {
+    QFile f(emptyListPath);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+  }
+  const QString tarPath = out.path() + QStringLiteral("/empty.tar");
+  QProcess tar;
+  tar.start(QStringLiteral("bsdtar"),
+            {QStringLiteral("-cf"), tarPath, QStringLiteral("-T"), emptyListPath});
+  QVERIFY(tar.waitForStarted(10000) && tar.waitForFinished(30000));
+  QVERIFY(tar.exitStatus() == QProcess::NormalExit && tar.exitCode() == 0);
+  QVERIFY(QFileInfo(tarPath).size() > 0); // empty tar ≠ empty file (zero blocks)
+
+  const auto bsdtarScan =
+      ArchiveSafety::scanArchiveEntriesWithTool(tarPath, QStringLiteral("bsdtar"));
+  QVERIFY2(bsdtarScan.isError(), "zero parsed entries must not scan as safe");
+  QVERIFY2(!ArchiveSafety::isSecurityRejection(bsdtarScan.error()),
+           "an uninterpretable listing is not a security verdict — the "
+           "fallback-tool chain must stay available");
+
+  if (!QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty()) {
+    const auto sevenZipScan =
+        ArchiveSafety::scanArchiveEntriesWithTool(tarPath, QStringLiteral("7z"));
+    QVERIFY2(sevenZipScan.isOk(),
+             qPrintable(QStringLiteral("7z must pass a genuinely empty archive (separator with "
+                                       "no rows): %1")
+                            .arg(sevenZipScan.isError() ? sevenZipScan.error().userFacingSummary()
+                                                        : QString())));
+  }
 }
 
 void TestArchiveSafety::missingArchiveFailsClosed() {

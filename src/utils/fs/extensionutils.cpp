@@ -99,6 +99,27 @@ auto ExtensionUtils::videoBaseExtensions() -> const QStringList & {
   return exts;
 }
 
+auto ExtensionUtils::archiveBaseExtensions() -> const QStringList & {
+  static const QStringList exts = {QStringLiteral("zip"), QStringLiteral("7z"),
+                                   QStringLiteral("rar"), QStringLiteral("gz"),
+                                   QStringLiteral("tar"), QStringLiteral("bz2"),
+                                   QStringLiteral("xz")};
+  return exts;
+}
+
+// Suffix match (not QFileInfo::suffix()) so multi-part names like
+// "disc.tar.gz" are recognised through their ".gz" tail, matching what the
+// launcher and hasher have always accepted.
+auto ExtensionUtils::isArchivePath(const QString &path) -> bool {
+  const QString lowered = path.toLower();
+  for (const QString &ext : archiveBaseExtensions()) {
+    if (lowered.endsWith(QLatin1Char('.') + ext)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 auto ExtensionUtils::findFileWithExtensions(const QDir &dir, const QString &baseName,
                                             const QStringList &extensions) -> QString {
   for (const QString &ext : extensions) {

@@ -60,6 +60,20 @@ validateCollectionNameForSubstitution(const QString &collectionName);
 // Returns true if the sync succeeded or the platform has nothing to do.
 bool syncDirectory(const QString &dirPath);
 
+/// The sanctioned whole-file durable write: creates the parent directory,
+/// writes `data` to a sibling temp file via QSaveFile (cancelling on a short
+/// write), atomic-renames it over `filePath` on commit, then syncDirectory()s
+/// the parent so the rename itself survives a crash or power loss. Returns
+/// false after logging the failing stage under `kartend.pathutils`; a failed
+/// call never leaves a partial file at `filePath`. Deliberately bool rather
+/// than Result<void>: every adopter either consumes it as a plain bool or
+/// wraps the failure in its own domain-specific ErrorContext (naming *what*
+/// it was writing), so a generic Result here would only be re-wrapped.
+/// Writers that stream their payload incrementally (KartWriter) or batch the
+/// directory fsync across many files (CacheDiskStorage) keep their own
+/// QSaveFile sequence — see docs/dev/architecture.md "Atomic File Writes".
+[[nodiscard]] bool atomicWriteFile(const QString &filePath, const QByteArray &data);
+
 // Kartend-qubev: true when @p dirPath is a directory owned by the current
 // effective user with no group/other access bits set (POSIX mode & 0077 == 0).
 // This is the "safe to trust on a shared host" test used before reusing a

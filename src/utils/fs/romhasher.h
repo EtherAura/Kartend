@@ -53,23 +53,24 @@ struct Result {
 hashFile(const QString &filePath, const std::shared_ptr<std::atomic<bool>> &cancelToken = {});
 
 /// True when `filePath` ends with one of the recognised archive
-/// extensions (.zip / .7z / .rar / .gz / .tar / .bz2 / .xz). Mirrors
-/// LaunchManager::isArchiveFile (kept here so the hasher doesn't pull
-/// LaunchManager into the scraper module).
+/// extensions (ExtensionUtils::archiveBaseExtensions() — the shared table
+/// LaunchManager::isArchiveFile also delegates to, so the launcher and the
+/// hasher always agree on what counts as an archive). Kept as a RomHasher
+/// entry point so scraper-side callers don't pull LaunchManager in.
 [[nodiscard]] bool isArchivePath(const QString &filePath);
 
 /// Archive extractors (command names, in priority order) able to handle
-/// `archivePath`'s format. `unzip` reads only `.zip`, so it is omitted for
-/// `.gz`/`.xz`/`.bz2`/`.tar`/`.7z`/`.rar`, where it would fail; `7z` and
-/// `bsdtar` cover the broad set. The caller runs the first that is present on
-/// PATH. Exposed so the capability matrix can be unit-tested without the tools.
+/// `archivePath`'s format. Only `7z` and `bsdtar` are offered: `unzip`
+/// recreates symlink entries and then writes through them, so it is never a
+/// candidate. The caller runs the first that is present on PATH. Exposed so
+/// the capability matrix can be unit-tested without the tools.
 [[nodiscard]] QStringList extractorCandidates(const QString &archivePath);
 
 /// Extract the archive at `archivePath` to a temporary directory,
 /// pick the largest regular file inside, and return its hash. The
 /// "largest file" heuristic picks the right thing for typical ROM
 /// archives (single dump file plus optional readme / NFO sidecars).
-/// Falls back to an error when no extractor (7z / unzip / bsdtar) is
+/// Falls back to an error when no extractor (7z / bsdtar) is
 /// installed, the archive can't be opened, or it contains no
 /// regular files. The temp directory is auto-cleaned when the call
 /// returns. Symlinks inside the archive are skipped to keep a

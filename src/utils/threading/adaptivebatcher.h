@@ -29,10 +29,29 @@ public:
 
     // Default configuration
     static Config defaults() { return Config{10, 2, 50, 50, 0.3, 10}; }
+
+    /// Clamp a caller-built aggregate into the ranges the math relies on:
+    /// qBound below requires min <= max, and a smoothing factor outside
+    /// (0, 1] makes the EMA diverge instead of converge. Defensive like the
+    /// settings-persistence clamps — a bad Config degrades to sane bounds.
+    [[nodiscard]] static Config sanitized(Config c) {
+      c.minBatchSize = qMax(1, c.minBatchSize);
+      c.maxBatchSize = qMax(c.minBatchSize, c.maxBatchSize);
+      c.initialBatchSize = qBound(c.minBatchSize, c.initialBatchSize, c.maxBatchSize);
+      c.targetTimeMs = qMax(1, c.targetTimeMs);
+      if (!(c.smoothingFactor > 0.0)) { // also catches NaN
+        c.smoothingFactor = defaults().smoothingFactor;
+      } else if (c.smoothingFactor > 1.0) {
+        c.smoothingFactor = 1.0;
+      }
+      c.historySize = qMax(1, c.historySize);
+      return c;
+    }
   };
 
   explicit AdaptiveBatcher(const Config &config)
-      : m_config(config), m_currentBatchSize(config.initialBatchSize), m_avgTimePerItem(0.0) {}
+      : m_config(Config::sanitized(config)), m_currentBatchSize(m_config.initialBatchSize),
+        m_avgTimePerItem(0.0) {}
 
   // Default constructor uses default config
   AdaptiveBatcher() : AdaptiveBatcher(Config::defaults()) {}

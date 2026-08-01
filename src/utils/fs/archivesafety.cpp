@@ -1,6 +1,7 @@
 #include "archivesafety.h"
 
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -67,6 +68,21 @@ ErrorContext rejectEntry(const QString &reason, const QString &detail) {
   return ErrorContext::error(ErrorCode::InvalidFilePath, reason, kSource).withDetails(detail);
 }
 
+/// The listing tool exited 0 on a non-empty archive file, yet the parser
+/// recognised zero entries — the loop above inspected NOTHING, and returning
+/// success would fail OPEN on an output format we didn't understand (a
+/// localized/reshaped listing, a tool update). FileReadError is deliberately
+/// distinct from both the security class (InvalidFilePath — must abort, never
+/// retry) and the tool-missing/unusable codes, so scanArchiveEntries' fallback
+/// chain still consults the next tool while a lone-tool caller fails closed.
+ErrorContext uninterpretableListing(const QString &tool) {
+  return ErrorContext::error(ErrorCode::FileReadError,
+                             "Archive listing could not be interpreted", kSource)
+      .withDetails(QString("%1 reported success but no entries could be parsed "
+                           "from its listing output")
+                       .arg(tool));
+}
+
 /// bsdtar scan: `-tvf` exposes the mode string (symlinks lead with 'l',
 /// hardlinks are marked "link to"), `-tf` yields one clean entry name per
 /// line for the path-escape checks.
@@ -86,12 +102,23 @@ ErrorUtils::Result<void> scanWithBsdtar(const QString &archivePath) {
   const auto names = runListing(QStringLiteral("bsdtar"), {QStringLiteral("-tf"), archivePath});
   if (names.isError()) return names.error();
   const QStringList nameLines = QString::fromUtf8(names.value()).split(QLatin1Char('\n'));
+  int inspectedEntries = 0;
   for (const QString &name : nameLines) {
     if (name.isEmpty()) continue;
+    ++inspectedEntries;
     if (entryPathEscapes(name)) {
       return rejectEntry(QStringLiteral("Archive entry path escapes the extraction directory"),
                          name.left(200));
     }
+  }
+  // Zero parsed entries from a non-empty archive file must not scan as safe:
+  // bsdtar's flat listing cannot distinguish "genuinely empty archive" from
+  // "output we failed to parse", so refuse (fail closed) with a non-security
+  // error and let the caller's fallback chain consult 7z, whose entry-table
+  // separator CAN tell the two apart. (A zero-byte file never reaches here —
+  // bsdtar exits non-zero on it, which runListing already rejects.)
+  if (inspectedEntries == 0 && QFileInfo(archivePath).size() > 0) {
+    return uninterpretableListing(QStringLiteral("bsdtar"));
   }
   return {};
 }
@@ -134,6 +161,15 @@ ErrorUtils::Result<void> scanWith7z(const QString &archivePath) {
       return rejectEntry(QStringLiteral("Archive contains a symlink entry"), line.left(200));
     }
   }
+  // The "----------" separator is 7z's contract for where the per-entry
+  // key = value table begins. If it never appeared, the loop above vetted
+  // NOTHING — a zero-exit run whose output shape we didn't recognise must
+  // fail closed rather than scan as safe (see uninterpretableListing). A
+  // genuinely EMPTY archive passes: 7z still prints the separator for it,
+  // just with no entry blocks after it.
+  if (!inEntries && QFileInfo(archivePath).size() > 0) {
+    return uninterpretableListing(QStringLiteral("7z"));
+  }
   return {};
 }
 
@@ -154,8 +190,10 @@ bool entryPathEscapes(const QString &entryName) {
 bool isSecurityRejection(const ErrorUtils::ErrorContext &err) {
   // rejectEntry() and the invalid-input guards below all use InvalidFilePath;
   // tool-could-not-list failures use UnknownError / ResponseTooLarge /
-  // OperationCancelled / FileNotFound. So InvalidFilePath is exactly the
-  // "unsafe — abort, do not try another tool" class.
+  // OperationCancelled / FileNotFound, and an uninterpretable-listing refusal
+  // uses FileReadError. So InvalidFilePath is exactly the "unsafe — abort, do
+  // not try another tool" class; every other code lets the caller fall
+  // through to the next listing tool.
   return err.code == ErrorCode::InvalidFilePath;
 }
 

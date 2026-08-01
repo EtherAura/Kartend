@@ -3,6 +3,9 @@
 // so the disk read happens once.
 #include "romhasher.h"
 
+#include "archivesafety.h"
+#include "extensionutils.h"
+
 #include <algorithm>
 
 #include <QCryptographicHash>
@@ -210,31 +213,21 @@ ErrorUtils::Result<Result> hashFile(const QString &filePath,
 }
 
 bool isArchivePath(const QString &filePath) {
-  // Mirrors LaunchManager::isArchiveFile. Kept in sync deliberately —
-  // both call sites need to recognise the same set so a file the
-  // launcher unpacks is also unpacked for SS hash-ID.
-  static const QStringList archiveExtensions = {
-      QStringLiteral(".zip"), QStringLiteral(".7z"),  QStringLiteral(".rar"), QStringLiteral(".gz"),
-      QStringLiteral(".tar"), QStringLiteral(".bz2"), QStringLiteral(".xz")};
-  const QString lowered = filePath.toLower();
-  for (const QString &ext : archiveExtensions) {
-    if (lowered.endsWith(ext)) return true;
-  }
-  return false;
+  // Delegates to the shared archive-extension table (also behind
+  // LaunchManager::isArchiveFile) — both call sites need to recognise the
+  // same set so a file the launcher unpacks is also unpacked for SS hash-ID.
+  return ExtensionUtils::isArchivePath(filePath);
 }
 
-QStringList extractorCandidates(const QString &archivePath) {
-  // 7z first (widest format coverage), then unzip ONLY for .zip — it cannot read
-  // gz/xz/bz2/tar/7z/rar — then bsdtar/libarchive for the rest. Without the .zip
-  // gate, a non-zip archive on a box that has unzip but not 7z was handed to
-  // unzip and failed, silently dropping the ROM to filename-only SS matching
-  // even when bsdtar could have extracted it (Kartend-akaww).
+QStringList extractorCandidates(const QString & /*archivePath*/) {
+  // 7z first (widest format coverage), then bsdtar/libarchive. unzip is gone
+  // entirely — it recreates symlink entries and then writes through them (the
+  // zip-slip-via-symlink primitive the pre-extraction safety scan exists to
+  // stop), and 7z/bsdtar both cover .zip anyway. The per-extension gating the
+  // parameter used to drive is therefore no longer needed; the signature is
+  // kept so the capability matrix stays unit-testable.
   QStringList candidates;
-  candidates << QStringLiteral("7z");
-  if (archivePath.toLower().endsWith(QStringLiteral(".zip"))) {
-    candidates << QStringLiteral("unzip");
-  }
-  candidates << QStringLiteral("bsdtar");
+  candidates << QStringLiteral("7z") << QStringLiteral("bsdtar");
   return candidates;
 }
 
@@ -271,14 +264,23 @@ extractArchiveForHashing(const QString &archivePath, QTemporaryDir &tmp,
         .withDetails(archivePath);
   }
   // absoluteFilePath() guarantees a leading '/', so when this is appended as a
-  // positional operand to 7z/unzip below it can never be misparsed as an
-  // option (no argv-flag injection); bsdtar passes it as -f's argument, also
-  // safe. Hence no `--` separator is needed (and `--` would break bsdtar).
+  // positional operand to 7z below it can never be misparsed as an option (no
+  // argv-flag injection); bsdtar passes it as -f's argument, also safe. Hence
+  // no `--` separator is needed (and `--` would break bsdtar).
   const QString resolvedArchivePath = info.absoluteFilePath();
 
-  // Pick the first format-capable extractor the user has on PATH. The candidate
-  // list is gated by extension (extractorCandidates) so a non-.zip archive is
-  // never handed to unzip, which can't read it.
+  // Refuse archives whose listing shows symlink/hardlink entries or
+  // path-escape attempts before anything is written: the post-extraction
+  // NoSymLinks walks in the callers only govern which extracted file is READ —
+  // a write routed THROUGH a symlink entry during extraction lands outside the
+  // temp dir where those walks never look.
+  if (const auto scan = ArchiveSafety::scanArchiveEntries(resolvedArchivePath); scan.isError()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath,
+                               "Archive failed the pre-extraction safety scan", origin)
+        .withDetails(scan.error().userFacingSummary());
+  }
+
+  // Pick the first format-capable extractor the user has on PATH.
   QString extractor;
   QStringList args;
   for (const QString &cmd : extractorCandidates(resolvedArchivePath)) {
@@ -289,7 +291,7 @@ extractArchiveForHashing(const QString &archivePath, QTemporaryDir &tmp,
   }
   if (extractor.isEmpty()) {
     return ErrorContext::error(ErrorCode::FileNotFound, "No archive extraction tool found", origin)
-        .withDetails("Install 7z or bsdtar to hash inner ROMs (unzip handles only .zip)");
+        .withDetails("Install 7z or bsdtar to hash inner ROMs");
   }
 
   // The caller's QTemporaryDir auto-cleans on destruction so we don't
@@ -304,8 +306,6 @@ extractArchiveForHashing(const QString &archivePath, QTemporaryDir &tmp,
 
   if (extractor == QStringLiteral("7z")) {
     args << QStringLiteral("x") << QStringLiteral("-y") << resolvedArchivePath;
-  } else if (extractor == QStringLiteral("unzip")) {
-    args << QStringLiteral("-o") << resolvedArchivePath;
   } else { // bsdtar
     args << QStringLiteral("-xf") << resolvedArchivePath;
   }

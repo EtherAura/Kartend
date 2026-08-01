@@ -11,6 +11,10 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#if defined(Q_OS_UNIX)
+#include <unistd.h>
+#endif
+
 class TestPathUtils : public QObject {
   Q_OBJECT
 
@@ -56,6 +60,12 @@ private slots:
   void testSyncDirectory_existingDir();
   void testSyncDirectory_emptyPath();
   void testSyncDirectory_nonExistentDir();
+
+  // atomicWriteFile tests
+  void testAtomicWriteFile_createsParentDirsAndContent();
+  void testAtomicWriteFile_overwritesExistingFile();
+  void testAtomicWriteFile_emptyPathFails();
+  void testAtomicWriteFile_unwritableParentFailsWithoutPartialFile();
 
   // isPrivateDirOfCurrentUser tests (Kartend-qubev)
   void testIsPrivateDir_ownerOnlyDirIsPrivate();
@@ -381,6 +391,63 @@ void TestPathUtils::testSyncDirectory_nonExistentDir() {
 #else
   QVERIFY2(PathUtils::syncDirectory("/nonexistent/path/abcxyz"),
            "Non-existent path is a no-op on non-POSIX");
+#endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// atomicWriteFile tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestPathUtils::testAtomicWriteFile_createsParentDirsAndContent() {
+  // The helper mkpaths the parent chain itself — several adopters (session
+  // metadata, pending scrape state) target directories that may not exist yet.
+  const QString path = QDir(m_tempDir.path()).filePath(QStringLiteral("nested/sub/out.json"));
+  const QByteArray payload = QByteArrayLiteral("{\"hello\":\"world\"}");
+  QVERIFY2(PathUtils::atomicWriteFile(path, payload),
+           "Write into a not-yet-created parent chain should succeed");
+  QFile f(path);
+  QVERIFY2(f.open(QIODevice::ReadOnly), "Written file should exist and be readable");
+  QCOMPARE(f.readAll(), payload);
+}
+
+void TestPathUtils::testAtomicWriteFile_overwritesExistingFile() {
+  const QString path = QDir(m_tempDir.path()).filePath(QStringLiteral("overwrite.txt"));
+  QVERIFY(PathUtils::atomicWriteFile(path, QByteArrayLiteral("first, longer payload")));
+  QVERIFY(PathUtils::atomicWriteFile(path, QByteArrayLiteral("second")));
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  // Full replacement, not append/partial overwrite of the longer first write.
+  QCOMPARE(f.readAll(), QByteArrayLiteral("second"));
+}
+
+void TestPathUtils::testAtomicWriteFile_emptyPathFails() {
+  QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("empty file path")));
+  QVERIFY2(!PathUtils::atomicWriteFile(QString(), QByteArrayLiteral("x")),
+           "Empty path must be refused");
+}
+
+void TestPathUtils::testAtomicWriteFile_unwritableParentFailsWithoutPartialFile() {
+#if defined(Q_OS_UNIX)
+  if (::geteuid() == 0) {
+    QSKIP("root bypasses directory write permissions");
+  }
+  // Read-only (0500) parent: QSaveFile cannot create its sibling temp file, so
+  // the write must fail cleanly and leave nothing at the target path.
+  const QString parent = QDir(m_tempDir.path()).filePath(QStringLiteral("readonly"));
+  QVERIFY(QDir().mkpath(parent));
+  QVERIFY(QFile::setPermissions(parent, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+  const QString path = QDir(parent).filePath(QStringLiteral("out.txt"));
+  QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("atomicWriteFile")));
+  const bool ok = PathUtils::atomicWriteFile(path, QByteArrayLiteral("payload"));
+  const bool leftover = QFile::exists(path);
+  // Restore write permission first so QTemporaryDir cleanup can remove the dir
+  // even if the assertions below fail.
+  QVERIFY(QFile::setPermissions(parent, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                            QFileDevice::ExeOwner));
+  QVERIFY2(!ok, "Write into an unwritable parent must fail");
+  QVERIFY2(!leftover, "Failed write must not leave a partial file behind");
+#else
+  QSKIP("POSIX permission semantics; not meaningful on this platform");
 #endif
 }
 

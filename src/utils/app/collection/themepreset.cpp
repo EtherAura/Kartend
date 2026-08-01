@@ -1,12 +1,9 @@
 #include "themepreset.h"
 
-#include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QSaveFile>
 
 #include "collectionconfig.h"
 #include "pathutils.h"
@@ -279,34 +276,16 @@ ErrorUtils::Result<bool> exportToFile(const ThemePreset &preset, const QString &
                                "Cannot export theme preset to an empty path",
                                "ThemePresetIO::exportToFile");
   }
-  // QSaveFile + syncDirectory mirrors the playlists / session writer
+  // PathUtils::atomicWriteFile mirrors the playlists / session writer
   // pattern: write to a sibling temp, atomic-rename on commit, then fsync
-  // the parent so the rename survives crash / power loss.
-  const QString parentDir = QFileInfo(filePath).absolutePath();
-  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to create parent directory for theme preset",
-                               "ThemePresetIO::exportToFile")
-        .withDetails(parentDir);
-  }
-  QSaveFile file(filePath);
-  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to open theme preset for writing",
-                               "ThemePresetIO::exportToFile")
-        .withDetails(file.errorString());
-  }
+  // the parent so the rename survives crash / power loss. It logs the
+  // failing stage itself.
   const QByteArray bytes = QJsonDocument(toJson(preset)).toJson(QJsonDocument::Indented);
-  if (file.write(bytes) != bytes.size()) {
-    file.cancelWriting();
-    return ErrorContext::error(ErrorCode::FileWriteError, "Short write on theme preset export",
-                               "ThemePresetIO::exportToFile");
-  }
-  if (!file.commit()) {
-    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to commit theme preset write",
+  if (!PathUtils::atomicWriteFile(filePath, bytes)) {
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to write theme preset",
                                "ThemePresetIO::exportToFile")
-        .withDetails(file.errorString());
+        .withDetails(filePath);
   }
-  PathUtils::syncDirectory(parentDir);
   return true;
 }
 
@@ -411,13 +390,6 @@ ErrorUtils::Result<bool> saveRegistry(const QList<ThemePreset> &profiles, const 
                                "Cannot save layout profile registry to an empty path",
                                "ThemePresetIO::saveRegistry");
   }
-  const QString parentDir = QFileInfo(filePath).absolutePath();
-  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to create parent directory for layout profile registry",
-                               "ThemePresetIO::saveRegistry")
-        .withDetails(parentDir);
-  }
   QJsonArray arr;
   for (const ThemePreset &p : profiles) {
     arr.append(toJson(p));
@@ -426,26 +398,13 @@ ErrorUtils::Result<bool> saveRegistry(const QList<ThemePreset> &profiles, const 
   root["schemaVersion"] = kCurrentSchemaVersion;
   root["profiles"] = arr;
 
-  QSaveFile file(filePath);
-  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to open layout profile registry for writing",
-                               "ThemePresetIO::saveRegistry")
-        .withDetails(file.errorString());
-  }
   const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);
-  if (file.write(bytes) != bytes.size()) {
-    file.cancelWriting();
-    return ErrorContext::error(ErrorCode::FileWriteError, "Short write on layout profile registry",
-                               "ThemePresetIO::saveRegistry");
-  }
-  if (!file.commit()) {
+  if (!PathUtils::atomicWriteFile(filePath, bytes)) {
     return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to commit layout profile registry write",
+                               "Failed to write layout profile registry",
                                "ThemePresetIO::saveRegistry")
-        .withDetails(file.errorString());
+        .withDetails(filePath);
   }
-  PathUtils::syncDirectory(parentDir);
   return true;
 }
 

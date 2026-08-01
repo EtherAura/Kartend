@@ -1,12 +1,9 @@
 #include "presentationprofile.h"
 
-#include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QSaveFile>
 
 #include "collection/generalsettings.h"
 #include "pathutils.h"
@@ -105,32 +102,15 @@ ErrorUtils::Result<bool> exportToFile(const PresentationProfile &profile, const 
                                "Cannot export presentation profile to an empty path",
                                "PresentationProfileIO::exportToFile");
   }
-  const QString parentDir = QFileInfo(filePath).absolutePath();
-  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to create parent directory for presentation profile",
-                               "PresentationProfileIO::exportToFile");
-  }
-  QSaveFile f(filePath);
-  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to open presentation profile for writing",
-                               "PresentationProfileIO::exportToFile")
-        .withDetails(f.errorString());
-  }
+  // PathUtils::atomicWriteFile: sibling temp + atomic rename on commit +
+  // parent-directory fsync so the rename survives crash / power loss. It
+  // logs the failing stage itself.
   const QByteArray bytes = QJsonDocument(toJson(profile)).toJson(QJsonDocument::Indented);
-  if (f.write(bytes) != bytes.size()) {
-    f.cancelWriting();
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Short write on presentation profile export",
-                               "PresentationProfileIO::exportToFile");
+  if (!PathUtils::atomicWriteFile(filePath, bytes)) {
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to write presentation profile",
+                               "PresentationProfileIO::exportToFile")
+        .withDetails(filePath);
   }
-  if (!f.commit()) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to commit presentation profile write",
-                               "PresentationProfileIO::exportToFile");
-  }
-  PathUtils::syncDirectory(parentDir);
   return true;
 }
 
@@ -245,38 +225,19 @@ ErrorUtils::Result<bool> saveRegistry(const QList<PresentationProfile> &profiles
                                "Cannot save presentation profile registry to an empty path",
                                "PresentationProfileIO::saveRegistry");
   }
-  const QString parentDir = QFileInfo(filePath).absolutePath();
-  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to create parent directory for registry",
-                               "PresentationProfileIO::saveRegistry");
-  }
   QJsonArray arr;
   for (const PresentationProfile &p : profiles) arr.append(toJson(p));
   QJsonObject root;
   root["schemaVersion"] = kCurrentSchemaVersion;
   root["profiles"] = arr;
 
-  QSaveFile f(filePath);
-  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to open presentation profile registry for writing",
-                               "PresentationProfileIO::saveRegistry")
-        .withDetails(f.errorString());
-  }
   const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);
-  if (f.write(bytes) != bytes.size()) {
-    f.cancelWriting();
+  if (!PathUtils::atomicWriteFile(filePath, bytes)) {
     return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Short write on presentation profile registry",
-                               "PresentationProfileIO::saveRegistry");
+                               "Failed to write presentation profile registry",
+                               "PresentationProfileIO::saveRegistry")
+        .withDetails(filePath);
   }
-  if (!f.commit()) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to commit presentation profile registry write",
-                               "PresentationProfileIO::saveRegistry");
-  }
-  PathUtils::syncDirectory(parentDir);
   return true;
 }
 

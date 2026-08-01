@@ -13,6 +13,7 @@ private slots:
   void mismatchedOrderDoesNotMatch();
   void caseInsensitive();
   void wordBoundaryScoresHigherThanMidWord();
+  void snakeCaseUnderscoreCountsAsWordBoundary();
   void consecutiveMatchScoresHigherThanScatteredMatch();
 };
 
@@ -49,6 +50,17 @@ void TestFuzzyMatch::wordBoundaryScoresHigherThanMidWord() {
   QVERIFY(boundary > 0);
   QVERIFY(midWord > 0);
   QVERIFY(boundary > midWord);
+}
+
+void TestFuzzyMatch::snakeCaseUnderscoreCountsAsWordBoundary() {
+  // An underscore separates words just like whitespace or a hyphen, so
+  // the char after it earns the boundary bonus: "fs" against snake_case
+  // "file_size" must outrank the same letters glued together mid-word.
+  const int snakeCase = FuzzyMatch::score("fs", "file_size");
+  const int gluedWord = FuzzyMatch::score("fs", "filesize");
+  QVERIFY(snakeCase > 0);
+  QVERIFY(gluedWord > 0);
+  QVERIFY(snakeCase > gluedWord);
 }
 
 void TestFuzzyMatch::consecutiveMatchScoresHigherThanScatteredMatch() {

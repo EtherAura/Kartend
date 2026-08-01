@@ -16,6 +16,7 @@ private slots:
   void batcher_slowBatches_shrinkTowardMin();
   void batcher_respectsCustomBounds();
   void batcher_historyBoundedToConfig();
+  void batcher_sanitizesInvertedBoundsAndBadSmoothing();
 
   // ThreadPoolUtils::shutdownWithBudget — the UAF-avoiding leak branch.
   void shutdown_nullPool_returnsTrue();
@@ -78,6 +79,34 @@ void TestThreadingUtils::batcher_historyBoundedToConfig() {
     b.observeBatch(5, 10);
   }
   QCOMPARE(b.stats().samplesCollected, 10);
+}
+
+void TestThreadingUtils::batcher_sanitizesInvertedBoundsAndBadSmoothing() {
+  // min > max violates qBound's precondition (UB territory) and a smoothing
+  // factor outside (0, 1] diverges the EMA — the constructor must clamp both
+  // instead of trusting the aggregate.
+  AdaptiveBatcher inverted(AdaptiveBatcher::Config{10, 40, 5, 50, 0.3, 10}); // min 40 > max 5
+  // Sanitized: min stays 40, max is lifted to min, initial clamps into range.
+  QCOMPARE(inverted.currentBatchSize(), 40);
+  for (int i = 0; i < 20; ++i) {
+    inverted.observeBatch(inverted.currentBatchSize(),
+                          static_cast<qint64>(inverted.currentBatchSize()) * 1000); // very slow
+  }
+  QCOMPARE(inverted.currentBatchSize(), 40); // still pinned inside [min, max]
+
+  AdaptiveBatcher badEma(AdaptiveBatcher::Config{10, 2, 50, 50, -3.0, 10}); // factor <= 0
+  for (int i = 0; i < 20; ++i) {
+    const int now = badEma.observeBatch(badEma.currentBatchSize(), 1);
+    QVERIFY2(now >= 2 && now <= 50, "size must stay bounded despite a bad smoothing factor");
+  }
+  QCOMPARE(badEma.currentBatchSize(), 50); // converges instead of diverging
+
+  AdaptiveBatcher overEma(AdaptiveBatcher::Config{10, 2, 50, 50, 7.5, 10}); // factor > 1
+  for (int i = 0; i < 20; ++i) {
+    const int now = overEma.observeBatch(overEma.currentBatchSize(), 1);
+    QVERIFY2(now >= 2 && now <= 50, "size must stay bounded with the factor clamped to 1");
+  }
+  QCOMPARE(overEma.currentBatchSize(), 50);
 }
 
 // ── ThreadPoolUtils::shutdownWithBudget ──────────────────────────────────────

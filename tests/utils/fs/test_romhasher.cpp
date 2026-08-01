@@ -54,7 +54,7 @@ private slots:
   void hashArchiveMembersMissingPathReturnsError();
   void hashesSymlinkTargetSameAsDirect();
   void brokenSymlinkReturnsError();
-  void extractorCandidates_unzipOnlyOfferedForZip();
+  void extractorCandidates_neverOffersUnzip();
   void hashFileHonoursCancelToken();
 
 private:
@@ -206,7 +206,7 @@ void TestRomHasher::hashesInnerRomLargestFile() {
   // `tsan_rtl.cpp:253 "((!thr->slot)) != (0)"` and aborts the process.
   // The bug fires both in the test setup (QProcess running `zip`) and
   // inside RomHasher::hashArchiveInnerRom itself (QProcess running
-  // 7z/unzip/bsdtar), so there's no rearrangement that makes this test
+  // 7z/bsdtar), so there's no rearrangement that makes this test
   // runnable under TSan on this distro. Re-enable once the runner image
   // ships a newer libtsan.
   QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
@@ -220,7 +220,6 @@ void TestRomHasher::hashesInnerRomLargestFile() {
     KARTEND_ARCHIVE_TOOL_SKIP("zip not available — skipping archive-build half of the test");
   }
   if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
-      QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
       QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
     KARTEND_ARCHIVE_TOOL_SKIP("no archive extractor on PATH — RomHasher would error out");
   }
@@ -265,7 +264,6 @@ void TestRomHasher::hashInnerRomAmbiguousMultiDumpReturnsError() {
     KARTEND_ARCHIVE_TOOL_SKIP("zip not available — skipping archive-build half of the test");
   }
   if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
-      QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
       QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
     KARTEND_ARCHIVE_TOOL_SKIP("no archive extractor on PATH — RomHasher would error out");
   }
@@ -315,7 +313,6 @@ void TestRomHasher::hashArchiveMembersHashesEveryFile() {
     KARTEND_ARCHIVE_TOOL_SKIP("zip not available — skipping archive-build half of the test");
   }
   if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
-      QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
       QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
     KARTEND_ARCHIVE_TOOL_SKIP("no archive extractor on PATH — RomHasher would error out");
   }
@@ -380,7 +377,6 @@ void TestRomHasher::hashArchiveMembersPreservesArchiveOrder() {
     KARTEND_ARCHIVE_TOOL_SKIP("zip not available — skipping archive-build half of the test");
   }
   if (QStandardPaths::findExecutable(QStringLiteral("7z")).isEmpty() &&
-      QStandardPaths::findExecutable(QStringLiteral("unzip")).isEmpty() &&
       QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
     KARTEND_ARCHIVE_TOOL_SKIP("no archive extractor on PATH — RomHasher would error out");
   }
@@ -467,32 +463,21 @@ void TestRomHasher::brokenSymlinkReturnsError() {
 #endif
 }
 
-void TestRomHasher::extractorCandidates_unzipOnlyOfferedForZip() {
-  // unzip reads only .zip; offering it for gz/xz/bz2/tar/7z/rar is the bug that
-  // dropped those archives to filename-only matching when 7z was absent
-  // (Kartend-akaww). A format-capable extractor (7z, bsdtar) must always be
-  // offered, with 7z kept first so it wins when installed.
-  const auto zip = RomHasher::extractorCandidates(QStringLiteral("/data/item.zip"));
-  QVERIFY(zip.contains(QStringLiteral("unzip")));
-  QVERIFY(zip.contains(QStringLiteral("7z")));
-  QVERIFY(zip.contains(QStringLiteral("bsdtar")));
-  QCOMPARE(zip.first(), QStringLiteral("7z"));
-
-  const QStringList nonZip = {QStringLiteral(".gz"),  QStringLiteral(".xz"),
-                              QStringLiteral(".bz2"), QStringLiteral(".tar"),
-                              QStringLiteral(".7z"),  QStringLiteral(".rar")};
-  for (const QString &ext : nonZip) {
+void TestRomHasher::extractorCandidates_neverOffersUnzip() {
+  // unzip recreates symlink entries and then writes through them — the
+  // zip-slip-via-symlink primitive the pre-extraction safety scan exists to
+  // stop — so it must never be offered for ANY format, .zip included; 7z and
+  // bsdtar both cover .zip. 7z stays first so it wins when installed.
+  const QStringList exts = {QStringLiteral(".zip"), QStringLiteral(".gz"),
+                            QStringLiteral(".xz"),  QStringLiteral(".bz2"),
+                            QStringLiteral(".tar"), QStringLiteral(".7z"),
+                            QStringLiteral(".rar"), QStringLiteral(".ZIP")};
+  for (const QString &ext : exts) {
     const auto cands = RomHasher::extractorCandidates(QStringLiteral("/data/item") + ext);
     QVERIFY2(!cands.contains(QStringLiteral("unzip")), qPrintable(ext));
-    QVERIFY2(cands.contains(QStringLiteral("7z")), qPrintable(ext));
     QVERIFY2(cands.contains(QStringLiteral("bsdtar")), qPrintable(ext));
+    QCOMPARE(cands.first(), QStringLiteral("7z"));
   }
-
-  // Extension match is case-insensitive.
-  QVERIFY(RomHasher::extractorCandidates(QStringLiteral("/data/ITEM.ZIP"))
-              .contains(QStringLiteral("unzip")));
-  QVERIFY(!RomHasher::extractorCandidates(QStringLiteral("/data/ITEM.GZ"))
-               .contains(QStringLiteral("unzip")));
 }
 
 QTEST_MAIN(TestRomHasher)

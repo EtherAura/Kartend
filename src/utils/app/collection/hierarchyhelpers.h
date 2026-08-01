@@ -20,6 +20,13 @@ namespace CollectionUtils {
 /// + PathUtils, which would balloon the include cost if dragged into a header.
 [[nodiscard]] int countVirtualFolders(const CollectionConfig &config);
 
+/// The directory countVirtualFolders scans for @p config: the collection's
+/// mediaDirectory, descended into folderBrowsing.currentSubfolder when the
+/// user has browsed into one. Exposed so callers that memoize the count
+/// (TitleCountsHelpers) can stat the exact same directory for invalidation
+/// without duplicating the resolution logic.
+[[nodiscard]] QString virtualFolderScanDir(const CollectionConfig &config);
+
 [[nodiscard]] QList<int> collectDescendantIndices(int parentIndex,
                                                   const QList<CollectionConfig> &collections);
 

@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QStandardPaths>
 #include <QStringList>
 
@@ -231,6 +232,45 @@ bool syncDirectory(const QString &dirPath) {
   Q_UNUSED(dirPath);
   return true;
 #endif
+}
+
+bool atomicWriteFile(const QString &filePath, const QByteArray &data) {
+  if (filePath.isEmpty()) {
+    qCWarning(lcPathUtils) << "atomicWriteFile: refusing to write to an empty file path";
+    return false;
+  }
+
+  const QString parentDir = QFileInfo(filePath).absolutePath();
+  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
+    qCWarning(lcPathUtils) << "atomicWriteFile: failed to create parent directory" << parentDir;
+    return false;
+  }
+
+  QSaveFile file(filePath);
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    qCWarning(lcPathUtils).nospace() << "atomicWriteFile: failed to open " << filePath
+                                     << " for writing: " << file.errorString();
+    return false;
+  }
+
+  const qint64 written = file.write(data);
+  if (written != data.size()) {
+    file.cancelWriting();
+    qCWarning(lcPathUtils).nospace() << "atomicWriteFile: short write to " << filePath << " ("
+                                     << written << " of " << data.size()
+                                     << " bytes): " << file.errorString();
+    return false;
+  }
+
+  if (!file.commit()) {
+    qCWarning(lcPathUtils).nospace() << "atomicWriteFile: failed to commit " << filePath << ": "
+                                     << file.errorString();
+    return false;
+  }
+
+  // fsync the parent directory so the rename is durable across crash/power loss.
+  syncDirectory(parentDir);
+  return true;
 }
 
 bool isPrivateDirOfCurrentUser(const QString &dirPath) {

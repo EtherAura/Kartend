@@ -46,9 +46,9 @@ int score(const QString &query, const QString &candidate) {
       lastMatched = false;
     }
     // Compute the boundary flag for the NEXT iteration based on the
-    // current character. Anything non-alphanumeric (and underscore) is
-    // treated as a boundary.
-    lastWasWordBoundary = !h.isLetterOrNumber() && h != QLatin1Char('_');
+    // current character. Anything non-alphanumeric (whitespace, hyphen,
+    // underscore, ...) is treated as a boundary.
+    lastWasWordBoundary = !h.isLetterOrNumber();
   }
   if (qi < needle.size()) {
     return -1; // didn't consume the whole query → no match

@@ -8,10 +8,21 @@
 #include "hierarchyhelpers.h"
 
 #include <QDir>
+#include <QDirIterator>
 #include <QSet>
 #include <QStringList>
 
 namespace CollectionUtils {
+
+QString virtualFolderScanDir(const CollectionConfig &config) {
+  // Determine the effective directory to scan: the media directory, descended
+  // into the current subfolder when the user has browsed into one.
+  QString scanDir = config.mediaDirectory;
+  if (!config.folderBrowsing.currentSubfolder.isEmpty()) {
+    scanDir = QDir(scanDir).absoluteFilePath(config.folderBrowsing.currentSubfolder);
+  }
+  return scanDir;
+}
 
 int countVirtualFolders(const CollectionConfig &config) {
   // Only count virtual folders if includeContentSubfolders is enabled
@@ -21,23 +32,24 @@ int countVirtualFolders(const CollectionConfig &config) {
     return 0;
   }
 
-  // Determine the effective directory to scan
-  QString scanDir = config.mediaDirectory;
-  if (!config.folderBrowsing.currentSubfolder.isEmpty()) {
-    scanDir = QDir(scanDir).absoluteFilePath(config.folderBrowsing.currentSubfolder);
-  }
-
-  QDir dir(scanDir);
-  if (!dir.exists()) {
-    return 0;
-  }
-
   // Count subdirectories, optionally including hidden folders
   QDir::Filters filters = QDir::Dirs | QDir::NoDotAndDotDot;
   if (config.folderBrowsing.showHiddenFolders) {
     filters |= QDir::Hidden;
   }
-  return dir.entryList(filters).size();
+  // QDirIterator instead of QDir::entryList().size(): only the count is
+  // needed, and entryList() materializes the whole directory as a SORTED
+  // QStringList — a readdir + sort per call, which several GUI-thread callers
+  // (window-title refresh, navigation title context) pay on every event. A
+  // nonexistent directory simply iterates zero entries, so the old exists()
+  // pre-stat is folded in for free.
+  int count = 0;
+  QDirIterator it(virtualFolderScanDir(config), filters);
+  while (it.hasNext()) {
+    it.next();
+    ++count;
+  }
+  return count;
 }
 
 namespace {
