@@ -32,7 +32,7 @@
 #include "collection/typehelpers.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
-#include "workersignalspy.h"
+#include "../../support/workersignalspy.h"
 
 class TestQueryManagerAbsPath : public QObject {
   Q_OBJECT

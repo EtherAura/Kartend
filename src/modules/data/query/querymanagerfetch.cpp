@@ -470,25 +470,28 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
     query.bindValue(bindPos++, matchedUuid);
   }
 
-  // Debug: count rows the subquery enumerates (should match fetchItemCount)
-  QString countSql =
-      QString("SELECT COUNT(*) FROM items WHERE collection_uuid IN (%1)").arg(uuidPlaceholders);
-  QSqlQuery countQuery(m_db);
-  countQuery.prepare(countSql);
-  int countBindPos = 0;
-  for (const QString &uuid : uuids) {
-    countQuery.bindValue(countBindPos++, uuid);
-  }
-  int rowCount = -1;
-  if (countQuery.exec() && countQuery.next()) {
-    rowCount = countQuery.value(0).toInt();
-  }
+  // Debug: count rows the subquery enumerates (should match fetchItemCount).
+  // Diagnostic-only query — skip it entirely unless the category is enabled.
+  if (lcSearchDiag().isDebugEnabled()) {
+    QString countSql =
+        QString("SELECT COUNT(*) FROM items WHERE collection_uuid IN (%1)").arg(uuidPlaceholders);
+    QSqlQuery countQuery(m_db);
+    countQuery.prepare(countSql);
+    int countBindPos = 0;
+    for (const QString &uuid : uuids) {
+      countQuery.bindValue(countBindPos++, uuid);
+    }
+    int rowCount = -1;
+    if (countQuery.exec() && countQuery.next()) {
+      rowCount = countQuery.value(0).toInt();
+    }
 
-  QString boundPath = relPath.isEmpty() ? filePath : relPath;
-  qCDebug(lcSearchDiag) << "[SelectionRestore] fetchVisualIndexForPath:"
-                        << "rowCount in subquery:" << rowCount << "uuids:" << uuids.size()
-                        << "filePath:" << filePath << "relPath:" << relPath
-                        << "boundPath:" << boundPath;
+    QString boundPath = relPath.isEmpty() ? filePath : relPath;
+    qCDebug(lcSearchDiag) << "[SelectionRestore] fetchVisualIndexForPath:"
+                          << "rowCount in subquery:" << rowCount << "uuids:" << uuids.size()
+                          << "filePath:" << filePath << "relPath:" << relPath
+                          << "boundPath:" << boundPath;
+  }
 
   if (query.exec() && query.next()) {
     int position = query.value(0).toInt();

@@ -229,14 +229,18 @@ void QueryManager::scheduleDeferredCacheBuild(const QStringList &uuids, const QS
   // Schedule cache build to run after current event processing completes.
   // This allows the slow-path query to return immediately while the cache
   // builds in the background. Subsequent queries will use the cache once ready.
-  if (m_sortCacheBuildPending) {
-    return; // Already scheduled
-  }
-
-  m_sortCacheBuildPending = true;
+  // Always record the latest parameters first: a rescheduled build must
+  // materialize the caller's current filter/sort, not the one captured when
+  // the pending flag was first set (rapid typing re-enters here per keystroke).
   m_pendingCacheUuids = uuids;
   m_pendingCacheFilter = filter;
   m_pendingCacheSortMode = sortMode;
+
+  if (m_sortCacheBuildPending) {
+    return; // Already scheduled; the queued build picks up the params above
+  }
+
+  m_sortCacheBuildPending = true;
 
   if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
     qCDebug(lcSearchDiag) << "[RangeDiag] Deferred cache build scheduled for" << uuids.size()

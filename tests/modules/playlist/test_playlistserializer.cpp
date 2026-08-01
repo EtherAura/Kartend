@@ -236,8 +236,12 @@ void TestPlaylistSerializer::testParseJson_missingFileIsError() {
 }
 
 void TestPlaylistSerializer::testExportJson_unwritablePathIsError() {
-  // A directory component that does not exist — QSaveFile::open fails.
-  const QString out = path(QStringLiteral("no/such/dir/out.json"));
+  // A regular file occupying a directory component — mkpath and open both
+  // fail. (A merely nonexistent parent is created by atomicWriteFile.)
+  QFile blocker(path(QStringLiteral("blocker")));
+  QVERIFY(blocker.open(QIODevice::WriteOnly));
+  blocker.close();
+  const QString out = path(QStringLiteral("blocker/out.json"));
   QVERIFY(PlaylistSerializer::exportJson(makeRow(), {}, out).isError());
 }
 

@@ -26,7 +26,7 @@
 #include "itemmetadata.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
-#include "workersignalspy.h"
+#include "../../support/workersignalspy.h"
 
 class TestQueryManagerStateFlags : public QObject {
   Q_OBJECT

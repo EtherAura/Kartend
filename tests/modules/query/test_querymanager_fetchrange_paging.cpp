@@ -28,7 +28,7 @@
 #include "collection/typehelpers.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
-#include "workersignalspy.h"
+#include "../../support/workersignalspy.h"
 
 namespace {
 constexpr int kItemCount = 50'000;

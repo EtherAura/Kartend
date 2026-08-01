@@ -29,7 +29,7 @@
 #include "querymanager.h"
 #include "sessionmanager.h"
 #include "uiconstants/database.h"
-#include "workersignalspy.h"
+#include "../../support/workersignalspy.h"
 
 class TestQueryManagerShellCollectionSort : public QObject {
   Q_OBJECT

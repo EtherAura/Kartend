@@ -18,7 +18,7 @@
 #include "itemdetaildata.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
-#include "workersignalspy.h"
+#include "../../support/workersignalspy.h"
 
 namespace {
 void writeStubFile(const QString &path) {

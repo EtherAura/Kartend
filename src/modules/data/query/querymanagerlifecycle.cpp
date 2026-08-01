@@ -165,19 +165,24 @@ void QueryManager::runWriteRung(std::function<bool(QSqlDatabase &)> op, const QS
   // deliberately short (WORKER_BUSY_TIMEOUT_MS — fail-fast for the UI query
   // slots), so a launch / history write landing inside a scan-commit window
   // used to fail with SQLITE_BUSY and be dropped silently. Retry the op with
-  // the same bounded exponential backoff as the scanservice retry ladder
-  // (Kartend-6yhq: 100/200/400/800ms, worst-case 1.5s of sleep) — each
-  // attempt additionally waits busy_timeout inside SQLite before reporting
-  // busy. The op returns true when settled (success, or a permanent failure
-  // it already logged) and false only on transient lock contention.
+  // bounded backoff — each attempt additionally waits busy_timeout inside
+  // SQLite before reporting busy. The op returns true when settled (success,
+  // or a permanent failure it already logged) and false only on transient
+  // lock contention.
   //
-  // Kartend-rctcv: this inline ladder runs ONCE, on the first rung. Its sleeps
-  // block the worker thread, so every later rung is a SINGLE attempt — the
-  // waiting happens off-thread in the requeue timer below, where the event
-  // loop stays free to serve reads (and to let the lock holder finish).
-  constexpr int MAX_ATTEMPTS = 5;
+  // Kartend-rctcv: this inline ladder runs ONCE, on the first rung, and every
+  // later rung is a SINGLE attempt — the waiting happens off-thread in the
+  // requeue timer below, where the event loop stays free to serve reads (and
+  // to let the lock holder finish). The inline rung used to run 5 attempts
+  // with 100/200/400/800ms sleeps (~4s worst case counting the 500ms
+  // busy_timeout each attempt pays); those sleeps block the worker thread,
+  // so queued UI reads stalled behind a single contended write. It is now 2
+  // attempts — one immediate, one after the first 100ms backoff, ~1.1s worst
+  // case — and the removed attempts moved onto the deferral schedule below,
+  // which keeps the total attempt count and the write-loss bound unchanged.
+  constexpr int MAX_INLINE_ATTEMPTS = 2;
   constexpr int BASE_DELAY_MS = 100;
-  const int attempts = (deferral == 0) ? MAX_ATTEMPTS : 1;
+  const int attempts = (deferral == 0) ? MAX_INLINE_ATTEMPTS : 1;
   for (int attempt = 1; attempt <= attempts; ++attempt) {
     if (op(m_db)) {
       if (attempt > 1 || deferral > 0) {
@@ -212,11 +217,16 @@ void QueryManager::runWriteRung(std::function<bool(QSqlDatabase &)> op, const QS
 
   // Kartend-rctcv: the inline budget is spent and the database is still locked.
   // Requeue rather than drop — losing the write here is what silently cost a
-  // launch its play_count increment and its history row. Bounded: 1/2/4/8/16s,
-  // ~31s of deferral on top of the inline ~4s, after which a lock this durable
-  // is a stuck holder rather than a scan we can outwait.
-  constexpr int MAX_WRITE_DEFERRALS = 5;
-  constexpr int DEFERRAL_BASE_DELAY_MS = 1000;
+  // launch its play_count increment and its history row. The attempts the old
+  // inline ladder ran on-thread live here now: the 125/250/500ms rungs cover
+  // the ground its removed 200/400/800ms sleeps did (off-thread, so reads keep
+  // flowing), then the original 1/2/4/8/16s tail. Bounded: 8 deferrals, ~32s
+  // of deferral on top of the inline ~1.1s — the total attempt count (10) and
+  // the ~35s write-loss bound match the previous 5-inline + 5-deferred
+  // schedule, after which a lock this durable is a stuck holder rather than a
+  // scan we can outwait.
+  constexpr int MAX_WRITE_DEFERRALS = 8;
+  constexpr int DEFERRAL_BASE_DELAY_MS = 125;
   if (deferral >= MAX_WRITE_DEFERRALS) {
     qCWarning(lcQueryManager).nospace()
         << context << ": worker write LOST after " << MAX_WRITE_DEFERRALS

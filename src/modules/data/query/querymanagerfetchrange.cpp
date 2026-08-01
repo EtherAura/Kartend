@@ -114,10 +114,38 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
                         << context.config.folderBrowsing.showAllSubfolderItems
                         << " currentSubfolder='" << context.config.folderBrowsing.currentSubfolder
                         << "'";
+  // Snapshot the diag toggle once per process: the env var cannot change
+  // mid-run and this slot otherwise re-reads it a dozen times per page on
+  // the scroll paging hot path.
+  static const bool rangeDiag = qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG");
   QElapsedTimer rangeTimer;
-  if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+  if (rangeDiag) {
     rangeTimer.start();
   }
+
+  // Per-uuid QDir memo for row materialization: the row loops below
+  // otherwise construct a fresh QDir (path normalization) per row for the
+  // same handful of media directories.
+  QHash<QString, QDir> mediaDirByUuid;
+  const auto mediaDirFor = [&dirMaps, &mediaDirByUuid](const QString &uuid) -> QDir {
+    const auto it = mediaDirByUuid.constFind(uuid);
+    if (it != mediaDirByUuid.constEnd()) {
+      return it.value();
+    }
+    QDir dir(dirMaps.uuidToMediaDir.value(uuid));
+    mediaDirByUuid.insert(uuid, dir);
+    return dir;
+  };
+  // QFileInfo(keyPath).completeBaseName() equivalent via string ops — the
+  // key paths here are '/'-separated (canonicalKeyPath with dedup=false is a
+  // passthrough of QDir-built paths), so the file name is the segment after
+  // the last '/' and the complete base name strips from the LAST '.' inside
+  // that segment. Saves a QFileInfo construction per row.
+  const auto completeBaseNameOf = [](const QString &keyPath) {
+    const qsizetype start = keyPath.lastIndexOf(u'/') + 1;
+    const qsizetype dot = keyPath.lastIndexOf(u'.');
+    return (dot >= start) ? keyPath.mid(start, dot - start) : keyPath.mid(start);
+  };
 
   // ═══════════════════════════════════════════════════════════════════════════
   // FAST PATH: Use precomputed sorted cache for O(1) range lookups
@@ -161,7 +189,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
         m_pendingCacheUuids.clear();
         m_pendingCacheFilter.clear();
       }
-      if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+      if (rangeDiag) {
         qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: Random sort requires cache, "
                                  "building synchronously";
       }
@@ -169,7 +197,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
       // Fall through to use the cache we just built
     } else if (!m_sortCacheBuildPending && uuids.size() >= 10 &&
                offset >= UIConstants::Database::PRECOMPUTE_SORT_THRESHOLD) {
-      if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+      if (rangeDiag) {
         qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: scheduling deferred cache "
                                  "build, offset="
                               << offset;
@@ -183,7 +211,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
     // Verify cache hash still matches (in case filter or sortMode changed)
     const QByteArray currentHash = computeSortCacheHash(uuids, trimmedFilter, ctx.sortMode);
     if (currentHash == m_sortedItemsCacheHash) {
-      if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+      if (rangeDiag) {
         qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: using sorted cache, offset="
                               << offset << "limit=" << limit;
       }
@@ -214,12 +242,12 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
           if (QDir::isAbsolutePath(relPath)) {
             fullPath = relPath;
           } else {
-            fullPath = QDir(mediaDir).absoluteFilePath(relPath);
+            fullPath = mediaDirFor(uuid).absoluteFilePath(relPath);
           }
 
           QString keyPath = canonicalKeyPath(fullPath, false, nullptr);
           filePaths.append(keyPath);
-          fileNames[keyPath] = displayNameForBase(QFileInfo(keyPath).completeBaseName());
+          fileNames[keyPath] = displayNameForBase(completeBaseNameOf(keyPath));
           if (!artworkDir.isEmpty()) {
             fileToArtworkDir[keyPath] = artworkDir;
           }
@@ -231,7 +259,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
           }
         }
 
-        if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+        if (rangeDiag) {
           qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange (cached): totalMs="
                                 << rangeTimer.elapsed() << "resultCount=" << filePaths.size();
         }
@@ -241,7 +269,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
         return;
       } else {
         // Cache query failed - fall through to standard path
-        if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+        if (rangeDiag) {
           qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: cache query failed, "
                                    "falling back:"
                                 << cacheQuery.lastError().text();
@@ -249,7 +277,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
       }
     } else {
       // Hash mismatch - cache is stale (filter changed)
-      if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+      if (rangeDiag) {
         qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: cache hash mismatch, using "
                                  "slow path";
       }
@@ -378,7 +406,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
       QStringLiteral(" ") + QueryHelpers::orderByForSortMode(ctx.sortMode, /*useSortPrefix=*/true,
                                                              /*withLimitOffset=*/true);
 
-  if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+  if (rangeDiag) {
     qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange (slow path): offset=" << offset
                           << "limit=" << limit << "uuids=" << uuids.size()
                           << "useTempTable=" << useTempTable;
@@ -418,7 +446,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
 
   qint64 execMs = 0;
   if (query.exec()) {
-    if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+    if (rangeDiag) {
       execMs = rangeTimer.elapsed();
     }
     while (query.next()) {
@@ -432,12 +460,12 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
       if (QDir::isAbsolutePath(relPath)) {
         fullPath = relPath;
       } else {
-        fullPath = QDir(mediaDir).absoluteFilePath(relPath);
+        fullPath = mediaDirFor(uuid).absoluteFilePath(relPath);
       }
 
       QString keyPath = canonicalKeyPath(fullPath, false, nullptr);
       filePaths.append(keyPath);
-      fileNames[keyPath] = displayNameForBase(QFileInfo(keyPath).completeBaseName());
+      fileNames[keyPath] = displayNameForBase(completeBaseNameOf(keyPath));
       if (!artworkDir.isEmpty()) {
         fileToArtworkDir[keyPath] = artworkDir;
       }
@@ -449,7 +477,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
       }
     }
 
-    if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+    if (rangeDiag) {
       qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: execMs=" << execMs
                             << "totalMs=" << rangeTimer.elapsed()
                             << "resultCount=" << filePaths.size();
@@ -463,7 +491,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
       }
     }
   } else {
-    if (qEnvironmentVariableIsSet("KARTEND_RANGE_DIAG")) {
+    if (rangeDiag) {
       qCDebug(lcSearchDiag) << "[RangeDiag] fetchItemsRange: QUERY FAILED after"
                             << rangeTimer.elapsed() << "ms:" << query.lastError().text();
     }

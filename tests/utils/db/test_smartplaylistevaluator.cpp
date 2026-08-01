@@ -104,6 +104,7 @@ private slots:
   void neverPlayed_returnsZeroOrNullPlayCount();
   void byExtension_matchesAllListedAndIsCaseInsensitive();
   void byExtension_emptyListReturnsNothing();
+  void byExtension_underscoreIsLiteralNotWildcard();
   void hasArtwork_returnsItemsWithNonEmptyArtworkPath();
   void byDateAdded_filtersByRecencyWindowAndExcludesUnknownDates();
   void stateFlag_pinnedReturnsOnlyPinned();
@@ -211,6 +212,31 @@ void TestSmartPlaylistEvaluator::byExtension_emptyListReturnsNothing() {
   // Empty extensions list — without the early return this would build
   // an unparseable WHERE clause and crash. Verify the early return.
   QCOMPARE(SmartPlaylistEvaluator::evaluate(db, f).size(), 0);
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::byExtension_underscoreIsLiteralNotWildcard() {
+  const QString conn = "spe_byext_underscore";
+  auto db = openMemoryDb(conn);
+  createItemsTable(db);
+  insertItem(db, "u1", "Video", "/a/video.mp4");
+  insertItem(db, "u1", "Odd", "/a/odd.m_4");
+
+  // The extension is escaped before binding: "_" is a literal underscore,
+  // not a single-character LIKE wildcard, so "m_4" must NOT match "mp4".
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ByExtension;
+  f.extensions = {"m_4"};
+  const auto result = SmartPlaylistEvaluator::evaluate(db, f);
+  QCOMPARE(result.size(), 1);
+  QCOMPARE(result[0].path, QStringLiteral("/a/odd.m_4"));
+
+  // And a literal-underscore extension still matches itself alongside a
+  // plain one.
+  f.extensions = {"m_4", "mp4"};
+  const auto both = SmartPlaylistEvaluator::evaluate(db, f);
+  QCOMPARE(both.size(), 2);
 
   closeAndRemove(db, conn);
 }

@@ -418,14 +418,21 @@ bool PlaylistManager::addItem(const QString &playlistId, const QString &sourceCo
     return false; // guard dtor rolls back
   }
 
-  // Stamp the parent's updated_at so a future "sort playlists by recency"
-  // (follow-up) can rely on it. Best-effort: a failed touch does not abort the
-  // transaction in SQLite, and the stamp is non-essential.
+  // Stamp the parent's updated_at. Not just cosmetic: QueryManager folds the
+  // stamp into its playlist scope key, so committing the insert without the
+  // touch would serve a stale cached view for the rest of the session — treat
+  // a failed touch as a failed add and let the guard roll back.
   QSqlQuery touch(m_db);
   touch.prepare(QStringLiteral("UPDATE playlists SET updated_at = ? WHERE id = ?"));
   touch.addBindValue(PlaylistIo::isoNow());
   touch.addBindValue(playlistId);
-  touch.exec();
+  if (!touch.exec()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to touch playlist updated_at",
+                                               "PlaylistManager::addItem")
+                             .withDetails(touch.lastError().text()));
+    return false; // guard dtor rolls back
+  }
 
   if (!txn.commitOrReport("Failed to commit add-item transaction", ErrorUtils::Severity::Warning)) {
     return false; // guard dtor rolls back the aborted transaction (no-op)
@@ -512,13 +519,19 @@ bool PlaylistManager::removeItem(const QString &playlistId, const QString &sourc
   // Stamp the parent's updated_at inside the transaction so it commits (or
   // rolls back) atomically with the removal — QueryManager folds the stamp
   // into its static-playlist scope key to disambiguate remove-then-add
-  // sequences that re-mint the same MAX(rowid). Best-effort like addItem's
-  // stamp: a failed touch does not abort the transaction in SQLite.
+  // sequences that re-mint the same MAX(rowid). Like addItem's stamp, a failed
+  // touch means a stale cached view for the session, so fail the removal.
   QSqlQuery touch(m_db);
   touch.prepare(QStringLiteral("UPDATE playlists SET updated_at = ? WHERE id = ?"));
   touch.addBindValue(PlaylistIo::isoNow());
   touch.addBindValue(playlistId);
-  touch.exec();
+  if (!touch.exec()) {
+    ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
+                                               "Failed to touch playlist updated_at",
+                                               "PlaylistManager::removeItem")
+                             .withDetails(touch.lastError().text()));
+    return false; // guard dtor rolls back
+  }
 
   // Previously a silent failure; the guard now logs it (Kartend-l94tw).
   if (!txn.commitOrReport("Failed to commit remove-item transaction",

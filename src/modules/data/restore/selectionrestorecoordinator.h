@@ -1,5 +1,5 @@
-#ifndef SELECTIONRESTOREMANAGER_H
-#define SELECTIONRESTOREMANAGER_H
+#ifndef SELECTIONRESTORECOORDINATOR_H
+#define SELECTIONRESTORECOORDINATOR_H
 
 #include <functional>
 #include <QObject>
@@ -166,4 +166,4 @@ private:
   std::function<bool()> m_isShuttingDown;
 };
 
-#endif // SELECTIONRESTOREMANAGER_H
+#endif // SELECTIONRESTORECOORDINATOR_H

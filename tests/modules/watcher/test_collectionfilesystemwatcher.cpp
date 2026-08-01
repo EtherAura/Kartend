@@ -32,6 +32,7 @@ private slots:
   void configure_disabledCollection_isNotWatched();
   void configure_enabledCollection_watchesEveryDir();
   void configure_reconfigure_removesStaleWatches();
+  void configure_supersededConfigure_onlyNewestDirsWatched();
   void directoryChanged_burstCoalescesIntoSingleRescan();
   void directoryChanged_newNestedSubdirsBecomeWatched();
 };
@@ -109,8 +110,11 @@ void TestCollectionFilesystemWatcher::configure_enabledCollection_watchesEveryDi
   CollectionFilesystemWatcher w;
   w.configure({cfg});
 
+  // configure() registers the root synchronously; the subdirectory walk runs
+  // on the worker pool and its result is applied when the event loop spins.
+  QCOMPARE(w.watchedPaths().size(), 1);
   // root + a + a/b = 3
-  QCOMPARE(w.watchedPaths().size(), 3);
+  QTRY_COMPARE_WITH_TIMEOUT(w.watchedPaths().size(), 3, 15000);
 }
 
 void TestCollectionFilesystemWatcher::configure_reconfigure_removesStaleWatches() {
@@ -126,11 +130,55 @@ void TestCollectionFilesystemWatcher::configure_reconfigure_removesStaleWatches(
   CollectionFilesystemWatcher w;
   w.configure({cfg});
   QVERIFY(!w.watchedPaths().isEmpty());
+  // Let the async registration walk land first so the reconfigure below
+  // tears down a fully-registered watch set, not just the root.
+  QTRY_COMPARE_WITH_TIMEOUT(w.watchedPaths().size(), 2, 15000);
 
   // Flip the toggle off and reconfigure — every watch should disappear.
   cfg.watchFilesystem = false;
   w.configure({cfg});
   QVERIFY(w.watchedPaths().isEmpty());
+}
+
+// Back-to-back configures: A's registration walk may still be in flight when
+// B's configure tears the layout down. The generation guard must drop A's
+// result when it lands — only B's tree may end up watched.
+void TestCollectionFilesystemWatcher::configure_supersededConfigure_onlyNewestDirsWatched() {
+  QTemporaryDir tdA;
+  QTemporaryDir tdB;
+  QVERIFY(tdA.isValid());
+  QVERIFY(tdB.isValid());
+  makeDir(tdA.path(), "a1");
+  makeDir(tdB.path(), "b1");
+  makeDir(tdB.path(), "b1/b2");
+
+  CollectionConfig cfgA;
+  cfgA.name = "A";
+  cfgA.mediaDirectory = tdA.path();
+  cfgA.watchFilesystem = true;
+
+  CollectionConfig cfgB;
+  cfgB.name = "B";
+  cfgB.mediaDirectory = tdB.path();
+  cfgB.watchFilesystem = true;
+
+  CollectionFilesystemWatcher w;
+  w.configure({cfgA});
+  w.configure({cfgB});
+
+  // root + b1 + b1/b2 = 3
+  QTRY_COMPARE_WITH_TIMEOUT(w.watchedPaths().size(), 3, 15000);
+  // Settle a moment so a stale walk result from the superseded configure had
+  // a chance to land (and be dropped) before the watch set is judged.
+  QTest::qWait(100);
+  const QStringList dirs = w.watchedPaths();
+  QCOMPARE(dirs.size(), 3);
+  const QString rootB = QFileInfo(tdB.path()).absoluteFilePath();
+  for (const QString &d : dirs) {
+    QVERIFY2(d.startsWith(rootB),
+             qPrintable(
+                 QStringLiteral("dir from superseded configure still watched: %1").arg(d)));
+  }
 }
 
 // Kartend-309nh.2: the reconcile tree walk moved off the per-event GUI-thread

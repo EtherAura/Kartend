@@ -18,13 +18,16 @@ QT_END_NAMESPACE
 /// Watches every collection whose `watchFilesystem` flag is true and triggers
 /// a debounced rescan whenever a watched directory fires a change event.
 ///
-/// QFileSystemWatcher is not recursive on Linux/macOS, so configure() walks
-/// each collection's media directory once at registration time and registers
-/// every subdirectory it finds. When a `directoryChanged` event fires, the
-/// per-collection debounce timer is (re)started; when it fires, the
-/// collection's tree is re-walked on a QtConcurrent worker and the watch set
-/// reconciled (on this object's thread) so newly-created subdirectories are
-/// picked up automatically — one walk per event burst, off the GUI thread.
+/// QFileSystemWatcher is not recursive on Linux/macOS, so configure()
+/// registers each collection's media-directory root synchronously (cheap) and
+/// dispatches a per-collection tree walk to a QtConcurrent worker that
+/// registers every subdirectory when it lands — the BFS stat of a large or
+/// network-mounted library never runs on the GUI thread. When a
+/// `directoryChanged` event fires, the per-collection debounce timer is
+/// (re)started; when it fires, the collection's tree is re-walked on the same
+/// worker mechanism and the watch set reconciled (on this object's thread) so
+/// newly-created subdirectories are picked up automatically — one walk per
+/// event burst, off the GUI thread.
 ///
 /// The rescan callback runs on the GUI thread (the watcher's QObject lives on
 /// it), after the reconcile walk for that burst has been applied. Callers are
@@ -46,9 +49,12 @@ public:
 
   /// Reconciles the watch set with the supplied collections list. Collections
   /// whose `watchFilesystem` flag is false are unwatched; the remaining
-  /// collections have their media-directory trees walked and (re)registered.
-  /// Safe to call repeatedly — used at startup, after settings save, and on
-  /// collection add/remove.
+  /// collections get their media-directory root registered synchronously and
+  /// the rest of the tree walked + registered asynchronously on a QtConcurrent
+  /// worker (guarded by the config generation, so a superseding configure()
+  /// drops any in-flight walk results when they land). Safe to call
+  /// repeatedly — used at startup, after settings save, and on collection
+  /// add/remove.
   void configure(const QList<CollectionConfig> &collections);
 
   /// Debounce window in milliseconds before a watched directory's change is
@@ -75,8 +81,14 @@ private:
   };
 
   void onDirectoryChanged(const QString &path);
-  void startReconcileWalk(int collectionIndex);
-  void onWalkFinished(int collectionIndex, int generation, const QStringList &freshDirs);
+  /// @p emitRescanWhenDone distinguishes debounce-driven walks (a filesystem
+  /// event is pending, so the rescan callback must fire once the reconciled
+  /// watch set is applied) from configure()-driven registration walks (no
+  /// event happened — firing the callback would force a spurious rescan of
+  /// every watched collection at startup).
+  void startReconcileWalk(int collectionIndex, bool emitRescanWhenDone);
+  void onWalkFinished(int collectionIndex, int generation, bool emitRescanWhenDone,
+                      const QStringList &freshDirs);
   void emitRescan(int collectionIndex);
 
   QFileSystemWatcher *m_watcher = nullptr;

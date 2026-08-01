@@ -24,7 +24,7 @@
 #include "collection/collectioncontext.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
-#include "workersignalspy.h"
+#include "../../support/workersignalspy.h"
 
 class TestQueryManagerCacheInvalidation : public QObject {
   Q_OBJECT

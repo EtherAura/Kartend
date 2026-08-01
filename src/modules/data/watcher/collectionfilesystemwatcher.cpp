@@ -122,21 +122,30 @@ void CollectionFilesystemWatcher::configure(const QList<CollectionConfig> &colle
     if (cfg.isPlaylist) continue;
     const QString mediaDir = SettingsUtils::expandConfigVariables(cfg.mediaDirectory, cfg.name);
     if (mediaDir.trimmed().isEmpty()) continue;
+    const QFileInfo rootInfo(mediaDir);
+    if (!rootInfo.exists() || !rootInfo.isDir() || !rootInfo.isReadable()) continue;
 
-    QStringList dirs = enumerateWatchableSubdirs(mediaDir);
-    if (dirs.isEmpty()) continue;
-
-    if (m_watcher) {
-      const QStringList failed = addPathsLogged(m_watcher, dirs, mediaDir);
-      for (const QString &f : failed) dirs.removeOne(f);
-    }
-
+    // Register only the root synchronously (one stat + one watch — cheap), so
+    // change events at the top of the tree are live immediately. The rest of
+    // the tree is a BFS stat of every subdirectory — too slow for the GUI
+    // thread on a large or network-mounted library — so it rides the same
+    // async reconcile mechanism the debounce path uses: the walk runs on the
+    // worker pool, its result is applied on this thread when the future
+    // lands, and the generation guard above drops it if a newer configure()
+    // superseded this layout in the meantime. No rescan is emitted for these
+    // registration walks — no filesystem event happened.
     WatchEntry entry;
     entry.collectionIndex = i;
-    entry.rootPath = mediaDir;
-    for (const QString &d : dirs) entry.watchedSubdirs.insert(d);
+    entry.rootPath = rootInfo.absoluteFilePath();
+    if (m_watcher) {
+      const QStringList failed = addPathsLogged(m_watcher, {entry.rootPath}, entry.rootPath);
+      if (failed.isEmpty()) {
+        entry.watchedSubdirs.insert(entry.rootPath);
+        m_pathToCollection.insert(entry.rootPath, i);
+      }
+    }
     m_entries.insert(i, entry);
-    for (const QString &d : dirs) m_pathToCollection.insert(d, i);
+    startReconcileWalk(i, /*emitRescanWhenDone=*/false);
   }
 }
 
@@ -154,18 +163,20 @@ void CollectionFilesystemWatcher::onDirectoryChanged(const QString &path) {
   if (!timer) {
     timer = new QTimer(this);
     timer->setSingleShot(true);
-    connect(timer, &QTimer::timeout, this,
-            [this, collectionIndex]() { startReconcileWalk(collectionIndex); });
+    connect(timer, &QTimer::timeout, this, [this, collectionIndex]() {
+      startReconcileWalk(collectionIndex, /*emitRescanWhenDone=*/true);
+    });
   }
   timer->start(m_debounceMs);
 }
 
-void CollectionFilesystemWatcher::startReconcileWalk(int collectionIndex) {
+void CollectionFilesystemWatcher::startReconcileWalk(int collectionIndex,
+                                                     bool emitRescanWhenDone) {
   const auto entryIt = m_entries.constFind(collectionIndex);
   if (entryIt == m_entries.cend()) {
     // No watch bookkeeping for this collection (shouldn't happen while a
     // debounce timer for it is live) — still honor the pending rescan.
-    emitRescan(collectionIndex);
+    if (emitRescanWhenDone) emitRescan(collectionIndex);
     return;
   }
   if (m_walksInFlight.contains(collectionIndex)) {
@@ -188,15 +199,17 @@ void CollectionFilesystemWatcher::startReconcileWalk(int collectionIndex) {
   const QString rootPath = entryIt->rootPath;
   auto *walkWatcher = new QFutureWatcher<QStringList>(this);
   connect(walkWatcher, &QFutureWatcher<QStringList>::finished, this,
-          [this, walkWatcher, collectionIndex, generation]() {
+          [this, walkWatcher, collectionIndex, generation, emitRescanWhenDone]() {
             walkWatcher->deleteLater();
-            onWalkFinished(collectionIndex, generation, walkWatcher->result());
+            onWalkFinished(collectionIndex, generation, emitRescanWhenDone,
+                           walkWatcher->result());
           });
   walkWatcher->setFuture(
       QtConcurrent::run(&CollectionFilesystemWatcher::enumerateWatchableSubdirs, rootPath));
 }
 
 void CollectionFilesystemWatcher::onWalkFinished(int collectionIndex, int generation,
+                                                 bool emitRescanWhenDone,
                                                  const QStringList &freshDirs) {
   // configure() ran while the walk was in flight: the result describes a torn
   // down layout (and the in-flight/rerun sets were already cleared) — drop it.
@@ -232,12 +245,15 @@ void CollectionFilesystemWatcher::onWalkFinished(int collectionIndex, int genera
     entryIt->watchedSubdirs = freshSet;
   }
 
-  emitRescan(collectionIndex);
+  if (emitRescanWhenDone) emitRescan(collectionIndex);
 
   // A debounce window elapsed while we were walking — run the deferred walk
-  // now so those later events get reconciled and rescanned too.
+  // now so those later events get reconciled and rescanned too. Reruns always
+  // come from the debounce path (a real filesystem event), so they rescan
+  // when they land, even when the walk they piggybacked on was a silent
+  // configure() registration walk.
   if (m_walkRerunPending.remove(collectionIndex)) {
-    startReconcileWalk(collectionIndex);
+    startReconcileWalk(collectionIndex, /*emitRescanWhenDone=*/true);
   }
 }
 

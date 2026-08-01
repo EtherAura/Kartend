@@ -8,14 +8,11 @@
 
 #include <algorithm>
 #include <QApplication>
-#include <QDir>
 #include <QFile>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QSaveFile>
 #include <QSet>
 #include <QStandardPaths>
 
@@ -194,37 +191,13 @@ auto SessionManager::buildSessionJson() const -> QJsonObject {
   return root;
 }
 
-// Atomically writes data to file using QSaveFile (temp file + atomic rename
-// via QFileDevice::commit()), then fsyncs the parent directory so the rename
-// itself is durable across a crash or power loss.
+// Atomically writes data to file. The mechanics (QSaveFile temp file +
+// atomic rename via QFileDevice::commit(), then a parent-directory fsync so
+// the rename is durable across crash/power loss) live in the shared
+// PathUtils helper; this member survives so callers keep their
+// SessionManager-scoped name.
 auto SessionManager::atomicWriteFile(const QString &filePath, const QByteArray &data) -> bool {
-  if (filePath.isEmpty()) {
-    return false;
-  }
-
-  const QString parentDir = QFileInfo(filePath).absolutePath();
-  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) {
-    return false;
-  }
-
-  QSaveFile file(filePath);
-  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    return false;
-  }
-
-  const qint64 written = file.write(data);
-  if (written != data.size()) {
-    file.cancelWriting();
-    return false;
-  }
-
-  if (!file.commit()) {
-    return false;
-  }
-
-  // fsync the parent directory so the rename is durable across crash/power loss
-  PathUtils::syncDirectory(parentDir);
-  return true;
+  return PathUtils::atomicWriteFile(filePath, data);
 }
 
 void SessionManager::saveToDisk() {

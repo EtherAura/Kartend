@@ -91,17 +91,16 @@ QList<Match> evalByExtension(QSqlDatabase &db, const QStringList &extensions) {
   if (extensions.isEmpty() || !db.isOpen()) {
     return out;
   }
-  // SQLite has no LOWER() over the column without an expression index, so
-  // we build the ORed glob list dynamically and rely on path being
-  // case-sensitive by convention. Lowercase comparison would require
-  // either a generated column or per-row LOWER(); the cost isn't worth
-  // it for what is normally a tiny extension list.
+  // One ORed LIKE per extension. SQLite LIKE is ASCII case-insensitive by
+  // default, so ".mp4" matches ".MP4" without a second uppercase pattern.
+  // The bound needle is escaped (Kartend-joird): only the leading "%." is an
+  // intentional wildcard — a literal % or _ in the extension must match
+  // itself, not act as a LIKE metacharacter.
   QStringList globPlaceholders;
-  globPlaceholders.reserve(extensions.size() * 2);
+  globPlaceholders.reserve(extensions.size());
   for (const QString &ext : extensions) {
     Q_UNUSED(ext);
-    globPlaceholders.append(QStringLiteral("path LIKE ?"));
-    globPlaceholders.append(QStringLiteral("path LIKE ?"));
+    globPlaceholders.append(QStringLiteral("path LIKE ?") + KartendDb::kLikeEscape);
   }
   const QString sql = QStringLiteral("SELECT collection_uuid, path FROM items WHERE ") +
                       globPlaceholders.join(QStringLiteral(" OR ")) +
@@ -120,11 +119,7 @@ QList<Match> evalByExtension(QSqlDatabase &db, const QStringList &extensions) {
     if (clean.startsWith('.')) {
       clean.remove(0, 1);
     }
-    // Bind both common cases so the user typing ".mp4" matches files
-    // named ".MP4" too — covers the usual macOS/Windows filename quirks
-    // without needing a case-insensitive collation on the path column.
-    q.addBindValue(QStringLiteral("%.") + clean);
-    q.addBindValue(QStringLiteral("%.") + clean.toUpper());
+    q.addBindValue(QStringLiteral("%.") + KartendDb::escapeLike(clean));
   }
   if (!q.exec()) {
     ErrorUtils::logError(ErrorContext::error(ErrorCode::DatabaseQueryFailed,

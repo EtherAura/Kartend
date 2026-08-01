@@ -1,5 +1,5 @@
 // Manages selection restoration logic for collection navigation.
-#include "selectionrestoremanager.h"
+#include "selectionrestorecoordinator.h"
 
 #include <memory>
 #include <QApplication>

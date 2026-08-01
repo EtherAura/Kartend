@@ -11,7 +11,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <QSaveFile>
 #include <QStringConverter>
 #include <QTextStream>
 
@@ -67,81 +66,58 @@ ErrorUtils::Result<int> exportJson(const PlaylistRow &row, const QList<PlaylistI
   doc["smart_filter"] = row.smartFilterJson;
   doc["items"] = itemsArray;
 
-  QSaveFile file(outPath);
-  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to open output file",
-                               "PlaylistSerializer::exportJson")
-        .withDetails(file.errorString());
-  }
+  // PathUtils::atomicWriteFile: sibling temp + atomic rename on commit +
+  // parent-directory fsync so the rename survives crash / power loss. It
+  // logs the failing stage itself.
   const QByteArray bytes = QJsonDocument(doc).toJson(QJsonDocument::Indented);
-  if (file.write(bytes) != bytes.size()) {
-    file.cancelWriting();
-    return ErrorContext::error(ErrorCode::FileWriteError, "Short write to JSON file",
-                               "PlaylistSerializer::exportJson");
-  }
-  if (!file.commit()) {
-    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to commit JSON file",
+  if (!PathUtils::atomicWriteFile(outPath, bytes)) {
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to write JSON file",
                                "PlaylistSerializer::exportJson")
-        .withDetails(file.errorString());
+        .withDetails(outPath);
   }
-  PathUtils::syncDirectory(QFileInfo(outPath).absolutePath());
   return items.size();
 }
 
 ErrorUtils::Result<int> exportM3U(const QList<PlaylistItemRef> &items, const QString &outPath) {
-  QSaveFile file(outPath);
-  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
-    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to open output file",
-                               "PlaylistSerializer::exportM3U")
-        .withDetails(file.errorString());
-  }
+  // Build the whole document in memory, then hand it to
+  // PathUtils::atomicWriteFile (sibling temp + atomic rename on commit +
+  // parent-directory fsync). Playlists are small, and UTF-8 with '\n' line
+  // endings on every platform keeps round-trip fidelity deterministic
+  // (Kartend-93ju5) — readM3UPaths reads in text mode, which accepts both.
+  //
+  // Extended-M3U marker on line 1 so parsers that look for it (most modern
+  // players) recognise the dialect. Each entry gets an EXTINF line with
+  // duration -1 (unknown) and the file's basename as the title — we don't
+  // currently track per-item titles in playlist_items, but the basename is
+  // what every other Kartend surface defaults to.
+  QString content = QStringLiteral("#EXTM3U\n");
   int written = 0;
-  {
-    QTextStream out(&file);
-    // Pin UTF-8 so round-trip fidelity is deterministic across locales /
-    // platforms rather than depending on Qt6's implicit default encoding
-    // (Kartend-93ju5).
-    out.setEncoding(QStringConverter::Utf8);
-    // Extended-M3U marker on line 1 so parsers that look for it (most modern
-    // players) recognise the dialect. Each entry gets an EXTINF line with
-    // duration -1 (unknown) and the file's basename as the title — we don't
-    // currently track per-item titles in playlist_items, but the basename is
-    // what every other Kartend surface defaults to.
-    out << "#EXTM3U\n";
-    for (const PlaylistItemRef &item : items) {
-      // A path containing a newline or carriage return would split one logical
-      // entry across multiple M3U lines; on re-read the continuation would parse
-      // as a separate (garbage) path and corrupt the file. M3U has no escaping
-      // for embedded line breaks, so skip the entry and warn rather than emit a
-      // file that round-trips into corruption (Kartend-93ju5).
-      if (item.sourcePath.contains(QLatin1Char('\n')) ||
-          item.sourcePath.contains(QLatin1Char('\r'))) {
-        ErrorUtils::logError(
-            ErrorContext::warning(ErrorCode::InvalidArgument,
-                                  "M3U export: skipping path containing a newline/carriage return "
-                                  "(would corrupt the file)",
-                                  "PlaylistSerializer::exportM3U")
-                .withDetails(item.sourcePath));
-        continue;
-      }
-      const QString title = QFileInfo(item.sourcePath).completeBaseName();
-      out << "#EXTINF:-1," << title << "\n";
-      out << item.sourcePath << "\n";
-      ++written;
+  for (const PlaylistItemRef &item : items) {
+    // A path containing a newline or carriage return would split one logical
+    // entry across multiple M3U lines; on re-read the continuation would parse
+    // as a separate (garbage) path and corrupt the file. M3U has no escaping
+    // for embedded line breaks, so skip the entry and warn rather than emit a
+    // file that round-trips into corruption (Kartend-93ju5).
+    if (item.sourcePath.contains(QLatin1Char('\n')) ||
+        item.sourcePath.contains(QLatin1Char('\r'))) {
+      ErrorUtils::logError(
+          ErrorContext::warning(ErrorCode::InvalidArgument,
+                                "M3U export: skipping path containing a newline/carriage return "
+                                "(would corrupt the file)",
+                                "PlaylistSerializer::exportM3U")
+              .withDetails(item.sourcePath));
+      continue;
     }
-    out.flush();
-    if (out.status() != QTextStream::Ok) {
-      file.cancelWriting();
-      return ErrorContext::error(ErrorCode::FileWriteError, "Failed to write M3U content",
-                                 "PlaylistSerializer::exportM3U");
-    }
+    const QString title = QFileInfo(item.sourcePath).completeBaseName();
+    content += QStringLiteral("#EXTINF:-1,") + title + QLatin1Char('\n');
+    content += item.sourcePath + QLatin1Char('\n');
+    ++written;
   }
-  if (!file.commit()) {
-    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to commit M3U file",
+  if (!PathUtils::atomicWriteFile(outPath, content.toUtf8())) {
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to write M3U file",
                                "PlaylistSerializer::exportM3U")
-        .withDetails(file.errorString());
+        .withDetails(outPath);
   }
-  PathUtils::syncDirectory(QFileInfo(outPath).absolutePath());
   return written;
 }
 

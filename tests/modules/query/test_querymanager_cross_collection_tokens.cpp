@@ -27,7 +27,7 @@
 #include "collection/collectioncontext.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
-#include "workersignalspy.h"
+#include "../../support/workersignalspy.h"
 
 class TestQueryManagerCrossCollectionTokens : public QObject {
   Q_OBJECT
