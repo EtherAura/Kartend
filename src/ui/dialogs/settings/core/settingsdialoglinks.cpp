@@ -35,12 +35,6 @@ void SettingsDialog::updateLinkedParentsButtonLabel() {
   }
 }
 
-auto SettingsDialog::checkLinkedParentsChanges() const -> bool {
-  // Order matters — the cache renders linked children in the user's
-  // declared order, so swapping two link names is a real change.
-  return m_workingAdditionalParentNames != originalCollection.additionalParentNames;
-}
-
 void SettingsDialog::onEditLinkedParents() {
   if (!CollectionUtils::isValidIndex(currentCollectionIndex, &collections)) {
     return;

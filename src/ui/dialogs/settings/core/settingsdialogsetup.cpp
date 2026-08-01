@@ -83,20 +83,36 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   QString newMediaDir = ui->configurationPanel->mediaDirLineEdit()
                             ? ui->configurationPanel->mediaDirLineEdit()->text().trimmed()
                             : originalCollection.mediaDirectory;
-  QString newExtensions = ui->configurationPanel->fileExtensionsLineEdit()
-                              ? ui->configurationPanel->fileExtensionsLineEdit()->text().trimmed()
-                              : originalCollection.extensions.join(", ");
+  // Compare the PARSED extension list — the same normalization
+  // ConfigurationPanel::save() applies — so cosmetic comma-spacing tweaks
+  // in the raw line-edit text don't register as a database change and queue a
+  // needless rescan.
+  QStringList newExtensions = ui->configurationPanel->fileExtensionsLineEdit()
+                                  ? ExtensionUtils::parseUserExtensionList(
+                                        ui->configurationPanel->fileExtensionsLineEdit()->text())
+                                  : originalCollection.extensions;
   bool newIncludeSubfolders = ui->subfoldersPanel
                                   ? ui->subfoldersPanel->isContentSubfoldersIncluded()
                                   : originalCollection.folderBrowsing.includeContentSubfolders;
 
   bool databaseFieldsChanged =
       (newName != originalCollection.name) || (newMediaDir != originalCollection.mediaDirectory) ||
-      (newExtensions != originalCollection.extensions.join(", ")) ||
+      (newExtensions != originalCollection.extensions) ||
       (newIncludeSubfolders != originalCollection.folderBrowsing.includeContentSubfolders);
 
   if (databaseFieldsChanged) {
     m_rescanRequired.insert(editedIndex);
+  }
+
+  // A committed rename must follow the startup-collection target: the setting
+  // stores the collection NAME, so leaving it stale would silently degrade to
+  // "(Default)" the next time the combo writes back (the stale name is no
+  // longer findable among the combo's entries). Remapped before the
+  // general-settings save below so the new name persists atomically with the
+  // rename; the combo entries refresh via the collectionSaved connection.
+  if (newName != originalCollection.name &&
+      m_generalSettings.startup.startupCollection == originalCollection.name) {
+    m_generalSettings.startup.startupCollection = newName;
   }
 
   saveCollectionFromUI(editedIndex);

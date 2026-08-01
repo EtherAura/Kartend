@@ -113,100 +113,13 @@ auto SettingsDialog::updateParentCollectionFromUI(CollectionConfig &collection, 
   }
 }
 
-// Checks basic field changes against original configuration
-auto SettingsDialog::checkBasicFieldChanges() const -> bool {
-  const CollectionConfig &o = originalCollection;
-
-  // Special cases: launcher dirty-check, additional-launchers list, default
-  // launcher index (only valid when combobox has entries), the
-  // collection-type combobox (compares trimmed currentText, not index), and
-  // the spacing fields (apply spacingUiToInternal first). Sidebar / details-
-  // pane fields delegate to SidebarPanel::hasChanges, which handles its own
-  // image-vs-color background-value special case.
-  // launcher fields (path / core / params / name / extract / extracted-ext)
-  // delegate to LauncherTabPanel::hasChanges; the additional-launchers list
-  // and default-launcher combo state still live on the dialog.
-  const bool additionalChanged = m_workingAdditionalLaunchers != o.launcher.additionalLaunchers;
-  const bool defaultLauncherChanged =
-      ui->launcherPanel->defaultLauncherComboBox()->count() > 0 &&
-      ui->launcherPanel->defaultLauncherComboBox()->currentIndex() !=
-          o.launcher.defaultLauncherIndex;
-  // type comparison is handled inside ConfigurationPanel::hasChanges below.
-  const bool hSpacingChanged =
-      ui->appearanceLayoutPanel->horizontalSpacingSpinBox() &&
-      spacingUiToInternal(ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->value()) !=
-          o.gridLayout.horizontalSpacing;
-  const bool vSpacingChanged =
-      ui->appearanceLayoutPanel->verticalSpacingSpinBox() &&
-      spacingUiToInternal(ui->appearanceLayoutPanel->verticalSpacingSpinBox()->value()) !=
-          o.gridLayout.verticalSpacing;
-
-  return additionalChanged || defaultLauncherChanged || hSpacingChanged || vSpacingChanged ||
-         ui->sidebarPanel->hasChanges() || ui->configurationPanel->hasChanges() ||
-         ui->artworkPanel->hasChanges() || ui->launcherPanel->hasChanges() ||
-
-         // Layout / grid / view fields delegate to AppearanceLayoutPanel.
-         ui->appearanceLayoutPanel->hasChanges() ||
-
-         // Titles / folders.
-         ui->appearanceTitlesPanel->hasChanges() || ui->subfoldersPanel->hasChanges();
-}
-
-// Extension + customArtworkTypes dirty checks live in ConfigurationPanel /
-// ArtworkTabPanel respectively (covered by checkBasicFieldChanges via the
-// panels' own hasChanges() methods). Kept as an empty stub so the
-// hasUnsavedChanges() callsite stays unchanged for now.
-auto SettingsDialog::checkExtensionChanges() const -> bool {
-  return false;
-}
-
-// Checks tree name changes
-auto SettingsDialog::checkTreeNameChanges() const -> bool {
-  QString currentTreeName = originalCollection.name;
-  if (auto *item = m_treeManager ? m_treeManager->itemAt(currentCollectionIndex) : nullptr) {
-    currentTreeName = item->text(0);
-  }
-  return currentTreeName != originalCollection.name;
-}
-
-// Checks parent collection changes
-auto SettingsDialog::checkParentCollectionChanges() const -> bool {
-  int dropdownIndex = (ui->configurationPanel->parentCollectionComboBox())
-                          ? ui->configurationPanel->parentCollectionComboBox()->currentIndex()
-                          : -1;
-  int currentParentIndex = -1;
-  if (dropdownIndex >= 0 && dropdownIndex < m_parentCollectionMapping.size()) {
-    currentParentIndex = m_parentCollectionMapping[dropdownIndex];
-  }
-  return currentParentIndex != originalCollection.parentCollectionIndex;
-}
-
-// Checks dimension changes
-auto SettingsDialog::checkDimensionChanges() const -> bool {
-  // Item dimensions live on AppearanceLayoutPanel; rolled into
-  // checkBasicFieldChanges via the panel's own hasChanges().
-  return false;
-}
-
-// Checks color field changes — palette / list-row colors / vignette / header-
-// logo / parallax+blur. Background type/value are part of AppearanceColorsPanel
-// too (collapsed under hasChanges).
-auto SettingsDialog::checkColorChanges() const -> bool {
-  return ui->appearanceColorsPanel->hasChanges() || ui->appearanceToolbarPanel->hasChanges() ||
-         ui->appearanceEffectsPanel->hasChanges();
-}
-
-// Checks list mode field changes
-auto SettingsDialog::checkListModeChanges() const -> bool {
-  return ui->appearanceListPanel->hasChanges();
-}
-
-// Background type/value dirty check rolled into checkColorChanges via
-// AppearanceColorsPanel::hasChanges. Kept as a stub so the hasUnsavedChanges()
-// callsite stays unchanged.
-auto SettingsDialog::checkBackgroundChanges() const -> bool {
-  return false;
-}
+// Kartend audit 2026-07: the per-collection check*Changes helper family that
+// lived here (checkBasicFieldChanges + the TreeName/ParentCollection/Color/
+// ListMode buckets and the permanently-false Extension/Dimension/Background
+// stubs) was deleted along with every panel's hasChanges() — the dirty check
+// in hasUnsavedChanges() (settingsdialogform.cpp) now runs the same
+// extraction pipeline Save uses and whole-struct-compares the result against
+// originalCollection, so a field can no longer be persisted-but-untracked.
 
 auto SettingsDialog::checkGeneralSettingsChanges() const -> bool {
   // Whole-struct compare against the baseline snapshot. Every settings panel

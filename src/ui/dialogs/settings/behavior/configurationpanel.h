@@ -44,7 +44,6 @@ public:
   /// expandMode, showAllSubcollectionItems). Parent-collection index is
   /// resolved separately by the host using the dropdown→collection mapping.
   void save() override;
-  [[nodiscard]] bool hasChanges() const;
 
   /// Populate the type combo with @p knownTypes and select / set
   /// @p currentText. Trims any leading/trailing whitespace on the current
@@ -53,8 +52,8 @@ public:
 
   // Cross-cutting widget accessors used by the host dialog:
   // - parentCollectionComboBox: populated via updateParentCollectionComboBox
-  //   and read back via m_parentCollectionMapping in extractUIFieldValues
-  //   and checkParentCollectionChanges.
+  //   and read back via m_parentCollectionMapping in extractUIFieldValues /
+  //   updateParentCollectionFromUI.
   // - editLinkedParentsButton: clicked → SettingsDialog::onEditLinkedParents
   //   which mutates m_workingAdditionalParentNames.
   // - recursiveImportContentButton / mediaDirLineEdit: clicked →

@@ -60,16 +60,6 @@ void AppearanceTitlesPanel::save() {
   config.hideSubcollectionTitles = ui->hideSubcollectionTitlesCheckBox->isChecked();
 }
 
-bool AppearanceTitlesPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  if (ui->fontSizeSpinBox->value() != o.gridLayout.fontSize) return true;
-  if (ui->customFontEdit->text().trimmed() != o.customFontFamily) return true;
-  if (ui->hideTitlesCheckBox->isChecked() != o.hideTitles) return true;
-  if (ui->hideSubcollectionTitlesCheckBox->isChecked() != o.hideSubcollectionTitles) return true;
-  return false;
-}
-
 void AppearanceTitlesPanel::onBrowseFont() {
   bool ok = false;
   QFont currentFont = QApplication::font();

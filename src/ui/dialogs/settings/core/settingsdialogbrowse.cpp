@@ -160,6 +160,15 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isConte
     newCollection.parentCollectionIndex = parentIndex;
     newCollection.isSubcollection = true;
 
+    // Children inherit the template's launcher/appearance settings but must
+    // NOT inherit its linkage or scraper identity — copied verbatim, the
+    // parent's extra-parent links, DAT list, ScreenScraper system id, and
+    // icon would misattribute every generated child.
+    newCollection.additionalParentNames.clear();
+    newCollection.scraperOverrides.datFilePaths.clear();
+    newCollection.scraperOverrides.screenscraperSystemId = -1; // unset -> autodetect
+    newCollection.collectionIcon.clear();
+
     // Set the directory paths
     if (isContentDir) {
       newCollection.mediaDirectory = dir.absoluteFilePath(subdir);

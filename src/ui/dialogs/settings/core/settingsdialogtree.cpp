@@ -47,7 +47,7 @@ void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
     };
   }
   const SettingsTreeHelpers::ParentComboModel model = SettingsTreeHelpers::buildParentComboModel(
-      collections, currentIndex, QStringLiteral("None"), cycleCheck);
+      collections, currentIndex, tr("None"), cycleCheck);
 
   QSignalBlocker blocker(ui->configurationPanel->parentCollectionComboBox());
   ui->configurationPanel->parentCollectionComboBox()->clear();

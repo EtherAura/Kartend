@@ -37,7 +37,7 @@ LauncherTabPanel::LauncherTabPanel(QWidget *parent)
   connect(ui->extractedExtensionLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { emit changed(); });
   // Picking a detected core fills the path field, which stays the
-  // single source of truth that save() / hasChanges() read.
+  // single source of truth that save() reads.
   connect(ui->coreComboBox, &QComboBox::activated, this, [this](int index) {
     const QString path = ui->coreComboBox->itemData(index).toString();
     if (!path.isEmpty()) {
@@ -103,18 +103,6 @@ void LauncherTabPanel::save() {
   config.launcher.launcherName = ui->launcherNameLineEdit->text().trimmed();
   config.archive.extractArchives = ui->extractArchivesCheckBox->isChecked();
   config.archive.extractedExtension = ui->extractedExtensionLineEdit->text();
-}
-
-bool LauncherTabPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  if (ui->launcherLineEdit->text() != o.launcher.launcherPath) return true;
-  if (ui->coreLineEdit->text() != o.launcher.corePath) return true;
-  if (ui->launchParamsLineEdit->text() != o.launcher.launchParameters) return true;
-  if (ui->launcherNameLineEdit->text().trimmed() != o.launcher.launcherName) return true;
-  if (ui->extractArchivesCheckBox->isChecked() != o.archive.extractArchives) return true;
-  if (ui->extractedExtensionLineEdit->text() != o.archive.extractedExtension) return true;
-  return false;
 }
 
 void LauncherTabPanel::populateCoreCombo() {

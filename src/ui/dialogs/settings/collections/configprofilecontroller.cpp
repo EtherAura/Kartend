@@ -2,6 +2,7 @@
 // Extracted from SettingsDialog (settingsdialoggeneral.cpp seam).
 #include "configprofilecontroller.h"
 #include "errorutils.h"
+#include "imainwindow.h"
 #include "settingsutils.h"
 #include <QApplication>
 #include <QComboBox>
@@ -196,6 +197,18 @@ void ConfigProfileController::importConfig() {
     QMessageBox::critical(m_dialogParent, tr("Load Configuration"),
                           tr("Failed to load configuration:\n%1").arg(result.error().message));
     return;
+  }
+
+  // kartend.cfg now holds the imported profile. Tell the main window before
+  // scheduling the quit below: the shutdown path otherwise persists the OLD
+  // in-memory state over the imported file (ApplicationManager::shutdown's
+  // saveCollections removes every collection section not in the stale list,
+  // and a pending debounced general-settings save would clobber [General]).
+  // The dialog's QObject parent is the main window — the same host
+  // resolution SettingsDialog itself uses.
+  QObject *hostCandidate = m_dialogParent ? m_dialogParent->parent() : nullptr;
+  if (auto *host = dynamic_cast<IMainWindow *>(hostCandidate)) {
+    host->markConfigReplacedOnDisk();
   }
 
   QMessageBox::information(m_dialogParent, tr("Load Configuration"),

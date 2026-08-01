@@ -340,46 +340,6 @@ void ConfigurationPanel::save() {
   }
 }
 
-bool ConfigurationPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  if (ui->collectionTypeComboBox->currentText().trimmed() != o.type) return true;
-  if (ui->scraperProviderComboBox->currentData().toString() != o.scraperOverrides.scraperProviderId)
-    return true;
-  if (ui->mediaDirLineEdit->text() != o.mediaDirectory) return true;
-  if (ui->expandModeCheckBox->isChecked() != o.expandMode) return true;
-  if (ui->showAllSubcollectionItemsCheckBox->isChecked() != o.showAllSubcollectionItems)
-    return true;
-  if (ui->watchFilesystemCheckBox->isChecked() != o.watchFilesystem) return true;
-  // Compare against the parsed form so cosmetic comma-spacing tweaks don't
-  // register as dirty.
-  const QStringList parsed =
-      ExtensionUtils::parseUserExtensionList(ui->fileExtensionsLineEdit->text());
-  if (parsed != o.extensions) return true;
-  if (ui->screenscraperSystemComboBox->currentIndex() >= 0 &&
-      ui->screenscraperSystemComboBox->currentData().toInt() !=
-          o.scraperOverrides.screenscraperSystemId) {
-    return true;
-  }
-  if (ui->screenscraperHashArchiveCheckBox->isChecked() !=
-      o.scraperOverrides.screenscraperHashArchive) {
-    return true;
-  }
-  // Compare against the rebuilt list so duplicate-drop / empty-trim
-  // logic in save() doesn't register as a spurious diff against the
-  // original.
-  QStringList current;
-  current.reserve(ui->datFilesListWidget->count());
-  for (int i = 0; i < ui->datFilesListWidget->count(); ++i) {
-    const QString path = ui->datFilesListWidget->item(i)->text();
-    if (!path.isEmpty()) current.append(path);
-  }
-  if (current != o.scraperOverrides.datFilePaths) {
-    return true;
-  }
-  return false;
-}
-
 void ConfigurationPanel::setKnownTypes(const QStringList &knownTypes, const QString &currentText) {
   QSignalBlocker blocker(ui->collectionTypeComboBox);
   ui->collectionTypeComboBox->clear();

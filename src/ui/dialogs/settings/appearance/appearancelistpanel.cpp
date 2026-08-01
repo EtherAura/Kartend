@@ -43,9 +43,3 @@ void AppearanceListPanel::save() {
   config.listView.listRowHeight = ui->listRowHeightSpinBox->value();
 }
 
-bool AppearanceListPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  return ui->listFontSizeSpinBox->value() != o.listView.listFontSize ||
-         ui->listRowHeightSpinBox->value() != o.listView.listRowHeight;
-}

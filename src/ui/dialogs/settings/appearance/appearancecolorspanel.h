@@ -35,7 +35,6 @@ public:
   void load() override;
   void clear() override;
   void save() override;
-  [[nodiscard]] bool hasChanges() const;
   // Not part of ISettingsPanel: loads the three global title-tint fields. The
   // host calls this separately (alongside load()) — keep it as-is.
   void refresh();

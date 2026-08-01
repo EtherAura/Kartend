@@ -27,7 +27,6 @@ public:
   void load() override;
   void clear() override;
   void save() override;
-  [[nodiscard]] bool hasChanges() const;
 
 signals:
   void changed();

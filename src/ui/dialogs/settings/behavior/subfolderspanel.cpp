@@ -70,18 +70,6 @@ void SubfoldersPanel::save() {
       ui->includeArtworkSubfoldersCheckBox->isChecked();
 }
 
-bool SubfoldersPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  return ui->includeContentSubfoldersCheckBox->isChecked() !=
-             o.folderBrowsing.includeContentSubfolders ||
-         ui->showAllSubfolderItemsCheckBox->isChecked() != o.folderBrowsing.showAllSubfolderItems ||
-         ui->hideSubfolderTitlesCheckBox->isChecked() != o.folderBrowsing.hideSubfolderTitles ||
-         ui->showHiddenFoldersCheckBox->isChecked() != o.folderBrowsing.showHiddenFolders ||
-         ui->includeArtworkSubfoldersCheckBox->isChecked() !=
-             o.folderBrowsing.includeArtworkSubfolders;
-}
-
 bool SubfoldersPanel::isContentSubfoldersIncluded() const {
   return ui->includeContentSubfoldersCheckBox->isChecked();
 }

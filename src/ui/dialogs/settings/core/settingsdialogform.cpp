@@ -35,6 +35,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "collection/validationhelpers.h"
+#include "errordialog.h"
 #include "extensionutils.h"
 #include "fontspanel.h"
 #include "gamepadcapturecontroller.h"
@@ -73,6 +74,46 @@ void SettingsDialog::revertCurrentCollectionEdits() {
   updateSaveButtonStyle();
 }
 
+void SettingsDialog::revertGeneralSettingsEdits() {
+  if (!checkGeneralSettingsChanges()) {
+    return;
+  }
+
+  // Reset the live model to the dialog-open baseline. Deliberately NOT
+  // loadGeneralSettingsToUI(): that re-reads the host's struct, which may
+  // carry live-applied edits (base color / fonts / splash) that are part of
+  // what is being discarded — m_originalGeneralSettings is the only true
+  // baseline. The host/disk rollback for live-applied edits stays where it
+  // is today: restoreLiveAppliedSettings on the reject path, and the
+  // baseline re-persist in saveGeneralSettingsFromUI on the accept path.
+  m_generalSettings = m_originalGeneralSettings;
+
+  // Refresh the same panel set loadGeneralSettingsToUI hydrates so the
+  // widgets match the restored struct. Each load()/refresh() sets its
+  // widgets with signals blocked (SettingsFormBinding::loadInto), so this
+  // cannot re-dirty the model or trip the live-save handlers.
+  ui->splashPanel->load();
+  ui->fontsPanel->load();
+  ui->attractPanel->load();
+  ui->marqueePanel->load();
+  ui->generalSettingsPanel->load();
+  ui->scraperSettingsPanel->load();
+  ui->screenScraperCredentialsPanel->load();
+  ui->tmdbCredentialsPanel->load();
+  ui->appearanceColorsPanel->refresh();
+  ui->controlsPanel->load();
+  ui->toolbarPanel->load();
+  ui->launcherPresetsPanel->load();
+  // The startup-collection combo lives outside GeneralSettingsPanel::load();
+  // re-seed its entries and selection from the restored baseline the same way
+  // loadGeneralSettingsToUI does.
+  refreshStartupCollectionCombo();
+  if (m_gamepadCapture) {
+    m_gamepadCapture->refreshUi();
+  }
+  updateSaveButtonStyle();
+}
+
 auto SettingsDialog::resolveUnsavedChanges(const QString &actionDescription,
                                            bool refreshTreeAfterSave) -> bool {
   if (!hasUnsavedChanges()) {
@@ -87,11 +128,28 @@ auto SettingsDialog::resolveUnsavedChanges(const QString &actionDescription,
   if (decision == QMessageBox::Save) {
     if (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size()) {
       handleSaveCollection(currentCollectionIndex, refreshTreeAfterSave);
+    } else if (checkGeneralSettingsChanges()) {
+      // No collection is selected, so handleSaveCollection (which persists
+      // general settings as part of its flow) can't run — but the prompt may
+      // have been raised by general-settings edits alone. Persist them here;
+      // otherwise choosing Save on the reject path silently dropped them.
+      // On failure keep the dialog open (same outcome as Cancel) so the user
+      // can retry instead of closing over unwritten settings.
+      if (auto result = saveGeneralSettingsFromUI(); result.isError()) {
+        ErrorDialog::showError(this, result.error());
+        return false;
+      }
+      updateSaveButtonStyle();
     }
     return true;
   }
 
+  // Discard covers everything the prompt asked about: the current collection
+  // row AND the general-settings edits. Leaving m_generalSettings dirty here
+  // meant accept()'s unconditional saveGeneralSettingsFromUI() went on to
+  // persist the exact edits the user just chose to throw away.
   revertCurrentCollectionEdits();
+  revertGeneralSettingsEdits();
   return true;
 }
 
@@ -186,13 +244,36 @@ auto SettingsDialog::hasUnsavedChanges() const -> bool {
     return true;
   }
 
-  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size()) {
+  if (currentCollectionIndex < 0 || currentCollectionIndex >= collections.size() ||
+      currentCollectionIndex >= m_workingCollections.size()) {
     return false;
   }
 
-  return checkBasicFieldChanges() || checkExtensionChanges() || checkTreeNameChanges() ||
-         checkParentCollectionChanges() || checkLinkedParentsChanges() || checkDimensionChanges() ||
-         checkColorChanges() || checkListModeChanges() || checkBackgroundChanges();
+  // Whole-struct compare against the per-row baseline, mirroring the
+  // general-settings check above (Kartend-6oqat's collection-side
+  // counterpart): build the exact CollectionConfig that Save would persist —
+  // the same extractUIFieldValues + updateParentCollectionFromUI pipeline
+  // saveCollectionFromUI runs — and diff it against originalCollection via
+  // CollectionConfig::operator==. This replaces the nine hand-enumerated
+  // check*Changes buckets, three of which had already decayed into permanent
+  // always-false stubs; anything Save would write IS a change, and a new
+  // CollectionConfig field participates automatically once operator== and the
+  // save path carry it. Comparing through the extraction also canonicalizes
+  // (trimmed labels, parsed extension lists, cleared inactive background
+  // slots), so a row whose stored form differs from what Save would emit
+  // reports dirty — Save then rewrites it in canonical form.
+  //
+  // extractUIFieldValues routes every panel's save() through the working row
+  // (the panels write via m_model), so snapshot the row first and restore it
+  // before returning — the method is logically const: all dialog state is
+  // bit-identical on return. The const_cast is confined to that scratch
+  // round-trip; the panels' save() bodies write only into the row itself.
+  auto *self = const_cast<SettingsDialog *>(this);
+  const CollectionConfig snapshot = m_workingCollections[currentCollectionIndex];
+  CollectionConfig edited = self->extractUIFieldValues();
+  self->updateParentCollectionFromUI(edited, currentCollectionIndex);
+  self->m_workingCollections[currentCollectionIndex] = snapshot;
+  return edited != originalCollection;
 }
 
 void SettingsDialog::updateSaveButtonStyle() {
@@ -374,18 +455,8 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   // even though they edit GeneralSettings; owned by AppearanceColorsPanel
   // which observes &m_generalSettings.
   ui->appearanceColorsPanel->refresh();
-  // Populate the panel's startup-collection combo with the live collection
-  // names so the user can pick one.
-  if (mainWindow) {
-    const auto &mwCollections = mainWindow->collections();
-    QStringList names;
-    names.reserve(mwCollections.size());
-    for (const CollectionConfig &cfg : std::as_const(mwCollections)) {
-      names.append(cfg.name);
-    }
-    ui->generalSettingsPanel->setStartupCollections(names,
-                                                    m_generalSettings.startup.startupCollection);
-  }
+  // Populate the panel's startup-collection combo so the user can pick one.
+  refreshStartupCollectionCombo();
   // Note: customFontEdit is now loaded per-collection in loadCollectionFields()
 
   // Keyboard / Gamepad / Mouse fields owned by ControlsPanel.
@@ -404,6 +475,24 @@ void SettingsDialog::loadGeneralSettingsToUI() {
   if (m_gamepadCapture) {
     m_gamepadCapture->refreshUi();
   }
+}
+
+void SettingsDialog::refreshStartupCollectionCombo() {
+  // Repopulate from the dialog's WORKING list, not the host's live one:
+  // collections added, renamed, or removed in this session must be pickable
+  // (or gone) immediately, and the host list only catches up after the
+  // controller's post-dialog write-back. Selection is preserved by name —
+  // setStartupCollections re-selects the stored startup.startupCollection
+  // value (falling back to "(Default)" only when the name truly no longer
+  // exists). Wired to collectionSaved in the constructor so every tree
+  // mutation and per-collection save refreshes the entries.
+  QStringList names;
+  names.reserve(m_workingCollections.size());
+  for (const CollectionConfig &cfg : std::as_const(m_workingCollections)) {
+    names.append(cfg.name);
+  }
+  ui->generalSettingsPanel->setStartupCollections(names,
+                                                  m_generalSettings.startup.startupCollection);
 }
 
 ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {

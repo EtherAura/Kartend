@@ -93,29 +93,6 @@ void AppearanceLayoutPanel::save() {
   config.gridLayout.cornerRadius = ui->cornerRadiusSpinBox->value();
 }
 
-bool AppearanceLayoutPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  if (ui->viewTypeComboBox->currentIndex() != static_cast<int>(o.viewType)) return true;
-  if (ui->horizontalAlignmentComboBox->currentIndex() != static_cast<int>(o.horizontalAlignment))
-    return true;
-  if (ui->gridWidthSpinBox->value() != o.gridLayout.gridWidth) return true;
-  if (ui->gridWidthSidebarHiddenSpinBox->value() != o.gridLayout.gridWidthSidebarHidden)
-    return true;
-  if (ui->horizontalGridHeightSpinBox->value() != o.gridLayout.horizontalGridHeight) return true;
-  if (ui->horizontalGridHeightSidebarHiddenSpinBox->value() !=
-      o.gridLayout.horizontalGridHeightSidebarHidden)
-    return true;
-  if (spacingUiToInternal(ui->horizontalSpacingSpinBox->value()) != o.gridLayout.horizontalSpacing)
-    return true;
-  if (spacingUiToInternal(ui->verticalSpacingSpinBox->value()) != o.gridLayout.verticalSpacing)
-    return true;
-  if (ui->itemWidthSpinBox->value() != o.gridLayout.itemWidth) return true;
-  if (ui->itemHeightSpinBox->value() != o.gridLayout.itemHeight) return true;
-  if (ui->cornerRadiusSpinBox->value() != o.gridLayout.cornerRadius) return true;
-  return false;
-}
-
 QSpinBox *AppearanceLayoutPanel::gridWidthSpinBox() const {
   return ui->gridWidthSpinBox;
 }

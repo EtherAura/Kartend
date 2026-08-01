@@ -180,36 +180,6 @@ void AppearanceColorsPanel::save() {
   config.background.vignetteIntensity = ui->vignetteIntensitySpinBox->value();
 }
 
-bool AppearanceColorsPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  BackgroundType currentType = BackgroundType::Color;
-  if (ui->backgroundVideoRadio->isChecked()) {
-    currentType = BackgroundType::Video;
-  } else if (ui->backgroundImageRadio->isChecked()) {
-    currentType = BackgroundType::Image;
-  }
-  if (currentType != o.background.backgroundType) return true;
-
-  const QString currentValue = ui->backgroundValueEdit->text().trimmed();
-  if (currentType == BackgroundType::Video) {
-    if (currentValue != o.background.backgroundVideo) return true;
-  } else if (currentType == BackgroundType::Image) {
-    if (currentValue != o.background.backgroundImage) return true;
-  } else {
-    if (currentValue != o.background.backgroundColor) return true;
-  }
-
-  if (ui->primaryColorEdit->text().trimmed() != o.background.primaryColor) return true;
-  if (ui->tileColorEdit->text().trimmed() != o.background.tileColor) return true;
-  if (ui->selectionColorEdit->text().trimmed() != o.background.selectionColor) return true;
-  if (ui->listRowColorEdit->text().trimmed() != o.listView.listRowColor) return true;
-  if (ui->listAltRowColorEdit->text().trimmed() != o.listView.listAltRowColor) return true;
-  if (ui->vignetteEnabledCheckBox->isChecked() != o.background.vignetteEnabled) return true;
-  if (ui->vignetteIntensitySpinBox->value() != o.background.vignetteIntensity) return true;
-  return false;
-}
-
 void AppearanceColorsPanel::refresh() {
   if (!m_model || !m_model->generalSettings) return;
   SettingsFormBinding::loadInto(ui->titleSaturationSpinBox,

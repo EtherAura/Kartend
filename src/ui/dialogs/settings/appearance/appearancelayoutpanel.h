@@ -34,7 +34,6 @@ public:
   void load() override;
   void clear() override;
   void save() override;
-  [[nodiscard]] bool hasChanges() const;
 
   // Cross-cutting accessors:
   [[nodiscard]] QSpinBox *gridWidthSpinBox() const;

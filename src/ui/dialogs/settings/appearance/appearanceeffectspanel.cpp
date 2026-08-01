@@ -56,12 +56,3 @@ void AppearanceEffectsPanel::save() {
   config.background.backdropBlurRadius = ui->backdropBlurRadiusSpinBox->value();
 }
 
-bool AppearanceEffectsPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  if (ui->wallpaperParallaxCheckBox->isChecked() != o.background.wallpaperParallax) return true;
-  if (ui->parallaxStrengthSpinBox->value() != o.background.parallaxStrength) return true;
-  if (ui->toolbarBackdropBlurCheckBox->isChecked() != o.background.toolbarBackdropBlur) return true;
-  if (ui->backdropBlurRadiusSpinBox->value() != o.background.backdropBlurRadius) return true;
-  return false;
-}

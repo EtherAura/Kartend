@@ -227,6 +227,12 @@ private:
   void updateExtractArchivesVisibility();
   void onExtractArchivesToggled(bool checked);
   void loadGeneralSettingsToUI();
+  /// Rebuilds the startup-collection combo from the WORKING collection list,
+  /// preserving the stored startup.startupCollection selection by name.
+  /// Called at load/revert and on every collectionSaved so in-session
+  /// adds/renames/removals are immediately reflected instead of the combo
+  /// staying frozen at its dialog-open contents.
+  void refreshStartupCollectionCombo();
   // Mirrors the dialog's working m_generalSettings onto MainWindow's struct,
   // applies live side effects (PixmapCache resize, VideoThumbnailExtractor
   // timeout, ItemWidget tint, etc.) and persists via SettingsManager. Returns
@@ -246,23 +252,24 @@ private:
   void loadLinkedParentsToUI(const CollectionConfig &config);
   void clearLinkedParentsUI();
   void updateLinkedParentsButtonLabel();
-  [[nodiscard]] auto checkLinkedParentsChanges() const -> bool;
   void rebuildDefaultLauncherCombo(int preferredIndex);
   void updateAdditionalLauncherButtonsState();
-  // Helper methods for hasUnsavedChanges refactoring
-  auto checkBasicFieldChanges() const -> bool;
-  auto checkExtensionChanges() const -> bool;
-  auto checkTreeNameChanges() const -> bool;
-  auto checkParentCollectionChanges() const -> bool;
-  auto checkDimensionChanges() const -> bool;
-  auto checkColorChanges() const -> bool;
-  auto checkListModeChanges() const -> bool;
-  auto checkBackgroundChanges() const -> bool;
+  // Kartend audit 2026-07: the per-collection check*Changes helper family
+  // (Basic/Extension/TreeName/ParentCollection/Dimension/Color/ListMode/
+  // Background) was deleted — hasUnsavedChanges() now builds the row Save
+  // would write (extractUIFieldValues + updateParentCollectionFromUI) and
+  // whole-struct-compares it against originalCollection, the same shape the
+  // general-settings check below already uses.
   auto checkGeneralSettingsChanges() const -> bool;
   /// Prompts the user to resolve unsaved changes for the specified action.
   auto promptUnsavedChanges(const QString &actionDescription) -> QMessageBox::StandardButton;
   /// Restores the current collection to its last saved state.
   void revertCurrentCollectionEdits();
+  /// Restores m_generalSettings to the dialog-open baseline and refreshes the
+  /// general-settings panels from it. Runs on the Discard resolution so
+  /// accept()'s unconditional general-settings save persists the baseline
+  /// instead of the edits the user just chose to throw away.
+  void revertGeneralSettingsEdits();
   /// Resolves unsaved changes prior to executing an action.
   auto resolveUnsavedChanges(const QString &actionDescription, bool refreshTreeAfterSave)
       -> bool override;

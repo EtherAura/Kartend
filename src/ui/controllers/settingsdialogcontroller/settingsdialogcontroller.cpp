@@ -336,8 +336,17 @@ void SettingsDialogController::openSettingsDialog(const SettingsDialogContext &c
     return;
   }
 
-  auto onCollectionSaved = [this, &collections,
+  // Set whenever the dialog persists collections mid-session (persistent Save
+  // button, tree drag-drop reparent, recursive import, add/remove/duplicate).
+  // Those writes land on disk immediately, so the post-dialog reconciliation
+  // below must run for them even when the dialog is later cancelled. Captured
+  // by reference: exec() is synchronous and the dialog (with its signal
+  // connections) is destroyed before this function returns.
+  bool sessionSaved = false;
+
+  auto onCollectionSaved = [this, &collections, &sessionSaved,
                             parent](const QList<CollectionConfig> &savedCollections) {
+    sessionSaved = true;
     collections = savedCollections;
     // Persist + surface disk-write failures back through the open settings
     // dialog. Without this the toolbar/tree-driven save buttons would lie
@@ -374,7 +383,18 @@ void SettingsDialogController::openSettingsDialog(const SettingsDialogContext &c
   // on the relevant tab without an extra click. Default is a no-op.
   dlg->setInitialPage(context.initialPage);
 
-  if (dlg->exec() != QDialog::Accepted) {
+  // A cancelled session with NO mid-session save has nothing persisted to
+  // reconcile — bail as before. But when a save fired during the session,
+  // Cancel/Esc must still run the reconciliation below for what was
+  // persisted: skipping it stranded DB rows under the old uuid after a saved
+  // rename (uuid = hash(name, mediaDirectory)), left orphan rows unpurged
+  // until the next accepted session or restart, and never applied the
+  // reload/layout refresh for the saved changes. Unsaved edits can't leak in
+  // here — the dialog's close path resolves them (Save or Discard reverts)
+  // before reject() completes, so getCollections() reflects exactly the
+  // persisted state on the cancel-but-saved path.
+  const bool accepted = dlg->exec() == QDialog::Accepted;
+  if (!accepted && !sessionSaved) {
     return;
   }
 
@@ -412,26 +432,59 @@ void SettingsDialogController::openSettingsDialog(const SettingsDialogContext &c
     art->getTimerCoordinator()->stopAllTimers();
   }
 
-  // Reconcile renamed collections in the database BEFORE the list is
-  // persisted. A collection's uuid is hash(name, mediaDirectory), so a
-  // rename strands its items + play history under the old uuid — which
-  // is why the Statistics "total items" (a flat COUNT(*)) drifts above
-  // the live per-collection totals. Match each renamed collection to
-  // its pre-dialog self by media directory (unchanged across a rename)
-  // and migrate its rows to the new uuid so the history survives.
+  // Reconcile renamed / relocated collections in the database BEFORE the
+  // list is persisted. A collection's uuid is hash(name, mediaDirectory) —
+  // CollectionConfig carries no standalone identity field — so a rename or a
+  // media-directory change strands its items + play history under the old
+  // uuid, which is why the Statistics "total items" (a flat COUNT(*)) drifts
+  // above the live per-collection totals.
+  //
+  // Pairing old→new by list INDEX: the dialog keeps its working list
+  // index-stable across edits (only add/remove shift rows), so index i names
+  // the same underlying collection on both sides until the first structural
+  // divergence. The previous first-mediaDirectory-match pairing mis-migrated
+  // whenever two collections shared a directory (the renamed sibling's rows
+  // were mapped onto the first sibling's uuid) and skipped any session that
+  // changed name AND directory together. Each index pair is corroborated by
+  // an unchanged anchor (name or directory); a pair with NEITHER anchor is
+  // an in-place rename+move only when the row hasn't simply shifted — if the
+  // mismatched row reappears later on the other side, an add/remove has
+  // shifted the tail and index pairing stops (the orphan purge below covers
+  // whatever a shifted session leaves behind, exactly as before).
   if (databaseManager) {
-    for (const CollectionConfig &newC : newCollections) {
-      if (newC.mediaDirectory.trimmed().isEmpty()) {
-        continue;
-      }
-      for (const CollectionConfig &oldC : originalCollections) {
-        if (oldC.mediaDirectory == newC.mediaDirectory && oldC.name != newC.name) {
-          databaseManager->migrateCollectionUuid(
-              CollectionUtils::computeCollectionUuid(oldC.name, oldC.mediaDirectory),
-              CollectionUtils::computeCollectionUuid(newC.name, newC.mediaDirectory));
-          break;
+    const auto reappearsLater = [](const CollectionConfig &row,
+                                   const QList<CollectionConfig> &list, int fromIndex) {
+      for (int j = fromIndex; j < list.size(); ++j) {
+        if (list[j].name == row.name || list[j].mediaDirectory == row.mediaDirectory) {
+          return true;
         }
       }
+      return false;
+    };
+    const int pairCount = qMin(newCollections.size(), originalCollections.size());
+    for (int i = 0; i < pairCount; ++i) {
+      const CollectionConfig &oldC = originalCollections[i];
+      const CollectionConfig &newC = newCollections[i];
+      if (oldC.mediaDirectory.trimmed().isEmpty() || newC.mediaDirectory.trimmed().isEmpty()) {
+        // No scanned rows can exist without a media directory — nothing to
+        // migrate, and the uuid hash is meaningless for an empty path.
+        continue;
+      }
+      const bool nameMatch = oldC.name == newC.name;
+      const bool dirMatch = oldC.mediaDirectory == newC.mediaDirectory;
+      if (nameMatch && dirMatch) {
+        continue; // unchanged identity, uuid identical
+      }
+      if (!nameMatch && !dirMatch &&
+          (reappearsLater(newC, originalCollections, i + 1) ||
+           reappearsLater(oldC, newCollections, i + 1))) {
+        // Structural divergence (add/remove shifted the rows) — indices are
+        // no longer trustworthy from here on.
+        break;
+      }
+      databaseManager->migrateCollectionUuid(
+          CollectionUtils::computeCollectionUuid(oldC.name, oldC.mediaDirectory),
+          CollectionUtils::computeCollectionUuid(newC.name, newC.mediaDirectory));
     }
   }
 

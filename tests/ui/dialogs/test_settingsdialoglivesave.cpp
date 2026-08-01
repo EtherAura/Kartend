@@ -14,6 +14,7 @@
 #include "collection/generalsettings.h"
 #include "imainwindow.h"
 #include "settingsdialog.h"
+#include "uiconstants/timing.h"
 
 #include "../../integration/mocks/mocksettingsmanager.h"
 
@@ -21,6 +22,7 @@
 #include <QCheckBox>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTest>
 #include <QTimer>
 
@@ -105,6 +107,16 @@ struct Harness {
   }
 };
 
+// Absence-assertion window: how long each case waits before declaring that
+// no (further) debounced write is coming. 3x the production debounce
+// constant the dialog's live-save timer is armed with — the same
+// documented-multiple pattern test_collectionfilesystemwatcher.cpp uses —
+// so a single-shot rescheduled anywhere inside one full debounce period
+// would still fire well inside the window, with 2x margin for a slow
+// runner. Derived, not literal, so a constant bump can't silently turn
+// these into always-green waits shorter than the debounce itself.
+constexpr int kDebounceSettleWaitMs = 3 * UIConstants::Timing::SETTINGS_LIVE_SAVE_DEBOUNCE_MS;
+
 } // namespace
 
 class TestSettingsDialogLiveSave : public QObject {
@@ -114,6 +126,7 @@ private slots:
   void editBurstAppliesInMemoryImmediatelyButWritesDiskOnce();
   void rejectRestoresBaselineAndCancelsPendingWrite();
   void acceptViaSaveSupersedesPendingDebounce();
+  void fontsLiveSaveDoesNotPersistUnrelatedDeferredEdits();
 };
 
 void TestSettingsDialogLiveSave::editBurstAppliesInMemoryImmediatelyButWritesDiskOnce() {
@@ -138,7 +151,7 @@ void TestSettingsDialogLiveSave::editBurstAppliesInMemoryImmediatelyButWritesDis
   QCOMPARE(h.sm.lastSaved.splash.bootSplashEnabled, !original);
 
   // No trailing writes once settled.
-  QTest::qWait(700);
+  QTest::qWait(kDebounceSettleWaitMs);
   QCOMPARE(h.sm.saveCount, 1);
 }
 
@@ -164,7 +177,7 @@ void TestSettingsDialogLiveSave::rejectRestoresBaselineAndCancelsPendingWrite() 
   QCOMPARE(h.host.settings.splash.bootSplashEnabled, original);
 
   // Wait out the debounce window: the cancelled timer stays cancelled.
-  QTest::qWait(700);
+  QTest::qWait(kDebounceSettleWaitMs);
   QCOMPARE(h.sm.saveCount, 1);
   QCOMPARE(h.sm.lastSaved.splash.bootSplashEnabled, original);
 }
@@ -190,8 +203,35 @@ void TestSettingsDialogLiveSave::acceptViaSaveSupersedesPendingDebounce() {
   QCOMPARE(h.sm.lastSaved.splash.bootSplashEnabled, !original);
 
   // The superseded debounce must not add a redundant write after the fact.
-  QTest::qWait(700);
+  QTest::qWait(kDebounceSettleWaitMs);
   QCOMPARE(h.sm.saveCount, settled);
+}
+
+void TestSettingsDialogLiveSave::fontsLiveSaveDoesNotPersistUnrelatedDeferredEdits() {
+  Harness h;
+  // A DEFERRED edit first: the attract toggle mutates the dialog's working
+  // struct only — nothing may reach the host or disk until Save/OK.
+  auto *attract = h.dialog->findChild<QCheckBox *>(QStringLiteral("attractModeCheckBox"));
+  QVERIFY(attract);
+  const bool originalAttract = attract->isChecked();
+  attract->setChecked(!originalAttract);
+  QCOMPARE(h.host.settings.attract.attractModeEnabled, originalAttract);
+
+  // Then a fonts-panel live edit. The live mirror must carry ONLY the fonts
+  // fields — the old whole-struct copy dragged the pending attract edit onto
+  // the host, and the debounced flush persisted it behind the user's back.
+  auto *fontSize = h.dialog->findChild<QSpinBox *>(QStringLiteral("globalUiFontSizeSpinBox"));
+  QVERIFY(fontSize);
+  const int newSize = fontSize->value() + 2;
+  fontSize->setValue(newSize);
+
+  QCOMPARE(h.host.settings.appearance.globalUiFontPointSize, newSize);
+  QCOMPARE(h.host.settings.attract.attractModeEnabled, originalAttract);
+
+  // The settled disk write carries the font change but NOT the deferred edit.
+  QTRY_COMPARE_WITH_TIMEOUT(h.sm.saveCount, 1, 3000);
+  QCOMPARE(h.sm.lastSaved.appearance.globalUiFontPointSize, newSize);
+  QCOMPARE(h.sm.lastSaved.attract.attractModeEnabled, originalAttract);
 }
 
 QTEST_MAIN(TestSettingsDialogLiveSave)

@@ -160,45 +160,6 @@ void SidebarPanel::save() {
   config.gridLayout.hideVerticalScrollbar = ui->hideVerticalScrollbarCheckBox->isChecked();
 }
 
-bool SidebarPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  // Background value compares against image OR color depending on the type
-  // — same dual-purpose semantics as save().
-  const QString bgOrig = o.sidebar.sidebarBackgroundType == DetailsPaneBackgroundType::Image
-                             ? o.sidebar.sidebarBackgroundImage
-                             : o.sidebar.sidebarBackgroundColor;
-  if (ui->sidebarBackgroundValueEdit->text().trimmed() != bgOrig) return true;
-
-  if (ui->sidebarModeComboBox->currentIndex() != static_cast<int>(o.sidebar.sidebarMode))
-    return true;
-  if (ui->sidebarPositionComboBox->currentIndex() != static_cast<int>(o.sidebar.sidebarPosition))
-    return true;
-  if (ui->sidebarWidthSpinBox->value() != o.sidebar.sidebarWidth) return true;
-  if (ui->sidebarHeightSpinBox->value() != o.sidebar.sidebarHeight) return true;
-  if (ui->sidebarWidthLockedCheckBox->isChecked() != o.sidebar.sidebarWidthLocked) return true;
-  if (ui->sidebarBackgroundTypeComboBox->currentIndex() !=
-      static_cast<int>(o.sidebar.sidebarBackgroundType))
-    return true;
-  if (ui->sidebarPatternIntensitySpinBox->value() != o.sidebar.sidebarPatternIntensity) return true;
-  if (ui->sidebarPatternColorEdit->text().trimmed() != o.sidebar.sidebarPatternColor) return true;
-  if (ui->sidebarTextColorEdit->text().trimmed() != o.sidebar.sidebarTextColor) return true;
-  if (ui->sidebarAccentColorEdit->text().trimmed() != o.sidebar.sidebarAccentColor) return true;
-  if (ui->sidebarHeaderBgEdit->text().trimmed() != o.sidebar.sidebarHeaderBgColor) return true;
-  if (ui->sidebarSectionBgEdit->text().trimmed() != o.sidebar.sidebarSectionBgColor) return true;
-  if (ui->sidebarHeaderBgOpacitySpinBox->value() != o.sidebar.sidebarHeaderBgOpacity) return true;
-  if (ui->sidebarSectionBgOpacitySpinBox->value() != o.sidebar.sidebarSectionBgOpacity) return true;
-  if (ui->sidebarFontFamilyEdit->text().trimmed() != o.sidebar.sidebarFontFamily) return true;
-  if (ui->sidebarFontSizeSpinBox->value() != o.sidebar.sidebarFontPointSize) return true;
-  if (ui->sidebarActiveTabComboBox->currentIndex() != static_cast<int>(o.sidebar.sidebarActiveTab))
-    return true;
-  if (ui->hideHorizontalScrollbarCheckBox->isChecked() != o.gridLayout.hideHorizontalScrollbar)
-    return true;
-  if (ui->hideVerticalScrollbarCheckBox->isChecked() != o.gridLayout.hideVerticalScrollbar)
-    return true;
-  return false;
-}
-
 void SidebarPanel::onPositionChanged() {
   const auto pos = static_cast<DetailsPanePosition>(ui->sidebarPositionComboBox->currentIndex());
   const bool horizontalDock = CollectionUtils::isDetailsPaneHorizontal(pos);

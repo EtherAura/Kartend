@@ -53,16 +53,6 @@ void AppearanceToolbarPanel::save() {
       static_cast<HeaderLogoPosition>(ui->headerLogoPositionComboBox->currentIndex());
 }
 
-bool AppearanceToolbarPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  if (ui->headerLogoEdit->text().trimmed() != o.background.headerLogoImage) return true;
-  if (ui->headerLogoPositionComboBox->currentIndex() !=
-      static_cast<int>(o.background.headerLogoPosition))
-    return true;
-  return false;
-}
-
 void AppearanceToolbarPanel::onBrowse() {
   const QString currentPath = ui->headerLogoEdit->text().trimmed();
   const QString startDir =

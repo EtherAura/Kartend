@@ -22,17 +22,22 @@ QT_END_NAMESPACE
  *    so the new config takes effect on restart.
  *
  * Every widget is borrowed — the controller never owns them. The dialog
- * parent is borrowed too, used only as the parent for the modal Qt dialogs
- * (file/input/message boxes). Holds no back-pointer into SettingsDialog and
- * touches no dialog state, so the seam is one-directional.
+ * parent is borrowed too, used as the parent for the modal Qt dialogs
+ * (file/input/message boxes) and — on a successful Load only — to resolve
+ * the IMainWindow host through its QObject parent (the same resolution
+ * SettingsDialog uses), so the imminent shutdown skips the kartend.cfg
+ * writes that would clobber the imported file. Holds no back-pointer into
+ * SettingsDialog and touches no dialog state, so the seam is
+ * one-directional.
  */
 class ConfigProfileController : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(ConfigProfileController)
 public:
   /// Setup struct for ConfigProfileController dependencies. Every field is
-  /// borrowed — `dialogParent` is used purely as the parent widget for the
-  /// modal dialogs this controller raises.
+  /// borrowed — `dialogParent` is the parent widget for the modal dialogs
+  /// this controller raises, and doubles as the route to the IMainWindow
+  /// host (via its QObject parent) when a Load must flag the shutdown path.
   struct Setup {
     QWidget *dialogParent = nullptr;
     QComboBox *importConfigComboBox = nullptr;
@@ -53,7 +58,8 @@ private:
   void populateImportConfigComboBox();
   /// Prompt for a profile name, sanitize it, and export the live config.
   void exportConfig();
-  /// Replace the live config with the selected profile, then quit the app.
+  /// Replace the live config with the selected profile, mark the main window
+  /// so shutdown skips its kartend.cfg writes, then quit the app.
   void importConfig();
 
   // Borrowed dependencies — never owned, never deleted through these.

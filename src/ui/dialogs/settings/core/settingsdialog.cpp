@@ -226,7 +226,11 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   // pointed-to GeneralSettings and emits changed(); we mirror to mainWindow
   // and apply the font to the running app per edit, all without going
   // through the deferred-save path; the disk write is debounced (a font-size
-  // spinbox scrub used to rewrite the whole INI once per step).
+  // spinbox scrub used to rewrite the whole INI once per step). Mirror ONLY
+  // the two font fields this panel edits, matching the baseColorChanged
+  // handler's single-field mirror above — the earlier whole-struct copy
+  // dragged every pending deferred edit onto the host, and the debounced
+  // flush then persisted edits the user had not saved (and might Discard).
   ui->fontsPanel->setModel(&m_model);
   connect(ui->fontsPanel, &FontsPanel::changed, this, [this]() {
     auto *mainWindow = m_host;
@@ -234,7 +238,9 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     if (!mainWindow || !sm) {
       return;
     }
-    mainWindow->generalSettings() = m_generalSettings;
+    GeneralSettings &live = mainWindow->generalSettings();
+    live.appearance.globalUiFontFamily = m_generalSettings.appearance.globalUiFontFamily;
+    live.appearance.globalUiFontPointSize = m_generalSettings.appearance.globalUiFontPointSize;
     mainWindow->applyGlobalUiFontFromSettings();
     m_liveSettingsApplied = true; // Kartend-9cngh: revert on Cancel.
     scheduleLiveSettingsSave();
@@ -242,7 +248,8 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
 
   // Splash (boot + resume-focus) panel: same live-save shape as FontsPanel
   // minus the apply step — splashes are shown on next startup / focus event,
-  // so the (debounced) persist is sufficient.
+  // so the (debounced) persist is sufficient. Mirrors only its own splash
+  // sub-struct for the same deferred-edit-leak reason as the fonts handler.
   ui->splashPanel->setModel(&m_model);
   connect(ui->splashPanel, &SplashPanel::changed, this, [this]() {
     auto *mainWindow = m_host;
@@ -250,7 +257,7 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     if (!mainWindow || !sm) {
       return;
     }
-    mainWindow->generalSettings() = m_generalSettings;
+    mainWindow->generalSettings().splash = m_generalSettings.splash;
     m_liveSettingsApplied = true; // Kartend-9cngh: revert on Cancel.
     scheduleLiveSettingsSave();
   });
@@ -342,6 +349,14 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
 
   // Check if there's no root collection and prompt to create one
   ensureRootCollectionExists();
+
+  // Every mutation that commits the working collection list (per-collection
+  // save, add/duplicate, remove, drag-drop reparent, recursive import) emits
+  // collectionSaved — refresh the startup-collection combo from the working
+  // list so collections added or renamed in-session are immediately pickable
+  // instead of the combo staying frozen at its dialog-open contents.
+  connect(this, &SettingsDialog::collectionSaved, this,
+          &SettingsDialog::refreshStartupCollectionCombo);
 
   loadGeneralSettingsToUI();
   setupConnections();
@@ -495,7 +510,10 @@ void SettingsDialog::scheduleLiveSettingsSave() {
     connect(m_liveSaveTimer, &QTimer::timeout, this, [this]() {
       auto *mainWindow = m_host;
       auto *sm = m_ctx ? m_ctx->settingsManager() : nullptr;
-      if (!mainWindow || !sm) {
+      if (!mainWindow || !sm || mainWindow->isConfigReplacedOnDisk()) {
+        // Config-replaced: a freshly imported kartend.cfg is on disk and the
+        // app is quitting; flushing the stale in-memory struct would
+        // overwrite it.
         return;
       }
       // The per-edit handlers already mirrored their state onto MainWindow's
@@ -529,11 +547,21 @@ void SettingsDialog::restoreLiveAppliedSettings() {
   // The base-color / fonts / splash panels live-save to disk + the running app
   // as the user edits, bypassing the deferred path resolveUnsavedChanges undoes.
   // The (modal) dialog is the only thing mutating MainWindow's settings while it
-  // is open, so assigning the last-saved baseline back reverts exactly those
-  // live edits — including any that leaked through the fonts/splash whole-struct
-  // copy — without disturbing anything else (Kartend-9cngh).
+  // is open, and each live handler mirrors only its own fields (base color /
+  // font family+size / splash sub-struct), so assigning the last-saved baseline
+  // back reverts exactly those live-applied edits without disturbing anything
+  // else (Kartend-9cngh).
   mainWindow->generalSettings() = m_originalGeneralSettings;
-  const auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
+  if (!mainWindow->isConfigReplacedOnDisk()) {
+    const auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
+    if (result.isError()) {
+      ErrorDialog::showError(this, result.error());
+    }
+  }
+  // When the config was replaced on disk (profile import, app quitting), the
+  // in-memory revert above keeps the running UI consistent but the baseline
+  // must NOT be written back — it would overwrite the imported [General]
+  // section. The visual restores below stay unconditional.
   ItemWidget::setTitleBaseColor(m_originalGeneralSettings.appearance.titleBaseColor);
   // Repaint visible items so the reverted base color is reflected immediately
   // (Kartend-f3ivg) — mirrors the live-apply path above.
@@ -544,9 +572,6 @@ void SettingsDialog::restoreLiveAppliedSettings() {
     }
   }
   mainWindow->applyGlobalUiFontFromSettings();
-  if (result.isError()) {
-    ErrorDialog::showError(this, result.error());
-  }
 }
 
 void SettingsDialog::setupButtonConnections() {

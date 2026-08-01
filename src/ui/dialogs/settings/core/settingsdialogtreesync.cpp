@@ -10,4 +10,13 @@ void SettingsDialog::propagateCollectionNameChange(const QString &oldName, const
   if (m_treeManager) {
     m_treeManager->propagateNameChange(oldName, newName);
   }
+  // Keep the startup-collection target in lockstep with the propagation the
+  // alias-parent names already get: the setting stores the collection NAME.
+  // The removal pipeline passes an empty newName, which resets the target to
+  // the "(Default)" sentinel instead of leaving a dangling name behind.
+  // (Plain renames are remapped at commit time in handleSaveCollection.)
+  if (!oldName.isEmpty() && m_generalSettings.startup.startupCollection == oldName &&
+      oldName != newName) {
+    m_generalSettings.startup.startupCollection = newName;
+  }
 }

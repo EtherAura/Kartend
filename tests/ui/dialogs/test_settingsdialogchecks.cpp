@@ -1,10 +1,10 @@
-// SettingsDialog dirty tracking (settingsdialogchecks.cpp): pins one
-// representative field per check*Changes bucket that hasUnsavedChanges()
-// aggregates, so a bucket silently dropping out of the aggregation (the
-// failure mode that loses user edits on switch/close) breaks a test here.
-// Buckets whose historical helper is now an empty stub — extensions,
-// dimensions, background — are pinned through the panel field that absorbed
-// them, proving the coverage survived the fold-in. The dialog is constructed
+// SettingsDialog dirty tracking: pins one representative field per former
+// check*Changes bucket, so a field silently dropping out of change detection
+// (the failure mode that loses user edits on switch/close) breaks a test
+// here. hasUnsavedChanges() is now a whole-struct compare — it builds the
+// CollectionConfig that Save would write and diffs it against the original
+// snapshot — so these tests double as regression pins that the extraction
+// pipeline covers every historical bucket. The dialog is constructed
 // headlessly (never shown) and driven through findChild + the public
 // hasUnsavedChanges(), matching the established dialog-test pattern.
 
@@ -64,9 +64,9 @@ void TestSettingsDialogChecks::baselineIsClean() {
 }
 
 void TestSettingsDialogChecks::spacingSpinBox_marksDirtyAndRevertsClean() {
-  // Spacing runs through the spacingUiToInternal mapping inside
-  // checkBasicFieldChanges — a representative for the dialog-owned special
-  // cases (as opposed to plain panel hasChanges() delegation).
+  // Spacing runs through the spacingUiToInternal mapping in the panel's
+  // save() — a representative for the value-mapped fields (UI value differs
+  // from the persisted value).
   SettingsDialog dialog(nullptr, twoCollections(), 0);
   auto *spin = dialog.findChild<QSpinBox *>(QStringLiteral("horizontalSpacingSpinBox"));
   QVERIFY2(spin, "horizontalSpacingSpinBox must exist on the appearance layout panel");
@@ -80,21 +80,20 @@ void TestSettingsDialogChecks::spacingSpinBox_marksDirtyAndRevertsClean() {
 }
 
 void TestSettingsDialogChecks::extensionsEdit_marksDirty() {
-  // checkExtensionChanges() is a stub — extension edits must still be caught
-  // via ConfigurationPanel::hasChanges inside checkBasicFieldChanges.
+  // Extension edits reach the whole-struct compare through
+  // ConfigurationPanel::save()'s parsed extension list.
   SettingsDialog dialog(nullptr, twoCollections(), 0);
   auto *edit = dialog.findChild<QLineEdit *>(QStringLiteral("fileExtensionsLineEdit"));
   QVERIFY2(edit, "fileExtensionsLineEdit must exist on the configuration panel");
   QVERIFY(!dialog.hasUnsavedChanges());
   edit->setText(QStringLiteral("mp4, mkv"));
   QVERIFY2(dialog.hasUnsavedChanges(),
-           "Extension edits must mark the dialog dirty even though the dedicated "
-           "checkExtensionChanges helper is an empty stub");
+           "Extension edits must mark the dialog dirty");
 }
 
 void TestSettingsDialogChecks::itemDimension_marksDirtyAndRevertsClean() {
-  // checkDimensionChanges() is a stub — item dimensions must still be caught
-  // via AppearanceLayoutPanel::hasChanges.
+  // Item dimensions reach the whole-struct compare through
+  // AppearanceLayoutPanel::save().
   SettingsDialog dialog(nullptr, twoCollections(), 0);
   auto *spin = dialog.findChild<QSpinBox *>(QStringLiteral("itemWidthSpinBox"));
   QVERIFY2(spin, "itemWidthSpinBox must exist on the appearance layout panel");
@@ -116,7 +115,7 @@ void TestSettingsDialogChecks::treeRename_marksDirtyAndRevertsClean() {
 
   QVERIFY(!dialog.hasUnsavedChanges());
   item->setText(0, QStringLiteral("First Renamed"));
-  QVERIFY2(dialog.hasUnsavedChanges(), "Tree rename must register via checkTreeNameChanges");
+  QVERIFY2(dialog.hasUnsavedChanges(), "Tree rename must register as an unsaved change");
   item->setText(0, QStringLiteral("First"));
   QVERIFY2(!dialog.hasUnsavedChanges(),
            "Renaming back to the original name must clear the dirty flag");
@@ -133,7 +132,7 @@ void TestSettingsDialogChecks::parentComboChange_marksDirtyAndRevertsClean() {
   QVERIFY(!dialog.hasUnsavedChanges());
   combo->setCurrentIndex(1);
   QVERIFY2(dialog.hasUnsavedChanges(),
-           "Parent selection must register via checkParentCollectionChanges");
+           "Parent selection must register as an unsaved change");
   combo->setCurrentIndex(0);
   QVERIFY(!dialog.hasUnsavedChanges());
 }
@@ -144,14 +143,14 @@ void TestSettingsDialogChecks::vignetteToggle_marksDirtyAndRevertsClean() {
   QVERIFY2(box, "vignetteEnabledCheckBox must exist on the appearance colors panel");
   QVERIFY(!dialog.hasUnsavedChanges());
   box->setChecked(!box->isChecked());
-  QVERIFY2(dialog.hasUnsavedChanges(), "Vignette toggle must register via checkColorChanges");
+  QVERIFY2(dialog.hasUnsavedChanges(), "Vignette toggle must register as an unsaved change");
   box->setChecked(!box->isChecked());
   QVERIFY(!dialog.hasUnsavedChanges());
 }
 
 void TestSettingsDialogChecks::effectsToggle_marksDirty() {
-  // The effects panel (parallax / backdrop blur) is folded into
-  // checkColorChanges alongside the colors and toolbar panels.
+  // The effects panel (parallax / backdrop blur) reaches the compare
+  // through AppearanceEffectsPanel::save().
   SettingsDialog dialog(nullptr, twoCollections(), 0);
   auto *box = dialog.findChild<QCheckBox *>(QStringLiteral("wallpaperParallaxCheckBox"));
   QVERIFY2(box, "wallpaperParallaxCheckBox must exist on the appearance effects panel");
@@ -161,8 +160,8 @@ void TestSettingsDialogChecks::effectsToggle_marksDirty() {
 }
 
 void TestSettingsDialogChecks::backgroundValue_marksDirtyAndRevertsClean() {
-  // checkBackgroundChanges() is a stub — background edits must still be
-  // caught via AppearanceColorsPanel::hasChanges inside checkColorChanges.
+  // Background edits reach the whole-struct compare through
+  // AppearanceColorsPanel::save()'s type-routed value slots.
   SettingsDialog dialog(nullptr, twoCollections(), 0);
   auto *edit = dialog.findChild<QLineEdit *>(QStringLiteral("backgroundValueEdit"));
   QVERIFY2(edit, "backgroundValueEdit must exist on the appearance colors panel");
@@ -170,8 +169,7 @@ void TestSettingsDialogChecks::backgroundValue_marksDirtyAndRevertsClean() {
   QVERIFY(!dialog.hasUnsavedChanges());
   edit->setText(QStringLiteral("#123456"));
   QVERIFY2(dialog.hasUnsavedChanges(),
-           "Background value edits must mark the dialog dirty even though the dedicated "
-           "checkBackgroundChanges helper is an empty stub");
+           "Background value edits must mark the dialog dirty");
   edit->setText(original);
   QVERIFY(!dialog.hasUnsavedChanges());
 }
@@ -183,14 +181,14 @@ void TestSettingsDialogChecks::listFontSize_marksDirtyAndRevertsClean() {
   const int original = spin->value();
   QVERIFY(!dialog.hasUnsavedChanges());
   spin->setValue(original + 3);
-  QVERIFY2(dialog.hasUnsavedChanges(), "List font size must register via checkListModeChanges");
+  QVERIFY2(dialog.hasUnsavedChanges(), "List font size must register as an unsaved change");
   spin->setValue(original);
   QVERIFY(!dialog.hasUnsavedChanges());
 }
 
 void TestSettingsDialogChecks::defaultLauncherCombo_marksDirtyAndRevertsClean() {
-  // The default-launcher index is one of the dialog-owned special cases in
-  // checkBasicFieldChanges (only checked while the combo has entries).
+  // The default-launcher index is a dialog-owned special case in
+  // extractUIFieldValues (only written while the combo has entries).
   SettingsDialog dialog(nullptr, twoCollections(), 0);
   auto *combo = dialog.findChild<QComboBox *>(QStringLiteral("defaultLauncherComboBox"));
   QVERIFY2(combo, "defaultLauncherComboBox must exist on the launcher panel");

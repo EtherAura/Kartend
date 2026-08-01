@@ -31,7 +31,6 @@ public:
   void load() override;
   void clear() override;
   void save() override;
-  [[nodiscard]] bool hasChanges() const;
 
   /// Public accessor used by the host dialog's pre-save rescan-detection
   /// logic — toggling content-subfolders is one of the database-affecting

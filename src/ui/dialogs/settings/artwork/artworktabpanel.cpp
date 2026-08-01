@@ -124,18 +124,6 @@ void ArtworkTabPanel::save() {
   config.hideMissingArtwork = ui->hideMissingArtworkCheckBox->isChecked();
 }
 
-bool ArtworkTabPanel::hasChanges() const {
-  if (!m_model || !m_model->originalCollection) return false;
-  const CollectionConfig &o = *m_model->originalCollection;
-  if (ui->artworkDirLineEdit->text() != o.artworkDirectory) return true;
-  if (ui->placeholderArtworkLineEdit->text() != o.placeholderArtwork) return true;
-  // Compare against the parsed-and-deduped form so a stylistic comma-spacing
-  // tweak ("a, b" vs "a,b") doesn't register as dirty.
-  if (parseCustomArtworkTypes() != o.customArtworkTypes) return true;
-  if (ui->hideMissingArtworkCheckBox->isChecked() != o.hideMissingArtwork) return true;
-  return false;
-}
-
 QStringList ArtworkTabPanel::parseCustomArtworkTypes() const {
   // Custom artwork types are comma-separated; parse, trim each entry, drop
   // empties + duplicates. Mirrors the legacy parser inline in

@@ -51,7 +51,6 @@ public:
   /// extracted extension into the model's current working collection.
   /// Additional launchers + default index are written by the host dialog.
   void save() override;
-  [[nodiscard]] bool hasChanges() const;
 
   /// Toggles visibility of the launch-extension field (only meaningful
   /// when extract-archives is on). Idempotent.

@@ -41,10 +41,6 @@ public:
   /// collection.
   void save() override;
 
-  /// True when any field on the live UI differs from the corresponding field
-  /// on the model's original-collection snapshot.
-  [[nodiscard]] bool hasChanges() const;
-
 signals:
   /// Emitted on any internal field change. Also fires during load() because
   /// programmatic setters trigger Qt's *Changed signals; the host dialog
