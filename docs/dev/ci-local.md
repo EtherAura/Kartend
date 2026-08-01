@@ -20,9 +20,10 @@ installs:
 | Package set | Why |
 |-------------|-----|
 | `clang`, `g++`, `cmake`, `ninja-build`, `lld`, `ccache` | Build toolchain |
+| `git`, `python3` | `build.sh`'s git-hook probe + the `check-*.py` guardrail lints its `--maintenance` gate runs |
 | `qt6-base-dev`, `qt6-multimedia-dev`, `qt6-tools-dev`, `libqt6sql6-sqlite` | Qt 6.4.2 (Ubuntu 24.04's pinned version) |
-| `libzstd-dev`, `qtkeychain-qt6-dev` | Optional dependencies that flip features on |
-| `clang-tidy`, `clang-format-19`, `cppcheck`, `jq` | Maintenance / static-analysis tooling |
+| `libzstd-dev`, `libarchive-dev`, `libsdl2-dev`, `qtkeychain-qt6-dev` | Optional dependencies that flip features on (zstd kart compression, in-process archive hashing, SDL2 gamepad backend, keychain credentials) |
+| `clang-tidy`, `clang-format-19`, `cppcheck`, `iwyu`, `jq` | Maintenance / static-analysis tooling |
 | `libtsan2`, `libasan8`, `libubsan1`, `libclang-rt-18-dev` | Sanitizer runtime libs (the last one covers clang's static runtimes) |
 | `llvm-18` | `llvm-symbolizer` — clang's sanitizers need it to print `file:line` instead of bare addresses |
 | `pulseaudio` | QtMultimedia tests SIGILL under TSan without a running PulseAudio session |
@@ -49,8 +50,8 @@ docker build -f .scripts/Dockerfile.ci -t kartend-ci .
 ```
 
 Re-build whenever the Dockerfile changes (or once a quarter to pick
-up Ubuntu security updates). The local-CI subcommands check that the
-image exists and prompt to build it on first use.
+up Ubuntu security updates). The `docker:*` subcommands check that the
+image exists and print this build command when it doesn't.
 
 ## `.scripts/ci-local.sh`
 
@@ -59,7 +60,7 @@ Three Docker-backed subcommands plus `docker:all`:
 
 | Command | What it does | Approx duration |
 |---------|--------------|-----------------|
-| `docker:tidy` | `--maintenance --format-check`-equivalent (clang-tidy, format-check, the works) | ~10 min |
+| `docker:tidy` | Runs `build.sh --maintenance --format-check`: python guardrails, enforcing clang-format, and the full advisory analysis trio (clang-tidy + IWYU + cppcheck) over `src/` — **without test TUs**. Same image/Qt/clang as CI's `maintenance-check`, but not an exact match: CI configures `--tests` and runs a diff-scoped (PR) or curated enforcing (push) clang-tidy pass instead of the full advisory trio | ~10 min |
 | `docker:build` | Release+clang build + `ctest` | ~12 min |
 | `docker:tsan` | Debug+TSan build + `ctest` under TSan | ~10 min |
 | `docker:all` | `docker:tidy` → `docker:build` → `docker:tsan` in sequence | ~30 min |
@@ -75,8 +76,11 @@ Run them from the repo root:
 
 The script:
 
-- Mounts the repo at `/src` (read-only for `docker:tidy`, RW for
-  the build subcommands so they can write `build/` artifacts).
+- Mounts the repo at `/src` **read-write for every `docker:*`
+  subcommand** — `docker:tidy` included, since the maintenance build
+  writes `build/ninja-maintenance/` into the tree. The containers run
+  as the invoking user (not root), so those build dirs stay deletable
+  on the host.
 - Sets `QT_QPA_PLATFORM=offscreen` so widget tests run headless.
 - Wires up `TSAN_OPTIONS` with the
   [`tests/suppressions/tsan.txt`](../../tests/suppressions/tsan.txt) file

@@ -32,13 +32,18 @@ Thank you for considering contributing to Kartend! This document outlines the pr
    [docs/dev/testing.md](docs/dev/testing.md)).
 4. Run the maintenance gate before pushing:
    ```bash
-   .scripts/build.sh --maintenance   # clang-format, clang-tidy, IWYU, cppcheck, layering
+   .scripts/build.sh --maintenance   # python guardrails, clang-format, clang-tidy, IWYU, cppcheck
    ```
-   **clang-format drift is fatal** and the formatter is pinned to
-   **clang-format-19** — a newer system clang-format reformats differently and
-   fails CI. clang-tidy / cppcheck / raw-`qDebug` findings surface as
-   non-fatal notices. Local Qt is newer than CI's pinned **Qt 6.4.2**, so
-   reproduce CI failures in the pinned image with `.scripts/ci-local.sh` (see
+   The gate opens with the **Python guardrail lints** (the `check-*.py`
+   scripts: module layering + DI invariants, `QTimer::singleShot` "why"
+   comments, src↔tests mapping, bd-ID leakage, required-checks lockstep) —
+   the same set CI's `script-lint` job enforces; findings are **fatal** and
+   fail in under a second, before the build starts. **clang-format drift is
+   fatal** too, and the formatter is pinned to **clang-format-19** — a newer
+   system clang-format reformats differently and fails CI. clang-tidy /
+   cppcheck / raw-`qDebug` findings surface as non-fatal notices. Local Qt is
+   newer than CI's pinned **Qt 6.4.2**, so reproduce CI failures in the
+   pinned image with `.scripts/ci-local.sh` (see
    [docs/dev/ci-local.md](docs/dev/ci-local.md)).
 5. Open a pull request with a clear description of the changes.
 
@@ -111,7 +116,8 @@ See [docs/dev/architecture.md](docs/dev/architecture.md) for module hierarchy, s
 flow, and ownership model. A few rules are load-bearing and enforced:
 
 - **Layering DAG.** Module dependencies must follow the directed acyclic graph
-  enforced by `.scripts/check-layering.py` (run as part of `--maintenance`).
+  enforced by `.scripts/check-layering.py` — run as part of `--maintenance`
+  (the python-guardrails step) **and** in CI's `script-lint` job.
   Introducing an edge that violates it fails the build. See
   [docs/dev/layering.md](docs/dev/layering.md).
 - **`ApplicationContext` (ctx) access; no sibling-manager pointers in setup
@@ -119,7 +125,8 @@ flow, and ownership model. A few rules are load-bearing and enforced:
   only non-manager refs (widgets, value containers, callbacks); sibling
   manager/service pointers are read through `ctx` so a manager can't pin its
   siblings' lifetimes. `check-layering.py` fails the build if a `*Manager *` /
-  `*Service *` field is added to a `*Setup` struct. See
+  `*Service *` field is added to a `*Setup` struct — again both locally in
+  `--maintenance` and in CI `script-lint`. See
   [docs/dev/layering.md](docs/dev/layering.md).
 - **`parent()` is a runtime lifetime guard, not just ownership metadata.**
   Some call sites check `parent()` to decide whether an object is still

@@ -50,7 +50,10 @@ violations are caught before CI.
        └──────────────────────┘
 
        (api/ headers can be included from anywhere — they're role
-        interfaces, no implementation)
+        interfaces, no implementation. In the other direction api/ may
+        include only src/utils/ — value types that appear in interface
+        signatures; chrome/modules/ui/core includes from api/ are
+        upward edges and linted.)
 ```
 
 **Rule of thumb**: arrows are includes. Each layer can include from
@@ -90,8 +93,9 @@ relocating the header into a lower layer instead.
 The script enforces several guardrails; the three most relevant to
 day-to-day work are:
 
-**1. Include layering.** For every `*.cpp` and `*.h` under `src/utils/`
-and `src/chrome/`:
+**1. Include layering.** For every `*.cpp` and `*.h` under the linted
+layers (`src/utils/`, `src/chrome/`, `src/api/`, `src/ui/`, and each
+`src/modules/` sub-area):
 
 1. Scans for `#include "x.h"` directives (quoted, not bracketed).
 2. Maps each included header back to its top-level area
@@ -113,16 +117,24 @@ ui-layer dialogs reach siblings through an injected `ApplicationContext`.
 were removed in Kartend-qjtz) — the lint **fails the build** if any other
 `*Manager` accessor is re-added to it.
 
-(The script also enforces two further guardrails not detailed here —
-IMainWindow exposing only `applicationManager()`, and the two distinct
-`ctx` accessor styles staying visually apart. See the docstrings in
+(The script also enforces further guardrails not detailed here —
+IMainWindow exposing only `applicationManager()`, the two distinct
+`ctx` accessor styles staying visually apart, the read-only
+`currentCollectionIndex` back-channel, and teardown slot-nulling: every
+`ManagerRefs` pointer slot in `applicationcontext.h` must be nulled —
+directly or via its `seedXxxRoles(nullptr)` group — inside
+`ApplicationManager::destroyManagersAndClearContextSlots()`, so
+teardown-phase `if (auto *m = ctx->x())` guards can't read a dangling
+pointer. See the docstrings in
 [check-layering.py](../../.scripts/check-layering.py).)
 
 The lint runs:
 
 - **Locally** on every `git push` via the
-  [pre-push hook](git-hooks.md#pre-push).
-- **In CI** as the `lint` job, before the build job starts.
+  [pre-push hook](git-hooks.md#pre-push), and as the python-guardrails
+  step of `.scripts/build.sh --maintenance`.
+- **In CI** in the `script-lint` job (build.yml, main/develop pushes and
+  PRs) and via branch-lint.yml on every feature-branch push.
 
 ## ApplicationContext fan-out metric + ratchet
 
@@ -140,6 +152,11 @@ keeps its worst dimension from silently growing (a soft ratchet).
   *incoming* fan-out (how many call sites reach each manager) plus the
   *widest reachers* (files touching the most distinct managers — the
   prime candidates for role-scoped dependency structs).
+- Role-accessor reads (`ctx->scrollGrid()`, `ctx->wheelAnimator()`, …)
+  count toward their underlying manager via an alias table derived from
+  the `seedXxxRoles()` groupings in `applicationcontext.h` — narrowing a
+  file onto role interfaces keeps its coupling visible rather than
+  hiding it from the metric and the ratchet.
 
 **Ratchet (soft gate, Kartend-n1hpy.1).** The normal run also gates the
 **outgoing** dimension against a checked-in baseline

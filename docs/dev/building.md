@@ -33,6 +33,13 @@ sudo pacman -S cmake ninja clang lld ccache \
 Optional gamepad backends: `qt6-gamepad` (if available in your repos)
 or `sdl2`.
 
+Optional but recommended (matches CI's optional-backend set — zstd kart
+compression, libarchive in-process archive hashing, SDL2 gamepad):
+
+```bash
+sudo pacman -S zstd libarchive sdl2
+```
+
 ### Fedora
 
 ```bash
@@ -43,6 +50,12 @@ sudo dnf install cmake ninja-build clang lld ccache \
 
 Optional gamepad backend: `SDL2-devel`.
 
+Optional but recommended (matches CI's optional-backend set):
+
+```bash
+sudo dnf install libzstd-devel libarchive-devel SDL2-devel
+```
+
 ### Debian / Ubuntu
 
 ```bash
@@ -52,6 +65,14 @@ sudo apt install clang cmake lld ninja-build ccache \
 ```
 
 Optional gamepad backend: `libsdl2-dev`.
+
+Optional but recommended (matches CI's optional-backend set — every Linux
+CI job except the deliberate `build-no-zstd` / `build-no-libarchive` legs
+installs these):
+
+```bash
+sudo apt install libzstd-dev libarchive-dev libsdl2-dev
+```
 
 ### Maintenance / lint tooling (optional)
 
@@ -85,6 +106,12 @@ CI.
 ```bash
 emerge --ask dev-build/cmake dev-build/ninja llvm-core/clang llvm-core/lld \
   dev-qt/qtbase:6 dev-qt/qtmultimedia:6 dev-qt/qttools:6 dev-util/ccache
+```
+
+Optional but recommended (matches CI's optional-backend set):
+
+```bash
+emerge --ask app-arch/zstd app-arch/libarchive media-libs/libsdl2
 ```
 
 ### Windows (MSVC)
@@ -130,7 +157,7 @@ does, when to reach for it, and what it leaves behind.
 | Flag | Purpose | When to use | Side effects |
 |------|---------|-------------|--------------|
 | *(none)* | Release build. | Default for routine work and CI. | Writes `build/<gen>-release/`; honors `ccache`. |
-| `--debug` | Debug build (keeps `qDebug`/`qWarning` output, no `-O`, symbols on). | Local development; reproducing a runtime bug; before stepping in a debugger. | Writes `build/<gen>-debug/`; emits a linker map at `.backups/reports/kartend.map`; binaries are large and unoptimized. |
+| `--debug` | Debug build (keeps `qDebug`/`qWarning` output, no `-O`, symbols on). | Local development; reproducing a runtime bug; before stepping in a debugger. | Writes `build/<gen>-debug/`; emits a linker map at `build/<gen>-debug/maps/kartend.map` (the script passes `-DKARTEND_LINKER_MAP=ON`; the map stays in the build dir); binaries are large and unoptimized. |
 | `--relwithdebinfo` | Release-with-debug-symbols build. | Profiling a release binary; producing a perf/`gdb`-friendly artifact without the cost of `--debug`. | Writes `build/<gen>-relwithdebinfo/`. |
 | `--sanitize` (alias `--sanitizers`) | Debug build + ASan/UBSan instrumentation. | Investigating a use-after-free, uninit-read, signed-overflow, or undefined-behavior crash. **Not** for routine work — binaries run noticeably slower. | Writes `build/<gen>-sanitize/`; runtime ~2–3× slower; sanitizer reports go to stderr. |
 | `--maintenance` | Release build + static-analysis pipeline (clang-tidy, cppcheck, IWYU, clang-format). | Pre-push hygiene; CI-style lint pass. | Writes `build/<gen>-maintenance/`; lint reports go to `build/<gen>-maintenance/logs/`; **enables `-Werror`** — warnings break the build. |
@@ -173,13 +200,14 @@ does, when to reach for it, and what it leaves behind.
 | `--clean` | `rm -rf` the build dir before configuring. | Suspected stale cache; after large `CMakeLists.txt` edits. | **Deletes the build directory.** |
 | `--keep-builds` | Don't prune other script-created build dirs. | Keeping `--debug` and `--release` dirs side-by-side. | Skips the auto-prune that runs by default. |
 | `--jobs=N` | Override build parallelism (default: `nproc`). | Constrained CI agents; avoiding OOM on big TUs. | None. |
+| `--cmake-arg=ARG` | Append an arbitrary argument to the CMake configure invocation. Repeatable — pass once per argument. | One-off cache overrides the script has no flag for, e.g. `--cmake-arg=-DKARTEND_ENABLE_ZSTD=OFF`. | Applies to every configure the run performs (incl. both PGO passes). Flags derived from other script options (`--tests`, `--coverage`, `--no-ccache`) still win over a conflicting `--cmake-arg`. |
 
 ### Reporting / dependency flags
 
 | Flag | Purpose | When to use | Side effects |
 |------|---------|-------------|--------------|
-| `--archive` | Create a source `.tar.gz` under `.backups/`. | Producing a release artifact. | Writes `.backups/kartend-<version>.tar.gz`. |
-| `--reports` | Assemble source/UI reports under `.backups/reports/`. | Generating diagnostic bundles. | Writes `.backups/reports/`. |
+| `--archive` | Create a source `.tar.gz` under `.backups/`. `.backups/` is a **sibling of the repo** (`<parent-of-repo>/.backups/`), not inside it. | Producing a release artifact. | Writes `<parent-of-repo>/.backups/Kartend-<mode>-<timestamp>.tar.gz` (repo dir name + build mode + build timestamp). |
+| `--reports` | Assemble concatenated cpp/h/ui source listings under `.backups/reports/` (same repo-sibling `.backups/`). | Generating diagnostic bundles. | Writes `<parent-of-repo>/.backups/reports/{cpp,h,ui}.txt`; non-debug modes then delete any stale `kartend*.map` files there. |
 | `--no-ccache` | Disable `ccache` even if installed. | Debugging compiler-cache misses; suspected stale cached objects. | First build is slower; subsequent builds are slower than the ccache-enabled default. |
 | `--clang` | Force Clang/LLD for release builds (default: system compiler). | Reproducing a Clang-only warning/CI failure. | None beyond toolchain selection. |
 
@@ -197,7 +225,7 @@ Modes include: `release`, `debug`, `sanitize`, `maintenance`, `release-pgo`.
 - Incremental builds are the default (the script will not delete the build directory unless you pass `--clean`).
 - Unit tests are opt-in: tests are only configured/built when you pass `--tests`.
 - Reports and source archives are off by default; use `--reports` and/or `--archive` to opt in.
-- The script prunes other script-created build directories by default; use `--keep-builds` to keep multiple build dirs. "Script-created" means dirs that contain either the `.kartend-build-dir` marker file (left by the script on first prepare) OR a `CMakeCache.txt` (left by any CMake invocation). Hand-rolled scratch dirs under `build/` that contain neither are left alone. Stray `build/*.log` files are also swept on each run.
+- The script prunes other script-created build directories by default; use `--keep-builds` to keep multiple build dirs. "Script-created" means dirs carrying the `.kartend-build-dir` marker file the script writes on prepare — **only** those are pruned. Dirs without the marker (hand-configured CMake dirs, IDE build trees, `ci-local.sh` docker builds) are never touched, even when they contain a `CMakeCache.txt`. Stray `build/*.log` files are also swept on each run.
 
 ### Examples
 
@@ -231,11 +259,13 @@ Modes include: `release`, `debug`, `sanitize`, `maintenance`, `release-pgo`.
 
 For manual CMake builds without the script:
 
-> **Heads-up:** a hand-configured dir under `build/` (e.g. `build/ninja-release`)
-> contains a `CMakeCache.txt`, so a later `.scripts/build.sh` run **without**
-> `--keep-builds` will prune it as a stray build dir (see the prune note above).
-> If you mix manual builds with the script, either pass `--keep-builds`, or keep
-> your manual build dir outside `build/` (e.g. `build-manual/`).
+> **Heads-up:** a hand-configured dir under `build/` is safe from the script's
+> auto-prune — only dirs carrying the script's own `.kartend-build-dir` marker
+> are ever deleted (see the prune note above). But if you reuse one of the
+> script's own dir names (e.g. `build/ninja-release`), a later script run for
+> that mode will take the dir over: it writes its marker into it and reuses
+> (or with `--clean`, wipes) the tree. Pick a name outside the script's
+> `build/<gen>-<mode>` scheme if you want the two to coexist.
 
 ```bash
 # Configure (recommended: Ninja)
@@ -309,7 +339,7 @@ build-dir artifact, not a code or `CMakeLists` bug.
 | `KARTEND_ENABLE_COVERAGE` | `OFF` | Enable gcov/lcov instrumentation (Debug only) |
 | `KARTEND_SLIM_DEBUG_INFO` | `OFF` | Emit line tables only (`-g1`) instead of full DWARF. The ASan and coverage CI jobs set this to stay under the runner disk ceiling — it cuts a Debug+ASan test binary from ~513 MiB to ~343 MiB and links faster. Sanitizer stack traces keep `file:line`; what you lose is local-variable inspection in gdb, so leave it `OFF` when debugging a sanitizer finding locally. **Never set it on a TSan build:** the suppressions anchor on inlined template frames that `-g1` stops qualifying, so documented false positives turn into red builds — see [sanitizer-suppressions.md](sanitizer-suppressions.md). |
 | `KARTEND_PORTABLE_RELEASE` | `OFF` | Drop `-march=native`/`-O3`/fast-math for distro packaging; keeps LTO + hardening |
-| `KARTEND_LINKER_MAP` | `OFF` | Emit `kartend.map` next to `.backups/reports/` in Debug builds |
+| `KARTEND_LINKER_MAP` | `OFF` | Emit `maps/kartend.map` inside the build directory in Debug builds (kept in-tree so sandboxed builders don't need a writable repo parent; copy it out manually if you want it alongside reports) |
 | `KARTEND_USE_PGO` | `OFF` | Enable Profile-Guided Optimization |
 | `KARTEND_PGO_GENERATE` | `OFF` | Generate PGO profile data |
 | `KARTEND_PGO_USE` | `OFF` | Use existing PGO profile data |
@@ -349,7 +379,9 @@ cmake -S . -B build/ninja-debug -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build/ninja-debug --parallel $(nproc)
 ```
 
-Debug builds include symbols and generate a linker map file at `.backups/reports/kartend.map`.
+Debug builds include symbols. A linker map is opt-in: configure with
+`-DKARTEND_LINKER_MAP=ON` (which `.scripts/build.sh --debug` does for you)
+and it lands at `<build-dir>/maps/kartend.map`.
 
 ## Ninja Support
 
@@ -427,7 +459,7 @@ pushing and is much faster than waiting for a remote run.
 
 - Docker (or Podman with a `docker` shim).
 - `act` **0.2.86 or newer** — earlier versions don't support the Node 24
-  runtime that `actions/cache@v5` requires. Distros tend to ship older
+  runtime that `actions/cache@v6` requires. Distros tend to ship older
   builds; install upstream if needed:
 
   ```bash
@@ -443,7 +475,7 @@ The repo ships an `.actrc` that pins:
 - Container resource caps (`--cpus=4 --memory=16g`) matching GHA's
   ubuntu-24.04 runner spec, so timing-dependent issues (TSan races,
   flaky tests) surface at the same rate they do on CI.
-- Artifact server path (`/tmp/act-artifacts`) so `actions/cache@v5`
+- Artifact server path (`/tmp/act-artifacts`) so `actions/cache@v6`
   persists ccache state across `act` invocations.
 
 ### Usage

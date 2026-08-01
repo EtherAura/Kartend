@@ -17,6 +17,16 @@ depends=(
   # back to the SDL2 gamepad backend, so listing it here just makes pacman
   # refuse the install. SDL2 is the working gamepad path on Arch.
   'sdl2'
+  # The remaining optional backends CMake auto-detects at configure time
+  # (cmake/OptionalBackends.cmake). Arch ships headers in the runtime
+  # packages, so listing them here both links the feature in at build time
+  # and keeps the shared library present at runtime: libzstd.so (Kart
+  # compression), libarchive.so (in-process archive-member hashing), and
+  # libqt6keychain.so (secret-service credential storage). Without them the
+  # binary still builds but silently falls back to the degraded paths.
+  'zstd'
+  'libarchive'
+  'qtkeychain-qt6'
 )
 makedepends=(
   'cmake'
@@ -57,7 +67,11 @@ check() {
     -DKARTEND_ENABLE_CCACHE=OFF \
     -DKARTEND_PORTABLE_RELEASE=ON
   cmake --build build-tests
-  ctest --test-dir build-tests --output-on-failure
+  # offscreen: the GUI tests need a Qt platform but makepkg often runs
+  # headless (chroot/clean builds have no display server). -LE benchmark
+  # matches every CI ctest invocation — the QBENCHMARK suites are
+  # timing-sensitive and excluded outside the dedicated benchmark job.
+  QT_QPA_PLATFORM=offscreen ctest --test-dir build-tests --output-on-failure -LE benchmark
 }
 
 package() {

@@ -19,13 +19,15 @@ fi
 LICENSE="GPL-3"
 SLOT="0"
 
-IUSE="gamepad sdl zstd test"
+IUSE="gamepad keychain libarchive sdl zstd test"
 RESTRICT="!test? ( test )"
 
 RDEPEND="
 	dev-qt/qtbase:6[gui,sql,sqlite,widgets,concurrent]
 	dev-qt/qtmultimedia:6[widgets]
 	gamepad? ( dev-qt/qtgamepad:6 )
+	keychain? ( dev-libs/qtkeychain[qt6(+)] )
+	libarchive? ( app-arch/libarchive )
 	sdl? ( media-libs/libsdl2 )
 	zstd? ( app-arch/zstd )
 "
@@ -43,6 +45,12 @@ src_configure() {
 		-DKARTEND_ENABLE_QT_GAMEPAD=$(usex gamepad ON OFF)
 		-DKARTEND_ENABLE_SDL2_GAMEPAD=$(usex sdl ON OFF)
 		-DKARTEND_ENABLE_ZSTD=$(usex zstd ON OFF)
+		-DKARTEND_ENABLE_LIBARCHIVE=$(usex libarchive ON OFF)
+		# QtKeychain has no KARTEND_ENABLE_* gate — it is a bare
+		# find_package(Qt6Keychain QUIET) in cmake/OptionalBackends.cmake —
+		# so anti-automagic control goes through CMake's standard
+		# disable-find-package knob instead.
+		-DCMAKE_DISABLE_FIND_PACKAGE_Qt6Keychain=$(usex keychain OFF ON)
 	)
 	cmake_src_configure
 }

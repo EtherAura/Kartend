@@ -1600,7 +1600,7 @@ Skipped %3 items that already had artwork.</source>
 <context>
     <name>ConfigProfileController</name>
     <message>
-        <location filename="../src/ui/dialogs/settings/collections/configprofilecontroller.cpp" line="+111"/>
+        <location filename="../src/ui/dialogs/settings/collections/configprofilecontroller.cpp" line="+112"/>
         <location line="+8"/>
         <location line="+12"/>
         <location line="+11"/>
@@ -1644,12 +1644,12 @@ Skipped %3 items that already had artwork.</source>
     <message>
         <location line="+14"/>
         <location line="+13"/>
-        <location line="+5"/>
+        <location line="+17"/>
         <source>Load Configuration</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-17"/>
+        <location line="-29"/>
         <source>This will replace the active configuration with &quot;%1&quot;. The current configuration will be saved as kartend.cfg.bak. Kartend must be restarted for the changes to take effect.
 
 Continue?</source>
@@ -1662,7 +1662,7 @@ Continue?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+17"/>
         <source>Configuration loaded from &quot;%1&quot;.
 
 Kartend will now exit. Restart the application to apply the new configuration.</source>
@@ -2067,7 +2067,7 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+281"/>
+        <location line="+284"/>
         <source>No items</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6809,6 +6809,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+5"/>
+        <location filename="../src/core/mainwindow_dialogs.cpp" line="+129"/>
         <source>About</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6948,7 +6949,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow_dialogs.cpp" line="+180"/>
+        <location filename="../src/core/mainwindow_dialogs.cpp" line="-7"/>
+        <source>&lt;h3&gt;%1 &lt;span style=&apos;font-size: medium; font-weight: normal;&apos;&gt;v%2&lt;/span&gt;&lt;/h3&gt;&lt;p&gt;Founded by %3&lt;/p&gt;&lt;p&gt;Build Date: %4&lt;/p&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+58"/>
         <source>Create First Collection</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7863,7 +7869,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/collections/configprofilecontroller.cpp" line="-106"/>
+        <location filename="../src/ui/dialogs/settings/collections/configprofilecontroller.cpp" line="-118"/>
         <source> (active)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9503,7 +9509,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
     </message>
     <message>
         <location line="+7"/>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialogform.cpp" line="+162"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialogform.cpp" line="+229"/>
         <source>Header Logo</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9716,7 +9722,7 @@ Would you like to rescan now?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+224"/>
+        <location line="+233"/>
         <source>Unsaved Changes</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9754,12 +9760,12 @@ Would you like to rescan now?</source>
         <location line="+12"/>
         <location line="+10"/>
         <location line="+8"/>
-        <location line="+100"/>
+        <location line="+109"/>
         <source>Recursive Import</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-117"/>
+        <location line="-126"/>
         <source>Please specify a content directory first.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9809,7 +9815,7 @@ Each subcollection will inherit the current collection&apos;s settings.
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+78"/>
+        <location line="+87"/>
         <source>Successfully created %1 subcollection(s).</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9987,12 +9993,13 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialogtree.cpp" line="+50"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialogtreemutation.cpp" line="+5"/>
         <source>None</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialogtreemutation.cpp" line="+4"/>
         <source>Parent collection:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10059,7 +10066,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
 <context>
     <name>SettingsDialogController</name>
     <message>
-        <location filename="../src/ui/controllers/settingsdialogcontroller/settingsdialogcontroller.cpp" line="+643"/>
+        <location filename="../src/ui/controllers/settingsdialogcontroller/settingsdialogcontroller.cpp" line="+663"/>
         <source>Collection Added</source>
         <translation type="unfinished"></translation>
     </message>

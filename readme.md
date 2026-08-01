@@ -91,7 +91,8 @@ The release page also carries the source tarball
 # Debian / Ubuntu (build deps only — the --maintenance lint gate needs extra
 # tooling: clang-format-19, clang-tidy, cppcheck, iwyu — see docs/dev/building.md)
 sudo apt install clang cmake lld ninja-build ccache \
-  qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite
+  qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite \
+  qt6-tools-dev qt6-l10n-tools qtkeychain-qt6-dev
 
 git clone https://github.com/EtherAura/Kartend.git
 cd Kartend

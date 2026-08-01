@@ -16,7 +16,7 @@ src/
 │   │                    # on src/ui/. Layering enforced by check-layering.py.
 │   ├── items/           # ItemWidget, CoverFlowWidget, placeholder renderers
 │   ├── media/           # VideoPreviewWidget, video thumbnail extractor
-│   └── overlays/        # ArtworkPreviewOverlay, OverlayLayerManager
+│   └── overlays/        # ArtworkPreviewOverlay, OverlayZOrderRegistry
 ├── core/                # Main application entry and window
 ├── modules/             # Feature modules grouped by domain
 │   ├── behavior/        # Manager lifecycle coordination
@@ -85,6 +85,15 @@ src/
 | `mainwindow.cpp` | Main application window that owns ApplicationManager and orchestrates UI setup. The implementation is split across eight sibling TUs (`mainwindow.cpp`, `mainwindow_setup.cpp`, `mainwindow_wiring.cpp`, `mainwindow_managerwiring.cpp`, `mainwindow_timers.cpp`, `mainwindow_scraper.cpp`, `mainwindow_toolbar.cpp`, `mainwindow_dialogs.cpp`); see [mainwindow-partials.md](mainwindow-partials.md) for the responsibility map and the rule for where new code goes. |
 | `marqueecontroller` | Drives the secondary-monitor marquee / topper window — owns the MarqueeWindow and the artwork-refresh debounce timer (extracted from MainWindow). |
 | `scrolleventscontroller` | Owns MainWindow's reactions to ScrollManager view-mode / column-resize / CoverFlow activation signals (sort-mode change, list-column-width persist, CoverFlow item-launch, sidebar-yield for CoverFlow / artwork-preview overlay). Replaces the prior `mainwindow_scrollevents.cpp` partial. |
+| `menucontroller` | Builds the menu bar and the command palette, and connects every action to its MainWindow-supplied callback (split across `menucontroller.cpp`, `menucontroller_actions.cpp`, `menucontroller_dynamicmenus.cpp`). |
+| `toolbarcontroller` | Owns the items-page toolbar's stateful widgets and their sync/refresh glue: layout-picker button + view actions, the search-mode action embedded in the search bar, and the consolidated filter button. |
+| `dialogcontroller` | Centralizes dialog construction so MainWindow doesn't `#include` every dialog header; owns dialog parenting/modality. |
+| `dbeventscontroller` | Owns MainWindow's reactions to DatabaseManager scan/count signals plus the scan-counter / startup-overlay-suppression state those slots read and write. |
+| `scrapercontroller` | Owns the scraper-flow entry points (open scraper dialog, resume pending scrape at startup) and the long-lived ScrapeResultDialog + ScraperService they cache. |
+| `datauditcontroller` | Owns the DAT Audit sub-window — lazily constructed on first open, hidden (not destroyed) on close — mirroring ScraperController's dialog-cache role. |
+| `librarytoolscontroller` | Owns the five per-collection library tools (collection health, duplicates/variants, bulk edit, missing-metadata review, artwork wizard) sharing the validate-collection → resolve-uuid → run-dialog skeleton. |
+| `gridwidthdebouncer` | Three-stage debounced pipeline (save / rebuild / preview) behind the menu-driven grid-width adjustment shortcuts. |
+| `titlecountshelpers` | Stateless helpers rendering the window title for the active collection (subfolder / hierarchy-root / leaf formats plus child-part counts). |
 
 ## Modules (`src/modules/`)
 
@@ -115,7 +124,7 @@ src/
 | `datasourcemanager` | Owns FilterManager, ScrollDataManager, PreSearchStateManager, and SearchLoadingOverlay (helper extracted from ScrollManager). |
 | `selectiondisplaymanager` | Owns SelectionOverlayManager, SelectionStateTracker, and ArtworkPreviewOverlay (helper extracted from ScrollManager). |
 | `overlay` | SelectionOverlayManager / SearchLoadingOverlay rendering helpers for glide and loading visuals. |
-| `restore` | SelectionRestoreManager coordinating selection restoration during navigation transitions. |
+| `restore` | SelectionRestoreCoordinator coordinating selection restoration during navigation transitions. |
 
 ## Manager Hierarchy
 
@@ -123,7 +132,7 @@ src/
 - **ApplicationManager** owns: `CacheManager`, `SessionManager`, `ArtworkManager`, `SettingsManager`, `DatabaseManager`, `ScrollManager`, `DetailsPaneManager`, `NavigationManager`, `InteractionManager`, `PlaylistManager`, `DetailPageManager`, `KartManager`
 - **InteractionManager** owns: `SearchManager`, `SelectionManager`, `KeyboardManager`, `GamepadManager`, `ArrowNavigationHandler`, `AlphabeticNavigationHandler`, `AnimationManager`, `MouseManager`, `LaunchManager`, `ViewportManager`, `EventManager`, `AttractManager`
 
-Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreManager`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`, `CollectionBackgroundController`.
+Additional helper managers owned by their parent feature module (not top-level): `WidgetPoolManager`, `FilterManager`, `SelectionRestoreCoordinator`, `SelectionOverlayManager`, `SearchLoadingOverlay`, `NavigationStackManager`, `CollectionBackgroundController`.
 
 ## Class-name suffix conventions
 
@@ -285,9 +294,12 @@ if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
 }
 ```
 
-`MainWindow::initializeAppContext()` populates `ctx->managers.*` before any
-`setupReferences()` runs; setup calls are wired in
-`MainWindow::setupManagers()` and related methods.
+`MainWindow::initializeAppContext()` (mainwindow_setup.cpp) populates
+`ctx->managers.*` before any `setupReferences()` runs. The per-manager setup
+calls themselves are wired in the `wireXxxManager()` functions in
+mainwindow_managerwiring.cpp (each builds the manager's Setup struct, wires
+owner-supplied closures, then calls `setupReferences()`) plus the `setupXxx()`
+helpers in mainwindow_setup.cpp.
 
 The scroll layer is additionally exposed as six narrow **role interfaces**
 (Kartend-h1l8f): `IScrollManager` is a pure facade union of
@@ -302,6 +314,39 @@ use; the facade remains for consumers spanning three or more roles, for the
 `virtualScrollSetupComplete` signal connection, and for QObject-based
 lifetime guards (`QPointer`, `singleShotGuarded`) — the roles are plain
 abstract classes.
+
+### The friend + back-pointer engine pattern
+
+When a manager/widget grows a cohesive sub-unit too large to stay in its TU
+(a layout engine, a load scheduler, a paint helper), the codebase extracts it
+as a **friend class holding a guarded back-pointer to its host** rather than
+duplicating state or widening the host's public API. Invariants:
+
+- **Canonical state stays on the host.** The engine reads/writes the host's
+  members through friendship; it keeps no shadow copies, so the host's other
+  helpers and existing access sites are unchanged.
+- **The back-pointer is guarded**: `QPointer<Host> m_owner` (see
+  `VirtualScrollEngine::m_owner`), with the engine Qt-parented under (or
+  member-owned by) the host so under normal teardown the host outlives it —
+  the QPointer only defends against a future destruction-order refactor.
+- **No public leakage.** Friendship is the whole point: the host's privates
+  stay private to everyone except the one named engine. Don't add public
+  accessors "for the engine".
+- **Teardown**: the engine dies with its host (QObject parent or member
+  order); it must not touch `m_owner` from its own destructor.
+
+Current adopters: `VirtualScrollEngine` (ScrollManager),
+`ViewportArtworkScheduler` (ArtworkManager), `EntityScrapeCoordinator`
+(ScraperService), `CoverFlowGalleryStrip` (CoverFlowWidget),
+`ScrapeResultDialogUnified` (ScrapeResultDialog), `DetailsPaneArtwork` +
+`DetailsPaneMetadataView` (DetailsPane).
+
+**Prefer the no-friend alternative when the helper needs only a narrow
+surface.** `DetailsPaneGalleryView` uses the host's public API plus injected
+widget refs (no friendship), and `CollectionRemover` talks to SettingsDialog
+through the small `CollectionRemoverHost` interface that *replaced* a former
+`friend` declaration. Reach for friendship only when the sub-unit genuinely
+shares the host's mutable state; if a dozen members suffice, inject them.
 
 ### Two ctx patterns: `ApplicationContext` vs controller-ctx structs
 
@@ -344,32 +389,23 @@ void ScrollManager::releaseWidget(ItemWidget *widget);  // Return to pool
 
 ### Atomic File Writes
 
-For data integrity when writing to disk, use `QSaveFile` (which manages the
-temp-file + atomic-rename internally) plus `PathUtils::syncDirectory()` so
-the rename survives crash / power loss:
+For data integrity when writing a whole-file payload to disk, call
+`PathUtils::atomicWriteFile(filePath, data)` (`src/utils/fs/pathutils.h`)
+instead of hand-rolling the sequence. It creates the parent directory,
+writes through `QSaveFile` (sibling temp file + atomic rename on commit,
+cancelling on a short write) and then `PathUtils::syncDirectory()`s the
+parent so the rename itself survives crash / power loss. It returns `bool`
+and logs the failing stage under the `kartend.pathutils` category; callers
+that report through `ErrorUtils::Result` wrap the `false` return in their
+own domain-specific `ErrorContext`.
 
-```cpp
-#include <QSaveFile>
-#include "utils/fs/pathutils.h"
-
-bool atomicWriteFile(const QString &filePath, const QByteArray &data) {
-  const QString parentDir = QFileInfo(filePath).absolutePath();
-  if (!parentDir.isEmpty() && !QDir().mkpath(parentDir)) return false;
-
-  QSaveFile file(filePath);
-  if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
-  if (file.write(data) != data.size()) {
-    file.cancelWriting();
-    return false;
-  }
-  if (!file.commit()) return false;
-  PathUtils::syncDirectory(parentDir);
-  return true;
-}
-```
-
-Adopters: `SessionManager`, `PlaylistManager`, `KartWriter` / `KartReader`,
-`CacheDiskStorage`.
+Adopters: `SessionManager`, `PlaylistSerializer`, `ScrapePendingState`,
+`ThemePresetIO` / `PresentationProfileIO`. Two writers intentionally keep
+their own `QSaveFile` sequence and must not be "cleaned up" onto the
+helper: `KartWriter` streams archive entries incrementally (the payload
+cannot be buffered as one `QByteArray`), and `CacheDiskStorage` batches
+the parent-directory fsync once per save batch instead of per file
+(Kartend-6n5r).
 
 ### QObject lifecycle: teardown guards (and where `parent()` still matters)
 
@@ -410,7 +446,7 @@ scope to the question you are actually asking:
   reading the app-level shutdown flag), backstopped by
   `QApplication::closingDown()`. See
   `SelectionRestoreCoordinator::validateSelectionRestoreContext`
-  (`selectionrestoremanager.cpp`), which gates deferred restore timers on
+  (`selectionrestorecoordinator.cpp`), which gates deferred restore timers on
   both. Flips once, late, for the entire process. Use it for deferred work
   (timers, queued lambdas) that should abandon during application quit
   regardless of any single manager's destruction progress.
