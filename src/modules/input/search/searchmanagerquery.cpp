@@ -83,10 +83,9 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
     // The clear-path routing (root-view rebuild vs pre-search restore vs
     // full reload) is a pure decision over the saved pre-search state —
     // extracted to SearchHelpers so the state machine is unit-testable.
-    const SearchHelpers::SearchClearAction clearAction =
-        SearchHelpers::classifySearchClearAction(collIndex, m_preSearchInRootView,
-                                                 scrollMgr() && scrollMgr()->hasPreSearchState(),
-                                                 m_preSearchMode);
+    const SearchHelpers::SearchClearAction clearAction = SearchHelpers::classifySearchClearAction(
+        collIndex, m_preSearchInRootView, scrollMgr() && scrollMgr()->hasPreSearchState(),
+        m_preSearchMode);
 
     // Root / Home view clear: rebuild the synthetic Home tile view rather
     // than trying to restore pre-search state (none was saved — there was

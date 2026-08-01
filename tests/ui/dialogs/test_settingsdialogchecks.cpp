@@ -87,8 +87,7 @@ void TestSettingsDialogChecks::extensionsEdit_marksDirty() {
   QVERIFY2(edit, "fileExtensionsLineEdit must exist on the configuration panel");
   QVERIFY(!dialog.hasUnsavedChanges());
   edit->setText(QStringLiteral("mp4, mkv"));
-  QVERIFY2(dialog.hasUnsavedChanges(),
-           "Extension edits must mark the dialog dirty");
+  QVERIFY2(dialog.hasUnsavedChanges(), "Extension edits must mark the dialog dirty");
 }
 
 void TestSettingsDialogChecks::itemDimension_marksDirtyAndRevertsClean() {
@@ -131,8 +130,7 @@ void TestSettingsDialogChecks::parentComboChange_marksDirtyAndRevertsClean() {
 
   QVERIFY(!dialog.hasUnsavedChanges());
   combo->setCurrentIndex(1);
-  QVERIFY2(dialog.hasUnsavedChanges(),
-           "Parent selection must register as an unsaved change");
+  QVERIFY2(dialog.hasUnsavedChanges(), "Parent selection must register as an unsaved change");
   combo->setCurrentIndex(0);
   QVERIFY(!dialog.hasUnsavedChanges());
 }
@@ -168,8 +166,7 @@ void TestSettingsDialogChecks::backgroundValue_marksDirtyAndRevertsClean() {
   const QString original = edit->text();
   QVERIFY(!dialog.hasUnsavedChanges());
   edit->setText(QStringLiteral("#123456"));
-  QVERIFY2(dialog.hasUnsavedChanges(),
-           "Background value edits must mark the dialog dirty");
+  QVERIFY2(dialog.hasUnsavedChanges(), "Background value edits must mark the dialog dirty");
   edit->setText(original);
   QVERIFY(!dialog.hasUnsavedChanges());
 }

@@ -15,10 +15,10 @@
 
 #include "../../support/scopeexit.h"
 #include "../../support/testsandbox.h"
+#include "../../support/workersignalspy.h"
 #include "itemdetaildata.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
-#include "../../support/workersignalspy.h"
 
 namespace {
 void writeStubFile(const QString &path) {

@@ -572,8 +572,7 @@ ErrorUtils::Result<Manifest> parse(const QByteArray &json) {
     return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartManifestInvalid,
                                            "Kart manifest array exceeds the entry ceiling",
                                            "KartManifest::parse")
-        .withDetails(
-            QString("%1: count=%2 max=%3").arg(QLatin1String(field)).arg(count).arg(max));
+        .withDetails(QString("%1: count=%2 max=%3").arg(QLatin1String(field)).arg(count).arg(max));
   };
 
   const QJsonArray launchersArr = root["launchers"].toArray();

@@ -42,4 +42,3 @@ void AppearanceListPanel::save() {
   config.listView.listFontSize = ui->listFontSizeSpinBox->value();
   config.listView.listRowHeight = ui->listRowHeightSpinBox->value();
 }
-

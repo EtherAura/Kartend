@@ -181,8 +181,8 @@ void ItemWidgetFactory::updateCollectionIndexFromDatabase(const QString &fullPat
 QString ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(
     const QList<CollectionConfig> *collections, int collectionIndex,
     const QString &contextPlaceholder, const QString &contextCollectionName) {
-  const bool validIndex = collections && collectionIndex >= 0 &&
-                          collectionIndex < collections->size();
+  const bool validIndex =
+      collections && collectionIndex >= 0 && collectionIndex < collections->size();
   QString placeholderArtwork;
   if (validIndex) {
     placeholderArtwork =

@@ -373,7 +373,8 @@ void TestKartManifest::testParseRejectsOversizedPlaylistItemsArray() {
   QByteArray items = QByteArray("{},").repeated(KartFormat::MAX_MANIFEST_ITEMS + 1);
   items.chop(1);
   const QByteArray json =
-      QByteArray("{\"format_version\":2,\"uuid\":\"u\",\"name\":\"n\",\"playlists\":[{\"items\":[") +
+      QByteArray(
+          "{\"format_version\":2,\"uuid\":\"u\",\"name\":\"n\",\"playlists\":[{\"items\":[") +
       items + "]}]}";
   auto result = KartManifest::parse(json);
   QVERIFY(result.isError());

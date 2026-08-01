@@ -28,8 +28,8 @@
 #include "idetailspane.h"
 #include "idetailspanemanager.h"
 #include "imainwindow.h"
-#include "interactionhelpers.h"
 #include "inavigationmanager.h"
+#include "interactionhelpers.h"
 #include "iplaylistmanager.h"
 #include "iselectionmanager.h"
 #include "itemmetadata.h"
@@ -62,9 +62,8 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
   // Pure structural classification (media item vs navigable tile → which
   // top-level entries appear) lives in InteractionHelpers so it is
   // unit-testable without the widget graph.
-  const InteractionHelpers::ContextTargetFlags target =
-      InteractionHelpers::classifyContextTarget(isSubcollection, isVirtualFolder,
-                                                !filePath.isEmpty());
+  const InteractionHelpers::ContextTargetFlags target = InteractionHelpers::classifyContextTarget(
+      isSubcollection, isVirtualFolder, !filePath.isEmpty());
   const bool isMediaItem = target.isMediaItem;
 
   QMenu menu;

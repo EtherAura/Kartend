@@ -49,9 +49,9 @@ int memoizedVirtualFolderCount(const CollectionConfig &config) {
   if (!info.exists() || !info.isDir()) {
     return 0;
   }
-  const QString key = info.absoluteFilePath() + QLatin1Char('\n') +
-                      (config.folderBrowsing.showHiddenFolders ? QLatin1Char('1')
-                                                               : QLatin1Char('0'));
+  const QString key =
+      info.absoluteFilePath() + QLatin1Char('\n') +
+      (config.folderBrowsing.showHiddenFolders ? QLatin1Char('1') : QLatin1Char('0'));
   const QDateTime mtime = info.lastModified();
 
   static QHash<QString, VirtualFolderCountMemoEntry> memo;

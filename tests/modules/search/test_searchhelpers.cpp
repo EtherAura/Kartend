@@ -291,9 +291,8 @@ void TestSearchHelpers::clearWithoutHostOrRootViewDoesNothing() {
 void TestSearchHelpers::clearWithSnapshotCurrentCollectionRebuilds() {
   // CurrentCollection searches are DB-backed, so the pre-search view must be
   // rebuilt before the cached widgets/scroll position are restored.
-  QCOMPARE(
-      SearchHelpers::classifySearchClearAction(0, false, true, SearchMode::CurrentCollection),
-      SearchHelpers::SearchClearAction::RebuildAndRestorePreSearch);
+  QCOMPARE(SearchHelpers::classifySearchClearAction(0, false, true, SearchMode::CurrentCollection),
+           SearchHelpers::SearchClearAction::RebuildAndRestorePreSearch);
 }
 
 void TestSearchHelpers::clearWithSnapshotInMemoryModeClearsFilter() {
@@ -306,9 +305,8 @@ void TestSearchHelpers::clearWithSnapshotInMemoryModeClearsFilter() {
 }
 
 void TestSearchHelpers::clearWithoutSnapshotReloads() {
-  QCOMPARE(
-      SearchHelpers::classifySearchClearAction(2, false, false, SearchMode::CurrentCollection),
-      SearchHelpers::SearchClearAction::ReloadCollection);
+  QCOMPARE(SearchHelpers::classifySearchClearAction(2, false, false, SearchMode::CurrentCollection),
+           SearchHelpers::SearchClearAction::ReloadCollection);
   // The root-view flag is irrelevant once a host collection exists.
   QCOMPARE(SearchHelpers::classifySearchClearAction(2, true, false, SearchMode::AllCollections),
            SearchHelpers::SearchClearAction::ReloadCollection);
@@ -341,9 +339,8 @@ void TestSearchHelpers::dispatchOutOfRangeHostIsNone() {
 void TestSearchHelpers::dispatchFollowsModeForValidHost() {
   QCOMPARE(SearchHelpers::classifySearchDispatch(1, 3, false, SearchMode::CurrentCollection),
            SearchHelpers::SearchDispatch::CurrentCollection);
-  QCOMPARE(
-      SearchHelpers::classifySearchDispatch(1, 3, false, SearchMode::CurrentAndSubcollections),
-      SearchHelpers::SearchDispatch::CurrentAndSubcollections);
+  QCOMPARE(SearchHelpers::classifySearchDispatch(1, 3, false, SearchMode::CurrentAndSubcollections),
+           SearchHelpers::SearchDispatch::CurrentAndSubcollections);
   QCOMPARE(SearchHelpers::classifySearchDispatch(1, 3, false, SearchMode::AllCollections),
            SearchHelpers::SearchDispatch::AllCollections);
   // A valid host keeps mode routing even while the root-view flag is set

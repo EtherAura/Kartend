@@ -176,9 +176,8 @@ void TestItemWidgetFactory::placeholder_allEmptyReturnsEmpty() {
   QCOMPARE(ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(&collections, 0, QString(),
                                                                QStringLiteral("Ctx")),
            QString());
-  QCOMPARE(
-      ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(nullptr, 3, QString(), QString()),
-      QString());
+  QCOMPARE(ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(nullptr, 3, QString(), QString()),
+           QString());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -100,10 +100,9 @@ auto ExtensionUtils::videoBaseExtensions() -> const QStringList & {
 }
 
 auto ExtensionUtils::archiveBaseExtensions() -> const QStringList & {
-  static const QStringList exts = {QStringLiteral("zip"), QStringLiteral("7z"),
-                                   QStringLiteral("rar"), QStringLiteral("gz"),
-                                   QStringLiteral("tar"), QStringLiteral("bz2"),
-                                   QStringLiteral("xz")};
+  static const QStringList exts = {
+      QStringLiteral("zip"), QStringLiteral("7z"),  QStringLiteral("rar"), QStringLiteral("gz"),
+      QStringLiteral("tar"), QStringLiteral("bz2"), QStringLiteral("xz")};
   return exts;
 }
 

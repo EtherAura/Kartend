@@ -1,10 +1,10 @@
 #include "test_toolbarcontroller.h"
 
+#include "applicationmanager.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "collection/launcherconfig.h"
 #include "collection/launcherpreset.h"
-#include "applicationmanager.h"
 #include "collectiontypes.h"
 #include "mainwindow.h"
 #include "mocks/mockedmainwindowfixture.h"

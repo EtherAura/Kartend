@@ -97,9 +97,8 @@ ErrorUtils::Result<void> writeEntry(QDataStream &ds, const QString &relPath, qui
 // QSaveFile's temp file is an ordinary seekable QFileDevice before commit(),
 // so this keeps peak memory at O(chunk) instead of O(entry) without touching
 // the on-disk byte layout.
-ErrorUtils::Result<void> writeEntryStreamed(QSaveFile &out, QDataStream &ds,
-                                            const QString &relPath, quint8 flags,
-                                            KartFormat::Compression algo, QFile &in,
+ErrorUtils::Result<void> writeEntryStreamed(QSaveFile &out, QDataStream &ds, const QString &relPath,
+                                            quint8 flags, KartFormat::Compression algo, QFile &in,
                                             const QAtomicInt &cancel) {
   const QByteArray pathBytes = relPath.toUtf8();
   if (pathBytes.size() == 0 || pathBytes.size() > KartFormat::MAX_PATH_LEN) {

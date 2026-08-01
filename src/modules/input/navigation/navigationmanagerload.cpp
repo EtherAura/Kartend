@@ -563,8 +563,8 @@ void NavigationManager::onBackgroundCollectionScanCompleted(const QString &colle
       }
       const QString subUuid = resolveUuid(descendantIndex);
       qCDebug(lcScanFlow) << "Checking descendant" << descendantIndex
-                          << "name=" << (*m_collections)[descendantIndex].name
-                          << "uuid=" << subUuid << "match=" << (subUuid == collectionUuid);
+                          << "name=" << (*m_collections)[descendantIndex].name << "uuid=" << subUuid
+                          << "match=" << (subUuid == collectionUuid);
       if (subUuid.isEmpty()) {
         continue;
       }

@@ -468,9 +468,8 @@ void TestRomHasher::extractorCandidates_neverOffersUnzip() {
   // zip-slip-via-symlink primitive the pre-extraction safety scan exists to
   // stop — so it must never be offered for ANY format, .zip included; 7z and
   // bsdtar both cover .zip. 7z stays first so it wins when installed.
-  const QStringList exts = {QStringLiteral(".zip"), QStringLiteral(".gz"),
-                            QStringLiteral(".xz"),  QStringLiteral(".bz2"),
-                            QStringLiteral(".tar"), QStringLiteral(".7z"),
+  const QStringList exts = {QStringLiteral(".zip"), QStringLiteral(".gz"),  QStringLiteral(".xz"),
+                            QStringLiteral(".bz2"), QStringLiteral(".tar"), QStringLiteral(".7z"),
                             QStringLiteral(".rar"), QStringLiteral(".ZIP")};
   for (const QString &ext : exts) {
     const auto cands = RomHasher::extractorCandidates(QStringLiteral("/data/item") + ext);

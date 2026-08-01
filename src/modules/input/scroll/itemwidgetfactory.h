@@ -246,8 +246,8 @@ private:
   // that only changes with the collections list or the active context —
   // both of which clear this cache (see the setters above).
   mutable QHash<int, QString> m_placeholderArtworkCache;
-  QSet<int> m_pendingRangeRequests;             // Tracks chunk start indices with pending
-                                                // requests
+  QSet<int> m_pendingRangeRequests; // Tracks chunk start indices with pending
+                                    // requests
   // Per-chunk count of consecutive empty (zero-row) responses. Bounds the
   // re-requests of a chunk that keeps coming back empty so it can't spin a
   // tight request loop; reset when the chunk fills or on a bulk clear

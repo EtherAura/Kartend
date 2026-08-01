@@ -248,23 +248,23 @@ bool atomicWriteFile(const QString &filePath, const QByteArray &data) {
 
   QSaveFile file(filePath);
   if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    qCWarning(lcPathUtils).nospace() << "atomicWriteFile: failed to open " << filePath
-                                     << " for writing: " << file.errorString();
+    qCWarning(lcPathUtils).nospace()
+        << "atomicWriteFile: failed to open " << filePath << " for writing: " << file.errorString();
     return false;
   }
 
   const qint64 written = file.write(data);
   if (written != data.size()) {
     file.cancelWriting();
-    qCWarning(lcPathUtils).nospace() << "atomicWriteFile: short write to " << filePath << " ("
-                                     << written << " of " << data.size()
-                                     << " bytes): " << file.errorString();
+    qCWarning(lcPathUtils).nospace()
+        << "atomicWriteFile: short write to " << filePath << " (" << written << " of "
+        << data.size() << " bytes): " << file.errorString();
     return false;
   }
 
   if (!file.commit()) {
-    qCWarning(lcPathUtils).nospace() << "atomicWriteFile: failed to commit " << filePath << ": "
-                                     << file.errorString();
+    qCWarning(lcPathUtils).nospace()
+        << "atomicWriteFile: failed to commit " << filePath << ": " << file.errorString();
     return false;
   }
 

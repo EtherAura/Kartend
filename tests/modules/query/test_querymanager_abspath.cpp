@@ -28,11 +28,11 @@
 #include "../../support/inspectordb.h"
 #include "../../support/scopeexit.h"
 #include "../../support/testsandbox.h"
+#include "../../support/workersignalspy.h"
 #include "collection/collectioncontext.h"
 #include "collection/typehelpers.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
-#include "../../support/workersignalspy.h"
 
 class TestQueryManagerAbsPath : public QObject {
   Q_OBJECT

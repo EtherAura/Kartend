@@ -10,8 +10,8 @@
 #include <QFutureWatcher>
 #include <QMessageBox>
 #include <QSet>
-#include <QThread>
 #include <QtConcurrentRun>
+#include <QThread>
 
 #include "collection/collectionconfig.h"
 #include "collection/launcherpreset.h"
@@ -93,10 +93,10 @@ ErrorUtils::Result<void> doExportKart(const CollectionConfig &cfg,
   // Qt-documented UB. Same reasoning as ScrapeWriteWorker's counter
   // (Kartend-fux2w).
   static std::atomic<quint64> s_exportConnectionId{0};
-  auto dbRes = openMediaDbConnection(
-      QString("kart-export-%1-%2")
-          .arg(collectionUuid)
-          .arg(s_exportConnectionId.fetch_add(1, std::memory_order_relaxed)));
+  auto dbRes =
+      openMediaDbConnection(QString("kart-export-%1-%2")
+                                .arg(collectionUuid)
+                                .arg(s_exportConnectionId.fetch_add(1, std::memory_order_relaxed)));
   if (dbRes.isError()) {
     return dbRes.error();
   }
@@ -718,9 +718,9 @@ void KartManager::runExport(int collectionIndex, const QString &outPath) {
   }
   QList<CollectionConfig> *collections = m_setup.getCollections();
   if (!collections || collectionIndex < 0 || collectionIndex >= collections->size()) {
-    auto ctx = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::CollectionNotFound,
-                                               "Collection index out of range",
-                                               "KartManager::runExport");
+    auto ctx =
+        ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::CollectionNotFound,
+                                        "Collection index out of range", "KartManager::runExport");
     emit exportFailed(ctx);
     showWarning(tr("Export Kart"), ctx.message);
     return;

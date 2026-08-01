@@ -214,8 +214,7 @@ auto buildSubfolderBreadcrumbHtml(const QString &subfolder, const QString &linkC
       // Intermediate folder — clickable to navigate to that level.
       html += QStringLiteral("<a href=\"subfolder:%1\" style=\"color:%2; "
                              "text-decoration:none;\">%3</a>")
-                  .arg(accumulatedPath.toHtmlEscaped(), linkColorHex,
-                       pathParts[i].toHtmlEscaped());
+                  .arg(accumulatedPath.toHtmlEscaped(), linkColorHex, pathParts[i].toHtmlEscaped());
     } else {
       // Current folder — not clickable, just styled.
       html += pathParts[i].toHtmlEscaped();

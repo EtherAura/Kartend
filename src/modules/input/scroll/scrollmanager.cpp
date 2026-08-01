@@ -552,9 +552,10 @@ void ScrollManager::onVisualIndexForPathLoaded(int visualIndex, const QString &f
     // loaded yet (on-demand views, where unified sort is never active).
     int adjustedIndex = m_dataManager ? m_dataManager->visualIndexFromFilePath(filePath) : -1;
     if (adjustedIndex < 0) {
-      int prefixCount = m_dataManager ? (m_dataManager->subcollectionCount() +
-                                         m_dataManager->virtualFolderCount())
-                                      : 0;
+      int prefixCount =
+          m_dataManager
+              ? (m_dataManager->subcollectionCount() + m_dataManager->virtualFolderCount())
+              : 0;
       adjustedIndex = visualIndex + prefixCount;
     }
     // Both branches above produce a store-space actual index, but when an

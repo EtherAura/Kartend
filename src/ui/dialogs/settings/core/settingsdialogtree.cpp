@@ -46,8 +46,8 @@ void SettingsDialog::updateParentCollectionComboBox(int currentIndex) {
       return m_treeManager->wouldCreateCircularReference(childIndex, potentialParentIndex);
     };
   }
-  const SettingsTreeHelpers::ParentComboModel model = SettingsTreeHelpers::buildParentComboModel(
-      collections, currentIndex, tr("None"), cycleCheck);
+  const SettingsTreeHelpers::ParentComboModel model =
+      SettingsTreeHelpers::buildParentComboModel(collections, currentIndex, tr("None"), cycleCheck);
 
   QSignalBlocker blocker(ui->configurationPanel->parentCollectionComboBox());
   ui->configurationPanel->parentCollectionComboBox()->clear();

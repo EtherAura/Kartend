@@ -452,8 +452,8 @@ void SettingsDialogController::openSettingsDialog(const SettingsDialogContext &c
   // shifted the tail and index pairing stops (the orphan purge below covers
   // whatever a shifted session leaves behind, exactly as before).
   if (databaseManager) {
-    const auto reappearsLater = [](const CollectionConfig &row,
-                                   const QList<CollectionConfig> &list, int fromIndex) {
+    const auto reappearsLater = [](const CollectionConfig &row, const QList<CollectionConfig> &list,
+                                   int fromIndex) {
       for (int j = fromIndex; j < list.size(); ++j) {
         if (list[j].name == row.name || list[j].mediaDirectory == row.mediaDirectory) {
           return true;

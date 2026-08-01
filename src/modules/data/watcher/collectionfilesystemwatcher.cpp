@@ -170,8 +170,7 @@ void CollectionFilesystemWatcher::onDirectoryChanged(const QString &path) {
   timer->start(m_debounceMs);
 }
 
-void CollectionFilesystemWatcher::startReconcileWalk(int collectionIndex,
-                                                     bool emitRescanWhenDone) {
+void CollectionFilesystemWatcher::startReconcileWalk(int collectionIndex, bool emitRescanWhenDone) {
   const auto entryIt = m_entries.constFind(collectionIndex);
   if (entryIt == m_entries.cend()) {
     // No watch bookkeeping for this collection (shouldn't happen while a
@@ -201,8 +200,7 @@ void CollectionFilesystemWatcher::startReconcileWalk(int collectionIndex,
   connect(walkWatcher, &QFutureWatcher<QStringList>::finished, this,
           [this, walkWatcher, collectionIndex, generation, emitRescanWhenDone]() {
             walkWatcher->deleteLater();
-            onWalkFinished(collectionIndex, generation, emitRescanWhenDone,
-                           walkWatcher->result());
+            onWalkFinished(collectionIndex, generation, emitRescanWhenDone, walkWatcher->result());
           });
   walkWatcher->setFuture(
       QtConcurrent::run(&CollectionFilesystemWatcher::enumerateWatchableSubdirs, rootPath));

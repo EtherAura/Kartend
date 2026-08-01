@@ -124,7 +124,7 @@ void TestAlphabeticNavigationHandler::forwardJumpsToNextDifferentLetter() {
 void TestAlphabeticNavigationHandler::forwardWrapsPastEndToBeginning() {
   Harness h({QStringLiteral("Beacon"), QStringLiteral("Breeze"), QStringLiteral("Canyon"),
              QStringLiteral("Cliff")});
-  h.selection.index = 3; // inside the trailing "C" group
+  h.selection.index = 3;                             // inside the trailing "C" group
   QCOMPARE(h.handler.navigateToNextLetter(true), 0); // wraps to the "B" group
 }
 

@@ -432,13 +432,12 @@ void TestNavigationHelpers::titleHtmlSubcollectionLinksAncestorChain() {
   cs[2].isSubcollection = true;
   // Grandchild breadcrumb: both ancestors clickable (root-most first), the
   // current collection as plain text, joined with " › ".
-  QCOMPARE(
-      NavigationHelpers::buildTitleBreadcrumbHtml(2, cs, kColor),
-      QStringLiteral(
-          "<a href=\"collection:0\" style=\"color:#aabbcc; text-decoration:none;\">Movies</a>"
-          " › "
-          "<a href=\"collection:1\" style=\"color:#aabbcc; text-decoration:none;\">Action</a>"
-          " › Classics"));
+  QCOMPARE(NavigationHelpers::buildTitleBreadcrumbHtml(2, cs, kColor),
+           QStringLiteral(
+               "<a href=\"collection:0\" style=\"color:#aabbcc; text-decoration:none;\">Movies</a>"
+               " › "
+               "<a href=\"collection:1\" style=\"color:#aabbcc; text-decoration:none;\">Action</a>"
+               " › Classics"));
 }
 
 void TestNavigationHelpers::titleHtmlSubcollectionInSubfolderLinksSelf() {

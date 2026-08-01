@@ -167,8 +167,9 @@ void BatchScrapeRunner::onMediaWriteFinished(const std::shared_ptr<ItemState> &s
   // row first (the onTimeout hook) and error the item via the shared
   // onStepTimedOut path — a worker reply that limps in later then finds no
   // row and is ignored by onWriteCompleted's unknown-id early return.
-  pending.saveWatchdog = armStepWatchdog(state, QStringLiteral("database save"),
-                                         [this, requestId]() { m_pendingWrites.remove(requestId); });
+  pending.saveWatchdog =
+      armStepWatchdog(state, QStringLiteral("database save"),
+                      [this, requestId]() { m_pendingWrites.remove(requestId); });
   m_pendingWrites.insert(requestId, pending);
 
   // Queued cross-thread invocation. The worker handles the load → merge → save

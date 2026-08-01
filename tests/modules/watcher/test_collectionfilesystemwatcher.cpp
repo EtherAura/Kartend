@@ -176,8 +176,7 @@ void TestCollectionFilesystemWatcher::configure_supersededConfigure_onlyNewestDi
   const QString rootB = QFileInfo(tdB.path()).absoluteFilePath();
   for (const QString &d : dirs) {
     QVERIFY2(d.startsWith(rootB),
-             qPrintable(
-                 QStringLiteral("dir from superseded configure still watched: %1").arg(d)));
+             qPrintable(QStringLiteral("dir from superseded configure still watched: %1").arg(d)));
   }
 }
 

@@ -427,8 +427,7 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
         if (entryWritten + static_cast<quint64>(block.size()) > origSize) {
           return ErrorUtils::ErrorContext::error(
                      ErrorUtils::ErrorCode::KartCompressionFailed,
-                     "Decompressed entry exceeds declared original size",
-                     "KartReader::extractTo")
+                     "Decompressed entry exceeds declared original size", "KartReader::extractTo")
               .withDetails(QString("declared=%1 path=%2").arg(origSize).arg(relPath));
         }
         if (block.isEmpty()) return {};

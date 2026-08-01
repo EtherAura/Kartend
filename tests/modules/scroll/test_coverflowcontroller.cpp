@@ -264,8 +264,7 @@ void TestCoverFlowController::itemActivated_mapsFilteredVisualToActual() {
     return out;
   }();
   static const QList<int> subs = {0};
-  const QStringList paths = {QStringLiteral("/items/Alpha.mp4"),
-                             QStringLiteral("/items/Beta.mp4")};
+  const QStringList paths = {QStringLiteral("/items/Alpha.mp4"), QStringLiteral("/items/Beta.mp4")};
   QHash<QString, QString> names;
   names.insert(paths.at(0), QStringLiteral("Alpha"));
   names.insert(paths.at(1), QStringLiteral("Beta"));

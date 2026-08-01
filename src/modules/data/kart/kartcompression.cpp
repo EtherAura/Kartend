@@ -269,7 +269,7 @@ ErrorUtils::Result<void> StreamDecompressor::begin() {
 }
 
 ErrorUtils::Result<QByteArray> StreamDecompressor::decompressChunk(const QByteArray &input,
-                                                                  qsizetype &inPos) {
+                                                                   qsizetype &inPos) {
 #ifdef KARTEND_HAS_ZSTD
   if (!m_ctx) {
     return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,

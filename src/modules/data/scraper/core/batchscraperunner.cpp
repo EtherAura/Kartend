@@ -363,12 +363,13 @@ void BatchScrapeRunner::startItem(const std::shared_ptr<ItemState> &state) {
   // whole batch, indefinitely. The watchdog shares `lookupDone` with the
   // callback so whichever fires first wins and the other no-ops.
   auto lookupDone = armStepWatchdog(state, QStringLiteral("metadata lookup"));
-  m_provider->lookup(ctx, [self, state, lookupDone](
-                              const ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> &result) mutable {
-    if (self.isNull() || lookupDone.fired()) return;
-    lookupDone.finish();
-    self->onLookupComplete(state, result);
-  });
+  m_provider->lookup(
+      ctx, [self, state,
+            lookupDone](const ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> &result) mutable {
+        if (self.isNull() || lookupDone.fired()) return;
+        lookupDone.finish();
+        self->onLookupComplete(state, result);
+      });
 }
 
 bool BatchScrapeRunner::cancelledFinish() {

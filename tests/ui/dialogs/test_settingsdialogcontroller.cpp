@@ -89,10 +89,10 @@ struct Harness {
     context.currentCollectionIndex = &currentIndex;
     context.databaseManager = &db;
     context.createSettingsDialog =
-        [saveDuringExec, execResult](
-            QWidget *, const QList<CollectionConfig> &initialCollections, int,
-            std::function<void(const QList<CollectionConfig> &)> onCollectionSaved,
-            std::function<void(int)>) -> std::unique_ptr<ISettingsDialog> {
+        [saveDuringExec,
+         execResult](QWidget *, const QList<CollectionConfig> &initialCollections, int,
+                     std::function<void(const QList<CollectionConfig> &)> onCollectionSaved,
+                     std::function<void(int)>) -> std::unique_ptr<ISettingsDialog> {
       auto dlg = std::make_unique<FakeSettingsDialog>();
       QList<CollectionConfig> renamed = initialCollections;
       renamed[0].name = QStringLiteral("New");
@@ -109,16 +109,14 @@ struct Harness {
   /// Like makeContext, but the accepted dialog returns the initial list
   /// transformed by @p mutate — for driving the uuid-migration pairing with
   /// arbitrary edit sessions (multi-rename, shared directories, rename+move).
-  SettingsDialogContext
-  makeMutatedContext(std::function<void(QList<CollectionConfig> &)> mutate) {
+  SettingsDialogContext makeMutatedContext(std::function<void(QList<CollectionConfig> &)> mutate) {
     SettingsDialogContext context;
     context.collections = &collections;
     context.currentCollectionIndex = &currentIndex;
     context.databaseManager = &db;
     context.createSettingsDialog =
-        [mutate = std::move(mutate)](QWidget *,
-                                     const QList<CollectionConfig> &initialCollections, int,
-                                     std::function<void(const QList<CollectionConfig> &)>,
+        [mutate = std::move(mutate)](QWidget *, const QList<CollectionConfig> &initialCollections,
+                                     int, std::function<void(const QList<CollectionConfig> &)>,
                                      std::function<void(int)>) -> std::unique_ptr<ISettingsDialog> {
       auto dlg = std::make_unique<FakeSettingsDialog>();
       QList<CollectionConfig> edited = initialCollections;
@@ -231,10 +229,12 @@ void TestSettingsDialogController::multiRenameMigratesEachRow() {
   }));
 
   QCOMPARE(h.db.migrations.size(), 2);
-  QCOMPARE(h.db.migrations[0].first, CollectionUtils::computeCollectionUuid(QStringLiteral("A"), dirA));
+  QCOMPARE(h.db.migrations[0].first,
+           CollectionUtils::computeCollectionUuid(QStringLiteral("A"), dirA));
   QCOMPARE(h.db.migrations[0].second,
            CollectionUtils::computeCollectionUuid(QStringLiteral("A2"), dirA));
-  QCOMPARE(h.db.migrations[1].first, CollectionUtils::computeCollectionUuid(QStringLiteral("B"), dirB));
+  QCOMPARE(h.db.migrations[1].first,
+           CollectionUtils::computeCollectionUuid(QStringLiteral("B"), dirB));
   QCOMPARE(h.db.migrations[1].second,
            CollectionUtils::computeCollectionUuid(QStringLiteral("B2"), dirB));
 }

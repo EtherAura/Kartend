@@ -99,9 +99,9 @@ void TestScrollManager::visualIndexForPathRestore_mapsThroughActiveFilter() {
   // Three preloaded media items, no subcollections / virtual folders — the
   // store's actual-index space is [Alpha 0, Beta 1, Gamma 2].
   CollectionContext context;
-  context.filePaths = QStringList{QStringLiteral("/items/Alpha.bin"),
-                                  QStringLiteral("/items/Beta.bin"),
-                                  QStringLiteral("/items/Gamma.bin")};
+  context.filePaths =
+      QStringList{QStringLiteral("/items/Alpha.bin"), QStringLiteral("/items/Beta.bin"),
+                  QStringLiteral("/items/Gamma.bin")};
   context.fileNames.insert(context.filePaths.at(0), QStringLiteral("Alpha"));
   context.fileNames.insert(context.filePaths.at(1), QStringLiteral("Beta"));
   context.fileNames.insert(context.filePaths.at(2), QStringLiteral("Gamma"));

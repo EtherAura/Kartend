@@ -237,8 +237,7 @@ void TestSettingsDialogDiscard::formerStubFieldsNowFlipUnsavedChanges() {
   QVERIFY(!h.dialog->hasUnsavedChanges());
 
   // Extensions (former checkExtensionChanges stub territory).
-  auto *extensions =
-      h.dialog->findChild<QLineEdit *>(QStringLiteral("fileExtensionsLineEdit"));
+  auto *extensions = h.dialog->findChild<QLineEdit *>(QStringLiteral("fileExtensionsLineEdit"));
   QVERIFY(extensions);
   extensions->setText(QStringLiteral("mkv, webm"));
   QVERIFY2(h.dialog->hasUnsavedChanges(),

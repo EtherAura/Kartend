@@ -76,8 +76,8 @@ ErrorContext rejectEntry(const QString &reason, const QString &detail) {
 /// retry) and the tool-missing/unusable codes, so scanArchiveEntries' fallback
 /// chain still consults the next tool while a lone-tool caller fails closed.
 ErrorContext uninterpretableListing(const QString &tool) {
-  return ErrorContext::error(ErrorCode::FileReadError,
-                             "Archive listing could not be interpreted", kSource)
+  return ErrorContext::error(ErrorCode::FileReadError, "Archive listing could not be interpreted",
+                             kSource)
       .withDetails(QString("%1 reported success but no entries could be parsed "
                            "from its listing output")
                        .arg(tool));

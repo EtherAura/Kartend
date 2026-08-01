@@ -49,7 +49,7 @@ void ItemWidget::resetForReuse() {
   m_hideSubfolderTitle = false;
   filePath.clear();
   itemName.clear();
-  storedPixmap = QPixmap(); // Clear stored artwork
+  storedPixmap = QPixmap();   // Clear stored artwork
   m_storedIsComposed = false; // The cleared pixmap is no worker-composed card
   m_placeholderArtworkPixmap = QPixmap();
   // Don't generate placeholder here - onArtworkChanged() will be called after

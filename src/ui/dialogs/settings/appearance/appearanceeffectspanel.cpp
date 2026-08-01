@@ -55,4 +55,3 @@ void AppearanceEffectsPanel::save() {
   config.background.toolbarBackdropBlur = ui->toolbarBackdropBlurCheckBox->isChecked();
   config.background.backdropBlurRadius = ui->backdropBlurRadiusSpinBox->value();
 }
-

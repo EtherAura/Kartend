@@ -92,8 +92,8 @@ struct PlaylistMenuFlags {
 // valid index, otherwise the collection's default launcher clamped into
 // range. `launcherCount <= 0` returns 0 (the "no configured launchers"
 // placeholder the preview path uses).
-[[nodiscard]] auto pickLauncherIndex(int overrideIndex, int defaultLauncherIndex,
-                                     int launcherCount) -> int;
+[[nodiscard]] auto pickLauncherIndex(int overrideIndex, int defaultLauncherIndex, int launcherCount)
+    -> int;
 
 // Expand-mode (two-stage activation) routing decision.
 //

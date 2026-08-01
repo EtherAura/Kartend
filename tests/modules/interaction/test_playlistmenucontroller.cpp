@@ -434,7 +434,8 @@ void TestPlaylistMenuController::exportM3uShowsLossyInteropNote() {
   h.rewire();
   h.controller.exportPlaylistToFile(QStringLiteral("pl-1"), QStringLiteral("Mix"),
                                     /*asJson=*/false);
-  QCOMPARE(h.playlists.exportedM3uPaths, QStringList{QStringLiteral("/tmp/kart_pl_export/mix.m3u")});
+  QCOMPARE(h.playlists.exportedM3uPaths,
+           QStringList{QStringLiteral("/tmp/kart_pl_export/mix.m3u")});
   // The M3U completion dialog must carry the lossy-round-trip note
   // (Kartend-o84pt) pointing at the JSON format.
   QVERIFY(infoBody.contains(QStringLiteral("M3U")));

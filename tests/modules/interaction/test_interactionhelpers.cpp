@@ -350,9 +350,9 @@ void TestInteractionHelpers::expandActivationReExpandsWhenOverlayDismissed() {
 }
 
 void TestInteractionHelpers::expandActivationExpandsOnDifferentItem() {
-  QCOMPARE(InteractionHelpers::classifyExpandActivation(true, /*expanded=*/1, /*activation=*/4,
-                                                        true),
-           InteractionHelpers::ExpandActivation::TryExpand);
+  QCOMPARE(
+      InteractionHelpers::classifyExpandActivation(true, /*expanded=*/1, /*activation=*/4, true),
+      InteractionHelpers::ExpandActivation::TryExpand);
 }
 
 void TestInteractionHelpers::expandActivationNegativeIndexNeverCollapses() {

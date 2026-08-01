@@ -23,10 +23,10 @@
 #include "../../support/inspectordb.h"
 #include "../../support/scopeexit.h"
 #include "../../support/testsandbox.h"
+#include "../../support/workersignalspy.h"
 #include "itemmetadata.h"
 #include "querymanager.h"
 #include "sessionmanager.h"
-#include "../../support/workersignalspy.h"
 
 class TestQueryManagerStateFlags : public QObject {
   Q_OBJECT

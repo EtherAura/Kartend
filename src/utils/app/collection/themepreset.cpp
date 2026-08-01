@@ -400,8 +400,7 @@ ErrorUtils::Result<bool> saveRegistry(const QList<ThemePreset> &profiles, const 
 
   const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);
   if (!PathUtils::atomicWriteFile(filePath, bytes)) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Failed to write layout profile registry",
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to write layout profile registry",
                                "ThemePresetIO::saveRegistry")
         .withDetails(filePath);
   }

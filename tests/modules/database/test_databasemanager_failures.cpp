@@ -244,8 +244,8 @@ void TestDatabaseManagerFailures::clearCollection_droppedTableRollsBackTransacti
     // Rolled back, not half-applied: the collections DELETE never ran
     // because the items DELETE threw first.
     QSqlQuery check(insp.db());
-    QVERIFY(check.exec(
-        QStringLiteral("SELECT COUNT(*) FROM collections WHERE uuid='%1'").arg(uuid)));
+    QVERIFY(
+        check.exec(QStringLiteral("SELECT COUNT(*) FROM collections WHERE uuid='%1'").arg(uuid)));
     QVERIFY(check.next());
     QCOMPARE(check.value(0).toInt(), 1);
   }

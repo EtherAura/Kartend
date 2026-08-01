@@ -292,8 +292,8 @@ void TestKartReader::testExtractToRejectsUnderdeclaredOrigSize() {
   }
   const QString relPath = QStringLiteral("media/bomb.bin");
   QByteArray data(2 * (1 << 20), 'K'); // highly compressible, > 1 chunk decompressed
-  QByteArray entry = entryBytes(relPath, data, KartFormat::Flag_Media,
-                                KartFormat::Compression_Zstd);
+  QByteArray entry =
+      entryBytes(relPath, data, KartFormat::Flag_Media, KartFormat::Compression_Zstd);
   const qsizetype origSizeOffset = 4 + relPath.toUtf8().size();
   patchU64LE(entry, origSizeOffset, 1024);
 
