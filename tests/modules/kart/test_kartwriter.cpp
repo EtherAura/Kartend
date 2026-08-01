@@ -1,3 +1,5 @@
+#include <QCryptographicHash>
+#include <QDataStream>
 #include <QDir>
 #include <QFile>
 #include <QSignalSpy>
@@ -56,6 +58,8 @@ private slots:
   void testRoundTripWithMultipleEntryKinds();
   void testWriterRefusesMissingSourceFile();
   void testWriterStoresUncompressedWhenCompressionGrowsPayload();
+  void testRoundTripStreamsMultiChunkEntry();
+  void testRoundTripStoresIncompressibleMultiChunkEntry();
   void testWriterEmitsProgress();
   void testWriterCanCancel();
   void testPrepareFromCollectionScansDirs();
@@ -231,6 +235,99 @@ void TestKartWriter::testWriterStoresUncompressedWhenCompressionGrowsPayload() {
   QFile readBack(QDir(extractDir.path()).filePath("media/tiny.bin"));
   QVERIFY(readBack.open(QIODevice::ReadOnly));
   QCOMPARE(readBack.readAll(), random);
+}
+
+void TestKartWriter::testRoundTripStreamsMultiChunkEntry() {
+  // Entries larger than KartCompression::STREAM_CHUNK_SIZE cross the writer's
+  // chunked hash/compress loop (with header backpatching) and the reader's
+  // chunked decompress loop; verify content integrity across the whole
+  // export → import pipeline with a content-hash and byte compare.
+  QTemporaryDir src;
+  const qsizetype targetSize = 3 * (1 << 20) + 12345; // > 3 chunks, unaligned tail
+  QByteArray rom;
+  rom.reserve(targetSize);
+  while (rom.size() < targetSize) {
+    rom.append("kart-streaming-pattern-");
+  }
+  rom.truncate(targetSize);
+  // Position-dependent bytes so a reordered or duplicated chunk cannot pass.
+  for (qsizetype i = 0; i < rom.size(); i += 4096) {
+    rom[i] = static_cast<char>((i >> 12) & 0xFF);
+  }
+  const QString mediaSrc = writeFile(QDir(src.path()), "big.bin", rom);
+
+  auto params = makeMinimalParams(mediaSrc, "big.bin");
+
+  QTemporaryDir outDir;
+  const QString kartPath = QDir(outDir.path()).filePath("big.kart");
+  KartWriter::Writer w;
+  auto wr = w.writeKart(kartPath, params);
+  QVERIFY2(wr.isOk(), qPrintable(wr.error().message));
+
+  QTemporaryDir extractDir;
+  KartReader::Extractor r;
+  auto rd = r.extractTo(kartPath, extractDir.path());
+  QVERIFY2(rd.isOk(), qPrintable(rd.error().message));
+
+  QFile readBack(QDir(extractDir.path()).filePath("media/big.bin"));
+  QVERIFY(readBack.open(QIODevice::ReadOnly));
+  const QByteArray extracted = readBack.readAll();
+  QCOMPARE(QCryptographicHash::hash(extracted, QCryptographicHash::Sha256),
+           QCryptographicHash::hash(rom, QCryptographicHash::Sha256));
+  QCOMPARE(extracted, rom);
+}
+
+void TestKartWriter::testRoundTripStoresIncompressibleMultiChunkEntry() {
+  // Pseudorandom data grows under compression, so a multi-chunk entry drives
+  // the streamed writer's fallback: rewrite the payload region with the raw
+  // bytes, truncate the compressed excess, and backpatch the compression byte
+  // to Compression_None. Prove the backpatch by parsing the entry header out
+  // of the finished kart, then round-trip for content integrity.
+  QTemporaryDir src;
+  const qsizetype targetSize = 2 * (1 << 20) + 777;
+  QByteArray rom(targetSize, '\0');
+  quint32 s = 0x12345678u;
+  for (qsizetype i = 0; i < rom.size(); ++i) {
+    s = s * 1664525u + 1013904223u;
+    rom[i] = static_cast<char>(s >> 24);
+  }
+  const QString mediaSrc = writeFile(QDir(src.path()), "noise.bin", rom);
+
+  auto params = makeMinimalParams(mediaSrc, "noise.bin");
+
+  QTemporaryDir outDir;
+  const QString kartPath = QDir(outDir.path()).filePath("noise.kart");
+  KartWriter::Writer w;
+  auto wr = w.writeKart(kartPath, params);
+  QVERIFY2(wr.isOk(), qPrintable(wr.error().message));
+
+  QFile kf(kartPath);
+  QVERIFY2(kf.open(QIODevice::ReadOnly), qPrintable(kf.errorString()));
+  QDataStream ds(&kf);
+  ds.setByteOrder(QDataStream::LittleEndian);
+  QVERIFY(kf.seek(KartFormat::MAGIC_SIZE));
+  quint32 manifestLen = 0;
+  ds >> manifestLen;
+  QVERIFY(kf.seek(kf.pos() + manifestLen));
+  quint8 flags = 0;
+  quint8 comp = 0;
+  quint16 pathLen = 0;
+  ds >> flags >> comp >> pathLen;
+  QVERIFY(kf.seek(kf.pos() + pathLen));
+  quint64 origSize = 0;
+  quint64 payloadSize = 0;
+  ds >> origSize >> payloadSize;
+  QCOMPARE(comp, static_cast<quint8>(KartFormat::Compression_None));
+  QCOMPARE(origSize, static_cast<quint64>(rom.size()));
+  QCOMPARE(payloadSize, static_cast<quint64>(rom.size()));
+
+  QTemporaryDir extractDir;
+  KartReader::Extractor r;
+  auto rd = r.extractTo(kartPath, extractDir.path());
+  QVERIFY2(rd.isOk(), qPrintable(rd.error().message));
+  QFile readBack(QDir(extractDir.path()).filePath("media/noise.bin"));
+  QVERIFY(readBack.open(QIODevice::ReadOnly));
+  QCOMPARE(readBack.readAll(), rom);
 }
 
 void TestKartWriter::testWriterEmitsProgress() {

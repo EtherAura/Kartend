@@ -21,9 +21,26 @@ private slots:
   void testParseRejectsMissingUuid();
   void testParseRejectsMissingName();
   void testParseRejectsNewerFormatVersion();
+  void testParseRejectsOversizedLaunchersArray();
+  void testParseRejectsOversizedItemsArray();
+  void testParseRejectsOversizedPlaylistsArray();
+  void testParseRejectsOversizedPlaylistItemsArray();
+  void testParseAcceptsLaunchersAtCap();
   void testPlaylistRoundTrip();
   void testV1ManifestParsesWithEmptyPlaylists();
 };
+
+namespace {
+// Minimal valid manifest JSON whose `field` array holds `count` copies of
+// `element` — built textually so an over-cap array costs kilobytes of JSON
+// instead of serializing hundreds of thousands of populated structs.
+QByteArray manifestWithArray(const char *field, qsizetype count, const char *element) {
+  QByteArray arr = (QByteArray(element) + ',').repeated(count);
+  arr.chop(1); // trailing comma
+  return QByteArray("{\"format_version\":1,\"uuid\":\"u\",\"name\":\"n\",\"") + field + "\":[" +
+         arr + "]}";
+}
+} // namespace
 
 void TestKartManifest::testFormatMagicConstants() {
   QCOMPARE(KartFormat::MAGIC_SIZE, 8);
@@ -324,6 +341,52 @@ void TestKartManifest::testParseRejectsNewerFormatVersion() {
   auto result = KartManifest::parse("{\"format_version\":99,\"uuid\":\"u\",\"name\":\"n\"}");
   QVERIFY(result.isError());
   QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartVersionUnsupported));
+}
+
+void TestKartManifest::testParseRejectsOversizedLaunchersArray() {
+  // The 64 MiB manifest-size cap alone still admits arrays whose parsed form
+  // expands far beyond the JSON text; parse must reject — not truncate — any
+  // array past its ceiling, matching the extraction loop's contract.
+  auto result = KartManifest::parse(
+      manifestWithArray("launchers", KartFormat::MAX_MANIFEST_LAUNCHERS + 1, "{}"));
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartManifestInvalid));
+}
+
+void TestKartManifest::testParseRejectsOversizedItemsArray() {
+  auto result =
+      KartManifest::parse(manifestWithArray("items", KartFormat::MAX_MANIFEST_ITEMS + 1, "{}"));
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartManifestInvalid));
+}
+
+void TestKartManifest::testParseRejectsOversizedPlaylistsArray() {
+  auto result = KartManifest::parse(
+      manifestWithArray("playlists", KartFormat::MAX_MANIFEST_PLAYLISTS + 1, "{}"));
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartManifestInvalid));
+}
+
+void TestKartManifest::testParseRejectsOversizedPlaylistItemsArray() {
+  // One playlist whose own items array crosses the ceiling — the per-playlist
+  // list gets the same bound as the top-level items array.
+  QByteArray items = QByteArray("{},").repeated(KartFormat::MAX_MANIFEST_ITEMS + 1);
+  items.chop(1);
+  const QByteArray json =
+      QByteArray("{\"format_version\":2,\"uuid\":\"u\",\"name\":\"n\",\"playlists\":[{\"items\":[") +
+      items + "]}]}";
+  auto result = KartManifest::parse(json);
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartManifestInvalid));
+}
+
+void TestKartManifest::testParseAcceptsLaunchersAtCap() {
+  // The ceiling is exclusive-over, not at: exactly MAX_MANIFEST_LAUNCHERS
+  // entries must still parse.
+  auto result =
+      KartManifest::parse(manifestWithArray("launchers", KartFormat::MAX_MANIFEST_LAUNCHERS, "{}"));
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  QCOMPARE(result.value().launchers.size(), KartFormat::MAX_MANIFEST_LAUNCHERS);
 }
 
 void TestKartManifest::testPlaylistRoundTrip() {

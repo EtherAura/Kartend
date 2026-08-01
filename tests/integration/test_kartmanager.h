@@ -70,6 +70,13 @@ private slots:
   // warn runner, and leave no operation in flight.
   void testImportKartAsyncFailureEmitsTerminalSignals();
 
+  // Kartend audit jpit3 rework: destroying a KartManager while an async
+  // import is in flight must cancel cooperatively and join within the
+  // bounded teardown budget (2s + slack) instead of hanging — and must not
+  // crash (the worker task owns its state by value/shared_ptr, so even an
+  // abandoned task touches nothing of the dead manager).
+  void testDestructorBoundsInFlightImportJoin();
+
   // Kartend-u8wf0: a headless import whose launcher path resolves inside
   // the extracted kart tree (a self-bundled executable) is refused by
   // default, with an error that names the opt-in flag.

@@ -41,23 +41,10 @@ void writeU64(QDataStream &ds, quint64 v) {
   ds << v;
 }
 
-ErrorUtils::Result<QByteArray> readFileFully(const QString &path) {
-  QFile in(path);
-  if (!in.open(QIODevice::ReadOnly)) {
-    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileReadError,
-                                           "Cannot open source file for reading",
-                                           "KartWriter::readFileFully")
-        .withDetails(in.errorString() + " path=" + path);
-  }
-  if (in.size() < 0 || static_cast<quint64>(in.size()) > KartFormat::MAX_ENTRY_SIZE) {
-    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
-                                           "Source file exceeds Kart entry size limit",
-                                           "KartWriter::readFileFully")
-        .withDetails(QString("size=%1 max=%2").arg(in.size()).arg(KartFormat::MAX_ENTRY_SIZE));
-  }
-  return in.readAll();
-}
-
+// Buffered entry writer, kept for zlib entries only: qCompress has no
+// streaming form short of linking zlib directly, and zlib is only the
+// fallback algorithm on builds without zstd. Stored and zstd entries go
+// through writeEntryStreamed below in O(chunk) memory.
 ErrorUtils::Result<void> writeEntry(QDataStream &ds, const QString &relPath, quint8 flags,
                                     KartFormat::Compression algo, const QByteArray &raw) {
   const QByteArray pathBytes = relPath.toUtf8();
@@ -101,6 +88,194 @@ ErrorUtils::Result<void> writeEntry(QDataStream &ds, const QString &relPath, qui
   return {};
 }
 
+// Streamed entry writer for Compression_None / Compression_Zstd. The entry
+// header precedes its payload but carries the payload size and content hash,
+// which are only known once the payload has been produced — so the header is
+// written with placeholder payload_size / sha fields, the payload is streamed
+// through the compressor in STREAM_CHUNK_SIZE slices (hashing as it goes),
+// and the placeholders are backpatched via seek() once the totals are known.
+// QSaveFile's temp file is an ordinary seekable QFileDevice before commit(),
+// so this keeps peak memory at O(chunk) instead of O(entry) without touching
+// the on-disk byte layout.
+ErrorUtils::Result<void> writeEntryStreamed(QSaveFile &out, QDataStream &ds,
+                                            const QString &relPath, quint8 flags,
+                                            KartFormat::Compression algo, QFile &in,
+                                            const QAtomicInt &cancel) {
+  const QByteArray pathBytes = relPath.toUtf8();
+  if (pathBytes.size() == 0 || pathBytes.size() > KartFormat::MAX_PATH_LEN) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                           "Entry path empty or too long",
+                                           "KartWriter::writeEntryStreamed")
+        .withDetails(relPath);
+  }
+  const quint64 rawSize = static_cast<quint64>(in.size());
+
+  writeU8(ds, flags);
+  const qint64 algoOffset = out.pos();
+  writeU8(ds, static_cast<quint8>(algo)); // backpatched to None on fallback below
+  writeU16(ds, static_cast<quint16>(pathBytes.size()));
+  ds.writeRawData(pathBytes.constData(), pathBytes.size());
+  writeU64(ds, rawSize);
+  const qint64 payloadSizeOffset = out.pos();
+  writeU64(ds, 0); // payload_size — backpatched below
+  const QByteArray shaPlaceholder(KartFormat::SHA256_SIZE, '\0');
+  ds.writeRawData(shaPlaceholder.constData(), shaPlaceholder.size()); // backpatched below
+  const qint64 payloadStart = out.pos();
+
+  QCryptographicHash hash(QCryptographicHash::Sha256);
+  quint64 payloadSize = 0;
+  KartFormat::Compression actual = algo;
+
+  // Streams the source verbatim into the payload region, hashing as it goes.
+  // Used for Compression_None entries and for the incompressible-fallback
+  // rewrite; the rewind + hash.reset() make the second pass self-contained so
+  // a source file mutating between passes yields a fresh, consistent hash.
+  auto streamRaw = [&]() -> ErrorUtils::Result<void> {
+    if (!in.seek(0)) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileReadError,
+                                             "Cannot rewind source file",
+                                             "KartWriter::writeEntryStreamed")
+          .withDetails(in.errorString() + " path=" + in.fileName());
+    }
+    hash.reset();
+    quint64 total = 0;
+    while (!in.atEnd()) {
+      if (cancel.loadRelaxed()) {
+        return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::OperationCancelled,
+                                               "Kart write cancelled",
+                                               "KartWriter::writeEntryStreamed");
+      }
+      const QByteArray chunk = in.read(KartCompression::STREAM_CHUNK_SIZE);
+      if (chunk.isEmpty()) {
+        return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileReadError,
+                                               "Read error while streaming source file",
+                                               "KartWriter::writeEntryStreamed")
+            .withDetails(in.errorString() + " path=" + in.fileName());
+      }
+      hash.addData(chunk);
+      ds.writeRawData(chunk.constData(), chunk.size());
+      total += static_cast<quint64>(chunk.size());
+    }
+    if (total != rawSize) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileReadError,
+                                             "Source file size changed during export",
+                                             "KartWriter::writeEntryStreamed")
+          .withDetails(
+              QString("expected=%1 got=%2 path=%3").arg(rawSize).arg(total).arg(in.fileName()));
+    }
+    return {};
+  };
+
+  if (algo == KartFormat::Compression_None) {
+    if (auto r = streamRaw(); r.isError()) {
+      return r.error();
+    }
+    payloadSize = rawSize;
+  } else {
+    // Compression_Zstd (zlib entries take the buffered writeEntry path).
+    KartCompression::StreamCompressor comp;
+    if (auto beginRes = comp.begin(rawSize); beginRes.isError()) {
+      return beginRes.error();
+    }
+    quint64 compressedWritten = 0;
+    while (!in.atEnd()) {
+      if (cancel.loadRelaxed()) {
+        return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::OperationCancelled,
+                                               "Kart write cancelled",
+                                               "KartWriter::writeEntryStreamed");
+      }
+      const QByteArray chunk = in.read(KartCompression::STREAM_CHUNK_SIZE);
+      if (chunk.isEmpty()) {
+        return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileReadError,
+                                               "Read error while streaming source file",
+                                               "KartWriter::writeEntryStreamed")
+            .withDetails(in.errorString() + " path=" + in.fileName());
+      }
+      hash.addData(chunk);
+      auto compressed = comp.compress(chunk);
+      if (compressed.isError()) {
+        return compressed.error();
+      }
+      if (!compressed.value().isEmpty()) {
+        ds.writeRawData(compressed.value().constData(), compressed.value().size());
+        compressedWritten += static_cast<quint64>(compressed.value().size());
+      }
+    }
+    auto tail = comp.finish();
+    if (tail.isError()) {
+      return tail.error();
+    }
+    if (!tail.value().isEmpty()) {
+      ds.writeRawData(tail.value().constData(), tail.value().size());
+      compressedWritten += static_cast<quint64>(tail.value().size());
+    }
+
+    if (compressedWritten < rawSize) {
+      payloadSize = compressedWritten;
+    } else {
+      // Compression grew (or merely matched) the payload — store the entry
+      // uncompressed instead, exactly like the buffered writer's size
+      // comparison. Rewrite the payload region with the source bytes and drop
+      // the compressed excess.
+      if (!out.seek(payloadStart)) {
+        return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                               "Seek failed while rewriting Kart entry payload",
+                                               "KartWriter::writeEntryStreamed")
+            .withDetails(relPath);
+      }
+      if (auto r = streamRaw(); r.isError()) {
+        return r.error();
+      }
+      actual = KartFormat::Compression_None;
+      payloadSize = rawSize;
+      const qint64 endAfterRaw = payloadStart + static_cast<qint64>(rawSize);
+      if (out.size() > endAfterRaw && !out.resize(endAfterRaw)) {
+        return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                               "Cannot truncate Kart entry payload",
+                                               "KartWriter::writeEntryStreamed")
+            .withDetails(out.errorString() + " " + relPath);
+      }
+    }
+  }
+
+  // Backpatch the placeholder payload_size / sha fields (and the compression
+  // byte when the fallback stored the entry raw), then restore the stream
+  // position for the next entry.
+  const QByteArray sha = hash.result();
+  const qint64 endPos = out.pos();
+  if (!out.seek(payloadSizeOffset)) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                           "Seek failed while backpatching Kart entry header",
+                                           "KartWriter::writeEntryStreamed")
+        .withDetails(relPath);
+  }
+  writeU64(ds, payloadSize);
+  ds.writeRawData(sha.constData(), KartFormat::SHA256_SIZE);
+  if (actual != algo) {
+    if (!out.seek(algoOffset)) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                             "Seek failed while backpatching Kart entry header",
+                                             "KartWriter::writeEntryStreamed")
+          .withDetails(relPath);
+    }
+    writeU8(ds, static_cast<quint8>(actual));
+  }
+  if (!out.seek(endPos)) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                           "Seek failed while backpatching Kart entry header",
+                                           "KartWriter::writeEntryStreamed")
+        .withDetails(relPath);
+  }
+
+  if (ds.status() != QDataStream::Ok) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                           "Failed to write Kart entry",
+                                           "KartWriter::writeEntryStreamed")
+        .withDetails(relPath);
+  }
+  return {};
+}
+
 void inlineLauncherPresets(WriterParams &params) {
   QSet<QString> referenced;
   auto collect = [&](const LauncherConfig &lc) {
@@ -134,6 +309,10 @@ bool extensionShouldCompress(const QString &path) {
 Writer::Writer(QObject *parent) : QObject(parent) {}
 
 ErrorUtils::Result<void> Writer::writeKart(const QString &outPath, const WriterParams &params) {
+  // Streams entries through one QSaveFile (commit + syncDirectory below) —
+  // deliberately not PathUtils::atomicWriteFile, which takes the whole
+  // payload as a single QByteArray: a kart carries every media file, so
+  // buffering it in memory is not viable.
   QSaveFile out(outPath);
   if (!out.open(QIODevice::WriteOnly)) {
     return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
@@ -193,12 +372,28 @@ ErrorUtils::Result<void> Writer::writeKart(const QString &outPath, const WriterP
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::OperationCancelled,
                                              "Kart write cancelled", "KartWriter::writeKart");
     }
-    auto raw = readFileFully(absPath);
-    if (raw.isError()) return raw.error();
+    QFile in(absPath);
+    if (!in.open(QIODevice::ReadOnly)) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileReadError,
+                                             "Cannot open source file for reading",
+                                             "KartWriter::writeKart")
+          .withDetails(in.errorString() + " path=" + absPath);
+    }
+    if (in.size() < 0 || static_cast<quint64>(in.size()) > KartFormat::MAX_ENTRY_SIZE) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                             "Source file exceeds Kart entry size limit",
+                                             "KartWriter::writeKart")
+          .withDetails(QString("size=%1 max=%2").arg(in.size()).arg(KartFormat::MAX_ENTRY_SIZE));
+    }
     const KartFormat::Compression algo = extensionShouldCompress(absPath)
                                              ? params.preferredCompression
                                              : KartFormat::Compression_None;
-    auto entryRes = writeEntry(ds, relPath, flags, algo, raw.value());
+    // Zlib entries (the no-zstd fallback) keep the buffered path — qCompress
+    // has no streaming form without a direct zlib dependency; stored and zstd
+    // entries stream in O(chunk) memory.
+    auto entryRes = (algo == KartFormat::Compression_Zlib)
+                        ? writeEntry(ds, relPath, flags, algo, in.readAll())
+                        : writeEntryStreamed(out, ds, relPath, flags, algo, in, m_cancel);
     if (entryRes.isError()) return entryRes.error();
     ++written;
     emitProgress();
@@ -277,8 +472,12 @@ ErrorUtils::Result<WriterParams> prepareFromCollection(const CollectionConfig &c
     return QString();
   };
 
-  static const QStringList kArtworkExts = {"png", "jpg", "jpeg", "webp", "gif"};
-  static const QStringList kVideoExts = {"mp4", "mkv", "webm", "mov"};
+  // Shared extension tables (ExtensionUtils) so the exporter bundles every
+  // sibling asset the in-app artwork/video lookup would find. The old local
+  // lists silently skipped .bmp/.avif artwork and .avi videos that the grid
+  // and details pane display fine — exporting then quietly dropped them.
+  const QStringList &kArtworkExts = ExtensionUtils::imageBaseExtensions();
+  const QStringList &kVideoExts = ExtensionUtils::videoBaseExtensions();
 
   for (const QFileInfo &mediaInfo : mediaFiles) {
     ItemSource item;

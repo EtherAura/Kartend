@@ -564,11 +564,29 @@ ErrorUtils::Result<Manifest> parse(const QByteArray &json) {
 
   m.collectionConfig = jsonToCollectionConfig(root["collection_config"].toObject());
 
+  // Array ceilings (kartformat.h): the 64 MiB MAX_MANIFEST_SIZE bounds the
+  // JSON text, but the parsed structures expand far beyond the text that
+  // describes them, so an over-cap array is rejected outright — never
+  // truncated — matching the extraction loop's fail-on-excess contract.
+  const auto arrayTooLarge = [](const char *field, qsizetype count, qsizetype max) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartManifestInvalid,
+                                           "Kart manifest array exceeds the entry ceiling",
+                                           "KartManifest::parse")
+        .withDetails(
+            QString("%1: count=%2 max=%3").arg(QLatin1String(field)).arg(count).arg(max));
+  };
+
   const QJsonArray launchersArr = root["launchers"].toArray();
+  if (launchersArr.size() > KartFormat::MAX_MANIFEST_LAUNCHERS) {
+    return arrayTooLarge("launchers", launchersArr.size(), KartFormat::MAX_MANIFEST_LAUNCHERS);
+  }
   for (const auto &v : launchersArr) {
     m.launchers.append(jsonToLauncherPreset(v.toObject()));
   }
   const QJsonArray itemsArr = root["items"].toArray();
+  if (itemsArr.size() > KartFormat::MAX_MANIFEST_ITEMS) {
+    return arrayTooLarge("items", itemsArr.size(), KartFormat::MAX_MANIFEST_ITEMS);
+  }
   for (const auto &v : itemsArr) {
     m.items.append(jsonToItem(v.toObject()));
   }
@@ -576,8 +594,16 @@ ErrorUtils::Result<Manifest> parse(const QByteArray &json) {
   // returns an empty array for a missing or wrong-type value, which is
   // exactly the fall-back the version comment in kartformat.h promises.
   const QJsonArray playlistsArr = root["playlists"].toArray();
+  if (playlistsArr.size() > KartFormat::MAX_MANIFEST_PLAYLISTS) {
+    return arrayTooLarge("playlists", playlistsArr.size(), KartFormat::MAX_MANIFEST_PLAYLISTS);
+  }
   for (const auto &v : playlistsArr) {
-    m.playlists.append(jsonToPlaylist(v.toObject()));
+    const QJsonObject po = v.toObject();
+    const qsizetype playlistItemCount = po["items"].toArray().size();
+    if (playlistItemCount > KartFormat::MAX_MANIFEST_ITEMS) {
+      return arrayTooLarge("playlist items", playlistItemCount, KartFormat::MAX_MANIFEST_ITEMS);
+    }
+    m.playlists.append(jsonToPlaylist(po));
   }
   return m;
 }

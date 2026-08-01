@@ -1,11 +1,16 @@
 #include "kartmanager.h"
 
+#include <atomic>
+
+#include <QDeadlineTimer>
+#include <QDebug>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFutureWatcher>
 #include <QMessageBox>
 #include <QSet>
+#include <QThread>
 #include <QtConcurrentRun>
 
 #include "collection/collectionconfig.h"
@@ -43,6 +48,111 @@ ConflictResolver makeFixedChoiceResolver(MergeChoice choice) {
   };
 }
 
+/// Playlist rows (and their static-playlist item refs) captured BY VALUE
+/// before an export's worker task launches. The task consumes only this
+/// snapshot — never IPlaylistManager — so a teardown that abandons the task
+/// after its bounded join can't leave it calling into freed managers
+/// (Kartend audit jpit3 rework; payload semantics from Kartend-kmj1).
+struct PlaylistExportSnapshot {
+  QList<PlaylistRow> rows;
+  QHash<QString, QList<PlaylistItemRef>> itemsByRowId;
+};
+
+PlaylistExportSnapshot snapshotPlaylistsForExport(IPlaylistManager *pm,
+                                                  const QString &collectionUuid) {
+  PlaylistExportSnapshot snap;
+  if (!pm) {
+    return snap;
+  }
+  const QList<PlaylistRow> rows = pm->loadAll();
+  for (const PlaylistRow &row : rows) {
+    if (row.parentCollectionUuid != collectionUuid) continue;
+    snap.rows.append(row);
+    if (!row.isSmart) {
+      snap.itemsByRowId.insert(row.id, pm->loadItems(row.id));
+    }
+  }
+  return snap;
+}
+
+/// The worker-safe body of a collection export: everything after the setup
+/// closures have been consulted. Takes only value snapshots (plus the
+/// optional signal-connected writer), so the QtConcurrent task in runExport
+/// can run — and, when the destructor's bounded join times out, be abandoned
+/// — without ever touching KartManager state (Kartend audit jpit3 rework).
+ErrorUtils::Result<void> doExportKart(const CollectionConfig &cfg,
+                                      const QList<LauncherPreset> &presets,
+                                      const PlaylistExportSnapshot &playlists,
+                                      const QString &outPath, KartWriter::Writer *writer) {
+  const QString collectionUuid =
+      CollectionUtils::computeCollectionUuid(cfg.name, cfg.mediaDirectory);
+  // Connection name suffixed with a process-global counter, not just the
+  // uuid: an abandoned (timed-out teardown) export leaks its task, and a
+  // later export of the SAME collection would otherwise addDatabase() under
+  // the identical name, replacing the leaked task's in-use connection —
+  // Qt-documented UB. Same reasoning as ScrapeWriteWorker's counter
+  // (Kartend-fux2w).
+  static std::atomic<quint64> s_exportConnectionId{0};
+  auto dbRes = openMediaDbConnection(
+      QString("kart-export-%1-%2")
+          .arg(collectionUuid)
+          .arg(s_exportConnectionId.fetch_add(1, std::memory_order_relaxed)));
+  if (dbRes.isError()) {
+    return dbRes.error();
+  }
+  QSqlDatabase db = dbRes.value();
+  auto prepRes = KartWriter::prepareFromCollection(cfg, collectionUuid, presets, &db);
+  closeMediaDbConnection(db);
+  if (prepRes.isError()) return prepRes.error();
+
+  KartWriter::WriterParams params = prepRes.value();
+  params.uuid = collectionUuid;
+  params.name = cfg.name;
+
+  // Kartend-kmj1: bundle every playlist whose parentCollectionUuid points at
+  // the exported collection (the snapshot is pre-filtered to those).
+  // Static-playlist items are translated to the in-bundle media_path
+  // (KartWriter populates that field on prepareFromCollection); references
+  // that don't resolve are dropped because the import side can't
+  // reconstruct them either.
+  QHash<QString, QString> absToRel;
+  for (const KartWriter::ItemSource &it : params.items) {
+    if (!it.mediaAbs.isEmpty()) {
+      absToRel.insert(it.mediaAbs, it.manifestItem.mediaPath);
+    }
+  }
+  for (const PlaylistRow &row : playlists.rows) {
+    KartManifest::PlaylistEntry entry;
+    entry.name = row.name;
+    entry.icon = row.icon;
+    entry.reservedKind = row.reservedKind;
+    entry.isSmart = row.isSmart;
+    entry.smartFilterJson = row.smartFilterJson;
+    if (!row.isSmart) {
+      const QList<PlaylistItemRef> refs = playlists.itemsByRowId.value(row.id);
+      for (const PlaylistItemRef &ref : refs) {
+        if (ref.sourceCollectionUuid != collectionUuid) continue;
+        const auto it = absToRel.constFind(ref.sourcePath);
+        if (it == absToRel.cend()) continue;
+        KartManifest::PlaylistItemEntry ie;
+        ie.mediaPath = it.value();
+        ie.position = ref.position;
+        entry.items.append(ie);
+      }
+    }
+    params.playlists.append(entry);
+  }
+
+  // Use the caller-supplied writer (runExport's m_activeWriter, whose
+  // progress signal + cancel flag are wired up) when provided; otherwise a
+  // local one.
+  KartWriter::Writer localWriter;
+  KartWriter::Writer &activeWriter = writer ? *writer : localWriter;
+  auto wr = activeWriter.writeKart(outPath, params);
+  if (wr.isError()) return wr.error();
+  return {};
+}
+
 } // namespace
 
 // collectSuspiciousKartPaths now lives in kartsuspiciouspaths.cpp so the
@@ -53,17 +163,38 @@ KartManager::KartManager(QObject *parent) : QObject(parent) {}
 
 KartManager::~KartManager() {
   // Kartend audit jpit3: an in-flight export/import runs on the global
-  // QThreadPool and its task body captures the active Writer/Extractor (and, in
-  // runExport, `this`) by raw pointer. QtConcurrent futures can't be cancelled
-  // and ~QObject does not wait, so without an explicit join the worker would
-  // touch freed state after we're gone — a use-after-free on close-during-
-  // export/import (the progress dialog is non-modal, so the window can close
-  // mid-run). Flip the cooperative cancel flag, then JOIN the future before the
-  // members it captured (m_activeReader / m_activeWriter, destroyed after this
-  // body) are freed. The Writer/Extractor poll the flag, so the wait is bounded.
+  // QThreadPool. QtConcurrent futures can't be cancelled and ~QObject does
+  // not wait, so flip the cooperative cancel flag (the Writer/Extractor poll
+  // it and bail at the next entry/asset boundary) and join the future before
+  // this object goes away.
   cancelActiveKartOperation();
   if (m_activeWatcher) {
-    m_activeWatcher->waitForFinished();
+    // The join is BOUNDED (2s — the DatabaseManager teardown norm) rather
+    // than the previous unbounded waitForFinished(): a task wedged inside a
+    // single un-interruptible syscall (stalled mount) never reaches the
+    // cancel-flag poll, and an unbounded wait hung the app close for as long
+    // as that syscall took. Abandoning past the budget is safe because the
+    // task bodies capture only values plus their OWN shared_ptr to the
+    // Writer/Extractor — no `this`, no m_setup closures (runExport snapshots
+    // the collection/preset/playlist data up front) — so on timeout the task
+    // and its shared captures are intentionally leaked and reaped at process
+    // exit, the same warn-and-leak trade DatabaseManager makes. Data safety
+    // on abandon: an export stages through writeKart's QSaveFile, which
+    // never commits on the cancel/error path, so the destination .kart can't
+    // be left corrupt; an import can leave partial files under the
+    // user-chosen destDir, exactly as a user cancel already can. The watcher
+    // is a child of `this` and is destroyed below, so no continuation ever
+    // fires post-dtor.
+    constexpr int kTeardownJoinBudgetMs = 2000;
+    QDeadlineTimer deadline(kTeardownJoinBudgetMs);
+    while (!m_activeWatcher->isFinished() && !deadline.hasExpired()) {
+      QThread::msleep(10);
+    }
+    if (!m_activeWatcher->isFinished()) {
+      qWarning() << "KartManager: in-flight kart operation did not finish within"
+                 << kTeardownJoinBudgetMs
+                 << "ms at teardown; abandoning it (the task holds only value/shared captures)";
+    }
   }
 }
 
@@ -382,74 +513,19 @@ ErrorUtils::Result<void> KartManager::exportCollection(int collectionIndex, cons
                                            "Collection index out of range",
                                            "KartManager::exportCollection");
   }
-  const CollectionConfig &cfg = collections->at(collectionIndex);
+  const CollectionConfig cfg = collections->at(collectionIndex);
 
   QList<LauncherPreset> presets;
   if (m_setup.getLauncherPresets) {
     presets = m_setup.getLauncherPresets();
   }
-
   const QString collectionUuid =
       CollectionUtils::computeCollectionUuid(cfg.name, cfg.mediaDirectory);
-  auto dbRes = openMediaDbConnection(QString("kart-export-%1").arg(collectionUuid));
-  if (dbRes.isError()) {
-    return dbRes.error();
-  }
-  QSqlDatabase db = dbRes.value();
-  auto prepRes = KartWriter::prepareFromCollection(cfg, collectionUuid, presets, &db);
-  closeMediaDbConnection(db);
-  if (prepRes.isError()) return prepRes.error();
-
-  KartWriter::WriterParams params = prepRes.value();
-  params.uuid = collectionUuid;
-  params.name = cfg.name;
-
-  // Kartend-kmj1: bundle every playlist whose parentCollectionUuid points
-  // at the exported collection. Static-playlist items are translated to
-  // the in-bundle media_path (KartWriter populates that field on
-  // prepareFromCollection); references that don't resolve are dropped
-  // because the import side can't reconstruct them either.
+  PlaylistExportSnapshot playlists;
   if (m_setup.getPlaylistManager) {
-    if (IPlaylistManager *pm = m_setup.getPlaylistManager()) {
-      QHash<QString, QString> absToRel;
-      for (const KartWriter::ItemSource &it : params.items) {
-        if (!it.mediaAbs.isEmpty()) {
-          absToRel.insert(it.mediaAbs, it.manifestItem.mediaPath);
-        }
-      }
-      const QList<PlaylistRow> rows = pm->loadAll();
-      for (const PlaylistRow &row : rows) {
-        if (row.parentCollectionUuid != collectionUuid) continue;
-        KartManifest::PlaylistEntry entry;
-        entry.name = row.name;
-        entry.icon = row.icon;
-        entry.reservedKind = row.reservedKind;
-        entry.isSmart = row.isSmart;
-        entry.smartFilterJson = row.smartFilterJson;
-        if (!row.isSmart) {
-          const QList<PlaylistItemRef> refs = pm->loadItems(row.id);
-          for (const PlaylistItemRef &ref : refs) {
-            if (ref.sourceCollectionUuid != collectionUuid) continue;
-            const auto it = absToRel.constFind(ref.sourcePath);
-            if (it == absToRel.cend()) continue;
-            KartManifest::PlaylistItemEntry ie;
-            ie.mediaPath = it.value();
-            ie.position = ref.position;
-            entry.items.append(ie);
-          }
-        }
-        params.playlists.append(entry);
-      }
-    }
+    playlists = snapshotPlaylistsForExport(m_setup.getPlaylistManager(), collectionUuid);
   }
-
-  // Use the caller-supplied writer (runExport's m_activeWriter, whose progress
-  // signal + cancel flag are wired up) when provided; otherwise a local one.
-  KartWriter::Writer localWriter;
-  KartWriter::Writer &activeWriter = (writer != nullptr) ? *writer : localWriter;
-  auto wr = activeWriter.writeKart(outPath, params);
-  if (wr.isError()) return wr.error();
-  return {};
+  return doExportKart(cfg, presets, playlists, outPath, writer);
 }
 
 // Kartend-sqoq0: route the warning through the owner-supplied runner when
@@ -544,7 +620,10 @@ void KartManager::exportCollectionInteractive(int collectionIndex) {
 }
 
 void KartManager::runImport(const QString &kartPath, const QString &destDir) {
-  m_activeReader = std::make_unique<KartReader::Extractor>(this);
+  // Un-parented and shared_ptr-owned on purpose — the worker task holds its
+  // own reference so a timed-out teardown join can abandon it safely (see
+  // the m_activeReader member doc and ~KartManager).
+  m_activeReader = std::make_shared<KartReader::Extractor>();
 
   // Ask the owner to put up a progress dialog, then feed it through signals.
   // reader->progress/entryExtracted fire on the QtConcurrent worker thread,
@@ -611,15 +690,56 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
   // Run the *connected* reader (m_activeReader) on the worker, not a throwaway
   // local Extractor — otherwise its progress/entryExtracted signals (wired
   // above) never fire and cancelActiveKartOperation()'s cancel flag can't reach
-  // the Extractor doing the work. Safe: m_activeReader.reset() runs in the
-  // finished slot, after the future resolves.
-  auto *reader = m_activeReader.get();
+  // the Extractor doing the work. The task captures its OWN shared_ptr (never
+  // `this`), so the destructor's bounded join can abandon a wedged extraction
+  // without freeing the Extractor out from under it (see ~KartManager).
+  auto reader = m_activeReader;
   watcher->setFuture(QtConcurrent::run(
       [reader, kartPath, destDir]() { return reader->extractTo(kartPath, destDir); }));
 }
 
 void KartManager::runExport(int collectionIndex, const QString &outPath) {
-  m_activeWriter = std::make_unique<KartWriter::Writer>(this);
+  // Snapshot everything the worker needs ON THIS THREAD, before the task
+  // launches: the task must capture only values plus the shared writer so
+  // the destructor's bounded join can abandon it (see ~KartManager).
+  // Consulting the m_setup closures from the worker thread was what forced
+  // the old destructor to join unbounded. The wiring checks mirror
+  // exportCollection's; the interactive entry validated the index already,
+  // so these are defensive — reported through the same failure signals,
+  // minus the progress-dialog bracket that never opened (the importInteractive
+  // peek-failure path sets that precedent).
+  if (!m_setup.getCollections) {
+    auto ctx = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                               "KartManager not wired to collections list",
+                                               "KartManager::runExport");
+    emit exportFailed(ctx);
+    showWarning(tr("Export Kart"), ctx.message);
+    return;
+  }
+  QList<CollectionConfig> *collections = m_setup.getCollections();
+  if (!collections || collectionIndex < 0 || collectionIndex >= collections->size()) {
+    auto ctx = ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::CollectionNotFound,
+                                               "Collection index out of range",
+                                               "KartManager::runExport");
+    emit exportFailed(ctx);
+    showWarning(tr("Export Kart"), ctx.message);
+    return;
+  }
+  const CollectionConfig cfg = collections->at(collectionIndex);
+  QList<LauncherPreset> presets;
+  if (m_setup.getLauncherPresets) {
+    presets = m_setup.getLauncherPresets();
+  }
+  const QString collectionUuid =
+      CollectionUtils::computeCollectionUuid(cfg.name, cfg.mediaDirectory);
+  PlaylistExportSnapshot playlists;
+  if (m_setup.getPlaylistManager) {
+    playlists = snapshotPlaylistsForExport(m_setup.getPlaylistManager(), collectionUuid);
+  }
+
+  // Un-parented and shared_ptr-owned on purpose — see the m_activeWriter
+  // member doc and ~KartManager.
+  m_activeWriter = std::make_shared<KartWriter::Writer>();
 
   // Same one-way progress flow as runImport(); see the comment there. The
   // writer emits no per-entry signal, so kartProgressEntry is never sent.
@@ -629,7 +749,7 @@ void KartManager::runExport(int collectionIndex, const QString &outPath) {
           &KartManager::kartProgressFraction, Qt::QueuedConnection);
 
   auto *watcher = new QFutureWatcher<ErrorUtils::Result<void>>(this);
-  m_activeWatcher = watcher; // Kartend audit jpit3: ~KartManager joins on this.
+  m_activeWatcher = watcher; // ~KartManager's bounded join reads this.
   connect(watcher, &QFutureWatcher<ErrorUtils::Result<void>>::finished, this,
           [this, watcher, outPath]() {
             const auto res = watcher->result();
@@ -647,11 +767,12 @@ void KartManager::runExport(int collectionIndex, const QString &outPath) {
           });
 
   // Inject the *connected* writer (m_activeWriter) so its progress signal and
-  // cancel flag reach the writer actually serializing the collection. Safe:
-  // m_activeWriter.reset() runs in the finished slot, after the future resolves.
-  auto *writer = m_activeWriter.get();
-  watcher->setFuture(QtConcurrent::run([this, collectionIndex, outPath, writer]() {
-    return exportCollection(collectionIndex, outPath, writer);
+  // cancel flag reach the writer actually serializing the collection. The
+  // task holds its own shared_ptr copy — never `this` (abandon-safety, see
+  // ~KartManager).
+  auto writer = m_activeWriter;
+  watcher->setFuture(QtConcurrent::run([writer, cfg, presets, playlists, outPath]() {
+    return doExportKart(cfg, presets, playlists, outPath, writer.get());
   }));
 }
 

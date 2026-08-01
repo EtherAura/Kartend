@@ -223,15 +223,23 @@ signals:
 
 private:
   KartManagerSetup m_setup;
-  std::unique_ptr<KartReader::Extractor> m_activeReader;
-  std::unique_ptr<KartWriter::Writer> m_activeWriter;
+  /// The active import/export workhorses. shared_ptr, NOT unique_ptr, and
+  /// deliberately un-parented: the QtConcurrent task body holds its own
+  /// shared_ptr copy (value/shared captures only — no `this`, no m_setup
+  /// closures), so a destructor whose bounded join times out can safely
+  /// ABANDON the task; the leaked task keeps its Writer/Extractor alive on
+  /// its own until it eventually returns (or process exit reaps it).
+  std::shared_ptr<KartReader::Extractor> m_activeReader;
+  std::shared_ptr<KartWriter::Writer> m_activeWriter;
   /// The QFutureWatcher of an in-flight export/import (null when idle).
-  /// Kartend audit jpit3: the QtConcurrent task captures the active
-  /// Writer/Extractor (and `this`) by raw pointer; ~KartManager must JOIN it
-  /// before those members are destroyed, or a close during a long .kart
-  /// export/import frees them mid-run (use-after-free). Set on launch, cleared
-  /// in each finished slot; the destructor flips the cooperative cancel flag
-  /// then waits on it. Base-class pointer so the header needs no template type.
+  /// Kartend audit jpit3 introduced the destructor join so a close during a
+  /// long .kart export/import can't free state the task still touches. The
+  /// task bodies now own their state by value/shared_ptr, so the join is
+  /// BOUNDED (2s, the DatabaseManager/CacheManager teardown norm) and an
+  /// overrunning task is abandoned instead of hanging the GUI — see
+  /// ~KartManager. Set on launch, cleared in each finished slot; a child of
+  /// `this`, so no continuation ever fires post-dtor. Base-class pointer so
+  /// the header needs no template type.
   QFutureWatcherBase *m_activeWatcher = nullptr;
 
   void runImport(const QString &kartPath, const QString &destDir);

@@ -2,6 +2,7 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -590,6 +591,49 @@ QString buildKartWithInTreeLauncher(const QString &extractRoot, QTemporaryDir &k
   return kartPath;
 }
 } // namespace
+
+void TestKartManager::testDestructorBoundsInFlightImportJoin() {
+  // 1. A real .kart bundle so importKartAsync has genuine extraction work
+  // in flight when the manager is destroyed.
+  auto src = buildSyntheticCollection(QStringLiteral("Teardown Audio"), QStringLiteral("clip.bin"),
+                                      QByteArray("teardown-bytes"));
+  auto prep = KartWriter::prepareFromCollection(src->cfg, QStringLiteral("teardown-uuid"), {});
+  QVERIFY2(prep.isOk(), qPrintable(prep.isError() ? prep.error().message : QString()));
+  prep.value().preferredCompression = KartCompression::zstdAvailable()
+                                          ? KartFormat::Compression_Zstd
+                                          : KartFormat::Compression_Zlib;
+  QTemporaryDir kartHome;
+  QVERIFY(kartHome.isValid());
+  const QString kartPath = QDir(kartHome.path()).filePath(QStringLiteral("teardown.kart"));
+  KartWriter::Writer writer;
+  QVERIFY(writer.writeKart(kartPath, prep.value()).isOk());
+
+  // 2. Standalone manager (no ApplicationManager — this exercises only the
+  // launch/teardown path), destroyed immediately after the async dispatch.
+  // The destructor flips the cooperative cancel flag, the extractor bails at
+  // its next poll, and the bounded join reaps the future — the elapsed bound
+  // below fails if teardown ever regresses into an unbounded (or crashing)
+  // wait. Generous slack over the 2s budget so a loaded CI runner that
+  // stretches scheduling doesn't flake the bound.
+  QTemporaryDir destRoot;
+  QVERIFY(destRoot.isValid());
+  QElapsedTimer teardownClock;
+  {
+    kart::KartManager mgr;
+    QList<CollectionConfig> collections;
+    kart::KartManagerSetup setup;
+    setup.getCollections = [&collections]() -> QList<CollectionConfig> * { return &collections; };
+    setup.getParentWindow = []() -> QWidget * { return nullptr; };
+    mgr.setupReferences(setup);
+    mgr.importKartAsync(kartPath, destRoot.path());
+    QVERIFY2(mgr.operationInFlight(), "the worker future must be live before teardown");
+    teardownClock.start();
+  }
+  QVERIFY2(teardownClock.elapsed() < 8000,
+           qPrintable(QStringLiteral("teardown with an in-flight import took %1 ms — the join "
+                                     "must be bounded")
+                          .arg(teardownClock.elapsed())));
+}
 
 void TestKartManager::testHeadlessImportRefusesInTreeLauncherByDefault() {
   QTemporaryDir destRoot;

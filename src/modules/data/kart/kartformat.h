@@ -53,6 +53,20 @@ inline constexpr quint64 MAX_ENTRY_COUNT = 200000;
 
 inline constexpr quint64 MAX_TOTAL_EXTRACTED_BYTES = 2048ull * 1024ull * 1024ull * 1024ull;
 
+// Manifest-array ceilings, enforced by KartManifest::parse. MAX_MANIFEST_SIZE
+// bounds the JSON text, but the parsed structures expand far beyond the text
+// that describes them, so parse also rejects (never truncates — matching the
+// extraction loop's fail-on-excess contract) any manifest whose arrays exceed
+// these counts. MAX_MANIFEST_ITEMS reuses MAX_ENTRY_COUNT: a manifest cannot
+// meaningfully describe more items than a bundle may carry entries, and the
+// same ceiling applies to one playlist's item list. Launchers and playlists
+// number at most dozens in any real collection; 10000 is a generous ceiling.
+inline constexpr qsizetype MAX_MANIFEST_ITEMS = static_cast<qsizetype>(MAX_ENTRY_COUNT);
+
+inline constexpr qsizetype MAX_MANIFEST_LAUNCHERS = 10000;
+
+inline constexpr qsizetype MAX_MANIFEST_PLAYLISTS = 10000;
+
 enum EntryFlag : quint8 {
   Flag_Media = 0x01,
   Flag_Artwork = 0x02,

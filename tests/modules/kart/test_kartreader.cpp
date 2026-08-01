@@ -81,6 +81,16 @@ QString writeTempKart(const QByteArray &bytes, QTemporaryFile &file) {
   return file.fileName();
 }
 
+// Overwrites a little-endian u64 field inside a crafted entry blob — used to
+// lie about header-declared sizes after entryBytes wrote consistent ones.
+// Entry field offsets: flags(0) comp(1) path_len(2) path(4) orig_size(4+N)
+// payload_size(12+N) sha256(20+N) payload(52+N).
+void patchU64LE(QByteArray &entry, qsizetype offset, quint64 value) {
+  for (int i = 0; i < 8; ++i) {
+    entry[offset + i] = static_cast<char>((value >> (8 * i)) & 0xFF);
+  }
+}
+
 KartManifest::Manifest sampleManifest() {
   KartManifest::Manifest m;
   m.uuid = "test-uuid";
@@ -105,10 +115,16 @@ private slots:
   void testExtractToWritesPathVariantEntries();
   void testExtractToValidatesShaAndFailsOnTamper();
   void testExtractToHandlesTruncatedEntry();
+  void testExtractToRejectsOversizedDeclaredPayload();
+  void testExtractToRejectsUnderdeclaredOrigSize();
+  void testExtractToRejectsStoredSizeMismatch();
+  void testExtractToDetectsTamperedShaOnMultiChunkEntry();
   void testExtractToHandlesZstdEntries();
   void testExtractToHandlesZlibEntries();
   void testExtractToRefusesPathTraversal();
   void testExtractToRefusesAbsolutePaths();
+  void testExtractToRefusesWindowsUnsafeSegments_data();
+  void testExtractToRefusesWindowsUnsafeSegments();
   void testExtractToRefusesSymlinkEscape();
   void testExtractToEmitsProgress();
   void testExtractToCanCancel();
@@ -174,6 +190,15 @@ void TestKartReader::testExtractToWritesPathVariantEntries_data() {
   QTest::newRow("cjk") << QStringLiteral("media/テスト動画.bin");
   QTest::newRow("emoji") << QStringLiteral("media/clip 🎬🎞.bin");
   QTest::newRow("unicode-subdir") << QStringLiteral("media/動画 集/clip 🎥.bin");
+
+  // Near-misses of the Windows-portability rejections must still extract:
+  // reserved-device-name checks match whole stems only, and dots/spaces are
+  // legal anywhere but a segment's tail.
+  QTest::newRow("reserved-name-prefix") << QStringLiteral("media/console.bin");
+  QTest::newRow("com-with-two-digits") << QStringLiteral("media/COM10.bin");
+  QTest::newRow("com-zero") << QStringLiteral("media/com0.bin");
+  QTest::newRow("bare-lpt-stem") << QStringLiteral("media/lpt.bin");
+  QTest::newRow("interior-dot-and-space") << QStringLiteral("media/a. b.bin");
 }
 
 void TestKartReader::testExtractToWritesPathVariantEntries() {
@@ -223,6 +248,113 @@ void TestKartReader::testExtractToHandlesTruncatedEntry() {
   auto result = ex.extractTo(f.fileName(), dest.path());
   QVERIFY(result.isError());
   QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
+}
+
+void TestKartReader::testExtractToRejectsOversizedDeclaredPayload() {
+  // The entry header's size fields are attacker-controlled. A declared
+  // payload_size within MAX_ENTRY_SIZE but far past the bytes actually in the
+  // file must be rejected against the remaining file length BEFORE a buffer is
+  // allocated for it — the earlier int-narrowed resize could wrap a multi-GiB
+  // declaration into a tiny buffer while the read loop was still handed the
+  // full length.
+  const QByteArray pathBytes = QByteArrayLiteral("media/huge.bin");
+  const quint64 declaredSize = 4ull * 1024 * 1024 * 1024; // 4 GiB, < MAX_ENTRY_SIZE
+  QByteArray entry;
+  QDataStream ds(&entry, QIODevice::WriteOnly);
+  ds.setByteOrder(QDataStream::LittleEndian);
+  ds << static_cast<quint8>(KartFormat::Flag_Media);
+  ds << static_cast<quint8>(KartFormat::Compression_None);
+  ds << static_cast<quint16>(pathBytes.size());
+  ds.writeRawData(pathBytes.constData(), pathBytes.size());
+  ds << declaredSize; // original_size
+  ds << declaredSize; // payload_size — a lie; only a few bytes follow
+  const QByteArray sha(KartFormat::SHA256_SIZE, '\0');
+  ds.writeRawData(sha.constData(), sha.size());
+  ds.writeRawData("only-a-few-bytes", 16);
+
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entry}), f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
+}
+
+void TestKartReader::testExtractToRejectsUnderdeclaredOrigSize() {
+  // Zip-bomb guard for the streaming decompressor: a payload whose
+  // decompressed stream exceeds the header-declared original_size must abort
+  // as soon as the excess appears, not after the whole stream materializes.
+  // Craft it by compressing a multi-chunk buffer, then understating the
+  // orig_size field in an otherwise-valid entry.
+  if (!KartCompression::zstdAvailable()) {
+    QSKIP("Built without zstd support");
+  }
+  const QString relPath = QStringLiteral("media/bomb.bin");
+  QByteArray data(2 * (1 << 20), 'K'); // highly compressible, > 1 chunk decompressed
+  QByteArray entry = entryBytes(relPath, data, KartFormat::Flag_Media,
+                                KartFormat::Compression_Zstd);
+  const qsizetype origSizeOffset = 4 + relPath.toUtf8().size();
+  patchU64LE(entry, origSizeOffset, 1024);
+
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entry}), f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartCompressionFailed));
+  // Nothing may land in the destination on an aborted entry.
+  QVERIFY(!QFile::exists(QDir(dest.path()).filePath(relPath)));
+}
+
+void TestKartReader::testExtractToRejectsStoredSizeMismatch() {
+  // Stored (Compression_None) entries always record payload_size ==
+  // original_size; a header where they disagree can only be tampered and is
+  // rejected before any destination file is created.
+  const QString relPath = QStringLiteral("media/mismatch.bin");
+  const QByteArray data("stored-mismatch-payload");
+  QByteArray entry =
+      entryBytes(relPath, data, KartFormat::Flag_Media, KartFormat::Compression_None);
+  const qsizetype origSizeOffset = 4 + relPath.toUtf8().size();
+  patchU64LE(entry, origSizeOffset, static_cast<quint64>(data.size()) - 1);
+
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entry}), f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
+}
+
+void TestKartReader::testExtractToDetectsTamperedShaOnMultiChunkEntry() {
+  // The SHA-256 now accumulates incrementally per streamed block; corrupting
+  // the stored hash of a multi-chunk entry must still fail the integrity
+  // check after the full stream has been hashed. (The payload itself stays
+  // valid so decompression succeeds and the hash comparison is what trips.)
+  const KartFormat::Compression algo = KartCompression::zstdAvailable()
+                                           ? KartFormat::Compression_Zstd
+                                           : KartFormat::Compression_None;
+  const QString relPath = QStringLiteral("media/tampered.bin");
+  QByteArray data(2 * (1 << 20) + 99, '\0');
+  for (qsizetype i = 0; i < data.size(); ++i) {
+    data[i] = static_cast<char>((i * 131) & 0xFF);
+  }
+  QByteArray entry = entryBytes(relPath, data, KartFormat::Flag_Media, algo);
+  const qsizetype shaOffset = 4 + relPath.toUtf8().size() + 16;
+  entry[shaOffset] = static_cast<char>(entry.at(shaOffset) ^ 0x5A);
+
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entry}), f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartIntegrityCheckFailed));
+  // The streamed bytes were written to a QSaveFile temp; a failed integrity
+  // check must leave no file behind.
+  QVERIFY(!QFile::exists(QDir(dest.path()).filePath(relPath)));
 }
 
 void TestKartReader::testExtractToHandlesZstdEntries() {
@@ -276,6 +408,43 @@ void TestKartReader::testExtractToRefusesAbsolutePaths() {
   QByteArray data("x");
   QTemporaryFile f;
   writeTempKart(buildKart(sampleManifest(), {entryBytes("/etc/passwd", data, KartFormat::Flag_Media,
+                                                        KartFormat::Compression_None)}),
+                f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
+}
+
+void TestKartReader::testExtractToRefusesWindowsUnsafeSegments_data() {
+  // Rejected unconditionally (matching the backslash / drive-letter checks)
+  // so a portable .kart stays importable on Windows: "." aliases the current
+  // directory, Windows strips trailing dots/spaces from segments (colliding
+  // "name." with "name"), and reserved device names resolve to the device
+  // regardless of extension or case.
+  QTest::addColumn<QString>("relPath");
+
+  QTest::newRow("bare-dot-segment") << QStringLiteral("media/./x.bin");
+  QTest::newRow("dots-and-spaces-only") << QStringLiteral("media/. ./x.bin");
+  QTest::newRow("trailing-dot") << QStringLiteral("media/name.");
+  QTest::newRow("trailing-space") << QStringLiteral("media/name ");
+  QTest::newRow("trailing-dot-dir") << QStringLiteral("media./x.bin");
+  QTest::newRow("reserved-con") << QStringLiteral("media/CON");
+  QTest::newRow("reserved-con-lower-ext") << QStringLiteral("media/con.txt");
+  QTest::newRow("reserved-nul-double-ext") << QStringLiteral("media/nul.tar.gz");
+  QTest::newRow("reserved-com1-mixed-case") << QStringLiteral("media/Com1.bin");
+  QTest::newRow("reserved-lpt9-bare") << QStringLiteral("lpt9");
+  QTest::newRow("reserved-aux-dir") << QStringLiteral("aux/x.bin");
+  QTest::newRow("reserved-prn-stem-space") << QStringLiteral("media/prn .txt");
+}
+
+void TestKartReader::testExtractToRefusesWindowsUnsafeSegments() {
+  QFETCH(QString, relPath);
+
+  QByteArray data("x");
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entryBytes(relPath, data, KartFormat::Flag_Media,
                                                         KartFormat::Compression_None)}),
                 f);
   QTemporaryDir dest;

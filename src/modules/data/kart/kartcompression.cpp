@@ -126,4 +126,187 @@ ErrorUtils::Result<QByteArray> compress(const QByteArray &raw, KartFormat::Compr
       .withDetails(QString("algo=%1").arg(static_cast<int>(algo)));
 }
 
+StreamCompressor::~StreamCompressor() {
+#ifdef KARTEND_HAS_ZSTD
+  if (m_ctx) {
+    ZSTD_freeCCtx(static_cast<ZSTD_CCtx *>(m_ctx));
+  }
+#endif
+}
+
+ErrorUtils::Result<void> StreamCompressor::begin(quint64 pledgedSize) {
+#ifdef KARTEND_HAS_ZSTD
+  if (m_ctx) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                           "Stream compressor already started",
+                                           "KartCompression::StreamCompressor::begin");
+  }
+  ZSTD_CCtx *ctx = ZSTD_createCCtx();
+  if (!ctx) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                           "Cannot allocate zstd compression context",
+                                           "KartCompression::StreamCompressor::begin");
+  }
+  // Level 3 matches the one-shot ZSTD_compress call above; the pledged source
+  // size puts the content size into the frame header the way the one-shot API
+  // does, and makes ZSTD_e_end fail if the streamed byte count disagrees.
+  size_t rc = ZSTD_CCtx_setParameter(ctx, ZSTD_c_compressionLevel, 3);
+  if (!ZSTD_isError(rc)) {
+    rc = ZSTD_CCtx_setPledgedSrcSize(ctx, pledgedSize);
+  }
+  if (ZSTD_isError(rc)) {
+    ZSTD_freeCCtx(ctx);
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                           "Cannot configure zstd compression context",
+                                           "KartCompression::StreamCompressor::begin")
+        .withDetails(QString::fromUtf8(ZSTD_getErrorName(rc)));
+  }
+  m_ctx = ctx;
+  return {};
+#else
+  Q_UNUSED(pledgedSize);
+  return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                         "zstd compression requested but build lacks zstd",
+                                         "KartCompression::StreamCompressor::begin");
+#endif
+}
+
+ErrorUtils::Result<QByteArray> StreamCompressor::compress(const QByteArray &chunk) {
+#ifdef KARTEND_HAS_ZSTD
+  if (!m_ctx) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                           "Stream compressor not started",
+                                           "KartCompression::StreamCompressor::compress");
+  }
+  auto *ctx = static_cast<ZSTD_CCtx *>(m_ctx);
+  QByteArray out;
+  ZSTD_inBuffer in{chunk.constData(), static_cast<size_t>(chunk.size()), 0};
+  while (in.pos < in.size) {
+    QByteArray block(static_cast<qsizetype>(STREAM_CHUNK_SIZE), Qt::Uninitialized);
+    ZSTD_outBuffer ob{block.data(), static_cast<size_t>(block.size()), 0};
+    const size_t rc = ZSTD_compressStream2(ctx, &ob, &in, ZSTD_e_continue);
+    if (ZSTD_isError(rc)) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                             "zstd streaming compression failed",
+                                             "KartCompression::StreamCompressor::compress")
+          .withDetails(QString::fromUtf8(ZSTD_getErrorName(rc)));
+    }
+    block.resize(static_cast<qsizetype>(ob.pos));
+    out.append(block);
+  }
+  return out;
+#else
+  Q_UNUSED(chunk);
+  return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                         "zstd compression requested but build lacks zstd",
+                                         "KartCompression::StreamCompressor::compress");
+#endif
+}
+
+ErrorUtils::Result<QByteArray> StreamCompressor::finish() {
+#ifdef KARTEND_HAS_ZSTD
+  if (!m_ctx) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                           "Stream compressor not started",
+                                           "KartCompression::StreamCompressor::finish");
+  }
+  auto *ctx = static_cast<ZSTD_CCtx *>(m_ctx);
+  QByteArray out;
+  ZSTD_inBuffer in{nullptr, 0, 0};
+  while (true) {
+    QByteArray block(static_cast<qsizetype>(STREAM_CHUNK_SIZE), Qt::Uninitialized);
+    ZSTD_outBuffer ob{block.data(), static_cast<size_t>(block.size()), 0};
+    // A pledged-size mismatch (source file changed mid-stream) surfaces here.
+    const size_t remaining = ZSTD_compressStream2(ctx, &ob, &in, ZSTD_e_end);
+    if (ZSTD_isError(remaining)) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                             "zstd streaming compression failed",
+                                             "KartCompression::StreamCompressor::finish")
+          .withDetails(QString::fromUtf8(ZSTD_getErrorName(remaining)));
+    }
+    block.resize(static_cast<qsizetype>(ob.pos));
+    out.append(block);
+    if (remaining == 0) {
+      break;
+    }
+  }
+  return out;
+#else
+  return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                         "zstd compression requested but build lacks zstd",
+                                         "KartCompression::StreamCompressor::finish");
+#endif
+}
+
+StreamDecompressor::~StreamDecompressor() {
+#ifdef KARTEND_HAS_ZSTD
+  if (m_ctx) {
+    ZSTD_freeDCtx(static_cast<ZSTD_DCtx *>(m_ctx));
+  }
+#endif
+}
+
+ErrorUtils::Result<void> StreamDecompressor::begin() {
+#ifdef KARTEND_HAS_ZSTD
+  if (m_ctx) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                           "Stream decompressor already started",
+                                           "KartCompression::StreamDecompressor::begin");
+  }
+  ZSTD_DCtx *ctx = ZSTD_createDCtx();
+  if (!ctx) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                           "Cannot allocate zstd decompression context",
+                                           "KartCompression::StreamDecompressor::begin");
+  }
+  m_ctx = ctx;
+  return {};
+#else
+  return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                         "Kart entry uses zstd but this build lacks zstd support",
+                                         "KartCompression::StreamDecompressor::begin");
+#endif
+}
+
+ErrorUtils::Result<QByteArray> StreamDecompressor::decompressChunk(const QByteArray &input,
+                                                                  qsizetype &inPos) {
+#ifdef KARTEND_HAS_ZSTD
+  if (!m_ctx) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                           "Stream decompressor not started",
+                                           "KartCompression::StreamDecompressor::decompressChunk");
+  }
+  if (inPos < 0 || inPos > input.size()) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                           "Stream decompressor input position out of range",
+                                           "KartCompression::StreamDecompressor::decompressChunk")
+        .withDetails(QString("pos=%1 size=%2").arg(inPos).arg(input.size()));
+  }
+  auto *ctx = static_cast<ZSTD_DCtx *>(m_ctx);
+  QByteArray block(static_cast<qsizetype>(STREAM_CHUNK_SIZE), Qt::Uninitialized);
+  ZSTD_inBuffer in{input.constData(), static_cast<size_t>(input.size()),
+                   static_cast<size_t>(inPos)};
+  ZSTD_outBuffer ob{block.data(), static_cast<size_t>(block.size()), 0};
+  const size_t rc = ZSTD_decompressStream(ctx, &ob, &in);
+  if (ZSTD_isError(rc)) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                           "zstd decompression failed",
+                                           "KartCompression::StreamDecompressor::decompressChunk")
+        .withDetails(QString::fromUtf8(ZSTD_getErrorName(rc)));
+  }
+  inPos = static_cast<qsizetype>(in.pos);
+  // rc == 0 marks a completed frame; like the one-shot ZSTD_decompress, a
+  // subsequent call with more input simply starts decoding the next frame.
+  m_frameEnded = (rc == 0);
+  block.resize(static_cast<qsizetype>(ob.pos));
+  return block;
+#else
+  Q_UNUSED(input);
+  Q_UNUSED(inPos);
+  return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                         "Kart entry uses zstd but this build lacks zstd support",
+                                         "KartCompression::StreamDecompressor::decompressChunk");
+#endif
+}
+
 } // namespace KartCompression

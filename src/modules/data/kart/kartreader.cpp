@@ -8,6 +8,8 @@
 #include <QSaveFile>
 #include <QSet>
 
+#include <limits>
+
 #include "kartcompression.h"
 #include "kartformat.h"
 #include "pathutils.h"
@@ -29,8 +31,25 @@ ErrorUtils::Result<QByteArray> readExactly(QFile &f, qint64 n) {
   if (n < 0) {
     return readError("Negative read length");
   }
+  // Guard the narrowing to qsizetype: on 32-bit targets qsizetype is 32-bit,
+  // and callers pass header-declared sizes up to MAX_ENTRY_SIZE (8 GiB).
+  // Reject anything that won't fit the buffer's index type rather than
+  // truncating it (the prior static_cast<int> could wrap to a tiny/negative
+  // size while the read loop was still told the full length).
+  if (n > static_cast<qint64>(std::numeric_limits<qsizetype>::max())) {
+    return readError("Read length exceeds addressable range", QString("requested=%1").arg(n));
+  }
+  // Header-declared lengths are untrusted; a length past the bytes remaining
+  // in the file can only end in "unexpected end", so reject it before
+  // allocating a buffer sized to the declaration.
+  const qint64 remaining = f.size() - f.pos();
+  if (n > remaining) {
+    return readError(
+        "Declared length exceeds remaining file size",
+        QString("requested=%1 remaining=%2 at offset=%3").arg(n).arg(remaining).arg(f.pos()));
+  }
   QByteArray buf;
-  buf.resize(static_cast<int>(n));
+  buf.resize(static_cast<qsizetype>(n));
   qint64 got = 0;
   while (got < n) {
     const qint64 r = f.read(buf.data() + got, n - got);
@@ -105,6 +124,39 @@ ErrorUtils::Result<KartManifest::Manifest> readManifest(QFile &f) {
   return KartManifest::parse(bytes.value());
 }
 
+// Reject segments that alias or collide on Windows. Applied unconditionally —
+// like the backslash / drive-letter rejections — so a portable .kart written
+// anywhere stays importable everywhere: Windows strips trailing dots and
+// spaces from path segments (so "name." collides with "name"), and reserved
+// device names resolve to the device regardless of any extension.
+bool isSegmentSafe(const QString &seg) {
+  if (seg == QLatin1String("..")) return false;
+  if (seg.contains('\\')) return false;
+  // A trailing dot or space also covers the bare "." segment and segments
+  // consisting only of dots and/or spaces — all of which end in one.
+  const QChar last = seg.back();
+  if (last == QLatin1Char('.') || last == QLatin1Char(' ')) return false;
+  // Reserved device names match case-insensitively on the stem before any
+  // extension ("CON", "con.txt", "Com1.bin"), with trailing stem spaces
+  // ignored the way Windows ignores them.
+  const qsizetype dot = seg.indexOf(QLatin1Char('.'));
+  QString stem = dot < 0 ? seg : seg.left(dot);
+  while (stem.endsWith(QLatin1Char(' '))) {
+    stem.chop(1);
+  }
+  const QString upper = stem.toUpper();
+  if (upper == QLatin1String("CON") || upper == QLatin1String("PRN") ||
+      upper == QLatin1String("AUX") || upper == QLatin1String("NUL")) {
+    return false;
+  }
+  if (upper.size() == 4 &&
+      (upper.startsWith(QLatin1String("COM")) || upper.startsWith(QLatin1String("LPT"))) &&
+      upper.at(3) >= QLatin1Char('1') && upper.at(3) <= QLatin1Char('9')) {
+    return false;
+  }
+  return true;
+}
+
 bool isPathSafe(const QString &relPath) {
   if (relPath.isEmpty()) return false;
   if (relPath.contains(QChar('\0'))) return false;
@@ -112,8 +164,7 @@ bool isPathSafe(const QString &relPath) {
   if (relPath.size() >= 2 && relPath.at(1) == QChar(':')) return false;
   const QStringList segments = relPath.split('/', Qt::SkipEmptyParts);
   for (const QString &seg : segments) {
-    if (seg == "..") return false;
-    if (seg.contains('\\')) return false;
+    if (!isSegmentSafe(seg)) return false;
   }
   return true;
 }
@@ -220,8 +271,21 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
     }
     auto sha = readExactly(f, KartFormat::SHA256_SIZE);
     if (sha.isError()) return sha.error();
-    auto payload = readExactly(f, static_cast<qint64>(payloadSizeRes.value()));
-    if (payload.isError()) return payload.error();
+    const quint64 origSize = origSizeRes.value();
+    const quint64 payloadSize = payloadSizeRes.value();
+
+    // The whole-payload readExactly used to enforce this bound; with the
+    // payload now streamed in chunks, check the declared length against the
+    // bytes actually left in the file up front, before any destination file
+    // is created for it.
+    const qint64 payloadRemaining = f.size() - f.pos();
+    if (static_cast<qint64>(payloadSize) > payloadRemaining) {
+      return readError("Declared length exceeds remaining file size",
+                       QString("requested=%1 remaining=%2 at offset=%3")
+                           .arg(payloadSize)
+                           .arg(payloadRemaining)
+                           .arg(f.pos()));
+    }
 
     if (!isPathSafe(relPath)) {
       return readError("Unsafe entry path (traversal or absolute)", relPath);
@@ -277,16 +341,19 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
     }
 
     const auto algo = static_cast<KartFormat::Compression>(compRes.value());
-    auto raw = KartCompression::decompress(payload.value(), algo,
-                                           static_cast<qint64>(origSizeRes.value()));
-    if (raw.isError()) return raw.error();
-
-    QByteArray actualSha = QCryptographicHash::hash(raw.value(), QCryptographicHash::Sha256);
-    if (actualSha != sha.value()) {
-      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartIntegrityCheckFailed,
-                                             "SHA-256 mismatch on Kart entry",
+    if (algo != KartFormat::Compression_None && algo != KartFormat::Compression_Zstd &&
+        algo != KartFormat::Compression_Zlib) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                             "Unknown compression algorithm",
                                              "KartReader::extractTo")
-          .withDetails(relPath);
+          .withDetails(QString("algo=%1").arg(compRes.value()));
+    }
+    // Stored entries always record payload_size == original_size (the writer
+    // sets both from the raw byte count); a disagreement can only come from a
+    // tampered header.
+    if (algo == KartFormat::Compression_None && payloadSize != origSize) {
+      return readError("Stored entry sizes disagree",
+                       QString("orig=%1 payload=%2").arg(origSize).arg(payloadSize));
     }
 
     QFileInfo fi(cleaned);
@@ -303,12 +370,128 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
                                              "KartReader::extractTo")
           .withDetails(out.errorString());
     }
-    if (out.write(raw.value()) != raw.value().size()) {
-      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
-                                             "Short write to entry output file",
-                                             "KartReader::extractTo")
-          .withDetails(cleaned);
+
+    // The payload streams through decompression into the QSaveFile in
+    // STREAM_CHUNK_SIZE slices — peak memory is O(chunk) instead of
+    // payload + original (up to 2 x MAX_ENTRY_SIZE for a single entry). The
+    // SHA-256 accumulates incrementally over the decompressed bytes, and the
+    // declared original_size plus the whole-archive MAX_TOTAL_EXTRACTED_BYTES
+    // backstop (Kartend-4e8ku) are enforced per block, so a decompression
+    // bomb aborts before its excess output is ever materialized. A failed
+    // entry never lands: QSaveFile discards the temp file unless commit()
+    // runs.
+    QCryptographicHash entryHash(QCryptographicHash::Sha256);
+    quint64 entryWritten = 0;
+
+    auto writeBlock = [&](const QByteArray &block) -> ErrorUtils::Result<void> {
+      if (out.write(block) != block.size()) {
+        return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                               "Short write to entry output file",
+                                               "KartReader::extractTo")
+            .withDetails(cleaned);
+      }
+      entryHash.addData(block);
+      entryWritten += static_cast<quint64>(block.size());
+      totalExtractedBytes += static_cast<quint64>(block.size());
+      if (totalExtractedBytes > KartFormat::MAX_TOTAL_EXTRACTED_BYTES) {
+        return readError("Kart bundle exceeds the total extraction size limit",
+                         QString("total=%1 max=%2")
+                             .arg(totalExtractedBytes)
+                             .arg(KartFormat::MAX_TOTAL_EXTRACTED_BYTES));
+      }
+      return {};
+    };
+
+    if (algo == KartFormat::Compression_None) {
+      quint64 left = payloadSize;
+      while (left > 0) {
+        if (m_cancel.loadRelaxed()) {
+          return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::OperationCancelled,
+                                                 "Kart extraction cancelled",
+                                                 "KartReader::extractTo");
+        }
+        const qint64 step =
+            static_cast<qint64>(qMin<quint64>(left, KartCompression::STREAM_CHUNK_SIZE));
+        auto chunk = readExactly(f, step);
+        if (chunk.isError()) return chunk.error();
+        if (auto w = writeBlock(chunk.value()); w.isError()) return w.error();
+        left -= static_cast<quint64>(step);
+      }
+    } else if (algo == KartFormat::Compression_Zstd) {
+      KartCompression::StreamDecompressor dec;
+      if (auto beginRes = dec.begin(); beginRes.isError()) return beginRes.error();
+
+      auto pumpBlock = [&](const QByteArray &block) -> ErrorUtils::Result<void> {
+        // Enforce the declared size before writing the block — the zip-bomb
+        // guard has to fire as soon as the decompressed stream exceeds it.
+        if (entryWritten + static_cast<quint64>(block.size()) > origSize) {
+          return ErrorUtils::ErrorContext::error(
+                     ErrorUtils::ErrorCode::KartCompressionFailed,
+                     "Decompressed entry exceeds declared original size",
+                     "KartReader::extractTo")
+              .withDetails(QString("declared=%1 path=%2").arg(origSize).arg(relPath));
+        }
+        if (block.isEmpty()) return {};
+        return writeBlock(block);
+      };
+
+      quint64 left = payloadSize;
+      while (left > 0) {
+        if (m_cancel.loadRelaxed()) {
+          return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::OperationCancelled,
+                                                 "Kart extraction cancelled",
+                                                 "KartReader::extractTo");
+        }
+        const qint64 step =
+            static_cast<qint64>(qMin<quint64>(left, KartCompression::STREAM_CHUNK_SIZE));
+        auto chunk = readExactly(f, step);
+        if (chunk.isError()) return chunk.error();
+        left -= static_cast<quint64>(step);
+
+        qsizetype inPos = 0;
+        while (inPos < chunk.value().size()) {
+          auto block = dec.decompressChunk(chunk.value(), inPos);
+          if (block.isError()) return block.error();
+          if (auto w = pumpBlock(block.value()); w.isError()) return w.error();
+        }
+      }
+      // Drain output zstd may still buffer after the last input byte; a frame
+      // that stalls without closing means the payload was truncated.
+      while (!dec.atFrameEnd()) {
+        qsizetype inPos = 0;
+        auto block = dec.decompressChunk(QByteArray(), inPos);
+        if (block.isError()) return block.error();
+        if (block.value().isEmpty() && !dec.atFrameEnd()) {
+          return readError("Truncated zstd stream in Kart entry", relPath);
+        }
+        if (auto w = pumpBlock(block.value()); w.isError()) return w.error();
+      }
+      if (entryWritten != origSize) {
+        return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                               "zstd decompressed size mismatch",
+                                               "KartReader::extractTo")
+            .withDetails(QString("expected=%1 got=%2").arg(origSize).arg(entryWritten));
+      }
+    } else {
+      // Compression_Zlib stays buffered: qUncompress has no streaming form
+      // without a direct zlib dependency, and zlib entries are only written
+      // by no-zstd builds. Their decompressed size is additionally bounded by
+      // qCompress's 4-byte length prefix on top of the MAX_ENTRY_SIZE checks
+      // above.
+      auto payload = readExactly(f, static_cast<qint64>(payloadSize));
+      if (payload.isError()) return payload.error();
+      auto raw = KartCompression::decompress(payload.value(), algo, static_cast<qint64>(origSize));
+      if (raw.isError()) return raw.error();
+      if (auto w = writeBlock(raw.value()); w.isError()) return w.error();
     }
+
+    if (entryHash.result() != sha.value()) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartIntegrityCheckFailed,
+                                             "SHA-256 mismatch on Kart entry",
+                                             "KartReader::extractTo")
+          .withDetails(relPath);
+    }
+
     if (!out.commit()) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
                                              "Failed to commit entry output file",
@@ -316,17 +499,6 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
           .withDetails(out.errorString());
     }
     dirsToSync.insert(fi.absolutePath());
-
-    // Accumulate written bytes and abort if the whole-archive total crosses the
-    // generous sanity backstop (Kartend-4e8ku). Checked after the write so the
-    // ceiling reflects bytes actually committed to disk.
-    totalExtractedBytes += static_cast<quint64>(raw.value().size());
-    if (totalExtractedBytes > KartFormat::MAX_TOTAL_EXTRACTED_BYTES) {
-      return readError("Kart bundle exceeds the total extraction size limit",
-                       QString("total=%1 max=%2")
-                           .arg(totalExtractedBytes)
-                           .arg(KartFormat::MAX_TOTAL_EXTRACTED_BYTES));
-    }
 
     // ExtractedFile::flags carries the stored per-entry flags byte for
     // forward-compat only; it is deliberately not honored for file permissions
