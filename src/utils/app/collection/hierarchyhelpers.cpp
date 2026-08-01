@@ -110,11 +110,17 @@ QString hierarchicalNameFor(const CollectionConfig &collection,
   QStringList parts;
   parts.prepend(collection.name);
   int parent = collection.parentCollectionIndex;
-  while (parent >= 0 && parent < collections.size()) {
+  // Bound the walk like ancestorIndexChain does: a well-formed chain cannot
+  // be longer than the collection list, so a corrupt config whose parent
+  // links form a cycle terminates instead of prepending forever.
+  const int maxDepth = collections.size();
+  int steps = 0;
+  while (parent >= 0 && parent < collections.size() && steps < maxDepth) {
     const CollectionConfig &p = collections[parent];
     parts.prepend(p.name);
     if (!p.isSubcollection) break;
     parent = p.parentCollectionIndex;
+    ++steps;
   }
   return parts.join('/');
 }
@@ -195,7 +201,11 @@ QString resolveInheritedField(int collectionIndex, const QList<CollectionConfig>
     return {};
   }
   int current = collectionIndex;
-  while (current >= 0 && current < collections.size()) {
+  // Same cycle bound as hierarchicalNameFor / ancestorIndexChain: a corrupt
+  // config with cyclic parent links must terminate, not hang the caller.
+  const int maxDepth = collections.size();
+  int steps = 0;
+  while (current >= 0 && current < collections.size() && steps <= maxDepth) {
     const CollectionConfig &c = collections[current];
     if (!(c.*field).trimmed().isEmpty()) {
       return c.*field;
@@ -204,6 +214,7 @@ QString resolveInheritedField(int collectionIndex, const QList<CollectionConfig>
       break;
     }
     current = c.parentCollectionIndex;
+    ++steps;
   }
   return {};
 }

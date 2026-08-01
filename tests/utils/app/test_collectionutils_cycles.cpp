@@ -24,6 +24,12 @@ private slots:
   void circularRef_unrelatedSubtree_isAllowed();
   void circularRef_topLevelReparent_isAllowed();
   void circularRef_existingDataCycle_isBounded();
+
+  // Kartend-14mll: the two walkers that lacked the sibling guards — a
+  // pre-existing 2-cycle in corrupt input must terminate, not hang (and, for
+  // hierarchicalNameFor, not grow the parts list without bound).
+  void hierarchicalNameFor_cyclicParents_terminates();
+  void resolveInheritedField_cyclicParents_terminates();
 };
 
 namespace {
@@ -125,6 +131,54 @@ void TestCollectionUtilsCycles::circularRef_existingDataCycle_isBounded() {
   // 1↔2 cycle while walking up. Must detect and return true within bounded
   // time (test would hang otherwise).
   QVERIFY(CollectionUtils::wouldCreateCircularReference(0, 1, cs));
+}
+
+namespace {
+// Corrupt input with a 2-cycle among subcollections: 1 → 2 → 1. Both carry
+// isSubcollection so the walkers keep following parent links; index 0 is a
+// healthy top-level row for the control assertions.
+QList<CollectionConfig> cyclicHierarchy() {
+  QList<CollectionConfig> cs;
+  CollectionConfig root;
+  root.name = QStringLiteral("Root");
+  root.parentCollectionIndex = -1;
+  cs.append(root);
+  CollectionConfig b;
+  b.name = QStringLiteral("B");
+  b.parentCollectionIndex = 2; // points at C
+  b.isSubcollection = true;
+  cs.append(b);
+  CollectionConfig c;
+  c.name = QStringLiteral("C");
+  c.parentCollectionIndex = 1; // points back at B → cycle
+  c.isSubcollection = true;
+  cs.append(c);
+  return cs;
+}
+} // namespace
+
+void TestCollectionUtilsCycles::hierarchicalNameFor_cyclicParents_terminates() {
+  const auto cs = cyclicHierarchy();
+  // Termination is the contract; the joined name must stay bounded by the
+  // walk limit (own name + at most collections.size() ancestors) instead of
+  // growing until allocation failure.
+  const QString name = CollectionUtils::hierarchicalNameFor(cs[1], cs);
+  QVERIFY(!name.isEmpty());
+  QVERIFY(name.count(QLatin1Char('/')) <= cs.size());
+  QVERIFY(name.endsWith(QStringLiteral("B")));
+
+  // Healthy input is unaffected by the guard.
+  QCOMPARE(CollectionUtils::hierarchicalNameFor(cs[0], cs), QStringLiteral("Root"));
+}
+
+void TestCollectionUtilsCycles::resolveInheritedField_cyclicParents_terminates() {
+  auto cs = cyclicHierarchy();
+  // All fields empty along the cycle: must terminate and report nothing.
+  QCOMPARE(CollectionUtils::resolveArtworkDirectory(1, cs), QString());
+
+  // A value somewhere on the cycle is still found before the bound trips.
+  cs[2].artworkDirectory = QStringLiteral("/art");
+  QCOMPARE(CollectionUtils::resolveArtworkDirectory(1, cs), QStringLiteral("/art"));
 }
 
 QTEST_APPLESS_MAIN(TestCollectionUtilsCycles)
