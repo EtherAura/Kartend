@@ -545,3 +545,51 @@ race:*DirectoryCache::schedulePrewarm*
 # free. Anchored on the call site; safe because the decode lambda is
 # pure-local (by-value path, local QImage — no shared state to mask).
 race:*ArtworkWizardDialog::renderCurrent*
+
+# ── Kartend-11zye ────────────────────────────────────────────────────────
+# Five reports that fire on a heavily-loaded workstation (container build
+# competing with a live desktop encode) but not on the CI runner, which is
+# why nightly-tsan is green while ci-local.sh docker:tsan is not. All five
+# are shapes already enumerated above, at dispatch sites not previously
+# listed; each is anchored on the call site, never on RunFunctionTaskBase,
+# so every other QtConcurrent::run functor body stays visible to TSan.
+
+# Group B StoredFunctionCall hand-off, DAT audit: DatAuditRunController::
+# start news the task on the GUI thread and the pooled worker's first read
+# at RunFunctionTaskBase<DatAudit::AuditOutput>::run() entry races the
+# allocation-write. Safe to anchor here: the audit lambda takes its inputs
+# by value (dats, roots, regionPrefs, ...) and publishes only through the
+# QFutureWatcher, so no shared state is masked.
+race:*DatAuditRunController::start*
+
+# Same hand-off for the per-entity media write. The existing
+# Scraper::BatchScrapeRunner::applyAndFinish entry covers the BATCH
+# dispatch of RunFunctionTaskBase<MediaWriteResult>; this is the separate
+# single-entity dispatch site, which that anchor does not reach.
+race:*EntityScrapeCoordinator::dispatchEntityMediaWrite*
+
+# Same hand-off for kart import: KartManager::runImport QtConcurrent::runs
+# the extract task, and the worker's first read at RunFunctionTaskBase<
+# ErrorUtils::Result<KartReader::ExtractResult>>::run() races the
+# allocation. Reached via importKartAsync.
+race:*KartManager::runImport*
+
+# COW copy of a QSet<QString> across the worker hand-off:
+# purgeOrphanCollectionData captures liveUuids by value into the queued
+# write, and QueryManager::runWrite copies that std::function again on the
+# worker thread (runWriteRung takes it by value) while the GUI thread's
+# original is still in scope. QHash's refcount is a QAtomicInt, so this is
+# memory-safe — the same COW-copy shape as the QArrayData::allocate and
+# ::reallocateUnaligned entries in Group B, which miss it only because
+# QHash/QSet allocate through their own path rather than QArrayData.
+race:*DatabaseManager::purgeOrphanCollectionData*
+
+# "double lock of a mutex" reported inside QtTsan::mutexPostLock for the
+# scan backpressure gate: DirectoryScanTask::run holds a QMutexLocker and
+# calls m_queue->hasSpace.wait(&m_queue->mutex, 50). QWaitCondition::wait
+# atomically releases and reacquires the mutex, but Qt's TSan shim does not
+# annotate the release, so the reacquire looks like a second lock. The
+# lock/unlock pairing is structurally correct — same reasoning as the
+# ArtworkDispatcherCacheHandle::tryLoadFromDiskCache entry above.
+mutex:*DirectoryScanTask::run*
+mutex:*ScanService::walkDirectoriesParallel*
