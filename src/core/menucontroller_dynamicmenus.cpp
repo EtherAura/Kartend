@@ -21,6 +21,7 @@
 #include "errorpresentation.h"
 #include "historystore.h"
 #include "idatabasemanager.h"
+#include "imainwindow.h"
 #include "isettingsmanager.h"
 #include "navigationmanager.h"
 #include "scrolldatamanager.h"
@@ -224,7 +225,15 @@ void MenuController::setupActionDetailsPaneOrientation() {
       if (!collections || idx < 0 || idx >= collections->size()) return;
       if ((*collections)[idx].sidebar.sidebarPosition == pos) return;
       (*collections)[idx].sidebar.sidebarPosition = pos;
-      if (m_ctx.getSettingsManager) {
+      // Per-click radio switching (users flipping through the four edges) —
+      // route the INI rewrite through the main window's debounced save
+      // stage. The position is already applied to the live list, and the
+      // relayout below reads memory, so only the disk write defers. The
+      // cross-cast resolves the IMainWindow role of the concrete window;
+      // harnesses that wire a plain QMainWindow keep the inline save.
+      if (auto *host = dynamic_cast<IMainWindow *>(m_ctx.mainWindow)) {
+        host->requestDebouncedCollectionsSave();
+      } else if (m_ctx.getSettingsManager) {
         if (auto *sm = m_ctx.getSettingsManager()) {
           ErrorPresentation::reportSaveResult(sm->saveCollections(*collections), "collections",
                                               true);
@@ -315,7 +324,15 @@ QList<CommandPaletteDialog::Command> MenuController::buildPaletteCommands() {
             return;
           }
           (*cols)[index].viewType = viewType;
-          if (auto *settings = m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
+          // Same interactive-mutation shape as MainWindow::setViewType,
+          // which already rides the debounced save stage — keep the two
+          // surfaces consistent so a palette-driven view toggle doesn't pay
+          // the inline INI rewrite the toolbar path no longer does. The
+          // reload below reads the already-updated in-memory viewType.
+          if (auto *host = dynamic_cast<IMainWindow *>(m_ctx.mainWindow)) {
+            host->requestDebouncedCollectionsSave();
+          } else if (auto *settings =
+                         m_ctx.getSettingsManager ? m_ctx.getSettingsManager() : nullptr) {
             ErrorPresentation::reportSaveResult(settings->saveCollections(*cols), "collections",
                                                 true);
           }

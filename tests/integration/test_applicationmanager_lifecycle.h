@@ -35,6 +35,7 @@ private slots:
   void testInitializeWiresAllManagers();
   void testManagersHaveNullQObjectParent();
   void testShutdownAfterInitializeIsSafe();
+  void testShutdownWithConfigReplacedSkipsCollectionsSave();
   void testDestructAfterInitializeWithoutShutdownIsSafe();
   void testDestructorNullsContextManagerSlots();
 };

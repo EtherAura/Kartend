@@ -137,6 +137,13 @@ public:
     return m_generalSettings;
   }
   void applyGlobalUiFontFromSettings() override { applyGlobalUiFont(m_generalSettings); }
+  void markConfigReplacedOnDisk() override { m_configReplacedOnDisk = true; }
+  [[nodiscard]] bool isConfigReplacedOnDisk() const override { return m_configReplacedOnDisk; }
+  /// Forward interactive per-click collections saves to the
+  /// GridWidthDebouncer's save stage; falls back to an immediate
+  /// saveCollections when the debouncer isn't constructed yet.
+  /// Defined in mainwindow_wiring.cpp.
+  void requestDebouncedCollectionsSave() override;
   [[nodiscard]] const CollectionHierarchyCache &getHierarchyCache() const {
     return m_hierarchyCache;
   }
@@ -347,6 +354,15 @@ private:
   void onKartOperationFinished();
 
   bool m_isShuttingDown = false;
+  // Set via markConfigReplacedOnDisk() when a settings-dialog profile import
+  // replaced kartend.cfg wholesale (the import quits the app so the new file
+  // takes effect on restart). closeEvent() honors it by skipping every
+  // kartend.cfg write on the way out — the pending general-settings flush and
+  // ApplicationManager::shutdown's collections save — because the in-memory
+  // state still describes the OLD configuration and persisting it would wipe
+  // the just-imported collection sections. Session/viewport/cache persistence
+  // is unaffected: those live in separate files, not kartend.cfg.
+  bool m_configReplacedOnDisk = false;
   bool m_deferredStartupDone = false;
   // Kartend-3vkjc: first-run startup gate. When the first-run wizard runs, its
   // modal exec() spins a nested event loop; the independent startup
@@ -402,7 +418,7 @@ private:
   /// before any overlay widget so each overlay's setLayerManager() call
   /// during setupUI() registers against a live instance. Owns no widgets —
   /// only references via QPointer.
-  std::unique_ptr<OverlayZOrderRegistry> m_overlayLayerManager;
+  std::unique_ptr<OverlayZOrderRegistry> m_overlayZOrderRegistry;
   SplashOverlay *m_splashOverlay = nullptr;
   NowPlayingOverlay *m_nowPlayingOverlay = nullptr;
   DetailPageOverlay *m_detailPageOverlay = nullptr;

@@ -32,6 +32,7 @@ private slots:
 
   void refreshFilterToolbar_buildsTypeRadiosAndTitleEntries();
   void refreshFilterToolbar_staleTypeFilterFallsBackToAllTypes();
+  void titleFilterToggle_burstCoalescesIntoOneDebouncedSave();
 };
 
 #endif // KARTEND_TESTS_TEST_TOOLBARCONTROLLER_H

@@ -189,6 +189,7 @@
 #include "detailspanemanager.h"
 #include "errorpresentation.h"
 #include "errorutils.h"
+#include "gridwidthdebouncer.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
 #include "librarytoolscontroller.h"
@@ -478,6 +479,9 @@ void MainWindow::connectDatabaseManager() {
         }
         if (!c.scraperOverrides.datFilePaths.contains(datPath)) {
           c.scraperOverrides.datFilePaths.append(datPath);
+          // Deliberately immediate, not debounced: a DAT attach is a
+          // one-shot dialog-driven commit, and the audit/scrape flows that
+          // follow may re-read the persisted config right away.
           if (auto saved = m_appManager->getSettingsManager()->saveCollections(m_collections);
               saved.isError()) {
             ErrorUtils::logError(saved.error());
@@ -757,5 +761,24 @@ void MainWindow::connectScrollBars() {
   if (const QScrollBar *hScrollBar = ui->itemScrollArea->horizontalScrollBar()) {
     QObject::connect(hScrollBar, &QScrollBar::valueChanged, m_appManager->getNavigationManager(),
                      &NavigationManager::onViewportChanged, Qt::UniqueConnection);
+  }
+}
+
+void MainWindow::requestDebouncedCollectionsSave() {
+  // IMainWindow role: single funnel for interactive per-click collections
+  // saves (toolbar filter toggles, sidebar drag/tab commits, menu radio
+  // switches, palette view toggles). Rides the GridWidthDebouncer's save
+  // stage so a burst of clicks coalesces into one INI rewrite; the caller
+  // has already mutated m_collections, so only the disk write is deferred
+  // and ApplicationManager::shutdown's synchronous saveCollections covers a
+  // save still pending at quit. The fallback keeps the historical inline
+  // save for the pre-setup window where the debouncer doesn't exist yet.
+  if (m_gridWidthDebouncer) {
+    m_gridWidthDebouncer->triggerSave();
+    return;
+  }
+  if (m_appManager->getSettingsManager()) {
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", false);
   }
 }

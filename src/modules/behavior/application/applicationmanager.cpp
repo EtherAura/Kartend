@@ -284,7 +284,8 @@ void ApplicationManager::initialize(ApplicationContext *ctx) {
   m_kartManager = std::make_unique<kart::KartManager>(nullptr);
 }
 
-void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
+void ApplicationManager::shutdown(const QList<CollectionConfig> &collections,
+                                  bool configReplacedOnDisk) {
   // 0a. Signal cancellation for any in-flight cache I/O BEFORE we wait for
   // the cache-init future to finish. CacheManager::initialize() runs on
   // QtConcurrent and loads the timestamp store (formerly a ~50 MB JSON
@@ -336,8 +337,13 @@ void ApplicationManager::shutdown(const QList<CollectionConfig> &collections) {
     cacheTimestamps = m_cacheManager->snapshotTimestampsForShutdown();
   }
 
-  // 4. Save settings synchronously (fast INI write, typically <1ms)
-  if (m_settingsManager) {
+  // 4. Save settings synchronously (fast INI write, typically <1ms).
+  // Skipped when kartend.cfg was just replaced on disk by a profile import:
+  // `collections` still holds the OLD list, and saveCollections removes every
+  // non-reserved top-level group not in the list it is handed — writing it
+  // here would wipe the imported profile's sections moments after the import
+  // put them there.
+  if (m_settingsManager && !configReplacedOnDisk) {
     ErrorPresentation::reportSaveResult(m_settingsManager->saveCollections(collections),
                                         "collections", false);
   }

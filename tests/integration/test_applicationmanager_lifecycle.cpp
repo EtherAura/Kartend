@@ -13,9 +13,11 @@
 #include "scrollmanager.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
+#include "settingsutils.h"
 
 #include <QList>
 #include <QSet>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTest>
 #include <QThreadPool>
@@ -152,6 +154,57 @@ void TestApplicationManagerLifecycle::testShutdownAfterInitializeIsSafe() {
   // destroy anything; destruction is the dtor's job.
   QVERIFY(manager.getCacheManager() != nullptr);
   QVERIFY(manager.getDatabaseManager() != nullptr);
+}
+
+void TestApplicationManagerLifecycle::testShutdownWithConfigReplacedSkipsCollectionsSave() {
+  ensureSandbox();
+
+  // A settings-dialog profile import replaces kartend.cfg on disk and quits;
+  // the in-memory collection list handed to shutdown() then still describes
+  // the OLD configuration. saveCollections removes every non-reserved
+  // top-level group not in the list it is handed, so an ungated shutdown save
+  // would wipe the just-imported profile's sections. shutdown(collections,
+  // /*configReplacedOnDisk=*/true) must leave kartend.cfg untouched.
+
+  // Stand in for the imported profile: write a collection section to the
+  // sandboxed kartend.cfg through the real persistence path.
+  {
+    // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+    // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
+    ApplicationContext appCtx;
+    ApplicationManager manager;
+    manager.initialize(&appCtx);
+
+    CollectionConfig imported;
+    imported.name = QStringLiteral("ImportSurvivor");
+    QList<CollectionConfig> importedList;
+    importedList.append(imported);
+    QVERIFY(!manager.getSettingsManager()->saveCollections(importedList).isError());
+
+    // Shutdown with a stale (empty) list but the replaced-on-disk flag set:
+    // the imported section must survive.
+    manager.shutdown(QList<CollectionConfig>(), /*configReplacedOnDisk=*/true);
+
+    QSettings onDisk(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
+    QVERIFY2(onDisk.childGroups().contains(QStringLiteral("ImportSurvivor")),
+             "shutdown(configReplacedOnDisk=true) rewrote kartend.cfg and "
+             "wiped the imported collection section");
+  }
+
+  // Baseline contrast (and sandbox cleanup): a normal shutdown with the same
+  // stale list DOES remove the section — proving the flag is what preserved
+  // it above, and leaving no stray group behind for later suites.
+  {
+    ApplicationContext appCtx;
+    ApplicationManager manager;
+    manager.initialize(&appCtx);
+    manager.shutdown(QList<CollectionConfig>());
+
+    QSettings onDisk(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
+    QVERIFY2(!onDisk.childGroups().contains(QStringLiteral("ImportSurvivor")),
+             "baseline shutdown kept a section absent from its collection "
+             "list — the wipe this fix gates never happened");
+  }
 }
 
 void TestApplicationManagerLifecycle::testDestructAfterInitializeWithoutShutdownIsSafe() {

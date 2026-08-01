@@ -66,6 +66,36 @@ public:
   [[nodiscard]] virtual GeneralSettings &generalSettings() = 0;
   [[nodiscard]] virtual const GeneralSettings &generalSettings() const = 0;
 
+  /// The active kartend.cfg was just replaced wholesale on disk (settings
+  /// dialog profile import) and the app is about to quit so the new file
+  /// takes effect on restart. The shutdown path honors this by skipping
+  /// every kartend.cfg write on the way out — the in-memory state still
+  /// describes the OLD configuration, and persisting it would silently
+  /// overwrite the just-imported file. Deliberately a no-op default rather
+  /// than pure: widget-only fakes in tests never shut the app down and
+  /// shouldn't have to stub shutdown-persistence concerns.
+  virtual void markConfigReplacedOnDisk() {}
+
+  /// Query counterpart of markConfigReplacedOnDisk(): dialog-side writers
+  /// that persist [General] outside the shutdown path (live-save flushes,
+  /// reject-path baseline restores) consult this so they don't rewrite the
+  /// just-imported file while the app quits. Same default-not-pure rationale.
+  [[nodiscard]] virtual bool isConfigReplacedOnDisk() const { return false; }
+
+  /// Coalesce an interactive per-click collections save through the main
+  /// window's debounced save stage (the one the grid-width shortcuts and
+  /// view-mode toggles already ride). saveCollections is a full INI rewrite
+  /// + fsync of the config directory, so per-click callers (toolbar filter
+  /// toggles, sidebar drag commits, menu radio switches) route here instead
+  /// of saving inline: the mutation has already landed in the live
+  /// m_collections, only the disk write is deferred, and a save still inside
+  /// the debounce window at quit is covered by the shutdown path's
+  /// synchronous persist. Same default-not-pure rationale as
+  /// markConfigReplacedOnDisk: widget-only fakes don't persist anyway and
+  /// shouldn't have to stub save plumbing. Callers that resolve no host
+  /// (headless / test harnesses) keep their inline immediate save.
+  virtual void requestDebouncedCollectionsSave() {}
+
   /// Sole routing point for sibling managers. Callers reach them by going
   /// through the ApplicationManager (e.g.
   /// mainWindow->applicationManager()->getXxx()), or — preferred for ui-layer

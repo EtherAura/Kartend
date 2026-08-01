@@ -13,9 +13,63 @@
 #include "stringutils.h"
 
 #include <QApplication>
+#include <QDateTime>
+#include <QFileInfo>
+#include <QHash>
 #include <QStringList>
 #include <QVector>
 #include <QWidget>
+
+namespace {
+
+// refreshTitleCounts fires on every navigation entry, items-loaded pass,
+// route change, and cachedCountsUpdated event (the last is wired straight to
+// the DB scan pipeline in mainwindow_wiring.cpp), and each call used to
+// re-list the current directory on the GUI thread just to render the
+// "N subfolders" suffix. Memoize the count per (scan dir, hidden-folders
+// flag), invalidated by the directory's mtime: a directory's modification
+// time changes exactly when direct entries are added, removed, or renamed —
+// the only mutations that can change the count — so one stat replaces a full
+// readdir per refresh, and DB-side scan bursts (which never touch the
+// directory itself) hit the memo every time. No cross-event generation
+// counter is cleanly reachable from this free function (the callers span
+// NavigationManager and DbEventsController), hence the path+mtime key.
+// GUI-thread only, like the caller.
+struct VirtualFolderCountMemoEntry {
+  QDateTime mtime;
+  int count = 0;
+};
+
+int memoizedVirtualFolderCount(const CollectionConfig &config) {
+  if (!config.folderBrowsing.includeContentSubfolders ||
+      config.folderBrowsing.showAllSubfolderItems) {
+    return 0;
+  }
+  const QFileInfo info(CollectionUtils::virtualFolderScanDir(config));
+  if (!info.exists() || !info.isDir()) {
+    return 0;
+  }
+  const QString key = info.absoluteFilePath() + QLatin1Char('\n') +
+                      (config.folderBrowsing.showHiddenFolders ? QLatin1Char('1')
+                                                               : QLatin1Char('0'));
+  const QDateTime mtime = info.lastModified();
+
+  static QHash<QString, VirtualFolderCountMemoEntry> memo;
+  const auto it = memo.constFind(key);
+  if (it != memo.cend() && it->mtime == mtime) {
+    return it->count;
+  }
+  const int count = CollectionUtils::countVirtualFolders(config);
+  // Bound the memo so a long session browsing many subfolders can't grow it
+  // without limit; 64 live (dir, flag) keys is far beyond one window's needs.
+  if (memo.size() >= 64) {
+    memo.clear();
+  }
+  memo.insert(key, {mtime, count});
+  return count;
+}
+
+} // namespace
 
 namespace TitleCountsHelpers {
 
@@ -62,7 +116,7 @@ void refreshTitleCounts(QWidget *titleHost, const ApplicationContext &ctx,
   // any direct children. Used by both the subfolder and the collection
   // branches below.
   auto appendChildPartsSuffix = [&collections, cur](QString &title) {
-    const int directSubfolderCount = CollectionUtils::countVirtualFolders(collections[cur]);
+    const int directSubfolderCount = memoizedVirtualFolderCount(collections[cur]);
     const int directSubcollectionCount = CollectionUtils::directChildrenOf(cur, collections).size();
     QStringList childParts;
     if (directSubfolderCount > 0) {

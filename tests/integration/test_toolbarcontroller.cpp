@@ -4,11 +4,14 @@
 #include "collection/generalsettings.h"
 #include "collection/launcherconfig.h"
 #include "collection/launcherpreset.h"
+#include "applicationmanager.h"
 #include "collectiontypes.h"
 #include "mainwindow.h"
 #include "mocks/mockedmainwindowfixture.h"
+#include "mocks/mocksettingsmanager.h"
 #include "pathutils.h"
 #include "toolbarcontroller.h"
+#include "uiconstants/timing.h"
 
 #include <QAction>
 #include <QByteArray>
@@ -379,4 +382,70 @@ void TestToolbarController::refreshFilterToolbar_staleTypeFilterFallsBackToAllTy
            "a stale persisted type filter must fall back to <All types>");
   QVERIFY2(win->m_generalSettings.view.collectionTypeFilter.isEmpty(),
            "the stale persisted filter must be cleared so the toolbar reflects reality");
+}
+
+void TestToolbarController::titleFilterToggle_burstCoalescesIntoOneDebouncedSave() {
+  CollectionConfig albums;
+  albums.name = QStringLiteral("Albums");
+  albums.type = QStringLiteral("Audio");
+  albums.filter.titleExclusionPatterns = {QStringLiteral("\\s*\\(demo\\)$")};
+  // The struct default is enabled=true; pin the start state so the toggle
+  // begins unchecked and the on/off/on burst below lands on enabled.
+  albums.filter.titleExclusionEnabled = false;
+
+  // Seed via the fixture ctor rather than assigning m_collections afterwards:
+  // an empty-at-startup MainWindow schedules the modal first-collection
+  // prompt via singleShot(0), which fires the moment this test spins the
+  // event loop (QTRY below) and hangs the run headless.
+  KartendTest::MockedMainWindowFixture fixture({albums});
+  MainWindow *win = fixture.window();
+  win->m_currentCollectionIndex = 0;
+
+  QWidget host;
+  auto *filterButton = new QToolButton(&host);
+  ToolbarController controller;
+  ToolbarController::Setup setup;
+  setup.mainWindow = win;
+  setup.filterButton = filterButton;
+  controller.initialize(setup);
+  controller.refreshFilterToolbar();
+
+  auto *mock = qobject_cast<KartendTest::MockSettingsManager *>(
+      win->applicationManager()->getSettingsManager());
+  QVERIFY2(mock, "MockedMainWindowFixture must have installed MockSettingsManager");
+  const int baseline = mock->saveCollectionsCalls();
+
+  // Resolve the toggle by label (positional grabs land on a neighbor), and
+  // re-resolve before every click: the reload each trigger schedules rebuilds
+  // the filter menu, deleting and recreating its actions, so a pointer held
+  // across triggers goes stale.
+  const auto findToggle = [filterButton]() -> QAction * {
+    const auto menuActions = filterButton->menu()->actions();
+    for (QAction *action : menuActions) {
+      if (action->text() == QStringLiteral("Apply title patterns")) {
+        return action;
+      }
+    }
+    return nullptr;
+  };
+
+  // Simulate a rapid on/off/on click burst. Each trigger mutates the live
+  // collection immediately (the reload it queues reads memory)…
+  for (int i = 0; i < 3; ++i) {
+    QAction *toggle = findToggle();
+    QVERIFY2(toggle, "filter menu must offer the Apply title patterns toggle");
+    toggle->trigger();
+  }
+
+  // …but no INI write happens inline: the per-click path rides MainWindow's
+  // debounced save stage instead of paying a full rewrite per click.
+  QCOMPARE(mock->saveCollectionsCalls(), baseline);
+  QVERIFY2(win->m_collections[0].filter.titleExclusionEnabled,
+           "the toggle must land in the live collection before any disk write");
+
+  // Exactly one coalesced write once the debounce window elapses, and no
+  // trailing second write after a further full window.
+  QTRY_COMPARE(mock->saveCollectionsCalls(), baseline + 1);
+  QTest::qWait(UIConstants::Timing::LONG_DELAY_MS * 2);
+  QCOMPARE(mock->saveCollectionsCalls(), baseline + 1);
 }

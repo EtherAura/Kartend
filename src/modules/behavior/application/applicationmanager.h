@@ -45,7 +45,14 @@ public:
   /// pervasive `if (auto *m = ctx->x())` guards stay protective during the
   /// destruction window instead of reading stale non-null pointers.
   void initialize(ApplicationContext *ctx);
-  void shutdown(const QList<CollectionConfig> &collections);
+  /// Coordinated pre-destruction teardown: cancel in-flight cache I/O,
+  /// snapshot session/cache state, persist settings, release GUI resources.
+  /// @p configReplacedOnDisk — pass true when kartend.cfg was just replaced
+  /// wholesale (settings-dialog profile import): @p collections then still
+  /// describes the OLD configuration and the collections save is skipped so
+  /// it can't overwrite the imported file. Session and cache persistence
+  /// (separate files) still runs either way.
+  void shutdown(const QList<CollectionConfig> &collections, bool configReplacedOnDisk = false);
 
   // Getters
   [[nodiscard]] ArtworkManager *getArtworkManager() const;

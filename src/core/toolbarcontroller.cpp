@@ -311,10 +311,12 @@ void ToolbarController::refreshFilterToolbar() {
           return;
         }
         c.filter.titleExclusionEnabled = checked;
-        if (settingsMgr()) {
-          ErrorPresentation::reportSaveResult(
-              settingsMgr()->saveCollections(m_mainWindow->m_collections), "collections", true);
-        }
+        // Per-click interactive path: the flag is already applied to the
+        // live collection (the reload below reads memory), so ride the
+        // debounced save stage instead of paying a full INI rewrite +
+        // config-dir fsync on every toggle. A save still pending at quit
+        // is covered by the shutdown path's synchronous persist.
+        m_mainWindow->requestDebouncedCollectionsSave();
         if (navMgr()) {
           navMgr()->safeReloadCollection(m_mainWindow->m_currentCollectionIndex);
         }
@@ -470,6 +472,10 @@ void ToolbarController::showTitleFilterEditor() {
   if (!parsed.isEmpty() && !c.filter.titleExclusionEnabled) {
     c.filter.titleExclusionEnabled = true;
   }
+  // Deliberately immediate, not debounced: this is a one-shot modal-dialog
+  // apply (the user just committed an edited pattern list), not a per-click
+  // burst path — persist it before the reload below so the change survives
+  // even an immediate crash/quit.
   if (settingsMgr()) {
     ErrorPresentation::reportSaveResult(settingsMgr()->saveCollections(m_mainWindow->m_collections),
                                         "collections", true);

@@ -469,6 +469,10 @@ void MainWindow::wireKartManager() {
         };
     km->setupReferences(kartSetup);
 
+    // Deliberately an immediate save, not the debounced per-click stage: a
+    // .kart import completing is a one-shot external event (worker-thread
+    // extraction finished), and the just-registered collection must survive
+    // an immediate quit — there is no click burst to coalesce here.
     connect(km, &kart::KartManager::collectionImported, this, [this](const QString &) {
       if (auto *sm = m_appManager->getSettingsManager()) {
         ErrorPresentation::reportSaveResult(sm->saveCollections(m_collections), "collections",

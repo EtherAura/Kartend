@@ -56,7 +56,7 @@
 #include "menucontroller.h"
 #include "navigationmanager.h"
 #include "nowplayingoverlay.h"
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 #include "pathutils.h"
 #include "playlistmanager.h"
 #include "propertyutils.h"
@@ -110,7 +110,7 @@ MainWindow::MainWindow(QWidget *parent)
   // inside setupUI() / setupArtworkManager() / setupSidebar() can register
   // against a live instance. The manager owns no widgets — overlays remain
   // parented to centralwidget as before.
-  m_overlayLayerManager = std::make_unique<OverlayZOrderRegistry>(nullptr);
+  m_overlayZOrderRegistry = std::make_unique<OverlayZOrderRegistry>(nullptr);
 
   ui->setupUi(this);
   setupUI();
@@ -317,10 +317,10 @@ void MainWindow::showStartupSplash() {
     // could bury the playing video. registerOverlay() records the layer;
     // restack() applies it now. Fallback raise() covers the (test-only)
     // case where the registry isn't constructed yet.
-    if (m_overlayLayerManager) {
-      m_overlayLayerManager->registerOverlay(videoOverlay,
-                                             OverlayZOrderRegistry::Layer::StartupVideo);
-      m_overlayLayerManager->restack();
+    if (m_overlayZOrderRegistry) {
+      m_overlayZOrderRegistry->registerOverlay(videoOverlay,
+                                               OverlayZOrderRegistry::Layer::StartupVideo);
+      m_overlayZOrderRegistry->restack();
     } else {
       videoOverlay->raise();
     }
@@ -663,7 +663,13 @@ void MainWindow::closeEvent(QCloseEvent *event) {
   // GeneralSettings has no such shutdown persist, so a debounced save still in
   // its window (volume / column-width / text-zoom burst) must flush now —
   // before m_isShuttingDown gates the timer's own callback.
-  flushPendingGeneralSettingsSave();
+  //
+  // Skipped when a profile import just replaced kartend.cfg on disk: the
+  // pending values were debounced against the OLD configuration and flushing
+  // them would clobber the imported [General] section.
+  if (!m_configReplacedOnDisk) {
+    flushPendingGeneralSettingsSave();
+  }
   m_isShuttingDown = true;
 
   // Hide window immediately so user sees instant visual response
@@ -698,9 +704,13 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
   m_currentCollectionIndex = -1;
 
-  // Delegate shutdown to ApplicationManager for coordinated cleanup
+  // Delegate shutdown to ApplicationManager for coordinated cleanup. When a
+  // profile import replaced kartend.cfg on disk, m_collections still holds
+  // the OLD collection list — shutdown() must not persist it over the
+  // imported file (saveCollections deletes every top-level group not in the
+  // list it is handed, which would wipe the imported profile's sections).
   if (m_appManager) {
-    m_appManager->shutdown(m_collections);
+    m_appManager->shutdown(m_collections, m_configReplacedOnDisk);
   }
 
   event->accept();

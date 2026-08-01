@@ -119,14 +119,14 @@ void MainWindow::showAbout() {
     buildDate = "[BUILD_DATE not set]";
   }
 
-  QString aboutText = QString("<h3>%1 <span style='font-size: medium; "
-                              "font-weight: normal;'>v%2</span></h3>"
-                              "<p>Founded by %3</p>"
-                              "<p>Build Date: %4</p>")
+  QString aboutText = tr("<h3>%1 <span style='font-size: medium; "
+                         "font-weight: normal;'>v%2</span></h3>"
+                         "<p>Founded by %3</p>"
+                         "<p>Build Date: %4</p>")
                           .arg(appName, appVersion, appAuthor, buildDate);
 
   QMessageBox msgBox(this);
-  msgBox.setWindowTitle("About");
+  msgBox.setWindowTitle(tr("About"));
   msgBox.setText(aboutText);
   msgBox.setTextFormat(Qt::RichText);
   msgBox.setStandardButtons(QMessageBox::Ok);

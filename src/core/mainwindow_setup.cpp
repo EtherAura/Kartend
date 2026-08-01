@@ -75,7 +75,7 @@
 #include "detailspanemanager.h"
 #include "isettingsmanager.h"
 #include "nowplayingoverlay.h"
-#include "overlaylayermanager.h"
+#include "overlayzorderregistry.h"
 #include "sessionmanager.h"
 #include "settingsutils.h"
 #include "splashoverlay.h"
@@ -393,20 +393,21 @@ void MainWindow::setupUIReferences() {
   // widget owned by SearchLoadingOverlay) register themselves through their
   // managers' setLayerManager() in connect-setup code below; the loose
   // top-level overlays we just constructed are registered here directly.
-  if (m_overlayLayerManager) {
-    m_overlayLayerManager->registerOverlay(m_loadingOverlay, OverlayZOrderRegistry::Layer::Loading);
-    m_overlayLayerManager->registerOverlay(m_splashOverlay, OverlayZOrderRegistry::Layer::Splash);
-    m_overlayLayerManager->registerOverlay(m_nowPlayingOverlay,
-                                           OverlayZOrderRegistry::Layer::NowPlaying);
-    m_overlayLayerManager->registerOverlay(m_detailPageOverlay,
-                                           OverlayZOrderRegistry::Layer::DetailPage);
-    m_overlayLayerManager->registerOverlay(m_textZoomHud,
-                                           OverlayZOrderRegistry::Layer::TextZoomHud);
-    m_loadingOverlay->setLayerManager(m_overlayLayerManager.get());
-    m_splashOverlay->setLayerManager(m_overlayLayerManager.get());
-    m_nowPlayingOverlay->setLayerManager(m_overlayLayerManager.get());
-    m_detailPageOverlay->setLayerManager(m_overlayLayerManager.get());
-    m_textZoomHud->setLayerManager(m_overlayLayerManager.get());
+  if (m_overlayZOrderRegistry) {
+    m_overlayZOrderRegistry->registerOverlay(m_loadingOverlay,
+                                             OverlayZOrderRegistry::Layer::Loading);
+    m_overlayZOrderRegistry->registerOverlay(m_splashOverlay, OverlayZOrderRegistry::Layer::Splash);
+    m_overlayZOrderRegistry->registerOverlay(m_nowPlayingOverlay,
+                                             OverlayZOrderRegistry::Layer::NowPlaying);
+    m_overlayZOrderRegistry->registerOverlay(m_detailPageOverlay,
+                                             OverlayZOrderRegistry::Layer::DetailPage);
+    m_overlayZOrderRegistry->registerOverlay(m_textZoomHud,
+                                             OverlayZOrderRegistry::Layer::TextZoomHud);
+    m_loadingOverlay->setLayerManager(m_overlayZOrderRegistry.get());
+    m_splashOverlay->setLayerManager(m_overlayZOrderRegistry.get());
+    m_nowPlayingOverlay->setLayerManager(m_overlayZOrderRegistry.get());
+    m_detailPageOverlay->setLayerManager(m_overlayZOrderRegistry.get());
+    m_textZoomHud->setLayerManager(m_overlayZOrderRegistry.get());
   }
 }
 
@@ -449,7 +450,7 @@ void MainWindow::initializeAppContext() {
   m_appContext.ui.sidebar = m_MetadataSidebar;
   m_appContext.ui.loadingLabel = ui->loadingLabel;
   m_appContext.ui.loadingOverlay = m_loadingOverlay;
-  m_appContext.ui.overlayLayerManager = m_overlayLayerManager.get();
+  m_appContext.ui.overlayZOrderRegistry = m_overlayZOrderRegistry.get();
 
   // Top-level managers — registered eagerly so ctx is fully populated before
   // any manager's setupReferences() runs.
@@ -623,8 +624,18 @@ void MainWindow::setViewType(ViewType viewType) {
   // Update the collection config
   config.viewType = viewType;
 
-  // Persist the change immediately
-  if (m_appManager->getSettingsManager()) {
+  // Persist the change (debounced). A view-mode toggle is a per-click
+  // interactive path, and saveCollections is a full INI rewrite + fsync of
+  // the config directory — an inline per-click stall on a populous library.
+  // Ride the same save stage the grid-width shortcuts already coalesce
+  // through: the new viewType is applied to m_collections above, so a save
+  // still inside the debounce window at exit is not lost —
+  // ApplicationManager::shutdown persists m_collections synchronously, under
+  // the same m_configReplacedOnDisk gate closeEvent applies to the
+  // general-settings flush (Kartend-rbkf6 rationale).
+  if (m_gridWidthDebouncer) {
+    m_gridWidthDebouncer->triggerSave();
+  } else if (m_appManager->getSettingsManager()) {
     ErrorPresentation::reportSaveResult(
         m_appManager->getSettingsManager()->saveCollections(m_collections), "collections", false);
   }
