@@ -119,6 +119,17 @@ public:
   qreal selectionPositionF() const { return m_selectionPositionF; }
   void setSelectionPositionF(qreal v);
 
+  // Test-visible state getters. The setters above clamp/early-out and clear
+  // caches; without these the clamp and cache-invalidation contracts are
+  // unobservable from outside a paint pass (tests/ui/widgets/
+  // test_coverflowwidget.cpp asserts through them).
+  [[nodiscard]] int cornerRadius() const { return m_cornerRadius; }
+  [[nodiscard]] int fontSize() const { return m_fontSize; }
+  [[nodiscard]] bool hideTitles() const { return m_hideTitles; }
+  [[nodiscard]] QString tileColor() const { return m_tileColor; }
+  /// Number of decoded source pixmaps currently cached (artwork-path keyed).
+  [[nodiscard]] int pixmapCacheSize() const { return static_cast<int>(m_pixmapCache.size()); }
+
 signals:
   /// User shifted the selection (wheel/arrow/side-card click). The caller is
   /// expected to route this through SelectionManager so sidebar/restore/etc.

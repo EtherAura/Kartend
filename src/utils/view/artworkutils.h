@@ -114,6 +114,29 @@ public:
   [[nodiscard]] bool isDirectoryCached(const QString &directory) const;
 
   /**
+   * @brief Monotonic generation counter for the cached listings.
+   *
+   * Incremented under the write lock on every listing mutation — a full
+   * directory insert (ensureDirectoryCached), a first-miss positive/negative
+   * patch (findInDirectory), and clear(). Callers that precompute derived
+   * structures from the listings (see ArtworkUtils::buildArtworkKeySet) key
+   * them on this value and rebuild only when it moves, instead of re-probing
+   * the cache per item.
+   */
+  [[nodiscard]] quint64 contentsGeneration() const;
+
+  /**
+   * @brief Union of every basename key with a cached POSITIVE artwork path
+   * across the listings of @p directories.
+   *
+   * Present-but-empty values are cached negatives and contribute nothing.
+   * Directories without a cached listing are queued for a background scan
+   * and contribute nothing, mirroring findInDirectory's non-blocking
+   * contract. One read-lock acquisition covers the whole enumeration.
+   */
+  [[nodiscard]] QSet<QString> collectPositiveKeys(const QStringList &directories);
+
+  /**
    * @brief Clear all cached directory contents and queued directories.
    * Call when collection changes or artwork directories are modified.
    */
@@ -139,6 +162,10 @@ private:
   QHash<QString, QHash<QString, QString>> m_cache;
   // Directories requested but not yet scanned
   QSet<QString> m_queuedDirectories;
+  // Bumped (under the write lock) on every m_cache mutation; lets derived
+  // structures (buildArtworkKeySet callers) detect staleness with one read
+  // instead of re-enumerating the listings. See contentsGeneration().
+  quint64 m_contentsGeneration = 0;
   // Kartend-uzs42: 1 while a schedulePrewarm() walk is in flight; caps the
   // background prewarm to one concurrent global-pool task so rapid collection
   // switches don't pile up redundant directory walks.
@@ -191,6 +218,30 @@ private:
  */
 [[nodiscard]] QString findArtworkForBaseNameCached(const QString &completeBaseName,
                                                    const QString &artworkDirectory);
+
+/**
+ * @brief Build the set of artwork-backed basename keys for @p artworkDirectory.
+ *
+ * Enumerates the flat root plus the typed cover subdirs (`front/`, `box/`, …)
+ * through the DirectoryCache listings ONCE and returns every baseMatchKey a
+ * findArtworkForFileCached probe would hit. Bulk predicates (FilterManager's
+ * hideMissingArtwork pass) test membership with both name-key variants —
+ * baseMatchKey(completeBaseName) and baseMatchKey(fileName) — instead of
+ * paying the per-item 20-probe cascade (flat root + 9 subdirs x 2 keys, each
+ * a lock acquisition and potentially a first-miss stat sweep).
+ *
+ * Divergences from the per-item cascade, both narrow:
+ *  - Uncached directories contribute nothing and are queued for a background
+ *    scan — the per-item path also returns empty for them, so a cold cache
+ *    behaves identically.
+ *  - A file dropped into an ALREADY-CACHED directory mid-session is invisible
+ *    here until some lookup's first-miss stat sweep patches it into the cache
+ *    (bumping contentsGeneration, so generation-keyed callers converge on
+ *    their next pass). The per-item path would find such a file once via its
+ *    own sweep; after that sweep caches a negative, both paths agree until
+ *    clear().
+ */
+[[nodiscard]] QSet<QString> buildArtworkKeySet(const QString &artworkDirectory);
 
 /**
  * @brief Compose the final item-card image: scale-to-fit + center on a

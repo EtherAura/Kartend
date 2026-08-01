@@ -253,8 +253,11 @@ void CoverFlowWidget::updateAccessibleSelection() {
 }
 
 void CoverFlowWidget::setGalleryForIndex(int index, const QList<CoverFlowGalleryEntry> &entries) {
-  if (index != m_selectedIndex && index != m_galleryOwnerIndex) {
-    // Stale push — selection moved on before the resolver caught up.
+  if (index != m_selectedIndex) {
+    // Stale push — selection moved on before the resolver caught up. A
+    // refresh for the current selection still passes (owner == selected
+    // then); a late result for the previous owner must not resurrect that
+    // card's gallery under the new selection.
     return;
   }
   m_gallery = entries;

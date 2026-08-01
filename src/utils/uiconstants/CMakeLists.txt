@@ -17,7 +17,6 @@ target_sources(kartend_utils PRIVATE
   metadata.h
   mouse.h
   navigation.h
-  offset.h
   overlay.h
   placeholder.h
   scroll.h

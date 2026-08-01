@@ -66,6 +66,13 @@ private:
   // See videothumbnailextractor.cpp — defers QtMultimedia backend init
   // until the first frame request actually arrives.
   void ensureMediaPipeline();
+  /// Stops and deletes the QMediaPlayer / QAudioOutput / QVideoSink while the
+  /// application still exists. Connected to QCoreApplication::aboutToQuit on
+  /// first pipeline construction: this object is a function-local static, so
+  /// without the early teardown the media objects would be destroyed during
+  /// static destruction, after QApplication (and the multimedia backend) are
+  /// gone. Post-teardown requests no-op gracefully.
+  void teardownMediaPipeline();
   void processNext();
   void onMediaStatusChanged(int status);
   void onVideoFrame();
@@ -82,6 +89,10 @@ private:
   QQueue<QString> m_queue;
   QString m_currentPath;
   bool m_seekedForCurrent = false;
+  /// Set by teardownMediaPipeline() (aboutToQuit). Blocks pipeline
+  /// reconstruction so a late thumbnail request during app teardown can't
+  /// resurrect the QtMultimedia backend after it started shutting down.
+  bool m_pipelineRetired = false;
   int m_timeoutMs = 4000;
   QTimer m_timeoutTimer; // Kartend-a911.6: value member
 };

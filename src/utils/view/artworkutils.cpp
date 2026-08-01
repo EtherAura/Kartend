@@ -74,6 +74,26 @@ const QStringList &coverSubdirPriority() {
   };
   return kDirs;
 }
+
+/// Small dedicated pool for the background prewarm walk (mirrors
+/// ArtworkLoadDispatcher's dedicated-pool pattern). schedulePrewarm used to
+/// start its task on the GLOBAL pool and the walk then ran
+/// QtConcurrent::blockingMap on that same global pool from inside the task —
+/// a blocked-thread-in-pool: under load the walk both occupied a global
+/// worker and waited on more global workers. The walk now owns its threads;
+/// blockingMap's calling thread participates in the map as before, so a
+/// saturated pool degrades to the caller scanning serially rather than
+/// deadlocking or starving unrelated global-pool work.
+QThreadPool &prewarmWalkPool() {
+  static QThreadPool pool;
+  static const bool configured = [] {
+    pool.setObjectName(QStringLiteral("kartend-artwork-prewarm"));
+    pool.setMaxThreadCount(2);
+    return true;
+  }();
+  Q_UNUSED(configured)
+  return pool;
+}
 } // namespace
 
 // Singleton instance
@@ -102,6 +122,7 @@ void DirectoryCache::ensureDirectoryCached(const QString &directory) {
     // Cache empty hash to avoid repeated checks
     QWriteLocker locker(&m_lock);
     m_cache.insert(directory, QHash<QString, QString>());
+    ++m_contentsGeneration;
     qCDebug(lcPerfTrace) << "ensureDirectoryCached: dir NOT EXISTS ms=" << perfTimer.elapsed()
                          << "dir=" << directory;
     return;
@@ -129,6 +150,7 @@ void DirectoryCache::ensureDirectoryCached(const QString &directory) {
     // Double-check another thread didn't cache it while we were scanning
     if (!m_cache.contains(directory)) {
       m_cache.insert(directory, dirContents);
+      ++m_contentsGeneration;
     }
   }
 
@@ -220,11 +242,13 @@ QString DirectoryCache::findInDirectory(const QString &baseName, const QString &
     // lookups aren't serialised behind it.
     QWriteLocker patchLocker(&m_lock);
     m_cache[artworkDirectory].insert(key, candidate);
+    ++m_contentsGeneration;
     return candidate;
   }
   {
     QWriteLocker patchLocker(&m_lock);
     m_cache[artworkDirectory].insert(key, QString());
+    ++m_contentsGeneration;
   }
   return {};
 }
@@ -269,8 +293,10 @@ void DirectoryCache::prewarmDirectories(const QStringList &directories) {
   }
 
   // Process directories in parallel - each thread scans a different directory
-  // This warms the OS dentry cache much faster than sequential scanning
-  QtConcurrent::blockingMap(toProcess, [this](const QString &dir) {
+  // This warms the OS dentry cache much faster than sequential scanning.
+  // The dedicated walk pool (not the global pool) supplies the parallelism —
+  // see prewarmWalkPool() for why.
+  QtConcurrent::blockingMap(&prewarmWalkPool(), toProcess, [this](const QString &dir) {
     ensureDirectoryCached(dir);
     // Brief lock to update queue
     {
@@ -287,11 +313,11 @@ void DirectoryCache::schedulePrewarm(const QStringList &directories) {
   // Kartend-uzs42: cap at one in-flight prewarm. If a walk is already running,
   // drop this request (best-effort — the running walk warms its dirs and the
   // newly-selected collection's own enumeration warms the rest). This stops a
-  // burst of collection switches from piling up redundant global-pool walks.
+  // burst of collection switches from piling up redundant walks.
   if (!m_prewarmInFlight.testAndSetOrdered(0, 1)) {
     return;
   }
-  QThreadPool::globalInstance()->start([this, directories]() {
+  prewarmWalkPool().start([this, directories]() {
     prewarmDirectories(directories);
     processQueuedDirectories();
     m_prewarmInFlight.storeRelaxed(0);
@@ -313,8 +339,9 @@ void DirectoryCache::processQueuedDirectories() {
   }
 
   qCDebug(lcPerfTrace) << "processQueuedDirectories: count=" << toProcess.size();
-  // Process in parallel for faster warmup
-  QtConcurrent::blockingMap(toProcess, [this](const QString &dir) {
+  // Process in parallel for faster warmup (dedicated walk pool — see
+  // prewarmWalkPool()).
+  QtConcurrent::blockingMap(&prewarmWalkPool(), toProcess, [this](const QString &dir) {
     ensureDirectoryCached(dir);
     // Brief lock just to update queue
     {
@@ -340,10 +367,47 @@ bool DirectoryCache::isDirectoryCached(const QString &directory) const {
   return m_cache.contains(directory);
 }
 
+quint64 DirectoryCache::contentsGeneration() const {
+  QReadLocker locker(&m_lock);
+  return m_contentsGeneration;
+}
+
+QSet<QString> DirectoryCache::collectPositiveKeys(const QStringList &directories) {
+  QSet<QString> keys;
+  QStringList uncached;
+  {
+    QReadLocker locker(&m_lock);
+    for (const QString &dir : directories) {
+      const auto dirIt = m_cache.constFind(dir);
+      if (dirIt == m_cache.constEnd()) {
+        uncached.append(dir);
+        continue;
+      }
+      for (auto it = dirIt->constBegin(); it != dirIt->constEnd(); ++it) {
+        // A present-but-empty value is a cached NEGATIVE (Kartend-bjrw1) —
+        // only real artwork paths contribute a key.
+        if (!it.value().isEmpty()) {
+          keys.insert(it.key());
+        }
+      }
+    }
+  }
+  // Mirror findInDirectory's non-blocking contract: uncached directories are
+  // queued for a background scan instead of being scanned here.
+  if (!uncached.isEmpty()) {
+    QWriteLocker locker(&m_lock);
+    for (const QString &dir : uncached) {
+      m_queuedDirectories.insert(dir);
+    }
+  }
+  return keys;
+}
+
 void DirectoryCache::clear() {
   QWriteLocker locker(&m_lock);
   m_cache.clear();
   m_queuedDirectories.clear();
+  ++m_contentsGeneration;
 }
 
 namespace {
@@ -485,6 +549,24 @@ QString findCachedWithKeys(const QString &baseName, const QString &fullName,
   return result;
 }
 } // namespace
+
+QSet<QString> buildArtworkKeySet(const QString &artworkDirectory) {
+  if (artworkDirectory.isEmpty()) {
+    return {};
+  }
+  // Same directory cascade findCachedWithKeys probes per item: the flat root
+  // first, then every typed cover subdir. Nonexistent subdirs cost one queued
+  // background scan that caches an empty listing — identical to the per-item
+  // path, which probes them through findInDirectory regardless.
+  QStringList directories;
+  directories.reserve(1 + coverSubdirPriority().size());
+  directories.append(artworkDirectory);
+  const QDir artRoot(artworkDirectory);
+  for (const QString &subdir : coverSubdirPriority()) {
+    directories.append(artRoot.absoluteFilePath(subdir));
+  }
+  return DirectoryCache::instance().collectPositiveKeys(directories);
+}
 
 void clearDirectoryCache() {
   DirectoryCache::instance().clear();

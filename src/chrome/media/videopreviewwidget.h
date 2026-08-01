@@ -127,6 +127,13 @@ private:
   // user-paused video — the user's intent should survive a sidebar
   // collapse/expand cycle.
   bool m_userPaused = false;
+  // Frame-drop coalescing: true while a singleShot(0) apply queued by
+  // renderFrame() has not yet run. Further decoded frames arriving in that
+  // window are dropped before their (expensive) toImage() conversion — at
+  // preview frame rates the one-frame lag is invisible, and the GUI thread
+  // stops paying toImage + fromImage + scaled per delivered frame when it
+  // can't keep up.
+  bool m_frameApplyPending = false;
 
   // shared volume state. Each instance pushes the current
   // s_globalVolume into its QAudioOutput at construction; setGlobalVolume()

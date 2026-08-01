@@ -482,16 +482,41 @@ void ItemWidget::onArtworkChanged() {
     drawTitleOnPlaceholder(placeholder);
     imageLabel->setPixmap(placeholder);
     imageLabel->setStyleSheet(QString());
-  } else if (m_storedIsComposed) {
+  } else if (m_storedIsComposed && !storedPixmap.isNull() &&
+             displayPixmap.deviceIndependentSize().toSize() == QSize(width, height)) {
     // Kartend-63wg: the worker already produced the final corner-masked card at
     // this tile's size — set it straight onto the label with no scale/composite.
-    // applyResultsToUi only routes here when the card matches the live size.
+    // The size guard matters on every entry path (deferred applyDimensions
+    // refresh, DeferArtworkUpdate release, palette change): a card composed
+    // for a previous tile size must not be set 1:1, and re-compositing it
+    // would double its border and corner mask.
     imageLabel->setPixmap(displayPixmap);
     imageLabel->setStyleSheet(QString());
-  } else {
-    // Get the screen DPR for the final output
+  } else if (m_storedIsComposed && !storedPixmap.isNull()) {
+    // Stale-size composed card (tile dimensions changed after delivery). The
+    // card is display-final — compositing it again doubles the border and
+    // re-masks the corners — and the raw artwork is not held here, so scale
+    // it as a stopgap. ArtworkManager::addPendingArtwork treats a stale-size
+    // card as "needs re-delivery" (hasStaleComposedArtwork), so the next
+    // configure pass replaces this with a card built for the current size.
     qreal dpr = 1.0;
-    if (QGuiApplication::primaryScreen()) {
+    if (const QScreen *scr = screen()) {
+      dpr = scr->devicePixelRatio();
+    } else if (QGuiApplication::primaryScreen()) {
+      dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
+    }
+    QPixmap scaled = displayPixmap.scaled(qRound(width * dpr), qRound(height * dpr),
+                                          Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    scaled.setDevicePixelRatio(dpr);
+    imageLabel->setPixmap(scaled);
+    imageLabel->setStyleSheet(QString());
+  } else {
+    // The DPR of the screen this widget is actually on (mixed-DPI setups),
+    // falling back to the primary screen for a not-yet-shown widget.
+    qreal dpr = 1.0;
+    if (const QScreen *scr = screen()) {
+      dpr = scr->devicePixelRatio();
+    } else if (QGuiApplication::primaryScreen()) {
       dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
     }
 
@@ -530,5 +555,25 @@ ItemWidget::ArtworkRenderSpec ItemWidget::artworkRenderSpec() const {
   }
   spec.cornerRadius = m_cornerRadius;
   spec.background = palette().color(QPalette::Mid);
+  // The DPR of the screen this widget actually sits on, so mixed-DPI setups
+  // decode + compose for the right display; primary-screen fallback for a
+  // widget not yet attached to a screen. GUI-thread only, like the rest of
+  // this snapshot.
+  if (const QScreen *scr = screen()) {
+    spec.dpr = scr->devicePixelRatio();
+  } else if (QGuiApplication::primaryScreen()) {
+    spec.dpr = QGuiApplication::primaryScreen()->devicePixelRatio();
+  }
   return spec;
+}
+
+bool ItemWidget::hasStaleComposedArtwork() const {
+  if (!m_storedIsComposed || storedPixmap.isNull() || !imageLabel) {
+    return false;
+  }
+  // A worker-composed card is final (scaled, centered, corner-masked) and can
+  // only be shown 1:1 — compare its logical size against the label it would
+  // be set on. deviceIndependentSize folds the card's DPR back out, so the
+  // comparison is DPR-agnostic.
+  return storedPixmap.deviceIndependentSize().toSize() != imageLabel->size();
 }

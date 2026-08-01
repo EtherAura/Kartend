@@ -2,6 +2,7 @@
 #include "videothumbnailextractor.h"
 
 #include <QAudioOutput>
+#include <QCoreApplication>
 #include <QFile>
 #include <QImage>
 #include <QMediaPlayer>
@@ -42,9 +43,18 @@ VideoThumbnailExtractor::VideoThumbnailExtractor() {
 }
 
 void VideoThumbnailExtractor::ensureMediaPipeline() {
-  if (m_player) {
+  if (m_player || m_pipelineRetired) {
     return;
   }
+  // First pipeline construction: arrange for the media objects to be torn
+  // down on aboutToQuit, while QApplication and the QtMultimedia backend
+  // still exist. This object is a function-local static — without the early
+  // teardown, the QMediaPlayer / QAudioOutput / QVideoSink children would be
+  // destroyed during static destruction, after the application is gone,
+  // which the multimedia backends do not survive. Context = this (the
+  // singleton), so the connection's lifetime is well-defined.
+  connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this,
+          [this]() { teardownMediaPipeline(); });
   m_player = new QMediaPlayer(this);
   m_audioOutput = new QAudioOutput(this);
   m_audioOutput->setMuted(true);
@@ -75,7 +85,33 @@ void VideoThumbnailExtractor::setExtractionTimeoutMs(int ms) {
   m_timeoutTimer.setInterval(m_timeoutMs);
 }
 
+void VideoThumbnailExtractor::teardownMediaPipeline() {
+  m_pipelineRetired = true;
+  m_timeoutTimer.stop();
+  m_queue.clear();
+  m_currentPath.clear();
+  m_seekedForCurrent = false;
+  if (m_player) {
+    m_player->stop();
+    m_player->setSource(QUrl());
+    // Detach the sink and audio output before deleting them so the player
+    // never holds a pointer to a dead object, even transiently.
+    m_player->setVideoSink(nullptr);
+    m_player->setAudioOutput(nullptr);
+  }
+  delete m_player;
+  m_player = nullptr;
+  delete m_sink;
+  m_sink = nullptr;
+  delete m_audioOutput;
+  m_audioOutput = nullptr;
+}
+
 VideoThumbnailExtractor::~VideoThumbnailExtractor() {
+  // Normally a no-op: teardownMediaPipeline() already destroyed the media
+  // members on aboutToQuit, leaving this static-destruction-time destructor
+  // trivial. The guarded stop covers the exotic path where the process exits
+  // without QCoreApplication ever emitting aboutToQuit.
   if (m_player) {
     m_player->stop();
     m_player->setSource(QUrl());
@@ -106,6 +142,12 @@ void VideoThumbnailExtractor::requestFrame(const QString &videoPath) {
     return;
   }
 
+  // Post-quit: the media pipeline was torn down on aboutToQuit and must not
+  // be resurrected — uncached requests quietly no-op from here on.
+  if (m_pipelineRetired) {
+    return;
+  }
+
   if (videoPath == m_currentPath || m_queue.contains(videoPath)) {
     return;
   }
@@ -121,6 +163,12 @@ void VideoThumbnailExtractor::processNext() {
     return;
   }
   ensureMediaPipeline();
+  if (!m_player) {
+    // Retired pipeline (teardown ran between enqueue and this deferred
+    // call): nothing can serve the queue anymore, drop it.
+    m_queue.clear();
+    return;
+  }
   m_currentPath = m_queue.dequeue();
   m_seekedForCurrent = false;
 
@@ -180,8 +228,10 @@ void VideoThumbnailExtractor::finishCurrent(const QPixmap &pixmap) {
     return;
   }
   m_timeoutTimer.stop();
-  m_player->stop();
-  m_player->setSource(QUrl());
+  if (m_player) {
+    m_player->stop();
+    m_player->setSource(QUrl());
+  }
 
   const QString path = m_currentPath;
   m_currentPath.clear();

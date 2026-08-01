@@ -45,8 +45,6 @@ inline constexpr int PERSISTENT_SILENT_LOAD_INTERVAL_MS = 300;
 inline constexpr int SILENT_LOAD_COOLDOWN_MS = 500;
 /// Delay before starting silent load after items loaded
 inline constexpr int START_SILENT_LOAD_AFTER_ITEMS_MS = 150;
-/// Delay before reapplying filter after artwork load
-inline constexpr int FILTER_REAPPLY_DELAY_MS = 150;
 
 // AdaptiveBatcher::Config tuning for the artwork-decode batcher — promoted
 // from the positional constructor tuple (easy to transpose) (Kartend-o12mq).

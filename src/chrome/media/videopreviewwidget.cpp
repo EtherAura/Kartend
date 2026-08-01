@@ -20,6 +20,7 @@
 #include <QPixmap>
 #include <QShowEvent>
 #include <QSizePolicy>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QVideoFrame>
@@ -123,6 +124,15 @@ void VideoPreviewWidget::renderFrame(const QVideoFrame &frame) {
     qCDebug(lcVideo) << "renderFrame skipped: currentPath is empty (post-stop)";
     return;
   }
+  // Drop frames while a previous frame is still waiting for its coalesced
+  // apply below — BEFORE the toImage() conversion, which is the expensive
+  // part. When the GUI thread keeps up, every frame is applied; when it
+  // falls behind, decoding continues but the per-frame convert + scale cost
+  // stops piling onto the event loop. One frame of lag is invisible at
+  // preview frame rates.
+  if (m_frameApplyPending) {
+    return;
+  }
   QImage img = frame.toImage();
   if (img.isNull()) {
     qCDebug(lcVideo) << "renderFrame skipped: frame.toImage() returned null"
@@ -155,7 +165,14 @@ void VideoPreviewWidget::renderFrame(const QVideoFrame &frame) {
                      << "labelVisible=" << m_imageLabel->isVisible() << ancestry;
   }
   ++frameCounter;
-  paintCurrentImageScaled();
+  m_frameApplyPending = true;
+  // Coalesce the label update to the next event-loop turn so a burst of
+  // deliveries paints once; the pending flag just set drops further frames
+  // until this apply has run.
+  QTimer::singleShot(0, this, [this]() {
+    m_frameApplyPending = false;
+    paintCurrentImageScaled();
+  });
 }
 
 void VideoPreviewWidget::paintCurrentImageScaled() {
@@ -166,8 +183,15 @@ void VideoPreviewWidget::paintCurrentImageScaled() {
   if (target.width() <= 0 || target.height() <= 0) {
     return;
   }
+  // Fast scaling while frames are streaming — the next frame replaces the
+  // pixmap in ~16-33ms anyway, so smooth filtering per intermediate frame
+  // buys nothing visible and costs GUI-thread time. Paused / stopped (the
+  // frame the user actually looks at, including the post-pause repaint and
+  // a resize while paused) gets SmoothTransformation.
+  const bool streaming = m_player && m_player->playbackState() == QMediaPlayer::PlayingState;
   QPixmap pix = QPixmap::fromImage(m_currentImage);
-  pix = pix.scaled(target, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+  pix = pix.scaled(target, Qt::KeepAspectRatio,
+                   streaming ? Qt::FastTransformation : Qt::SmoothTransformation);
   m_imageLabel->setPixmap(pix);
 }
 
@@ -211,6 +235,9 @@ bool VideoPreviewWidget::togglePauseResume() {
   if (m_player->playbackState() == QMediaPlayer::PlayingState) {
     m_player->pause();
     m_userPaused = true;
+    // The paused frame is the one the user will actually study — replace the
+    // fast-scaled streaming pixmap with a smooth-scaled render of it.
+    paintCurrentImageScaled();
   } else {
     m_player->play();
     m_userPaused = false;
@@ -226,8 +253,11 @@ bool VideoPreviewWidget::isPaused() const {
 }
 
 void VideoPreviewWidget::hideEvent(QHideEvent *event) {
-  // Free decoder resources whenever the sidebar (or this widget) becomes
-  // hidden — there is no point decoding a video the user cannot see.
+  // Pause (not stop) while hidden: decoding halts, so no CPU is spent on a
+  // video the user cannot see, but the source and position are preserved on
+  // purpose — sidebar previews resume from where they left off when
+  // showEvent() runs (a stop() here would drop the loaded source and restart
+  // playback from the beginning on every collapse/expand cycle).
   if (m_player) {
     m_player->pause();
   }

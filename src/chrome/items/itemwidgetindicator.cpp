@@ -76,7 +76,13 @@ void ItemWidget::paintTriangleIndicator() {
            << QPoint(UIConstants::Widget::TRIANGLE_SIZE - UIConstants::Metadata::VALUE_PADDING,
                      UIConstants::Widget::TRIANGLE_SIZE - UIConstants::Metadata::VALUE_PADDING);
   painter.drawPolygon(triangle);
-  auto *indicatorLabel = qobject_cast<QLabel *>(triangleIndicator);
+  // triangleIndicator is a plain QWidget in the .ui file, so the pixmap is
+  // hosted on a child QLabel created lazily on the first paint. Reuse it on
+  // every subsequent paint — allocating a fresh child per call would
+  // accumulate stacked labels for the widget's lifetime. It hides/shows with
+  // its parent, so the update path above needs no extra bookkeeping.
+  auto *indicatorLabel =
+      triangleIndicator->findChild<QLabel *>(QString(), Qt::FindDirectChildrenOnly);
   if (!indicatorLabel) {
     indicatorLabel = new QLabel(triangleIndicator);
     indicatorLabel->setGeometry(0, 0, UIConstants::Widget::TRIANGLE_SIZE,

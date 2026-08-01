@@ -280,7 +280,6 @@ void ItemWidget::setItemDimensions(int width, int height) {
 void ItemWidget::applyDimensions() {
   QString currentName = itemName;
   QString currentPath = filePath;
-  QPixmap currentPixmap = storedPixmap;
   setFixedSize(m_itemWidth, m_itemHeight);
 
   // List mode: horizontal layout with name, collection, and artwork icon
@@ -462,9 +461,14 @@ void ItemWidget::applyDimensions() {
   if (!currentPath.isEmpty()) {
     setFilePath(currentPath);
   }
-  if (!currentPixmap.isNull()) {
-    setArtworkPixmap(currentPixmap);
-  }
+  // storedPixmap is intentionally NOT re-fed through setArtworkPixmap here:
+  // it already holds the artwork, and routing a worker-composed card back
+  // through the raw-artwork setter cleared m_storedIsComposed — the deferred
+  // refresh below then re-composited the already-composed card (doubled
+  // border, re-masked corners at the wrong scale). The coalesced
+  // onArtworkChanged() below re-renders the stored artwork for the new
+  // dimensions either way, with the composed-card size guard deciding
+  // whether it can be set 1:1.
   // Defer artwork update until after all recycle property changes settle -
   // ensures the widget displays correctly after being reused from the pool.
   // Kartend-4hct5: coalesce — if a refresh is already queued for this widget

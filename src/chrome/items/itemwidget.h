@@ -44,8 +44,20 @@ public:
     QSize labelSize;
     int cornerRadius = 0;
     QColor background;
+    /// Device pixel ratio of the screen this widget is actually on (falls
+    /// back to the primary screen, then 1.0). Snapshotted on the GUI thread
+    /// so the worker decodes and composes for the tile's real screen on
+    /// mixed-DPI setups instead of always assuming the primary display.
+    qreal dpr = 1.0;
   };
   [[nodiscard]] ArtworkRenderSpec artworkRenderSpec() const;
+  /// True when the stored artwork is a worker-composed final card whose size
+  /// no longer matches the artwork label (tile dimensions changed after
+  /// delivery). A composed card is display-final — it cannot be re-composited
+  /// without doubling its border and corner mask — so ArtworkManager treats a
+  /// stale-size card as "needs re-delivery" even though the widget is still
+  /// in the loaded registry.
+  [[nodiscard]] bool hasStaleComposedArtwork() const;
   explicit ItemWidget(QWidget *parent = nullptr);
   ~ItemWidget() override;
 
