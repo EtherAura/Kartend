@@ -247,7 +247,7 @@ void ViewportManager::updateViewAndRowAfterVisibility(int index, int gridWidth) 
 }
 
 bool ViewportManager::shouldExitEnsureItemVisible(int index) const {
-  if (QApplication::closingDown() || ((m_isShuttingDown) && *m_isShuttingDown)) {
+  if (shuttingDown()) {
     return true;
   }
   if (!m_itemScrollArea ||

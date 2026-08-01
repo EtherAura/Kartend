@@ -4,6 +4,8 @@
 // Any user interaction immediately stops the autoscroll.
 #include "attractmanager.h"
 
+#include <QApplication>
+
 #include "applicationcontext.h"
 #include "attracthelpers.h"
 #include "collection/generalsettings.h"
@@ -44,6 +46,10 @@ AttractManager::AttractManager(QObject *parent) : QObject(parent) {
 }
 
 AttractManager::~AttractManager() = default;
+
+bool AttractManager::shuttingDown() const {
+  return QApplication::closingDown() || (m_isShuttingDown && *m_isShuttingDown);
+}
 
 void AttractManager::setupReferences(const AttractManagerSetup &setup) {
   m_ctx = setup.ctx;
@@ -159,7 +165,7 @@ void AttractManager::resetIdleTimer() {
   if (m_suspended) {
     return;
   }
-  if (m_isShuttingDown && *m_isShuttingDown) {
+  if (shuttingDown()) {
     return;
   }
   // Re-sync interval from the live GeneralSettings pointer every time so that
@@ -184,7 +190,7 @@ void AttractManager::onIdleTimeout() {
   if (m_suspended) {
     return;
   }
-  if (m_isShuttingDown && *m_isShuttingDown) {
+  if (shuttingDown()) {
     return;
   }
   startAttract();
@@ -334,7 +340,7 @@ void AttractManager::onAdvanceSelectionTick() {
   if (!m_attractActive || !isEnabled()) {
     return;
   }
-  if (m_isShuttingDown && *m_isShuttingDown) {
+  if (shuttingDown()) {
     return;
   }
   if (!m_generalSettings || !m_generalSettings->attract.attractModeAdvanceSelectionEnabled) {

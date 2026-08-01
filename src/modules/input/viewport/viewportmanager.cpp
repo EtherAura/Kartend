@@ -46,6 +46,10 @@ ViewportManager::ViewportManager(QObject *parent) : QObject(parent) {}
 
 ViewportManager::~ViewportManager() = default;
 
+bool ViewportManager::shuttingDown() const {
+  return QApplication::closingDown() || (m_isShuttingDown && *m_isShuttingDown);
+}
+
 void ViewportManager::setupReferences(const ViewportManagerSetup &setup) {
   m_ctx = setup.ctx;
   m_generalSettings = setup.getGeneralSettings();

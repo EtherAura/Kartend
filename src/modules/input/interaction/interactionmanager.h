@@ -414,6 +414,12 @@ private:
   QPointer<QLineEdit> m_searchBar;
   GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;
+  /// Canonical shutdown test (Kartend-kalh1, mirrors GamepadManager):
+  /// dereferences the MainWindow-owned flag pointer and folds in the
+  /// app-global closingDown. Use this — never truth-test m_isShuttingDown,
+  /// which is non-null for the manager's whole wired life and would read
+  /// permanently true (the stopRepeat bug this rule comes from).
+  [[nodiscard]] bool shuttingDown() const;
 
   // Kartend-n8kh: owner-supplied dialog runners. The closures live in the
   // UI layer (MainWindow setup wiring), so the input layer never #includes

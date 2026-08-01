@@ -189,6 +189,12 @@ private:
   QList<CollectionConfig> *m_collections = nullptr;
   const int *m_currentCollectionIndex = nullptr;
   const bool *m_isShuttingDown = nullptr;
+  /// Canonical shutdown test (Kartend-kalh1, mirrors GamepadManager):
+  /// dereferences the MainWindow-owned flag pointer and folds in the
+  /// app-global closingDown. Use this — never truth-test m_isShuttingDown,
+  /// which is non-null for the manager's whole wired life and would read
+  /// permanently true.
+  [[nodiscard]] bool shuttingDown() const;
 };
 
 #endif // VIEWPORTMANAGER_H

@@ -377,7 +377,7 @@ void InteractionManager::handleSuccessfulSelection(int index) {
     restoringMatch = m_selectionManager->checkAndFinalizeRestore(index);
   }
 
-  if ((m_isShuttingDown) && *m_isShuttingDown) {
+  if (shuttingDown()) {
     return;
   }
 

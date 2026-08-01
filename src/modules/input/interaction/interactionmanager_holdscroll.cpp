@@ -25,9 +25,7 @@
 
 // Stops key/mouse repeat navigation and restores artwork / centering properties
 void InteractionManager::stopRepeat(bool suppressRecentering) {
-  // m_isShuttingDown is a pointer into MainWindow's flag — it is non-null for
-  // the manager's whole life, so it must be dereferenced, never truth-tested.
-  if ((m_isShuttingDown && *m_isShuttingDown) || QApplication::closingDown()) {
+  if (shuttingDown()) {
     if (m_viewportManager) {
       m_viewportManager->setRepeating(false);
       m_viewportManager->setWrapSequenceActive(false);

@@ -124,6 +124,12 @@ private:
   QPointer<QScrollArea> m_itemScrollArea = nullptr;
   const GeneralSettings *m_generalSettings = nullptr;
   const bool *m_isShuttingDown = nullptr;
+  /// Canonical shutdown test (Kartend-kalh1, mirrors GamepadManager):
+  /// dereferences the MainWindow-owned flag pointer and folds in the
+  /// app-global closingDown. Use this — never truth-test m_isShuttingDown,
+  /// which is non-null for the manager's whole wired life and would read
+  /// permanently true.
+  [[nodiscard]] bool shuttingDown() const;
 
   // Timers — value members (Kartend-a911.5). Lifetime tracks the owner;
   // no QObject parent set, which is fine because nothing relies on

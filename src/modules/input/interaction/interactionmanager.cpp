@@ -272,12 +272,16 @@ void InteractionManager::updateFilePathForSelection(int index, const QList<int> 
   }
 }
 
+bool InteractionManager::shuttingDown() const {
+  return QApplication::closingDown() || (m_isShuttingDown && *m_isShuttingDown);
+}
+
 void InteractionManager::clearSelection() {
   if (m_selectionManager) {
-    // Dereference — m_isShuttingDown is a pointer into MainWindow's flag and
-    // is non-null for the manager's whole life; passing it raw would convert
-    // to a permanently-true bool.
-    m_selectionManager->clearSelection(m_isShuttingDown && *m_isShuttingDown);
+    // shuttingDown() — never the raw pointer, which is non-null for the
+    // manager's whole life and would convert to a permanently-true bool
+    // (the original stopRepeat bug, Kartend-kalh1).
+    m_selectionManager->clearSelection(shuttingDown());
   }
 }
 
