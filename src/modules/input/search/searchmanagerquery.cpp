@@ -242,19 +242,10 @@ void SearchManager::performDebouncedSearch() {
     return;
   }
 
-  CollectionContext context;
-  context.currentIndex = collIndex;
-  context.config = (*m_collections)[collIndex];
-  context.config.mediaDirectory =
-      SettingsUtils::expandConfigVariables(context.config.mediaDirectory, context.config.name);
-  context.config.artworkDirectory =
-      SettingsUtils::expandConfigVariables(context.config.artworkDirectory, context.config.name);
-  context.artworkDirectory = context.config.artworkDirectory;
-  if (m_generalSettings) {
-    context.sortMode = m_generalSettings->view.sortMode;
-    context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
-  }
-
+  // No CollectionContext is built here: every dispatch below hands off to a
+  // NavigationManager pipeline that constructs its own canonical context
+  // (the block this comment replaces built one nothing consumed —
+  // Kartend-a4ccd).
   switch (dispatch) {
   case SearchHelpers::SearchDispatch::CurrentCollection: {
     // CurrentCollection uses on-demand range loading; in-memory filtering can
