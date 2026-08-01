@@ -280,6 +280,14 @@ kartend_add_test(NAME CliArgs
   LINK kartend_utils
 )
 
+# FFmpeg hardware-decode backend policy (Kartend-0vnvo): keeps Qt off the
+# `vulkan` decode backend, which leaks a DRM render-node fd + Mesa worker
+# thread per QMediaPlayer::setSource().
+kartend_add_test(NAME MediaBackendConfig
+  SOURCES utils/app/test_mediabackendconfig.cpp
+  LINK kartend_utils
+)
+
 # Threading utils (Kartend-qsujk): AdaptiveBatcher's timing -> batch-size
 # adaptation, and ThreadPoolUtils::shutdownWithBudget's leak-vs-delete branch
 # (the UAF-avoiding path from Kartend-7vrx). Pure logic + a bounded blocking
