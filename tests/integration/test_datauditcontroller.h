@@ -24,6 +24,10 @@ private slots:
   void openDialog_recreatesAfterExternalDestruction();
   void openForCollection_showsTheSameCachedDialog();
   void startupLibraryScan_withoutLibraryPathIsInert();
+  // Kartend-j6a00: opened while an application-modal window is up, the
+  // dialog transient-parents to the modal (so it accepts input) and is
+  // handed back to the base parent before the modal is destroyed.
+  void openWhileModalActive_adoptsAndRestoresParent();
 };
 
 #endif // KARTEND_TESTS_TEST_DATAUDITCONTROLLER_H

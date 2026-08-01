@@ -4,6 +4,8 @@
 #include "datauditcontroller.h"
 #include "datauditdialog.h"
 
+#include <QApplication>
+#include <QDialog>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -102,4 +104,40 @@ void TestDatAuditController::startupLibraryScan_withoutLibraryPathIsInert() {
   DatAuditHarness unwired;
   unwired.controller.startupLibraryScan();
   QVERIFY(unwired.statusMessages.isEmpty());
+}
+
+void TestDatAuditController::openWhileModalActive_adoptsAndRestoresParent() {
+  DatAuditHarness h;
+
+  // Baseline open: parented to the host window.
+  h.controller.openDialog();
+  DatAuditDialog *dialog = h.host.findChildren<DatAuditDialog *>().first();
+  QCOMPARE(dialog->parentWidget(), &h.host);
+
+  {
+    // An application-modal dialog is up (the Settings dialog in production —
+    // setModal + show registers it as activeModalWidget without needing a
+    // blocking exec() here).
+    QDialog modal;
+    modal.setModal(true);
+    modal.show();
+    QCOMPARE(QApplication::activeModalWidget(), &modal);
+
+    // Opening the audit now must transient-parent it to the modal so Qt
+    // exempts it from the modal input block — previously it stayed under
+    // the host and froze until Settings closed (Kartend-j6a00).
+    h.controller.openDialog();
+    QCOMPARE(dialog->parentWidget(), static_cast<QWidget *>(&modal));
+    QVERIFY(dialog->isVisible());
+
+    // Closing the modal (finished) hands the dialog back to the host BEFORE
+    // the modal is destroyed — a QWidget parent owns its top-level children,
+    // and the cached dialog must outlive the settings session.
+    modal.close();
+    QCOMPARE(dialog->parentWidget(), &h.host);
+    QVERIFY(dialog->isVisible());
+  } // modal destroyed here; the destroyed()-path restore is a no-op now
+
+  QCOMPARE(h.host.findChildren<DatAuditDialog *>().size(), 1);
+  QCOMPARE(h.host.findChildren<DatAuditDialog *>().first(), dialog);
 }

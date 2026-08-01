@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Opening the DAT Audit from the settings dialog no longer produces a
+  frozen window.** The settings dialog is modal, and the audit window it
+  opened couldn't receive clicks or keys until settings closed. It now
+  accepts input immediately, and it stays open (moving back under the main
+  window) when the settings dialog closes.
 - Collection validation no longer contradicts itself about a launcher that
   exists but is not executable (it warned "not executable" and "does not
   exist" about the same file), and circular parent chains between

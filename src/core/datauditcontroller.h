@@ -120,6 +120,15 @@ private:
   /// notifies fresh. No-op when no library is configured.
   void updateLibraryWatch();
 
+  /// Kartend-j6a00: while an application-modal window (the Settings dialog)
+  /// is up, the audit dialog is transient-parented to it so Qt exempts it
+  /// from the modal input block. Non-null exactly while adopted; guards
+  /// duplicate reparent-back connections when the dialog is opened twice
+  /// from the same modal session.
+  QPointer<QWidget> m_modalParent;
+  void adoptModalParentIfNeeded(DatAuditDialog *dialog);
+  void restoreBaseParent();
+
   DatAuditControllerContext m_ctx;
   /// Cached across opens (hidden, not destroyed, on close). QPointer so a
   /// destruction elsewhere (parent teardown, a future WA_DeleteOnClose)

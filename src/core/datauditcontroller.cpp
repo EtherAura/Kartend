@@ -1,5 +1,7 @@
 #include "datauditcontroller.h"
 
+#include <QApplication>
+#include <QDialog>
 #include <QDir>
 #include <QDirIterator>
 #include <QFileDialog>
@@ -115,7 +117,63 @@ DatAuditDialog *DatAuditController::ensureDialog() {
   m_dialog->setScraperOpener(m_ctx.openScraperForCollection);
   // Global default quarantine folder for the Fix dialog (null = no default).
   m_dialog->setQuarantineDefaultProvider(m_ctx.getQuarantineDefaultDir);
+  adoptModalParentIfNeeded(m_dialog);
   return m_dialog;
+}
+
+// Kartend-j6a00: SettingsDialog is application-modal (setModal(true) +
+// exec()), and an application-modal window blocks input to every window
+// except its own children. The audit dialog is parented to the main window,
+// so its prominent "Open DAT Audit" entry point in the settings Behavior
+// panel produced a window that appeared but was frozen until Settings
+// closed. While a modal is active, transient-parent the dialog to it — Qt
+// then exempts it from the block and the live-unsaved-edits handover flow
+// works as designed.
+//
+// QWidget parents OWN their top-level children, and this dialog is a
+// long-lived cache that must outlive the settings session, so the parent is
+// handed back to the main window the moment the modal finishes or starts
+// destruction (~QObject emits destroyed() BEFORE deleting children, so the
+// rescue reparent runs in time on that path too).
+void DatAuditController::adoptModalParentIfNeeded(DatAuditDialog *dialog) {
+  QWidget *modal = QApplication::activeModalWidget();
+  modal = modal ? modal->window() : nullptr;
+  if (modal == nullptr || modal == dialog) {
+    return;
+  }
+  if (m_modalParent == modal) {
+    return; // second open from the same modal session — already adopted
+  }
+  m_modalParent = modal;
+  const QRect geometry = dialog->geometry();
+  const bool visible = dialog->isVisible();
+  dialog->setParent(modal, dialog->windowFlags()); // setParent hides; re-show below
+  if (visible) {
+    dialog->setGeometry(geometry);
+    dialog->show();
+  }
+  if (auto *modalDialog = qobject_cast<QDialog *>(modal)) {
+    connect(modalDialog, &QDialog::finished, this, &DatAuditController::restoreBaseParent);
+  }
+  connect(modal, &QObject::destroyed, this, &DatAuditController::restoreBaseParent);
+}
+
+void DatAuditController::restoreBaseParent() {
+  m_modalParent = nullptr;
+  if (!m_dialog) {
+    return;
+  }
+  QWidget *base = m_ctx.getParentWindow ? m_ctx.getParentWindow() : nullptr;
+  if (m_dialog->parentWidget() == base) {
+    return; // finished + destroyed both route here; second call is a no-op
+  }
+  const QRect geometry = m_dialog->geometry();
+  const bool visible = m_dialog->isVisible();
+  m_dialog->setParent(base, m_dialog->windowFlags());
+  if (visible) {
+    m_dialog->setGeometry(geometry);
+    m_dialog->show();
+  }
 }
 
 void DatAuditController::importDatPack(const QString &sourcePath) {
