@@ -18,6 +18,7 @@
 #include <QStringList>
 #include <QtGlobal>
 #include <QThread>
+#include <QTimer>
 
 #include "connectionpragmas.h"
 #include "dbmigrations.h"
@@ -192,6 +193,31 @@ void QueryManager::initDatabase() {
     ErrorUtils::logError(err);
     emit errorOccurred(err);
     return;
+  }
+
+  // Kartend-kcakv: corruption probe + quarantine, same as DatabaseManager's
+  // opener. In the common startup order DatabaseManager has already
+  // quarantined a corrupt file before any worker opens, so this announces
+  // only when a worker is the FIRST to see the damage (fresh corruption
+  // mid-session, racing openers — the rename winner is the announcer).
+  const auto recovery =
+      MediaDbConnectionInit::ensureNotCorrupt(m_db, QStringLiteral("QueryManager::initDatabase"));
+  if (recovery.announce) {
+    // Why singleShot(0): keeps the announcement off the current call stack —
+    // initDatabase runs both at worker start (before the host finishes
+    // wiring) and inside the reconnect ladder; the zero-timer lands it on
+    // the worker's event loop after wiring is complete.
+    const QString quarantinePath = recovery.quarantinePath;
+    QTimer::singleShot(0, this, [this, quarantinePath] {
+      emit errorOccurred(
+          ErrorContext::critical(
+              ErrorCode::DatabaseCorruptQuarantined,
+              QStringLiteral("The media database was damaged and has been reset. Collections "
+                             "will be rescanned automatically; play counts, ratings, and "
+                             "history could not be recovered."),
+              QStringLiteral("QueryManager::initDatabase"))
+              .withDetails(QStringLiteral("The damaged file was kept at: %1").arg(quarantinePath)));
+    });
   }
 
   // Kartend-67wo: shared PRAGMA helper — worker connection uses the longer

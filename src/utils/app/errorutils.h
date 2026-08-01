@@ -76,6 +76,11 @@ enum class ErrorCode {
   DatabaseNotOpen = 103,
   DatabaseConnectionLost = 104,
   DatabaseConnectionRestored = 105,
+  /// media.db failed the open-time corruption probe (SQLITE_NOTADB /
+  /// SQLITE_CORRUPT); the file was renamed aside and a fresh database was
+  /// created in its place (Kartend-kcakv). Carried by the one-time
+  /// user-visible announcement — the details name the quarantine path.
+  DatabaseCorruptQuarantined = 106,
 
   // Collection errors (200-299)
   InvalidCollectionContext = 200,
@@ -322,6 +327,8 @@ inline void logError(const ErrorContext &ctx) {
     return "DatabaseConnectionFailed";
   case ErrorCode::DatabaseQueryFailed:
     return "DatabaseQueryFailed";
+  case ErrorCode::DatabaseCorruptQuarantined:
+    return "DatabaseCorruptQuarantined";
   case ErrorCode::DatabaseTransactionFailed:
     return "DatabaseTransactionFailed";
   case ErrorCode::DatabaseNotOpen:

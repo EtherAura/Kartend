@@ -28,6 +28,7 @@
 #include "applicationcontext.h"
 #include "cachedcountsservice.h"
 #include "collection/collectioncontext.h"
+#include "connectionpragmas.h"
 #include "databaseschema.h"
 #include "isessionmanager.h"
 #include "loggingcategories.h"
@@ -390,6 +391,30 @@ void DatabaseManager::initDatabase() {
   const QString dbPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   if (!DatabaseSchema::openConnection(m_db, dbPath)) {
     return;
+  }
+  // Kartend-kcakv: sqlite3_open is lazy, so a garbage media.db "opens" and
+  // every later statement fails — previously the app ran indefinitely with a
+  // dead database returning empty results and no user-visible explanation.
+  // Probe now; on corruption the file is quarantined (renamed aside, never
+  // deleted) and the schema creation below runs against a fresh database.
+  const auto recovery = MediaDbConnectionInit::ensureNotCorrupt(
+      m_db, QStringLiteral("DatabaseManager::initDatabase"));
+  if (recovery.announce) {
+    // Why singleShot(0): initDatabase runs in the constructor, before the
+    // host wires errorOccurred to the error-dialog chain — a direct emit
+    // here would vanish. Wiring completes before the event loop first
+    // spins, so a zero-timer defers the one-time announcement just past it.
+    const QString quarantinePath = recovery.quarantinePath;
+    QTimer::singleShot(0, this, [this, quarantinePath] {
+      emit errorOccurred(
+          ErrorUtils::ErrorContext::critical(
+              ErrorUtils::ErrorCode::DatabaseCorruptQuarantined,
+              QStringLiteral("The media database was damaged and has been reset. Collections "
+                             "will be rescanned automatically; play counts, ratings, and "
+                             "history could not be recovered."),
+              QStringLiteral("DatabaseManager::initDatabase"))
+              .withDetails(QStringLiteral("The damaged file was kept at: %1").arg(quarantinePath)));
+    });
   }
   DatabaseSchema::applyConnectionPragmas(m_db);
   DatabaseSchema::createTables(m_db);

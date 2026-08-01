@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A damaged database no longer leaves the app silently empty.** A corrupt
+  media.db "opened" successfully and every lookup quietly returned nothing —
+  collections appeared empty with no explanation and no way back short of
+  deleting the file by hand. The damaged file is now set aside automatically
+  (kept next to the original as `media.db.corrupt-<timestamp>`, in case
+  anything can be salvaged from it), a fresh database is created in its
+  place, and a one-time notice explains that collections will be rescanned.
+  Play counts, ratings, and history from the damaged file cannot be
+  recovered automatically.
 - **Opening the DAT Audit from the settings dialog no longer produces a
   frozen window.** The settings dialog is modal, and the audit window it
   opened couldn't receive clicks or keys until settings closed. It now

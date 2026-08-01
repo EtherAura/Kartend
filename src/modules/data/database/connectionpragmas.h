@@ -44,6 +44,34 @@ struct PragmaConfig {
 /// DELETE.
 void applyPragmas(QSqlDatabase &db, const PragmaConfig &cfg, const QString &loggingContext);
 
+/// Outcome of ensureNotCorrupt().
+struct CorruptionRecovery {
+  /// The corruption probe failed with a file-is-bad code (SQLITE_NOTADB /
+  /// SQLITE_CORRUPT). false covers both a healthy file and transient
+  /// non-corruption failures (busy/locked), which are left alone.
+  bool corrupt = false;
+  /// The file was quarantined and the reopened connection probes healthy.
+  bool recovered = false;
+  /// THIS call performed the rename — the caller should surface the
+  /// one-time user-visible announcement (rescan required, history lost).
+  /// Concurrent connections that find the file already renamed adopt the
+  /// fresh database silently, so exactly one announcement fires per
+  /// corruption incident.
+  bool announce = false;
+  /// Where the damaged file was preserved (media.db.corrupt-<timestamp>).
+  QString quarantinePath;
+};
+
+/// Kartend-kcakv: probe @p db (freshly open()ed) for the corrupt /
+/// not-a-database state that a lazy sqlite3_open hides. On a healthy or
+/// merely-busy connection this is one cheap sqlite_master read and a no-op.
+/// On corruption: close, rename the file (plus -wal/-shm sidecars) to
+/// <name>.corrupt-<timestamp> — rename, never delete, the bytes may be
+/// hand-salvageable — reopen, and re-probe, so the caller's subsequent
+/// schema creation runs against a fresh usable database instead of logging
+/// failures forever against a dead one.
+CorruptionRecovery ensureNotCorrupt(QSqlDatabase &db, const QString &loggingContext);
+
 } // namespace MediaDbConnectionInit
 
 #endif // CONNECTION_PRAGMAS_H

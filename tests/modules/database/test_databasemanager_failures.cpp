@@ -12,9 +12,11 @@
  *    half-open state, clean connection teardown.
  *  - initDatabase() over a file of garbage bytes: SQLite opens lazily so the
  *    connection reports open, but the first statement fails with "file is
- *    not a database". The PRAGMA/create-table failures are logged and the
- *    manager again degrades to returning empty results. Nothing rewrites or
- *    truncates the (potentially user-precious) corrupt file.
+ *    not a database". Recovery (Kartend-kcakv): the corruption probe detects
+ *    it, the damaged file is quarantined under media.db.corrupt-<timestamp>
+ *    (renamed, never deleted — the bytes may be hand-salvageable), a fresh
+ *    schema is created in its place, and a one-time errorOccurred announces
+ *    the reset so the UI can tell the user a rescan is coming.
  *  - the clearCollectionFromDatabaseByUuid throw branch, reached through the
  *    public updateCachedCounts entry point (an unexpandable media directory
  *    routes into the clear) with the items table dropped out from under it
@@ -29,6 +31,8 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -72,6 +76,13 @@ void removeMediaDbArtifact() {
   // WAL side files from a previous healthy run of this sandbox.
   QFile::remove(path + QStringLiteral("-wal"));
   QFile::remove(path + QStringLiteral("-shm"));
+  // Quarantine files from the recovery path (Kartend-kcakv) — stale ones
+  // would break the exactly-one assertion on a rerun.
+  const QDir dir(QFileInfo(path).absolutePath());
+  const QStringList stale = dir.entryList({QStringLiteral("media.db.corrupt-*")}, QDir::Files);
+  for (const QString &name : stale) {
+    QFile::remove(dir.absoluteFilePath(name));
+  }
 }
 
 } // namespace
@@ -85,7 +96,7 @@ private slots:
 
   void directoryAsDbFile_openFailsAndQueriesDegrade();
   void unreadableDbFile_openFailsAndQueriesDegrade();
-  void garbageBytesDbFile_queriesFailWithoutCrashOrRewrite();
+  void garbageBytesDbFile_isQuarantinedAndRecreated();
   void clearCollection_droppedTableRollsBackTransaction();
 
 private:
@@ -166,12 +177,14 @@ void TestDatabaseManagerFailures::unreadableDbFile_openFailsAndQueriesDegrade() 
 #endif
 }
 
-void TestDatabaseManagerFailures::garbageBytesDbFile_queriesFailWithoutCrashOrRewrite() {
+void TestDatabaseManagerFailures::garbageBytesDbFile_isQuarantinedAndRecreated() {
   // A media.db full of non-SQLite bytes. sqlite3_open is lazy, so the
   // connection opens; the first statement then fails with SQLITE_NOTADB.
-  // Documented behavior today: PRAGMA / CREATE TABLE failures are logged,
-  // every query returns its empty default, and the corrupt file is left
-  // byte-for-byte intact — there is no recreate/recover path.
+  // Recovery (Kartend-kcakv): initDatabase's corruption probe quarantines
+  // the file (rename, never delete), recreates the schema, and announces
+  // the reset once through errorOccurred. Before this path existed, the app
+  // ran indefinitely with a dead database returning empty results and no
+  // user-visible explanation.
   removeMediaDbArtifact();
   const QByteArray garbage =
       QByteArrayLiteral("This is definitely not a SQLite database.\n").repeated(64);
@@ -189,23 +202,39 @@ void TestDatabaseManagerFailures::garbageBytesDbFile_queriesFailWithoutCrashOrRe
     DatabaseManager db(&appCtx);
     connName = db.connectionName();
 
-    // Lazy open: the handle reports open even though the file is garbage.
+    // The announcement is deferred through a zero-timer (initDatabase runs
+    // in the constructor, before a real host could wire errorOccurred), so
+    // a spy attached right after construction still catches it on the first
+    // event-loop spin.
+    QSignalSpy errorSpy(&db, &DatabaseManager::errorOccurred);
+    QTRY_COMPARE(errorSpy.count(), 1);
+    const auto announced = errorSpy.at(0).at(0).value<ErrorUtils::ErrorContext>();
+    QCOMPARE(announced.code, ErrorUtils::ErrorCode::DatabaseCorruptQuarantined);
+
+    // The recreated database is fully usable: empty results now mean "empty
+    // database", not "dead database".
     QVERIFY(QSqlDatabase::contains(connName));
     QVERIFY(QSqlDatabase::database(connName, /*open=*/false).isOpen());
-
-    // Schema creation failed, so every real statement errors out — the
-    // manager must surface that as empty results, not a crash.
     QVERIFY(db.loadAllItemPathsForCollection(QStringLiteral("any-uuid")).isEmpty());
     QVERIFY(db.loadCollectionLastScanned(QStringLiteral("any-uuid")).isNull());
     db.migrateCollectionUuid(QStringLiteral("a"), QStringLiteral("b"));
   }
   QVERIFY(!QSqlDatabase::contains(connName));
 
-  // No destructive "recovery": the user's corrupt file is untouched, so it
-  // can still be salvaged by hand.
-  QFile f(mediaDbPath());
-  QVERIFY(f.open(QIODevice::ReadOnly));
-  QCOMPARE(f.readAll(), garbage);
+  // media.db is a real SQLite database again...
+  {
+    QFile f(mediaDbPath());
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QVERIFY(f.readAll().startsWith(QByteArrayLiteral("SQLite format 3")));
+  }
+  // ...and the damaged bytes were preserved for hand-salvage, not deleted.
+  const QDir dbDir(QFileInfo(mediaDbPath()).absolutePath());
+  const QStringList quarantined =
+      dbDir.entryList({QStringLiteral("media.db.corrupt-*")}, QDir::Files);
+  QCOMPARE(quarantined.size(), 1);
+  QFile q(dbDir.absoluteFilePath(quarantined.first()));
+  QVERIFY(q.open(QIODevice::ReadOnly));
+  QCOMPARE(q.readAll(), garbage);
 }
 
 void TestDatabaseManagerFailures::clearCollection_droppedTableRollsBackTransaction() {
