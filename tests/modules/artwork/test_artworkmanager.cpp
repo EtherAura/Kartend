@@ -73,6 +73,13 @@ private slots:
   void testLoadArtworkParallel_emptyListNoop();
   void testLoadArtworkParallel_withoutSetupReferences();
 
+  // Scroll-suppression / stale-widget delivery must not discard decodes ------
+  void testSuppressedApply_cachesDecodedResult();
+  void testDrain_cachesResultForRecycledWidget();
+
+  // Stale-size composed card re-delivery -------------------------------------
+  void testStaleComposedCard_triggersRedelivery();
+
   // addPendingArtwork dedup --------------------------------------------------
   void testAddPendingArtwork_nullWidgetSafe();
   void testAddPendingArtwork_emptyPathSafe();
@@ -532,6 +539,118 @@ void TestArtworkManager::testLoadArtworkParallel_withoutSetupReferences() {
   ArtworkInfo info{QPointer<ItemWidget>(&widget), "/some/path.png"};
   manager.loadArtworkParallel({info}, /*highPriority=*/true);
   QVERIFY(true);
+}
+
+// ─── Suppressed / stale-widget delivery keeps the decode ────────────────────
+
+void TestArtworkManager::testSuppressedApply_cachesDecodedResult() {
+  // Artwork delivered while scroll suppression is active is requeued instead
+  // of applied — but the decoded image must land in the memory cache so the
+  // post-scroll pass resolves through the cache fast path with zero
+  // re-decode (the old requeue stripped the Result back to a bare
+  // ArtworkInfo and threw the decode away).
+  const QString artPath = m_tempDir.path() + "/suppressed_cache.png";
+  QPixmap onDisk(400, 400);
+  onDisk.fill(Qt::darkGreen);
+  QVERIFY(onDisk.save(artPath, "PNG"));
+
+  ArtworkManager manager;
+  wireSetup(&manager);
+
+  ItemWidget widget;
+  // Basename must match the artwork so the pre-dispatch identity check in
+  // collectUncachedAndApplyCached lets the item through.
+  widget.setFilePath(m_tempDir.path() + "/suppressed_cache.rom");
+  ArtworkInfo info{QPointer<ItemWidget>(&widget), artPath};
+  info.widgetIdentity = widget.getFilePath();
+
+  // Suppression is read at delivery time; the main thread doesn't re-enter
+  // the event loop until QTRY below, so the flag is guaranteed set first.
+  m_state->setGlideAnimating(true);
+  manager.loadArtworkParallel({info}, /*highPriority=*/true);
+
+  QTRY_VERIFY_WITH_TIMEOUT(!manager.getCachedPixmap(artPath).isNull(), 5000);
+  m_state->setGlideAnimating(false);
+}
+
+void TestArtworkManager::testDrain_cachesResultForRecycledWidget() {
+  // A widget recycled to a different item while its artwork was in flight
+  // makes the delivery skip that widget — but caching is path-keyed and
+  // widget-independent, so the decoded image must still be cached instead of
+  // discarded with the stale result.
+  const QString artPath = m_tempDir.path() + "/stale_widget.png";
+  QPixmap onDisk(400, 400);
+  onDisk.fill(Qt::darkBlue);
+  QVERIFY(onDisk.save(artPath, "PNG"));
+
+  ArtworkManager manager;
+  wireSetup(&manager);
+
+  ItemWidget widget;
+  widget.setFilePath(m_tempDir.path() + "/stale_widget.rom");
+  ArtworkInfo info{QPointer<ItemWidget>(&widget), artPath};
+  info.widgetIdentity = widget.getFilePath();
+  manager.loadArtworkParallel({info}, /*highPriority=*/true);
+
+  // Recycle the widget before delivery: the completion handler is queued to
+  // the main thread and can only run once QTRY re-enters the event loop, so
+  // the identity mismatch is deterministic.
+  widget.setFilePath(m_tempDir.path() + "/other_item.rom");
+
+  QTRY_VERIFY_WITH_TIMEOUT(!manager.getCachedPixmap(artPath).isNull(), 5000);
+  QVERIFY2(!manager.hasArtworkForWidget(&widget),
+           "recycled widget must not be marked loaded by the stale delivery");
+}
+
+// ─── Stale-size composed card re-delivery ───────────────────────────────────
+
+void TestArtworkManager::testStaleComposedCard_triggersRedelivery() {
+  // A worker-composed card is display-final: after a tile dimension change it
+  // can't be re-composited without doubling its border. addPendingArtwork
+  // must treat a loaded widget holding a stale-size card as needing
+  // re-delivery, and the cache fast path then rebuilds it at the new size.
+  const QString artPath = m_tempDir.path() + "/composed.png";
+  // 400x400: comfortably above the memory cache's MIN_PIXMAP_SIZE gate.
+  QPixmap onDisk(400, 400);
+  onDisk.fill(Qt::darkRed);
+  QVERIFY(onDisk.save(artPath, "PNG"));
+
+  ArtworkManager manager;
+  wireSetup(&manager);
+  m_cache->cacheArtworkInMemoryOnly(artPath, onDisk);
+
+  ItemWidget widget;
+  widget.setFilePath(m_tempDir.path() + "/composed.rom");
+  widget.setItemDimensions(220, 280);
+  QVERIFY(widget.imageLabel);
+  const QSize labelSize = widget.imageLabel->size();
+  QVERIFY(!labelSize.isEmpty());
+
+  // Cache hit marks the widget loaded (raw pixmap path).
+  manager.addPendingArtwork(&widget, artPath);
+  QVERIFY(manager.hasArtworkForWidget(&widget));
+
+  // Simulate a worker-composed card delivery at the current tile size.
+  QPixmap card(labelSize);
+  card.fill(Qt::blue);
+  widget.setComposedArtwork(card);
+  QVERIFY(!widget.hasStaleComposedArtwork());
+
+  // Same size + loaded → dedup early-return, composed card untouched.
+  manager.addPendingArtwork(&widget, artPath);
+  QVERIFY(!widget.hasStaleComposedArtwork());
+
+  // Dimension change: the stored card no longer matches the label.
+  widget.setItemDimensions(320, 400);
+  QVERIFY(widget.imageLabel->size() != labelSize);
+  QVERIFY(widget.hasStaleComposedArtwork());
+
+  // Re-delivery: the stale card is replaced through the cache fast path
+  // (raw pixmap → recomposed at the current size), and the widget is
+  // re-registered as loaded.
+  manager.addPendingArtwork(&widget, artPath);
+  QVERIFY(!widget.hasStaleComposedArtwork());
+  QVERIFY(manager.hasArtworkForWidget(&widget));
 }
 
 // ─── addPendingArtwork dedup ────────────────────────────────────────────────

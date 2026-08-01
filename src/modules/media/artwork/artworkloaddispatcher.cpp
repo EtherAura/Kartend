@@ -150,7 +150,8 @@ inline bool isCancelledForGeneration(const std::atomic<quint64> &counter, quint6
 QList<ArtworkInfo::Result>
 processBatchOnWorker(const QList<ArtworkInfo> &batch, const std::atomic<quint64> &generationCounter,
                      quint64 capturedGeneration,
-                     const std::shared_ptr<ArtworkDispatcherCacheHandle> &cacheHandle, qreal dpr) {
+                     const std::shared_ptr<ArtworkDispatcherCacheHandle> &cacheHandle,
+                     qreal fallbackDpr) {
   // Worker-only contract: QImage is reentrant, QPixmap is not. Any code path
   // that reaches here on the GUI thread would risk a future maintainer
   // constructing QPixmap below, which Qt explicitly forbids off the main
@@ -168,12 +169,22 @@ processBatchOnWorker(const QList<ArtworkInfo> &batch, const std::atomic<quint64>
     if (info.mediaItem.isNull()) {
       continue;
     }
+    // Per-item DPR: the widget's own screen, snapshotted on the GUI thread at
+    // dispatch (mixed-DPI setups). 0.0 means the producer didn't snapshot one
+    // — fall back to the batch-level primary-screen value. Identical on
+    // single-screen setups.
+    const qreal dpr = info.dpr > 0.0 ? info.dpr : fallbackDpr;
     // Disk-cache reads go through the shared handle, never a raw cache
     // pointer — the handle is invalidated in ~ArtworkLoadDispatcher so a
     // task abandoned by the bounded pool drain no-ops here (Kartend-xoftg).
     QImage img = cacheHandle ? cacheHandle->tryLoadFromDiskCache(info.artworkPath) : QImage{};
     const bool loadedFromDiskCache = !img.isNull();
-    if (!loadedFromDiskCache) {
+    if (loadedFromDiskCache) {
+      // Disk-cached PNGs decode with a default (1.0) DPR. Tag them with the
+      // same DPR a fresh decode gets so the pixmaps and memory-cache entries
+      // built from this image are consistently tagged either way.
+      img.setDevicePixelRatio(dpr);
+    } else {
       img = loadAndProcessImage(info.artworkPath, dpr);
     }
     if (QApplication::closingDown() ||
@@ -226,7 +237,10 @@ processPrecacheOnWorker(const QStringList &paths, const std::atomic<quint64> &ge
     // Shared-handle disk-cache read — see processBatchOnWorker (Kartend-xoftg).
     QImage img = cacheHandle ? cacheHandle->tryLoadFromDiskCache(artworkPath) : QImage{};
     const bool loadedFromDiskCache = !img.isNull();
-    if (!loadedFromDiskCache) {
+    if (loadedFromDiskCache) {
+      // Consistent DPR tagging for disk-cache hits — see processBatchOnWorker.
+      img.setDevicePixelRatio(dpr);
+    } else {
       img = loadAndProcessImage(artworkPath, dpr);
     }
     if (QApplication::closingDown() ||
@@ -257,32 +271,53 @@ ArtworkLoadDispatcher::ArtworkLoadDispatcher(ICacheManager *cacheManager, QObjec
 }
 
 ArtworkLoadDispatcher::~ArtworkLoadDispatcher() {
+  // Full standalone budget: pool drain + cache quiesce, sequential. A caller
+  // that already invoked shutdown() with a shared teardown deadline (the
+  // ArtworkManager destructor chain) makes this a no-op.
+  shutdown(QDeadlineTimer(kPoolDrainBudgetMs + kCacheQuiesceBudgetMs));
+}
+
+void ArtworkLoadDispatcher::shutdown(QDeadlineTimer deadline) {
+  if (m_shutdownDone) {
+    return;
+  }
+  m_shutdownDone = true;
+
   // Bump the generation so every in-flight task observes its captured
   // generation no longer matches and bails on the next check.
   if (m_currentGeneration) {
     m_currentGeneration->fetch_add(1, std::memory_order_acq_rel);
   }
 
+  // Each stage waits at most min(its own budget, the caller's remaining
+  // deadline), so sequential bounded teardown stages can't each stack their
+  // full budget against the same stalled worker.
+  const auto stageBudgetMs = [&deadline](int ownBudgetMs) {
+    if (deadline.isForever()) {
+      return ownBudgetMs;
+    }
+    return static_cast<int>(
+        qMin<qint64>(ownBudgetMs, qMax<qint64>(qint64{0}, deadline.remainingTime())));
+  };
+
   // Bounded-wait teardown so a slow decode doesn't block process exit.
   // Worker tasks observe the cancellation flag via shared_ptr capture, so
   // they remain safe to run to completion even after we abandon the pool.
-  constexpr int kArtworkPoolDrainMs = 2000;
-  if (!ThreadPoolUtils::shutdownWithBudget(m_threadPool, kArtworkPoolDrainMs)) {
+  const int poolDrainMs = stageBudgetMs(kPoolDrainBudgetMs);
+  if (!ThreadPoolUtils::shutdownWithBudget(m_threadPool, poolDrainMs)) {
     qCWarning(lcArtworkManager) << "ArtworkLoadDispatcher: thread pool did not drain in"
-                                << kArtworkPoolDrainMs
+                                << poolDrainMs
                                 << "ms during shutdown; abandoning pool to avoid blocking exit";
   }
 
-  // Kartend-xoftg: cut abandoned tasks off from the cache BEFORE this
-  // destructor returns — CacheManager is destroyed later in
-  // ApplicationManager teardown, and an abandoned task's next disk-cache
-  // read must be a guarded no-op rather than a use-after-free. When the
-  // pool drained above, no worker exists and this is instant; on the
-  // abandon path the small quiesce budget drains a read that already
-  // entered the cache.
-  constexpr int kCacheQuiesceMs = 500;
+  // Kartend-xoftg: cut abandoned tasks off from the cache BEFORE teardown
+  // proceeds — CacheManager is destroyed later in ApplicationManager
+  // teardown, and an abandoned task's next disk-cache read must be a guarded
+  // no-op rather than a use-after-free. When the pool drained above, no
+  // worker exists and this is instant; on the abandon path the small quiesce
+  // budget drains a read that already entered the cache.
   if (m_cacheHandle) {
-    m_cacheHandle->invalidate(kCacheQuiesceMs);
+    m_cacheHandle->invalidate(stageBudgetMs(kCacheQuiesceBudgetMs));
   }
 
   QMutexLocker futureLock(&m_futureMutex);
@@ -320,15 +355,17 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
   QObject *appReceiver = QCoreApplication::instance();
   const int batchItemCount = batch.size();
   auto handler = std::move(onComplete);
-  // Snapshot DPR on the GUI thread — QGuiApplication::primaryScreen() is not
-  // safe to call from a worker. Dpr changes are rare; at-most one batch lags.
-  const qreal dpr = QGuiApplication::primaryScreen()
-                        ? QGuiApplication::primaryScreen()->devicePixelRatio()
-                        : qreal{1.0};
+  // Fallback DPR for batch items that carry no per-widget snapshot
+  // (ArtworkInfo::dpr == 0). Snapshot it on the GUI thread —
+  // QGuiApplication::primaryScreen() is not safe to call from a worker.
+  // Dpr changes are rare; at-most one batch lags.
+  const qreal fallbackDpr = QGuiApplication::primaryScreen()
+                                ? QGuiApplication::primaryScreen()->devicePixelRatio()
+                                : qreal{1.0};
 
   QFuture<void> future = QtConcurrent::run(
       m_threadPool, [batch = std::move(batch), highPriority, generationCounter, generation,
-                     batchItemCount, appReceiver, cacheHandle, handler, dpr]() {
+                     batchItemCount, appReceiver, cacheHandle, handler, fallbackDpr]() {
         if (QApplication::closingDown() || !generationCounter ||
             isCancelledForGeneration(*generationCounter, generation)) {
           return;
@@ -336,7 +373,7 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
         QElapsedTimer timer;
         timer.start();
         QList<ArtworkInfo::Result> results =
-            processBatchOnWorker(batch, *generationCounter, generation, cacheHandle, dpr);
+            processBatchOnWorker(batch, *generationCounter, generation, cacheHandle, fallbackDpr);
         const qint64 elapsedMs = timer.elapsed();
         if (QApplication::closingDown() || !generationCounter ||
             isCancelledForGeneration(*generationCounter, generation)) {

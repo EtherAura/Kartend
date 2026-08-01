@@ -111,6 +111,10 @@ void DetailPageManager::onItemDetailLoaded(const ItemDetailData &data, int reque
 }
 
 void DetailPageManager::hideOverlay() {
+  // Invalidate any in-flight async load: without the bump, a result arriving
+  // after the dismissal still matches the token and showWith()s the overlay
+  // the user just closed.
+  ++m_detailLoadToken;
   if (m_overlay) {
     m_overlay->hideOverlay();
   }

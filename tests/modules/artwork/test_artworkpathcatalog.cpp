@@ -7,9 +7,13 @@
 
 #include "collection/collectionconfig.h"
 
+#include <QDeadlineTimer>
+#include <QElapsedTimer>
+#include <QFuture>
 #include <QList>
 #include <QString>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QTest>
 
 namespace {
@@ -29,6 +33,7 @@ private slots:
   void collectsRootAndDescendantsAcyclic();
   void cyclicParentIndexTerminates();
   void selfParentTerminates();
+  void abandonPendingBuildsIsIdempotentAndBounded();
 };
 
 void TestArtworkPathCatalog::collectsRootOnlyWhenDescendantsDisabled() {
@@ -78,6 +83,31 @@ void TestArtworkPathCatalog::selfParentTerminates() {
   const QStringList dirs = ArtworkPathCatalog::collectArtworkDirs(&collections, 0, true);
   QCOMPARE(dirs.size(), 1);
   QVERIFY(dirs.contains(QStringLiteral("/art/self")));
+}
+
+void TestArtworkPathCatalog::abandonPendingBuildsIsIdempotentAndBounded() {
+  // The shared-teardown-deadline entry point: draining against an expired
+  // deadline must abandon rather than wait, repeat calls must no-op, and the
+  // destructor after an explicit drain must not wait again. The build scans a
+  // real (empty) directory so the future completes quickly regardless.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QList<CollectionConfig> collections = {
+      makeCollection("root", tmp.path(), -1),
+  };
+
+  QElapsedTimer timer;
+  timer.start();
+  {
+    ArtworkPathCatalog catalog;
+    const QFuture<void> build = catalog.buildFromCollection(&collections, 0);
+    Q_UNUSED(build)
+    catalog.abandonPendingBuilds(QDeadlineTimer(0)); // already expired: no stacking wait
+    catalog.abandonPendingBuilds(QDeadlineTimer(0)); // idempotent
+    // destructor drains what's left with its standalone budget
+  }
+  // Way below the 2000ms standalone budget: nothing stacked sequential waits.
+  QVERIFY2(timer.elapsed() < 1500, "abandonPendingBuilds must not stack drain budgets");
 }
 
 QTEST_GUILESS_MAIN(TestArtworkPathCatalog)

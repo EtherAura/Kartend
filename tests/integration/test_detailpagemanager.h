@@ -37,6 +37,7 @@ private slots:
   void testShowForCurrentSelectionShowsCheapOverlayThenRequestsLoad();
   void testItemDetailLoadedPopulatesOverlay();
   void testStaleItemDetailResultIsIgnored();
+  void testLateResultAfterHideDoesNotReshowOverlay();
 
   void testFixtureExposesDetailPageManagerViaApplicationManager();
 };

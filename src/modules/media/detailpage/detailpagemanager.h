@@ -50,7 +50,9 @@ public:
   void showForCurrentSelection() override;
 
   /// Hides the overlay if active. Wired to navigation events that should
-  /// dismiss the detail page (collection change, search, etc.).
+  /// dismiss the detail page (collection change, search, etc.). Also
+  /// invalidates the in-flight load token so a late async result cannot
+  /// re-show the dismissed overlay.
   void hideOverlay() override;
 
   /// True while the detail-page overlay is showing.

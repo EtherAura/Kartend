@@ -24,7 +24,13 @@ ArtworkPathCatalog::~ArtworkPathCatalog() {
   // GUI-thread shutdown forever (Kartend-52b4j.3). The build lambdas co-own
   // the catalog state via shared_ptr, so a build that outlasts the budget is
   // abandoned safely: it finishes into state nothing else reads and the
-  // generation bump makes it discard its results.
+  // generation bump makes it discard its results. Default = the full
+  // standalone budget; instant when the owner already drained the catalog
+  // against its shared teardown deadline.
+  abandonPendingBuilds();
+}
+
+void ArtworkPathCatalog::abandonPendingBuilds(QDeadlineTimer deadline) {
   QList<QFuture<void>> pending;
   {
     QMutexLocker locker(&m_state->mutex);
@@ -32,8 +38,9 @@ ArtworkPathCatalog::~ArtworkPathCatalog() {
     pending = m_state->inFlightBuilds;
     m_state->inFlightBuilds.clear();
   }
-  constexpr int kDrainBudgetMs = 2000;
-  QDeadlineTimer deadline(kDrainBudgetMs);
+  if (pending.isEmpty()) {
+    return;
+  }
   bool drained = true;
   for (QFuture<void> &future : pending) {
     // QFuture has no bounded wait; poll against the shared deadline (the
@@ -48,9 +55,8 @@ ArtworkPathCatalog::~ArtworkPathCatalog() {
   }
   if (!drained) {
     qCWarning(lcArtworkManager)
-        << "ArtworkPathCatalog: build task(s) still enumerating artwork directories"
-        << kDrainBudgetMs
-        << "ms into shutdown; abandoning them to avoid blocking exit (they finish into"
+        << "ArtworkPathCatalog: build task(s) still enumerating artwork directories at the"
+           " teardown drain deadline; abandoning them to avoid blocking exit (they finish into"
            " co-owned state and drop their results via the generation guard)";
   }
 }

@@ -93,33 +93,48 @@ ICacheManager *ArtworkManager::cacheMgr() const {
 
 // Destructor stops timers, cancels in-flight dispatch, and clears widget state.
 ArtworkManager::~ArtworkManager() {
+  // One SHARED deadline across every bounded teardown wait in this chain:
+  // the watched-catalog-build wait below, the dispatcher's pool drain +
+  // cache quiesce, and the catalog's superseded-build drain. These waits are
+  // sequential and independent, so giving each its own full budget let a
+  // single wedged storage stall stack ~6.5s of waits back to back; sharing
+  // one deadline caps the whole chain at the original single-stage budget.
+  // Each stage keeps its standalone default budget when torn down outside
+  // this chain.
+  constexpr int kTeardownBudgetMs = 2000;
+  QDeadlineTimer teardownDeadline(kTeardownBudgetMs);
+
+  // Signal cancellation to in-flight artwork work up front so workers wind
+  // down cooperatively while we wait on the catalog build.
+  if (m_dispatcher) {
+    m_dispatcher->cancelAll();
+  }
+
   // Kartend-cl86n / Kartend-52b4j.3: give the CURRENT (watched) catalog build
   // a bounded window to finish, then abandon it — a build wedged inside
   // QDir::entryList on a network mount has no cancellation point, and the old
   // unbounded waitForFinished hung GUI-thread shutdown forever. Abandoning is
   // safe: the build lambda co-owns the catalog state (shared_ptr), so it
-  // never touches freed memory, and ~ArtworkPathCatalog (member teardown
-  // below) supersedes it so its results are dropped via the generation guard.
-  // Superseded builds from rapid collection switches are drained (bounded)
-  // by ~ArtworkPathCatalog itself (Kartend-lz1zp).
+  // never touches freed memory, and the catalog drain below supersedes it so
+  // its results are dropped via the generation guard. Superseded builds from
+  // rapid collection switches are drained by the same call (Kartend-lz1zp).
   {
-    constexpr int kCatalogDrainBudgetMs = 2000;
-    QDeadlineTimer deadline(kCatalogDrainBudgetMs);
     const QFuture<void> buildFuture = m_catalogBuildWatcher.future();
-    while (!buildFuture.isFinished() && !deadline.hasExpired()) {
+    while (!buildFuture.isFinished() && !teardownDeadline.hasExpired()) {
       QThread::msleep(10);
     }
     if (!buildFuture.isFinished()) {
       qCWarning(lcArtworkManager)
           << "ArtworkManager: catalog build still enumerating artwork directories"
-          << kCatalogDrainBudgetMs << "ms into shutdown; abandoning it to avoid blocking exit";
+          << kTeardownBudgetMs << "ms into shutdown; abandoning it to avoid blocking exit";
     }
   }
 
-  // Tell the dispatcher to stop accepting new work; its destructor (run when
-  // Qt's parent-child cleanup tears it down below) will drain the pool.
+  // Drain the dispatcher within the shared deadline; its own destructor (run
+  // by Qt's parent-child cleanup after this body) then no-ops instead of
+  // re-waiting with fresh full budgets.
   if (m_dispatcher) {
-    m_dispatcher->cancelAll();
+    m_dispatcher->shutdown(teardownDeadline);
   }
 
   TimerUtils::stopAndDisconnectTimers({&m_cacheTimer, &m_silentLoadTimer, &m_persistentLoadTimer});
@@ -130,11 +145,15 @@ ArtworkManager::~ArtworkManager() {
 
   m_widgetRegistry->clearAll();
   m_pathCatalog.clearAll();
+  // Drain superseded catalog builds within the same shared deadline;
+  // ~ArtworkPathCatalog (member teardown after this body) then has nothing
+  // left to wait on.
+  m_pathCatalog.abandonPendingBuilds(teardownDeadline);
 
   // m_cacheTimer / m_silentLoadTimer / m_timerCoordinator / m_widgetRegistry
   // / m_dispatcher are all parented to this, so Qt deletes them after we
-  // return. The dispatcher's destructor blocks on a bounded pool drain so no
-  // worker callback fires after this manager is gone.
+  // return. The dispatcher was already shut down against the shared deadline
+  // above, so no worker callback fires after this manager is gone.
 }
 
 // Clears in-memory artwork widget/path/pending/silent cache state (blocks
@@ -349,9 +368,16 @@ void ArtworkManager::addPendingArtwork(ItemWidget *widget, const QString &artwor
   const QString existingPath = m_widgetRegistry->pathFor(widget);
   if (existingPath == artworkPath) {
     if (m_widgetRegistry->isLoaded(widget)) {
-      return;
-    }
-    if (m_widgetRegistry->isPendingFor(widget, artworkPath)) {
+      if (!widget->hasStaleComposedArtwork()) {
+        return;
+      }
+      // The registry says loaded, but the widget's stored card was composed
+      // for a previous tile size — a final card can't be re-composited
+      // without doubling its border and corner mask, so treat the widget as
+      // needing re-delivery: clear its entries and fall through to the cache
+      // fast path / pending pipeline, which rebuilds at the current size.
+      m_widgetRegistry->removeAllEntriesFor(widget);
+    } else if (m_widgetRegistry->isPendingFor(widget, artworkPath)) {
       return;
     }
   }
@@ -398,7 +424,8 @@ void ArtworkManager::addPendingArtwork(ItemWidget *widget, const QString &artwor
                                                .widgetIdentity = widgetIdentity,
                                                .targetLabelSize = spec.labelSize,
                                                .cornerRadius = spec.cornerRadius,
-                                               .backgroundColor = spec.background});
+                                               .backgroundColor = spec.background,
+                                               .dpr = spec.dpr});
 
   if (!shouldDefer) {
     scheduleViewportUpdate();

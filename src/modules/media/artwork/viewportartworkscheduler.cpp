@@ -247,12 +247,36 @@ void ViewportArtworkScheduler::applyResultsToUi(const QList<ArtworkInfo::Result>
     // setPending() wrote straight into the registry, bypassing both — a
     // sustained scroll storm could then push m_pending well past the cap with
     // duplicate (widget,path) entries (Kartend-ghmyu).
+    auto *cache = m_owner->cacheMgr();
     for (const auto &r : batchResults) {
+      // Cache the decoded image by path before requeueing — caching is
+      // path-keyed and widget-independent, so discarding the decode here
+      // just forced a full re-decode of the same file once the scroll
+      // settled. With the entry cached, the requeued item resolves through
+      // collectUncachedAndApplyCached's memory-cache fast path with zero
+      // re-decode. In-memory only: a scroll storm is the wrong moment to
+      // schedule disk-flush I/O.
+      if (cache && !r.image.isNull() && !r.artworkPath.isEmpty()) {
+        QPixmap pixmap = QPixmap::fromImage(r.image);
+        if (!pixmap.isNull()) {
+          pixmap.setDevicePixelRatio(r.image.devicePixelRatio());
+          cache->cacheArtworkInMemoryOnly(r.artworkPath, pixmap);
+        }
+      }
       if (r.widget.isNull()) continue;
       ArtworkInfo info;
       info.mediaItem = r.widget;
       info.artworkPath = r.artworkPath;
       info.widgetIdentity = r.widgetIdentity;
+      // Re-snapshot the render spec (the Result doesn't echo it): the old
+      // requeue dropped targetLabelSize / cornerRadius / backgroundColor,
+      // silently downgrading any cache-evicted retry to the GUI-composite
+      // path. Reading it fresh also picks up a mid-scroll tile resize.
+      const ItemWidget::ArtworkRenderSpec spec = r.widget->artworkRenderSpec();
+      info.targetLabelSize = spec.labelSize;
+      info.cornerRadius = spec.cornerRadius;
+      info.backgroundColor = spec.background;
+      info.dpr = spec.dpr;
       m_owner->m_widgetRegistry->enqueuePending(info);
     }
     return;
@@ -294,7 +318,7 @@ void ViewportArtworkScheduler::drainPendingApply() {
     const ArtworkInfo::Result result = std::move(m_pendingApply.front());
     m_pendingApply.pop_front();
     ++processed;
-    if (result.widget.isNull() || result.image.isNull()) {
+    if (result.image.isNull()) {
       ++skipped;
       continue;
     }
@@ -304,6 +328,23 @@ void ViewportArtworkScheduler::drainPendingApply() {
       continue;
     }
     pixmap.setDevicePixelRatio(result.image.devicePixelRatio());
+
+    // Cache by path BEFORE the widget-staleness skips below: caching is
+    // path-keyed and widget-independent, so a decode whose widget died or
+    // was recycled mid-flight is still a perfectly good cache entry — the
+    // next request for the same path then hits memory instead of paying a
+    // full re-decode.
+    if (auto *cache = m_owner->cacheMgr()) {
+      if (result.loadedFromDiskCache) {
+        cache->cacheArtworkInMemoryOnly(result.artworkPath, pixmap);
+      } else {
+        // Pass the worker-decoded QImage through so the debounced disk flush
+        // can encode it directly instead of deep-copying the pixmap back to
+        // a QImage on the GUI thread.
+        cache->cacheArtwork(result.artworkPath, pixmap, result.image);
+      }
+    }
+
     ItemWidget *const widget = result.widget.data();
     if (!widget) {
       ++skipped;
@@ -352,16 +393,6 @@ void ViewportArtworkScheduler::drainPendingApply() {
 
     m_owner->m_widgetRegistry->markLoaded(widget, result.artworkPath);
     m_owner->m_widgetRegistry->track(widget);
-    if (auto *cache = m_owner->cacheMgr()) {
-      if (result.loadedFromDiskCache) {
-        cache->cacheArtworkInMemoryOnly(result.artworkPath, pixmap);
-      } else {
-        // Pass the worker-decoded QImage through so the debounced disk flush
-        // can encode it directly instead of deep-copying the pixmap back to
-        // a QImage on the GUI thread.
-        cache->cacheArtwork(result.artworkPath, pixmap, result.image);
-      }
-    }
     if (!QApplication::closingDown()) {
       // Kartend-63wg: if the worker composed the final card and the tile is
       // still the size it was composed for, set it straight through (no GUI

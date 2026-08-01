@@ -296,3 +296,39 @@ void TestDetailPageManager::testStaleItemDetailResultIsIgnored() {
   QCOMPARE(overlay.showCount, 3);
   QCOMPARE(overlay.lastPayload.itemName, QStringLiteral("B-details"));
 }
+
+void TestDetailPageManager::testLateResultAfterHideDoesNotReshowOverlay() {
+  StubDetailsPaneManager pane;
+  pane.ctx.filePath = QStringLiteral("/library/track.flac");
+  pane.ctx.itemName = QStringLiteral("Track");
+  pane.ctx.uuid = QStringLiteral("uuid-track");
+
+  CapturingDetailDb db;
+  StubDetailPageOverlay overlay;
+  ApplicationContext ctx;
+  ctx.managers.detailsPaneManager = &pane;
+  ctx.managers.databaseManager = &db;
+
+  DetailPageManager mgr;
+  DetailPageManagerSetup setup;
+  setup.ctx = &ctx;
+  setup.overlay = &overlay;
+  mgr.setupReferences(setup);
+
+  mgr.showForCurrentSelection(); // cheap show + async request dispatched
+  QCOMPARE(overlay.showCount, 1);
+  const int dismissedToken = db.lastToken;
+
+  // The user dismisses the page before the worker result lands. hideOverlay
+  // must invalidate the in-flight token, not just lower the overlay.
+  mgr.hideOverlay();
+  QCOMPARE(overlay.hideCount, 1);
+
+  // The late result arrives — it must be dropped, not resurrect the overlay
+  // the user just closed.
+  ItemDetailData late;
+  late.valid = true;
+  late.metadata.title = QStringLiteral("Track-details");
+  db.emitDetailLoaded(late, dismissedToken);
+  QCOMPARE(overlay.showCount, 1); // unchanged: no re-show after dismissal
+}

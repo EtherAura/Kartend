@@ -3,6 +3,7 @@
 
 #include <memory>
 
+#include <QDeadlineTimer>
 #include <QFuture>
 #include <QList>
 #include <QMutex>
@@ -37,6 +38,20 @@ public:
 
   ArtworkPathCatalog(const ArtworkPathCatalog &) = delete;
   ArtworkPathCatalog &operator=(const ArtworkPathCatalog &) = delete;
+
+  /// Standalone drain budget for abandonPendingBuilds() (and thus the
+  /// destructor). 2000ms is the project-wide bounded-teardown default.
+  static constexpr int kDrainBudgetMs = 2000;
+
+  /// Supersede every in-flight build (generation bump) and drain them, each
+  /// waiting at most until @p deadline. Idempotent: the destructor calls it
+  /// with the full standalone budget, which no-ops when a caller already
+  /// drained the catalog — ArtworkManager's destructor invokes it with the
+  /// shared teardown deadline so its sequential bounded waits can't each
+  /// stack a full budget against the same stalled worker. Builds that
+  /// outlast the deadline are abandoned safely (co-owned state + generation
+  /// guard, see the destructor doc).
+  void abandonPendingBuilds(QDeadlineTimer deadline = QDeadlineTimer(kDrainBudgetMs));
 
   /// Walks @p collections from @p currentIndex to populate the path list.
   /// Includes descendants when showAllSubcollectionItems is set. Kartend-cl86n:

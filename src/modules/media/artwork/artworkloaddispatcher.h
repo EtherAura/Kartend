@@ -6,6 +6,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <QDeadlineTimer>
 #include <QFuture>
 #include <QImage>
 #include <QList>
@@ -84,6 +85,24 @@ public:
   /// Number of currently-running futures. Used by silent-load throttle.
   [[nodiscard]] int runningFutureCount() const;
 
+  /// Standalone teardown budgets: the bounded pool drain and the cache-handle
+  /// quiesce that follows it. The destructor's shutdown() call uses their sum,
+  /// preserving the pre-shared-deadline behavior for a dispatcher torn down
+  /// outside the ArtworkManager destructor chain.
+  static constexpr int kPoolDrainBudgetMs = 2000;
+  static constexpr int kCacheQuiesceBudgetMs = 500;
+
+  /// Bounded teardown: bump the cancellation generation, drain the worker
+  /// pool, cut workers off from the disk cache, and cancel tracked futures.
+  /// Each stage waits at most min(its own budget, @p deadline's remaining
+  /// time), so a caller tearing down several bounded stages (ArtworkManager's
+  /// destructor) can thread ONE shared deadline through the whole chain
+  /// instead of letting sequential waits stack against the same stall.
+  /// Idempotent — the destructor calls it with the full standalone budgets,
+  /// which no-ops when a caller already shut the dispatcher down. After
+  /// shutdown the pool pointer is null, so new dispatches are rejected.
+  void shutdown(QDeadlineTimer deadline);
+
 private:
   void pruneFinishedFutures();
 
@@ -104,6 +123,9 @@ private:
   /// its next check because the counter no longer matches its captured
   /// value).
   std::shared_ptr<std::atomic<quint64>> m_currentGeneration;
+  /// shutdown() ran (whether invoked by a caller or the destructor). Keeps
+  /// the destructor's own shutdown call a no-op after an early explicit one.
+  bool m_shutdownDone = false;
 };
 
 #endif // ARTWORKLOADDISPATCHER_H

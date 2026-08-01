@@ -60,6 +60,11 @@ struct ArtworkInfo {
   QSize targetLabelSize;
   int cornerRadius = 0;
   QColor backgroundColor;
+  /// Device pixel ratio of the widget's screen, snapshotted on the GUI thread
+  /// at dispatch time (mixed-DPI: the tile's own screen, not the primary).
+  /// 0.0 means "not snapshotted" — the dispatcher then falls back to its
+  /// batch-level primary-screen snapshot.
+  qreal dpr = 0.0;
 
   struct Result {
     QPointer<ItemWidget> widget;
