@@ -75,6 +75,19 @@ std::atomic<quint64> g_connectionInstanceId{0};
 /// shutdown is bounded identically.
 constexpr int TOTAL_THREAD_JOIN_BUDGET_MS = 4000;
 
+/// Kartend-lvvda: minimum wait guaranteed to the LAST thread in the join
+/// sequence, reserved out of the shared pool before the first join runs. A
+/// starved pool used to hand the second thread a zero-length wait, and a
+/// thread leaked that way still holds its SQLite connection — under `ctest
+/// -j` (many binaries tearing down managers back to back) that leaked
+/// connection then amplifies lock contention for every later test in the
+/// same binary, which is the suspected amplifier behind the macOS Release
+/// playCount flake. Reserving (rather than granting a per-thread grace)
+/// keeps the total ceiling at exactly TOTAL_THREAD_JOIN_BUDGET_MS, so the
+/// testDestructDuringActiveScan bound (1500ms flush + 4000ms joins ≤ 6000ms)
+/// is untouched — the floor changes how the pool is divided, not its size.
+constexpr int JOIN_FLOOR_MS = 750;
+
 /// Quit `thread` and join it within whatever remains of the shared `budgetMs`,
 /// decrementing it by the time actually consumed. Returns false if the thread
 /// did not finish (either genuinely stuck, or the pool was already drained by
@@ -91,17 +104,23 @@ constexpr int TOTAL_THREAD_JOIN_BUDGET_MS = 4000;
 /// thread)" inside ~QueryManager (querymanager.cpp:78) — observed in CI on
 /// DatabaseManager and ScrapeResultSelectionModel, reproducibly, across two
 /// runs of the same commit. The serialisation is load-bearing, not incidental.
-bool quitAndJoinWithin(QThread *thread, int &budgetMs) {
+/// @p reserveForLaterMs (Kartend-lvvda) caps THIS join at
+/// budgetMs - reserveForLaterMs so threads joined after it are guaranteed at
+/// least that much pool — pass JOIN_FLOOR_MS times the number of joins still
+/// to come, 0 for the last one.
+bool quitAndJoinWithin(QThread *thread, int &budgetMs, int reserveForLaterMs = 0) {
   thread->quit();
-  if (budgetMs <= 0) {
-    // Pool drained. Still poll once: a thread that already finished should be
-    // reaped and deleted rather than leaked on a technicality.
+  const int allowedMs = budgetMs - reserveForLaterMs;
+  if (allowedMs <= 0) {
+    // Nothing usable for this join. Still poll once: a thread that already
+    // finished should be reaped and deleted rather than leaked on a
+    // technicality.
     return thread->wait(QDeadlineTimer(0));
   }
   QElapsedTimer spent;
   spent.start();
-  const bool joined = thread->wait(QDeadlineTimer(budgetMs));
-  budgetMs -= static_cast<int>(std::min<qint64>(spent.elapsed(), budgetMs));
+  const bool joined = thread->wait(QDeadlineTimer(allowedMs));
+  budgetMs -= static_cast<int>(std::min<qint64>(spent.elapsed(), allowedMs));
   return joined;
 }
 } // namespace
@@ -343,7 +362,10 @@ DatabaseManager::~DatabaseManager() {
   // connection registry.
   int joinBudgetMs = TOTAL_THREAD_JOIN_BUDGET_MS;
   if (m_workerThread) {
-    if (quitAndJoinWithin(m_workerThread, joinBudgetMs)) {
+    // Reserve the scan thread's floor so a slow query worker cannot starve
+    // it to a zero-length wait (Kartend-lvvda — a thread leaked that way
+    // still holds its SQLite connection).
+    if (quitAndJoinWithin(m_workerThread, joinBudgetMs, m_scanThread ? JOIN_FLOOR_MS : 0)) {
       delete m_workerThread;
     } else {
       qCWarning(lcDatabaseManager)
