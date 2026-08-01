@@ -8,6 +8,8 @@ target_sources(kartend_ui PRIVATE
   datauditauditpage.cpp
   datauditauditpage.h
   datauditauditpage_build.cpp
+  datauditauditpage_fix.cpp
+  datauditauditpage_results.cpp
   datauditdownloadpage.cpp
   datauditdownloadpage.h
   datauditfixdialog.cpp

@@ -21,6 +21,7 @@
 
 class IDatabaseManager;
 class QThread;
+class QTimer;
 #include "applicationcontext_fwd.h"
 
 namespace Scraper {
@@ -430,23 +431,51 @@ private:
   void recordError(const QString &itemName, const ErrorUtils::ErrorContext &err);
 
   /// Per-item stall guard (Kartend audit xnm8a). The per-item chain only
-  /// bounds its HTTP legs (HttpClient's 30s transfer timeout). The two local
-  /// file-I/O stages — the provider's ROM hash-read inside lookup(), and the
-  /// QtConcurrent media/sidecar write — have no timeout, so a slow or wedged
-  /// storage mount blocks read()/write()/fsync() with no interrupt: the item
-  /// never completes, its concurrency slot never frees, and the whole batch
-  /// hangs forever at <100%.
+  /// bounds its HTTP legs (HttpClient's 30s transfer timeout). The local
+  /// I/O stages — the provider's ROM hash-read inside lookup(), the
+  /// QtConcurrent media/sidecar write, and the ScrapeWriteWorker DB save —
+  /// have no timeout of their own, so a slow or wedged storage mount blocks
+  /// read()/write()/fsync() with no interrupt: the item never completes, its
+  /// concurrency slot never frees, and the whole batch hangs forever at
+  /// <100%.
   ///
+  /// Handle returned by armStepWatchdog: the shared "done" flag the step's
+  /// completion races against, plus the armed timer so a normal completion
+  /// can retire it immediately. Previously completion only set *done and the
+  /// timer ran out its full 10-minute budget before self-deleting — at two
+  /// timers per item a long batch retained thousands of live QTimers (each
+  /// capturing its item's shared ItemState) long after the items settled.
+  struct StepWatchdog {
+    std::shared_ptr<bool> done;
+    /// Raw pointer, not QPointer: finish() is only reachable while the
+    /// runner is alive (call sites guard on the QPointer<runner> first) and
+    /// before the timeout fired (fired() check), and only the timeout path
+    /// ever deletes the timer early — so the pointer cannot dangle there.
+    QTimer *timer = nullptr;
+    /// True when the watchdog already fired (or the handle is empty) — the
+    /// step's completion callback must bail out instead of double-settling.
+    [[nodiscard]] bool fired() const { return !done || *done; }
+    /// Mark the step complete and stop + deleteLater the timer. Timeout and
+    /// completion both run on the runner's thread, so there is no race; the
+    /// *done flag makes the two paths mutually exclusive (no double delete).
+    void finish();
+  };
+
   /// armStepWatchdog arms a single-shot timer racing one such step's
-  /// completion and returns a shared "done" flag. The step's own completion
-  /// callback must, before doing anything else, `if (*done) return; *done =
-  /// true;` so a watchdog that already fired is a no-op. If the watchdog fires
-  /// first it sets *done and calls onStepTimedOut, which errors that one item
-  /// and frees the slot so the batch advances — exactly like the HTTP timeout.
-  /// The wedged future/callback is left to drain on its own (value-captures
-  /// only), the same contract as the destructor's abandon-after-1s drain.
-  [[nodiscard]] std::shared_ptr<bool> armStepWatchdog(const std::shared_ptr<ItemState> &state,
-                                                      const QString &stageLabel);
+  /// completion and returns a StepWatchdog handle. The step's own completion
+  /// callback must, before doing anything else, `if (wd.fired()) return;
+  /// wd.finish();` so a watchdog that already fired is a no-op and a normal
+  /// completion retires the timer instead of leaving it to run out its
+  /// budget. If the watchdog fires first it sets *done, runs the optional
+  /// @p onTimeout cleanup (e.g. dropping the pending-write row so a late
+  /// worker reply lands in the unknown-id path), then calls onStepTimedOut,
+  /// which errors that one item and frees the slot so the batch advances —
+  /// exactly like the HTTP timeout. The wedged future/callback is left to
+  /// drain on its own (value-captures only), the same contract as the
+  /// destructor's abandon-after-1s drain.
+  [[nodiscard]] StepWatchdog armStepWatchdog(const std::shared_ptr<ItemState> &state,
+                                             const QString &stageLabel,
+                                             std::function<void()> onTimeout = {});
   /// Watchdog-fire continuation: count the stalled item as an error (or just
   /// drain it if the run was cancelled) and pump the queue.
   void onStepTimedOut(const std::shared_ptr<ItemState> &state, const QString &stageLabel);
@@ -593,6 +622,12 @@ private:
     /// longer pays. Drives the data for Kartend-5vwt item 3.
     /// `qint64{0}` = perf trace not active for this request.
     qint64 dispatchedAtMs = 0;
+    /// Stall guard for the ScrapeWriteWorker save leg — the lookup and
+    /// artwork-write stages already had one, but a save wedged on stalled
+    /// storage used to pin the item's slot and hang the batch at <100%
+    /// forever. onWriteCompleted retires it on the normal reply; on fire
+    /// the row is dropped so the late reply is ignored (unknown id).
+    StepWatchdog saveWatchdog;
   };
   QHash<quint64, PendingWrite> m_pendingWrites;
   quint64 m_nextWriteId = 0;

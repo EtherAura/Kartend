@@ -28,6 +28,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QEvent>
 #include <QFile>
 #include <QFileInfo>
 #include <QSignalSpy>
@@ -279,6 +280,7 @@ private slots:
   void skipsItemsWithNoCandidates();
   void countsErrorsOnLookupFailure();
   void stalledStepTimesOutAndAdvancesBatch();
+  void completedStepsRetireTheirWatchdogTimers();
   void countsErrorsOnFetchDetailFailure();
   void firstFailuresRecordsEveryFailure();
   void cancelStopsAfterInFlightItem();
@@ -721,6 +723,31 @@ void TestBatchScrapeRunner::stalledStepTimesOutAndAdvancesBatch() {
   // The message names the stall rather than a generic provider error.
   QVERIFY(!summary.firstFailures.isEmpty());
   QVERIFY(summary.firstFailures.first().contains(QStringLiteral("timed out")));
+}
+
+void TestBatchScrapeRunner::completedStepsRetireTheirWatchdogTimers() {
+  // A completed step must stop + delete its watchdog timer immediately. The
+  // watchdogs used to only flip the shared done flag on completion, leaving
+  // every single-shot QTimer to run out its full budget (10min default)
+  // before self-deleting — at two watchdogs per item, a long batch retained
+  // thousands of live timers, each holding its item's captured ItemState,
+  // long after the items settled.
+  auto stub = std::make_shared<StubProvider>();
+  stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha");
+  stub->byQuery[QStringLiteral("Beta")] = makeMatch("2", "Beta");
+  const QStringList paths{QStringLiteral("/games/Alpha.bin"), QStringLiteral("/games/Beta.bin")};
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.scraped, 2);
+  // Retirement goes through deleteLater — flush pending deferred deletes
+  // before counting. The watchdog timers are the only QTimer children the
+  // runner parents, so an empty findChildren proves they were all retired.
+  for (int i = 0; i < 100 && !runner.findChildren<QTimer *>().isEmpty(); ++i) {
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    QCoreApplication::processEvents();
+  }
+  QCOMPARE(runner.findChildren<QTimer *>().size(), 0);
 }
 
 void TestBatchScrapeRunner::countsErrorsOnFetchDetailFailure() {

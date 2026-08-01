@@ -3,6 +3,8 @@
 // a temp-dir artworkDirectory.
 #include "scrapepersistence.h"
 
+#include "extensionutils.h"
+
 #include <optional>
 
 #include <QDir>
@@ -88,8 +90,15 @@ QString extensionForAsset(const QUrl &url, MediaKind kind) {
   // can suffix-extract from. Filtered through a short whitelist so a
   // pathological `.../foo.php` URL doesn't end up as a ".php" file.
   const QString rawExt = QFileInfo(url.path()).suffix().toLower();
-  static const QSet<QString> kImageExts{"png", "jpg", "jpeg", "webp", "gif", "bmp"};
-  static const QSet<QString> kVideoExts{"mp4", "webm", "mkv", "mov", "avi"};
+  // Image/video whitelists come from the shared ExtensionUtils tables so the
+  // extensions this writer keeps are exactly the ones the artwork/video
+  // lookup (and the isDecodableImagePath decode gate) will accept later.
+  // kDocExts stays local: manuals are a scraper-only asset kind with no
+  // shared lookup path.
+  static const QSet<QString> kImageExts(ExtensionUtils::imageBaseExtensions().begin(),
+                                        ExtensionUtils::imageBaseExtensions().end());
+  static const QSet<QString> kVideoExts(ExtensionUtils::videoBaseExtensions().begin(),
+                                        ExtensionUtils::videoBaseExtensions().end());
   static const QSet<QString> kDocExts{"pdf", "epub", "cbz", "cbr", "djvu"};
   switch (kind) {
   case MediaKind::Image:

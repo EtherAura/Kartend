@@ -133,18 +133,25 @@ public:
            const QString &expectedContentTypePrefix = QString(),
            const QStringList &allowedHostSuffixes = QStringList());
 
-  /// Configure the rate limit for a host. `intervalMs` is the minimum
-  /// delay between consecutive request *starts* (not completions, so
-  /// the network time of one request overlaps with the next's throttle
-  /// window). `maxConcurrent` caps in-flight requests for this host
-  /// — set above 1 only when the upstream provider documents support
-  /// for concurrent threads from a single key. A host with no rule set
-  /// gets HostPolicy's defaults: no inter-start pacing, but in-flight
-  /// requests capped at 1 — conservative by design, so an unregistered
-  /// host can never be hammered concurrently by accident. Providers
-  /// that want parallel downloads must register an explicit policy
-  /// (ScreenScraper's media host wires the user's mediaConcurrency
-  /// setting through here). Idempotent.
+  /// Configure the rate limit for a host. `intervalMs` is the pacing
+  /// window: up to `maxConcurrent` request *starts* are admitted per
+  /// window (a burst), then the next start waits for the window to
+  /// elapse — "n concurrent threads, each capped at one start per
+  /// intervalMs", the model rate-limited upstreams document. With
+  /// maxConcurrent == 1 this is exactly a minimum delay between
+  /// consecutive starts (not completions, so the network time of one
+  /// request overlaps with the next's throttle window). `maxConcurrent`
+  /// also caps in-flight requests for this host — set above 1 only when
+  /// the upstream provider documents support for concurrent threads
+  /// from a single key. A host with no rule set gets HostPolicy's
+  /// defaults: no inter-start pacing, but in-flight requests capped at
+  /// 1 — conservative by design, so an unregistered host can never be
+  /// hammered concurrently by accident. Providers that want parallel
+  /// downloads must register an explicit policy (ScreenScraper's media
+  /// host wires the user's mediaConcurrency setting through here).
+  /// Idempotent — re-applying an unchanged policy leaves the live
+  /// pacing window untouched; a changed policy restarts pacing from a
+  /// fresh window.
   void setRateLimit(const QString &host, int intervalMs, int maxConcurrent = 1);
 
   /// Cancels any queued (not-yet-dispatched) requests, invoking each one's
@@ -195,11 +202,20 @@ private:
   /// Per-host in-flight count (number of replies awaiting completion).
   /// Used together with HostPolicy::maxConcurrent to gate dispatch.
   QHash<QString, int> m_inFlight;
-  /// Per-host monotonic timer used to measure the gap to the next
-  /// allowed start. We share one QElapsedTimer per host so cross-host
-  /// pacing stays independent; a started timer is what the inter-start
-  /// check reads.
+  /// Per-host monotonic timer marking when the current pacing window
+  /// opened (the first start of the current burst). One QElapsedTimer per
+  /// host so cross-host pacing stays independent; drainHost reads it
+  /// together with m_windowStartCount to decide whether another start
+  /// still fits the window.
   QHash<QString, QElapsedTimer> m_lastStartTimer;
+  /// Request starts admitted in the current pacing window, per host.
+  /// drainHost admits starts while this is below the policy's
+  /// maxConcurrent, then waits out the window remainder — giving the
+  /// documented "bursts of N, paced at intervalMs" semantics instead of
+  /// a flat 1/intervalMs regardless of concurrency. Reset alongside
+  /// m_lastStartTimer whenever a window expires or the host's policy
+  /// changes (setRateLimit).
+  QHash<QString, int> m_windowStartCount;
   /// Per-host scheduled-wakeup flag so we don't pile multiple
   /// singleShot timers on top of each other while a host is paced.
   QHash<QString, bool> m_drainScheduled;

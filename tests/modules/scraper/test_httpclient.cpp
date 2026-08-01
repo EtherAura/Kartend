@@ -397,6 +397,7 @@ private slots:
   void errorBody_controlCharacters_areFlattenedInDetails();
   void errorDetails_redactCredentialQueryValues();
   void unconfiguredHost_defaultsToOneInFlightRequest();
+  void throttledHost_admitsBurstOfMaxConcurrentPerWindow();
   void get_fromWrongThread_isRefusedInReleaseBuilds();
 };
 
@@ -898,6 +899,52 @@ void TestHttpClient::unconfiguredHost_defaultsToOneInFlightRequest() {
   // Drain the in-flight request (fast connection-refused) so no reply lingers
   // past the test.
   QTRY_VERIFY_WITH_TIMEOUT(inflightFired, 10000);
+  client->clearPending();
+}
+
+// Burst pacing: a host policy of maxConcurrent=N with an interval must admit
+// up to N request *starts* inside one interval window ("bursts of N, paced at
+// intervalMs" — the documented model), not one start per interval regardless
+// of N. Pre-fix, the pacing timer restarted after EVERY start, so with a
+// throttle set the concurrency knob was partially dead: with 3 requests
+// enqueued under {interval=60s, maxConcurrent=2}, only ONE dispatched and TWO
+// sat queued. The 60s window makes the assertion timing-free — nothing can
+// expire mid-test — and clearPending() resolves whatever is still queued, so
+// counting RequestQueueCleared callbacks reveals exactly how many dispatched.
+void TestHttpClient::throttledHost_admitsBurstOfMaxConcurrentPerWindow() {
+  auto *client = Scraper::HttpClient::instance();
+  client->clearPending();
+
+  const QString host = QStringLiteral("127.0.0.1");
+  // Reset any pacing state an earlier case left for this host, then install
+  // the burst policy — a policy CHANGE starts pacing from a fresh window.
+  client->setRateLimit(host, 0, 0);
+  client->setRateLimit(host, /*intervalMs=*/60000, /*maxConcurrent=*/2);
+  // A closed loopback port: dispatched requests fail fast with
+  // connection-refused; what matters here is only whether they *started*.
+  const QUrl url(QStringLiteral("https://127.0.0.1:1/x"));
+
+  int settled = 0;
+  int queueCleared = 0;
+  auto callback = [&](const ErrorUtils::Result<QByteArray> &r) {
+    ++settled;
+    if (r.isError() && r.error().code == ErrorCode::RequestQueueCleared) {
+      ++queueCleared;
+    }
+  };
+  client->get(url, {{"User-Agent", "test-agent"}}, callback);
+  client->get(url, {{"User-Agent", "test-agent"}}, callback);
+  client->get(url, {{"User-Agent", "test-agent"}}, callback);
+
+  // Requests 1+2 fit the window's burst budget and dispatched; request 3
+  // exceeded it and is still queued, so the clear resolves exactly one.
+  client->clearPending();
+  QCOMPARE(queueCleared, 1);
+
+  // Drain the two in-flight replies (fast connection-refused) and restore
+  // the default policy so no rule leaks into later cases.
+  QTRY_COMPARE_WITH_TIMEOUT(settled, 3, 10000);
+  client->setRateLimit(host, 0, 0);
   client->clearPending();
 }
 

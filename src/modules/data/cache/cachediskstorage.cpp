@@ -39,12 +39,13 @@ namespace {
 
 // Encode `image` to PNG in memory, then write it to `cachePath` via QSaveFile so
 // a crash mid-encode can't leave a truncated PNG on disk (which later loads as a
-// corrupt / blank thumbnail). Mirrors CacheDiskStorage::writeTimestamps, EXCEPT
-// the parent-directory fsync that makes the rename durable: the batch loop in
-// scheduleAsyncSave issues that once per distinct directory per batch instead —
-// per-file it was hundreds of redundant fsyncs per second against the same
-// artwork directory during silent precache. Logs + returns false on any
-// failure; the caller skips to the next image (Kartend-6n5r).
+// corrupt / blank thumbnail). Deliberately NOT PathUtils::atomicWriteFile — the
+// shared helper fsyncs the parent directory on every call, but here the batch
+// loop in scheduleAsyncSave issues that once per distinct directory per batch
+// instead: per-file it was hundreds of redundant fsyncs per second against the
+// same artwork directory during silent precache (the helper also mkpaths the
+// parent, which that loop likewise hoists per batch). Logs + returns false on
+// any failure; the caller skips to the next image (Kartend-6n5r).
 bool saveImageAtomically(const QString &cachePath, const QImage &image) {
   QByteArray pngBytes;
   {

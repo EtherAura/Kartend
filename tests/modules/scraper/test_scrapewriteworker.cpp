@@ -91,6 +91,12 @@ void seedSchemaOnDisk() {
 /// the (requestId, ok) payload through the event queue and the slot runs on
 /// THIS thread, so the capture below is single-threaded and ordered by Qt's
 /// event loop.
+///
+/// New tests should reach for tests/support/workersignalspy.h instead — it
+/// packages exactly this queued-capture pattern behind a QSignalSpy-like
+/// API. This helper predates it and additionally sequences the
+/// openConnection/performWrite invocations, so it keeps its hand-rolled
+/// loop.
 [[nodiscard]] bool runWrite(Scraper::ScrapeWriteWorker &worker, quint64 requestId,
                             const QString &uuid, const QString &sourcePath,
                             const Scraper::ScrapedItem &scraped,

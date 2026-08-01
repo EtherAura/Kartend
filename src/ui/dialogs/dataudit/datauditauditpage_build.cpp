@@ -1,7 +1,8 @@
 // Sibling TU: page construction for DatAuditAuditPage. The per-section
-// build* helpers live here so datauditauditpage.cpp keeps only the audit-run /
-// results / fix / export behaviour; wiring (wireProfilePanel / wireAuditActions)
-// and every slot stay in the main TU.
+// build* helpers live here so datauditauditpage.cpp keeps the profile UI +
+// audit-run orchestration (wiring — wireProfilePanel / wireAuditActions —
+// included); results presentation lives in datauditauditpage_results.cpp and
+// the fix/export flows in datauditauditpage_fix.cpp.
 #include "datauditauditpage.h"
 
 #include <QCheckBox>

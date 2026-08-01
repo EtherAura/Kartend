@@ -1,5 +1,8 @@
 target_sources(kartend_data PRIVATE
   batchscraperunner.cpp
+  batchscraperunner_media.cpp
+  batchscraperunner_watchdog.cpp
+  batchscraperunner_worker.cpp
   entityscrapecoordinator.cpp
   scrapelock.cpp
   scrapependingstate.cpp

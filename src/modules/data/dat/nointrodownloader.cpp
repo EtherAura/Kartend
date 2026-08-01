@@ -318,6 +318,28 @@ ErrorUtils::Result<QStringList> extractDatsTo(const QString &zipPath, const QStr
     return ErrorContext::error(ErrorCode::FileWriteError, "Could not create a temporary folder",
                                "NoIntroDownload::extractDatsTo");
   }
+
+  // Zip-bomb guard (Kartend audit SEC-02): the extractor runs count-free, so
+  // cap decompressed output at min(absolute cap, free space - margin) and kill
+  // the process if a malicious pack inflates past it. Only a KNOWN free-space
+  // figure may lower the ceiling (bytesAvailable() returns -1 when the volume
+  // cannot be queried) and it never lowers it below zero — an unclamped
+  // subtraction went negative on a low-free-space volume and rejected every
+  // pack as a zip bomb. A volume known to be out of budget cannot succeed at
+  // all, so name the real problem up front instead.
+  const qint64 freeAvail = QStorageInfo(tmp.path()).bytesAvailable();
+  const qint64 freeBudget =
+      freeAvail > kExtractFreeSpaceMargin ? freeAvail - kExtractFreeSpaceMargin : 0;
+  if (freeAvail >= 0 && freeBudget <= 0) {
+    return ErrorContext::error(ErrorCode::FileWriteError,
+                               "Not enough free disk space to unpack the DAT pack",
+                               "NoIntroDownload::extractDatsTo")
+        .withDetails(QString("available=%1 margin=%2").arg(freeAvail).arg(kExtractFreeSpaceMargin));
+  }
+  const qint64 extractCeiling =
+      freeBudget > 0 ? qMin(kMaxExtractedDatBytes, freeBudget) : kMaxExtractedDatBytes;
+  const bool ceilingIsFreeSpace = freeBudget > 0 && freeBudget < kMaxExtractedDatBytes;
+
   QStringList args;
   if (tool == QLatin1String("7z")) {
     args << QStringLiteral("x") << QStringLiteral("-y") << abs;
@@ -330,14 +352,6 @@ ErrorUtils::Result<QStringList> extractDatsTo(const QString &zipPath, const QStr
   if (!proc.waitForStarted(10000)) {
     return ErrorContext::error(ErrorCode::UnknownError, "Could not start the archive tool",
                                "NoIntroDownload::extractDatsTo");
-  }
-  // Zip-bomb guard (Kartend audit SEC-02): the extractor above runs count-free,
-  // so cap decompressed output at min(absolute cap, free space - margin) and
-  // kill the process if a malicious pack inflates past it.
-  const qint64 freeAvail = QStorageInfo(tmp.path()).bytesAvailable();
-  qint64 extractCeiling = kMaxExtractedDatBytes;
-  if (freeAvail >= 0) {
-    extractCeiling = qMin<qint64>(extractCeiling, freeAvail - kExtractFreeSpaceMargin);
   }
   const auto extractedBytes = [&tmp]() -> qint64 {
     qint64 total = 0;
@@ -361,6 +375,13 @@ ErrorUtils::Result<QStringList> extractDatsTo(const QString &zipPath, const QStr
     if (extractedBytes() > extractCeiling) {
       proc.kill();
       proc.waitForFinished(2000);
+      // A ceiling set by the volume's free space means a legitimate pack may
+      // simply not fit; only a breach of the absolute cap suggests a bomb.
+      if (ceilingIsFreeSpace) {
+        return ErrorContext::error(ErrorCode::FileWriteError,
+                                   "Not enough free disk space to unpack the DAT pack",
+                                   "NoIntroDownload::extractDatsTo");
+      }
       return ErrorContext::error(
           ErrorCode::InvalidArgument,
           "DAT pack exceeded the decompressed-size limit during extraction (possible zip bomb)",

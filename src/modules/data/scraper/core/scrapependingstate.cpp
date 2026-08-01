@@ -1,13 +1,11 @@
 #include "scrapependingstate.h"
 
 #include <QDir>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
 #include <QLoggingCategory>
-#include <QSaveFile>
 #include <QStandardPaths>
 
 #include "pathutils.h"
@@ -197,21 +195,14 @@ ScraperService::PendingState deserialize(const QByteArray &bytes) {
 }
 
 bool atomicWrite(const QString &path, const QByteArray &bytes) {
-  QDir().mkpath(QFileInfo(path).absolutePath());
-  QSaveFile f(path);
-  if (!f.open(QIODevice::WriteOnly)) {
+  // stopForQuotaExhaustion flushes this file precisely because the user may
+  // quit right after — the shared helper flushes the directory entry too so
+  // the rename survives a crash/power-cut (QSaveFile + syncDirectory, the
+  // sanctioned pattern).
+  if (!PathUtils::atomicWriteFile(path, bytes)) {
     qCWarning(lcScrapePendingState) << "Failed to write pending state to" << path;
     return false;
   }
-  f.write(bytes);
-  if (!f.commit()) {
-    qCWarning(lcScrapePendingState) << "Failed to commit pending state to" << path;
-    return false;
-  }
-  // stopForQuotaExhaustion flushes this file precisely because the user may
-  // quit right after — flush the directory entry too so the rename survives a
-  // crash/power-cut (QSaveFile + syncDirectory, the sanctioned pattern).
-  PathUtils::syncDirectory(QFileInfo(path).absolutePath());
   return true;
 }
 

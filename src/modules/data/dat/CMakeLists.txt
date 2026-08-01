@@ -1,5 +1,7 @@
 target_sources(kartend_data PRIVATE
   datlookup.cpp
+  datlookup_cmp.cpp
+  datlookup_xml.cpp
   datlookup.h
   datcache.cpp
   datcache.h

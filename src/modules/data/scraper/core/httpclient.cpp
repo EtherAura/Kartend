@@ -157,12 +157,27 @@ void HttpClient::setRateLimit(const QString &host, int intervalMs, int maxConcur
   }
   if (intervalMs <= 0 && maxConcurrent <= 0) {
     m_rateLimits.remove(host);
+    m_lastStartTimer.remove(host);
+    m_windowStartCount.remove(host);
     return;
   }
   HostPolicy policy;
   policy.intervalMs = std::max(0, intervalMs);
   policy.maxConcurrent = std::max(1, maxConcurrent);
+  // A genuinely NEW policy starts pacing from a fresh window — carrying the
+  // old window's start count into a policy with a different burst size would
+  // misthrottle the first interval. Providers re-apply an UNCHANGED policy on
+  // every media fetch (registerHostThrottles), so resetting unconditionally
+  // would erase the live window each time and disable pacing entirely — hence
+  // the changed-check.
+  const auto it = m_rateLimits.constFind(host);
+  const bool changed = it == m_rateLimits.cend() || it->intervalMs != policy.intervalMs ||
+                       it->maxConcurrent != policy.maxConcurrent;
   m_rateLimits.insert(host, policy);
+  if (changed) {
+    m_lastStartTimer.remove(host);
+    m_windowStartCount.remove(host);
+  }
 }
 
 void HttpClient::clearPending() {
@@ -349,44 +364,55 @@ void HttpClient::drainHost(const QString &host) {
       return;
     }
     // Inter-start spacing: this is what makes 1 thread @ 250ms feel
-    // different from N threads @ 250ms. Each slot is paced
-    // independently because we only check the *last* start; with
-    // concurrency > 1 the burst pattern is N requests in quick
-    // succession, then a wait, then N more. That matches what the
-    // upstream usually allows: "n concurrent threads, each capped at
-    // m req/s" → bursts of N, paced at intervalMs per burst step.
+    // different from N threads @ 250ms. With concurrency > 1 the burst
+    // pattern is up to N request starts inside one intervalMs window, then
+    // a wait, then N more. That matches what the upstream usually allows:
+    // "n concurrent threads, each capped at m req/s" → bursts of N, paced
+    // at intervalMs per burst step. The window opens at its first start
+    // (m_lastStartTimer) and admits starts until m_windowStartCount hits
+    // maxConcurrent — previously the timer restarted after EVERY start, so
+    // throughput capped at 1/intervalMs no matter the concurrency and the
+    // user's mediaConcurrency setting was partially dead whenever a
+    // throttle was set. maxConcurrent == 1 degenerates to exactly the old
+    // one-start-per-interval behaviour.
     auto &timer = m_lastStartTimer[host];
-    if (policy.intervalMs > 0 && timer.isValid()) {
-      const qint64 elapsed = timer.elapsed();
-      if (elapsed < policy.intervalMs) {
-        const qint64 wait = policy.intervalMs - elapsed;
-        // Only schedule a wakeup once per pending wait. The flag is
-        // cleared inside the singleShot lambda (when the timer fires)
-        // rather than at the top of drainHost — otherwise every
-        // back-to-back enqueue would clear the flag, re-schedule
-        // another timer, and end up serialising 1 PACE log + 1
-        // QTimer instance per enqueue. (Diagnosed via the user's
-        // /tmp/scrape.log: 26 PACE lines and 26 stacked timers
-        // between consecutive STARTs.)
-        if (!m_drainScheduled.value(host, false)) {
-          m_drainScheduled.insert(host, true);
-          qCDebug(lcScrapeTimings) << "PACE" << host << "wait" << wait << "ms"
-                                   << "queue=" << qit->size() << "inflight=" << inFlight;
-          // `wait` is the computed per-host pacing interval (server rate-limit
-          // backoff). Single scheduled drain per host enforces the gap; the
-          // drainScheduled flag (set just above, cleared on fire) is what
-          // collapses bursty enqueues into one timer instead of N stacked ones.
-          QTimer::singleShot(static_cast<int>(wait), this, [this, host]() {
-            m_drainScheduled.insert(host, false);
-            drainHost(host);
-          });
-        }
-        return;
+    const bool windowLive =
+        policy.intervalMs > 0 && timer.isValid() && timer.elapsed() < policy.intervalMs;
+    if (windowLive && m_windowStartCount.value(host, 0) >= policy.maxConcurrent) {
+      const qint64 wait = policy.intervalMs - timer.elapsed();
+      // Only schedule a wakeup once per pending wait. The flag is
+      // cleared inside the singleShot lambda (when the timer fires)
+      // rather than at the top of drainHost — otherwise every
+      // back-to-back enqueue would clear the flag, re-schedule
+      // another timer, and end up serialising 1 PACE log + 1
+      // QTimer instance per enqueue. (Diagnosed via the user's
+      // /tmp/scrape.log: 26 PACE lines and 26 stacked timers
+      // between consecutive STARTs.)
+      if (!m_drainScheduled.value(host, false)) {
+        m_drainScheduled.insert(host, true);
+        qCDebug(lcScrapeTimings) << "PACE" << host << "wait" << wait << "ms"
+                                 << "queue=" << qit->size() << "inflight=" << inFlight;
+        // `wait` is the computed per-host pacing interval (server rate-limit
+        // backoff). Single scheduled drain per host enforces the gap; the
+        // drainScheduled flag (set just above, cleared on fire) is what
+        // collapses bursty enqueues into one timer instead of N stacked ones.
+        QTimer::singleShot(static_cast<int>(wait), this, [this, host]() {
+          m_drainScheduled.insert(host, false);
+          drainHost(host);
+        });
       }
+      return;
     }
     PendingRequest req = qit->dequeue();
     m_inFlight.insert(host, inFlight + 1);
-    timer.start();
+    if (windowLive) {
+      // Another start inside the open window (burst step 2..N).
+      m_windowStartCount.insert(host, m_windowStartCount.value(host, 0) + 1);
+    } else {
+      // First start of a fresh pacing window.
+      timer.start();
+      m_windowStartCount.insert(host, 1);
+    }
     qCDebug(lcScrapeTimings) << "START" << host << req.url.path().left(80) << "inflight->"
                              << (inFlight + 1) << "remaining_queue=" << qit->size();
     send(host, std::move(req));

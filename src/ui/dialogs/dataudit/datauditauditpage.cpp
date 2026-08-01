@@ -1,29 +1,25 @@
+// Profile UI + audit-run orchestration for DatAuditAuditPage. Sibling TUs
+// (same class, partial-split pattern):
+//   datauditauditpage_build.cpp   — page construction (buildAuditPage)
+//   datauditauditpage_results.cpp — results presentation (filter combo,
+//                                   summary line, table row queries/menus)
+//   datauditauditpage_fix.cpp     — Fix dialog flows + CSV/fixdat/miss export
 #include "datauditauditpage.h"
 
-#include <QApplication>
 #include <QCheckBox>
-#include <QClipboard>
 #include <QComboBox>
-#include <QDesktopServices>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
 #include <QListWidget>
-#include <QMenu>
 #include <QMessageBox>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QSaveFile>
 #include <QSignalBlocker>
-#include <QSortFilterProxyModel>
-#include <QTableView>
 #include <QVBoxLayout>
 
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
-#include "datauditbrowsermodels.h" // DatAudit::auditRowsFromResults
-#include "datauditexport.h"
-#include "datauditfixdialog.h"
 #include "datauditmodel.h"
 #include "datauditprofile.h"
 #include "datauditprofilepanel.h"
@@ -31,10 +27,7 @@
 #include "errorutils.h"
 #include "pathutils.h"
 
-using DatAudit::AuditOutput;
-using DatAudit::AuditSummary;
 using DatAudit::DatAuditModel;
-using DatAudit::Status;
 
 DatAuditAuditPage::DatAuditAuditPage(DatAuditProfileStore &profileStore, QWidget *parent)
     : QWidget(parent), m_profileController(profileStore) {
@@ -64,47 +57,6 @@ void DatAuditAuditPage::setScraperOpener(std::function<void(const QString &)> op
 
 namespace {
 
-// Status sets for each filter combo entry. Index 0 ("All") => no filter.
-struct FilterEntry {
-  const char *label;
-  std::optional<QSet<Status>> statuses;
-};
-
-// Kartend-dfix4: QT_TRANSLATE_NOOP, not QT_TR_NOOP. This is a free function in
-// an anonymous namespace, so QT_TR_NOOP gave lupdate no class to attribute the
-// strings to — it warned "tr() cannot be called without context" and then
-// DROPPED them, which is why none of these labels were in
-// translations/kartend_en.ts and the filter combo was untranslatable.
-//
-// The context has to be the one the strings are looked up under at runtime.
-// Both consumers (populateFilterCombo, onFilterChanged) are DatAuditAuditPage
-// members calling tr(e.label), and DatAuditAuditPage is a Q_OBJECT at global
-// scope — the `namespace DatAudit` block in the header is only a forward
-// declaration of DatAuditModel — so that context is "DatAuditAuditPage",
-// matching the existing context of the same name in the .ts seed. It is
-// repeated literally on every entry because lupdate parses QT_TRANSLATE_NOOP
-// statically; a shared constant would put it right back to extracting nothing.
-QList<FilterEntry> filterEntries() {
-  return {
-      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "All"), std::nullopt},
-      // Framing presets: file-centric ("the files I own") vs entry-centric
-      // ("how complete is the catalogue"). Both are just status subsets.
-      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Files I own"),
-       QSet<Status>{Status::Have, Status::WrongName, Status::WrongHash, Status::Duplicate,
-                    Status::Unknown, Status::Corrupt}},
-      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Catalogue completeness"),
-       QSet<Status>{Status::Have, Status::WrongName, Status::Missing}},
-      // Individual statuses.
-      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Have"), QSet<Status>{Status::Have}},
-      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Missing"), QSet<Status>{Status::Missing}},
-      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Wrong name"), QSet<Status>{Status::WrongName}},
-      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Wrong content"), QSet<Status>{Status::WrongHash}},
-      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Duplicate"), QSet<Status>{Status::Duplicate}},
-      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Unknown"), QSet<Status>{Status::Unknown}},
-      {QT_TRANSLATE_NOOP("DatAuditAuditPage", "Corrupt"), QSet<Status>{Status::Corrupt}},
-  };
-}
-
 // Resolve the collection a profile links to, by the same canonical-uuid
 // computation the rest of the app keys on (name + expanded media dir).
 // Returns nullptr when the uuid matches no live collection — deleted,
@@ -117,14 +69,6 @@ const CollectionConfig *resolveLinkedCollection(const QList<CollectionConfig> *c
 }
 
 } // namespace
-
-void DatAuditAuditPage::populateFilterCombo() {
-  // Called from buildAuditPage (sibling TU); the entries stay file-local here,
-  // next to onFilterChanged's use of the same list.
-  for (const auto &e : filterEntries()) {
-    m_filterCombo->addItem(tr(e.label));
-  }
-}
 
 void DatAuditAuditPage::wireProfilePanel() {
   // The panel owns the profile combo + CRUD flows; the page adopts each
@@ -437,23 +381,6 @@ QStringList DatAuditAuditPage::scanRoots() const {
   return out;
 }
 
-bool DatAuditAuditPage::hasResults() const {
-  return !m_model->allRows().isEmpty();
-}
-
-bool DatAuditAuditPage::hasApplicableFixes() const {
-  // The fix engine acts on exactly these statuses: WrongName (rename), and
-  // Unknown / WrongHash (quarantine). Duplicate/Corrupt/Missing produce no
-  // action, so they must not light the Fix button.
-  for (const DatAudit::AuditRow &r : m_model->allRows()) {
-    if (r.status == DatAudit::Status::WrongName || r.status == DatAudit::Status::Unknown ||
-        r.status == DatAudit::Status::WrongHash) {
-      return true;
-    }
-  }
-  return false;
-}
-
 void DatAuditAuditPage::onAddDat() {
   const QStringList files = QFileDialog::getOpenFileNames(
       this, tr("Add DAT files"), QString(), tr("DAT files (*.dat *.xml);;All files (*)"));
@@ -596,89 +523,6 @@ void DatAuditAuditPage::onAuditFinished(const DatAudit::AuditOutput &out) {
   }
 }
 
-void DatAuditAuditPage::onFilterChanged(int index) {
-  const auto entries = filterEntries();
-  if (index >= 0 && index < entries.size()) {
-    m_model->setVisibleStatuses(entries.at(index).statuses);
-  }
-}
-
-void DatAuditAuditPage::updateSummary(const AuditSummary &s) {
-  m_summaryLabel->setText(tr("Have %1 · Wrong name %2 · Wrong content %3 · Unknown %4 · "
-                             "Missing %5 · Corrupt %6   (catalogue %7, files %8)")
-                              .arg(s.have)
-                              .arg(s.wrongName)
-                              .arg(s.wrongHash)
-                              .arg(s.unknown)
-                              .arg(s.missing)
-                              .arg(s.corrupt)
-                              .arg(s.totalCatalogue)
-                              .arg(s.totalFiles));
-  // Completeness bar: present (Have + Wrong-name) over the catalogue total.
-  const int present = s.present();
-  if (s.totalCatalogue > 0) {
-    m_completionBar->setRange(0, s.totalCatalogue);
-    m_completionBar->setValue(present);
-    QString tip = tr("%1 of %2 catalogue entries present").arg(present).arg(s.totalCatalogue);
-    // Per-DAT breakdown (Kartend-m6qsb.15) — only when more than one DAT feeds
-    // the catalogue, since a single source just restates the overall total.
-    if (s.perSource.size() > 1) {
-      for (const DatAudit::SourceCompleteness &sc : s.perSource) {
-        tip += tr("\n%1: %2 / %3 present").arg(sc.name).arg(sc.present).arg(sc.total);
-      }
-    }
-    m_completionBar->setToolTip(tip);
-    m_completionBar->setVisible(true);
-  } else {
-    m_completionBar->setVisible(false);
-  }
-}
-
-const DatAudit::AuditRow *DatAuditAuditPage::rowForProxyIndex(const QModelIndex &proxyIndex) const {
-  if (!proxyIndex.isValid()) {
-    return nullptr;
-  }
-  return m_model->rowAt(m_proxy->mapToSource(proxyIndex).row());
-}
-
-void DatAuditAuditPage::onResultDoubleClicked(const QModelIndex &index) {
-  const DatAudit::AuditRow *row = rowForProxyIndex(index);
-  if (row == nullptr || row->filePath.isEmpty()) {
-    return;
-  }
-  // Reveal the file's containing folder in the system file manager.
-  const QFileInfo fi(row->filePath);
-  QDesktopServices::openUrl(QUrl::fromLocalFile(fi.absolutePath()));
-}
-
-void DatAuditAuditPage::onResultsContextMenu(const QPoint &pos) {
-  const QModelIndex index = m_table->indexAt(pos);
-  const DatAudit::AuditRow *row = rowForProxyIndex(index);
-  if (row == nullptr) {
-    return;
-  }
-  QMenu menu(this);
-  if (!row->filePath.isEmpty()) {
-    const QString path = row->filePath;
-    menu.addAction(tr("Reveal in file manager"), this, [path] {
-      QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).absolutePath()));
-    });
-  }
-  if (!row->expectedName.isEmpty()) {
-    const QString name = row->expectedName;
-    menu.addAction(tr("Copy canonical name"), this,
-                   [name] { QApplication::clipboard()->setText(name); });
-  }
-  if (!row->actualName.isEmpty()) {
-    const QString name = row->actualName;
-    menu.addAction(tr("Copy file name"), this,
-                   [name] { QApplication::clipboard()->setText(name); });
-  }
-  if (!menu.isEmpty()) {
-    menu.exec(m_table->viewport()->mapToGlobal(pos));
-  }
-}
-
 void DatAuditAuditPage::setBusy(bool busy) {
   m_running = busy;
   m_runButton->setEnabled(!busy);
@@ -706,51 +550,6 @@ void DatAuditAuditPage::setBusy(bool busy) {
   m_exportMissButton->setEnabled(canExport);
 }
 
-void DatAuditAuditPage::seedFixDialogDefaults(DatAuditFixDialog &dlg) {
-  // Seed the managed-output option from the profile's persisted fix mode + root
-  // (Kartend-m6qsb.14) instead of always starting blank.
-  dlg.setManagedOutputDefaults(m_currentProfile.fixMode == DatAuditProfile::FixMode::ManagedOutput,
-                               m_currentProfile.managedOutputRoot);
-  // Seed the quarantine folder: the profile's per-collection root takes
-  // precedence, falling back to the global default. Either may be empty.
-  QString quarantineSeed = m_currentProfile.quarantineRoot.trimmed();
-  if (quarantineSeed.isEmpty() && m_getQuarantineDefaultDir) {
-    quarantineSeed = m_getQuarantineDefaultDir().trimmed();
-  }
-  dlg.setQuarantineDefault(quarantineSeed);
-}
-
-void DatAuditAuditPage::offerRescrapeAfterFix(const DatAuditFixDialog &dlg) {
-  // After renames, the files carry their canonical names — the form
-  // ScreenScraper matches best — so offer to re-scrape the linked collection
-  // (Kartend-m6qsb.27). Only when collection-linked and a scraper hook exists.
-  if (dlg.renamedCount() > 0 && !m_currentProfile.collectionUuid.isEmpty() &&
-      m_openScraperForCollection) {
-    const auto answer = QMessageBox::question(
-        this, tr("Re-scrape renamed items"),
-        tr("%n file(s) were renamed to their canonical names. Re-scrape this collection now? "
-           "Canonical names match metadata much better.",
-           nullptr, dlg.renamedCount()));
-    if (answer == QMessageBox::Yes) {
-      m_openScraperForCollection(m_currentProfile.collectionUuid);
-    }
-  }
-}
-
-void DatAuditAuditPage::onFix() {
-  if (!hasResults()) {
-    return;
-  }
-  DatAuditFixDialog dlg(m_model->allRows(), this);
-  seedFixDialogDefaults(dlg);
-  dlg.exec();
-  if (!dlg.didApply()) {
-    return;
-  }
-  onRun(); // re-audit so the table reflects the renamed/moved files
-  offerRescrapeAfterFix(dlg);
-}
-
 void DatAuditAuditPage::reauditProfile(qint64 profileId) {
   if (m_running) {
     QMessageBox::information(this, tr("DAT Audit"),
@@ -776,82 +575,4 @@ void DatAuditAuditPage::reauditProfile(qint64 profileId) {
   }
   m_browserAuditPending = true; // onAuditFinished refreshes + re-selects the node
   onRun();
-}
-
-void DatAuditAuditPage::fixProfile(qint64 profileId) {
-  if (m_running) {
-    QMessageBox::information(this, tr("DAT Audit"),
-                             tr("An audit is already running — wait for it to finish."));
-    return;
-  }
-  // Load the persisted profile so the Fix dialog gets this profile's
-  // managed-output / quarantine defaults, and the post-apply re-audit runs
-  // against the profile's saved DATs/roots (not unsaved on-screen edits).
-  if (!loadProfileFromDb(profileId)) {
-    QMessageBox::information(this, tr("DAT Audit"), tr("Couldn't load that profile."));
-    return;
-  }
-  // Keep the combo display in sync (no-op-safe).
-  m_profilePanel->selectProfileById(profileId);
-
-  // Fix from the persisted snapshot (Kartend-7iqhl.2): reconstruct AuditRows
-  // from the stored result rows rather than running a fresh audit first.
-  QList<DatAuditProfile::ResultRow> rows;
-  bool readOk = false;
-  if (auto r = m_profileController.loadResultRows(profileId); r.isOk()) {
-    rows = r.value();
-    readOk = true;
-  } else {
-    ErrorUtils::logError(r.error());
-  }
-  const QList<DatAudit::AuditRow> auditRows = DatAudit::auditRowsFromResults(rows);
-  if (auditRows.isEmpty()) {
-    // Distinguish a genuinely empty (never-audited) profile from a failed read,
-    // so a DB error isn't reported as "nothing to fix".
-    QMessageBox::information(this, tr("DAT Audit"),
-                             readOk ? tr("This profile has no audited results to fix yet.")
-                                    : tr("Couldn't read this profile's audit results."));
-    return;
-  }
-
-  DatAuditFixDialog dlg(auditRows, this);
-  seedFixDialogDefaults(dlg);
-  dlg.exec();
-  if (!dlg.didApply()) {
-    return;
-  }
-  // Re-audit the profile so the browser reflects the renamed/moved files.
-  if (!scanRoots().isEmpty() && !datPaths().isEmpty()) {
-    m_browserAuditPending = true;
-    onRun();
-  } else {
-    emit browserNodeRefreshRequested(profileId); // can't re-audit; re-read the snapshot
-  }
-  offerRescrapeAfterFix(dlg);
-}
-
-void DatAuditAuditPage::exportTo(const QString &caption, const QString &filter,
-                                 const QByteArray &bytes) {
-  const QString path = QFileDialog::getSaveFileName(this, caption, QString(), filter);
-  if (path.isEmpty()) {
-    return;
-  }
-  QSaveFile f(path);
-  if (!f.open(QIODevice::WriteOnly) || f.write(bytes) != bytes.size() || !f.commit()) {
-    QMessageBox::warning(this, tr("DAT Audit"), tr("Could not write %1").arg(path));
-  }
-}
-
-void DatAuditAuditPage::onExportCsv() {
-  exportTo(tr("Export CSV"), tr("CSV (*.csv)"), DatAudit::toCsv(m_model->allRows()));
-}
-
-void DatAuditAuditPage::onExportFixdat() {
-  exportTo(tr("Export fixdat"), tr("DAT files (*.dat *.xml)"),
-           DatAudit::toFixdat(m_model->allRows()));
-}
-
-void DatAuditAuditPage::onExportMissList() {
-  exportTo(tr("Export miss list"), tr("Text (*.txt)"),
-           DatAudit::toMissList(m_model->allRows()).toUtf8());
 }
