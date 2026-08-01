@@ -269,10 +269,15 @@ void TestCoverFlowController::itemActivated_mapsFilteredVisualToActual() {
   names.insert(paths.at(0), QStringLiteral("Alpha"));
   names.insert(paths.at(1), QStringLiteral("Beta"));
   const QHash<QString, QString> emptyDisplayNames;
+  // Named, not a `{}` temporary: setSourceData stores const-pointers to every
+  // container argument, so a braced temporary dangles at the end of the call
+  // statement (ASan stack-use-after-scope; a bus error on macOS Release).
+  // Same lesson as TestFilterManager's static seed helpers.
+  const QStringList noVirtualFolders;
 
   FilterManager filter;
   filter.setCollections(&collections);
-  filter.setSourceData(paths, names, emptyDisplayNames, subs, {});
+  filter.setSourceData(paths, names, emptyDisplayNames, subs, noVirtualFolders);
 
   ApplicationContext appCtx;
   appCtx.managers.filterManager = &filter;

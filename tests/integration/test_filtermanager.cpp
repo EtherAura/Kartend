@@ -244,7 +244,11 @@ void TestFilterManager::testBuildArtworkKeySetFromCachedListings() {
   ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artDir.path()});
   QVERIFY(ArtworkUtils::DirectoryCache::instance().contentsGeneration() > generationBefore);
   const QSet<QString> keys = ArtworkUtils::buildArtworkKeySet(artDir.path());
-  QCOMPARE(keys, (QSet<QString>{QStringLiteral("Alpha"), QStringLiteral("Beta")}));
+  // Keys are baseMatchKey-normalized: lowercased on the case-insensitive
+  // platforms (macOS/Windows), verbatim on Linux (Kartend-58ddn) — so the
+  // expectation must run through the same normalization, not literal case.
+  QCOMPARE(keys, (QSet<QString>{ArtworkUtils::baseMatchKey(QStringLiteral("Alpha")),
+                                ArtworkUtils::baseMatchKey(QStringLiteral("Beta"))}));
 
   ArtworkUtils::DirectoryCache::instance().clear();
 }
