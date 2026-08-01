@@ -147,20 +147,33 @@ void CoverFlowController::ensureWidget() {
     if (!m_dataManager) {
       return;
     }
-    if (m_dataManager->isSubcollectionIndex(idx)) {
-      int sub = m_dataManager->subcollectionIndexFromActual(idx);
+    // Carousel slots live in filtered-visual space when a filter is active
+    // (rebuildCards walks the filtered index list), so translate to the
+    // store's actual-index space before classifying — mirroring
+    // resolveAndPushVideo. Feeding the raw visual idx to the store here
+    // misroutes activation whenever the filter prunes or permutes the list.
+    const bool filtered = filterMgr() && filterMgr()->isFiltered();
+    const int actualIndex = filtered ? filterMgr()->getActualIndex(idx) : idx;
+    if (actualIndex < 0) {
+      return;
+    }
+    if (m_dataManager->isSubcollectionIndex(actualIndex)) {
+      int sub = m_dataManager->subcollectionIndexFromActual(actualIndex);
       if (sub >= 0) {
         emit subcollectionEntered(sub);
       }
       return;
     }
-    if (m_dataManager->isVirtualFolderIndex(idx)) {
-      QString folder = m_dataManager->virtualFolderFromActual(idx);
+    if (m_dataManager->isVirtualFolderIndex(actualIndex)) {
+      QString folder = m_dataManager->virtualFolderFromActual(actualIndex);
       if (!folder.isEmpty()) {
         emit virtualFolderEntered(folder);
       }
       return;
     }
+    // Media launch: keep emitting the visual index — downstream consumers
+    // (ScrollManager::coverFlowItemActivated → MainWindow) resolve it through
+    // the same filter-aware visual-index pipeline the grid uses.
     emit itemActivated(idx);
   });
 }

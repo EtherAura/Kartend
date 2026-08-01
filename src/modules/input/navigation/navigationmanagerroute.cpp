@@ -9,7 +9,7 @@
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
-#include "selectionrestoremanager.h"
+#include "selectionrestorecoordinator.h"
 #include "settingsutils.h"
 #include "uiconstants/navigation.h"
 #include "uiconstants/timing.h"

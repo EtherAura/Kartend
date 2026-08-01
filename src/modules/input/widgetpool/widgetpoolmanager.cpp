@@ -12,11 +12,10 @@ Q_LOGGING_CATEGORY(lcWidgetPoolManager, "kartend.widgetpoolmanager")
 namespace {
 
 void pruneNullEntries(QList<QPointer<ItemWidget>> &list) {
-  for (int i = list.size() - 1; i >= 0; --i) {
-    if (list[i].isNull()) {
-      list.removeAt(i);
-    }
-  }
+  // Single erase-remove pass: the old per-index removeAt loop shifted the
+  // tail once per null entry — O(pool^2) worst case on the release() hot
+  // path. removeIf compacts in one pass with no per-removal shifting.
+  list.removeIf([](const QPointer<ItemWidget> &widget) { return widget.isNull(); });
 }
 
 auto takeLastValid(QList<QPointer<ItemWidget>> &list) -> ItemWidget * {

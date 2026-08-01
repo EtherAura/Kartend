@@ -393,6 +393,36 @@ void ScrollDataStore::applyUnifiedSort(const CollectionContext &context,
   m_unifiedSortActive = true;
 }
 
+QList<int> ScrollDataStore::unifiedConcatToActualMap() const {
+  QList<int> map;
+  if (!m_unifiedSortActive) {
+    return map;
+  }
+  const int subCount = m_subcollections.size();
+  const int folderCount = m_virtualFolders.size();
+  map.resize(m_unifiedItems.size());
+  map.fill(-1);
+  for (int actual = 0; actual < m_unifiedItems.size(); ++actual) {
+    const UnifiedItem &item = m_unifiedItems[actual];
+    int concatIndex = -1;
+    switch (item.type) {
+    case UnifiedItem::Type::Subcollection:
+      concatIndex = item.originalIndex;
+      break;
+    case UnifiedItem::Type::VirtualFolder:
+      concatIndex = subCount + item.originalIndex;
+      break;
+    case UnifiedItem::Type::MediaFile:
+      concatIndex = subCount + folderCount + item.originalIndex;
+      break;
+    }
+    if (concatIndex >= 0 && concatIndex < map.size()) {
+      map[concatIndex] = actual;
+    }
+  }
+  return map;
+}
+
 void ScrollDataStore::setupFilePathMappings(const CollectionContext &context) {
   m_filePathToDisplayName.clear();
   if (context.config.showAllSubcollectionItems) {

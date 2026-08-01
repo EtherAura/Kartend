@@ -223,6 +223,21 @@ public:
   [[nodiscard]] bool isUnifiedSortActive() const { return m_unifiedSortActive; }
 
   /**
+   * @brief Permutation from unpermuted concat space to actual-index space.
+   *
+   * Concat space is the fixed [subcollections][virtualFolders][files] layout;
+   * when unified sorting is active, actual indices are positions in the
+   * permuted m_unifiedItems list instead. The returned list satisfies
+   * map[concatIndex] == actual position of that item in the unified order.
+   * Returns an empty list when unified sorting is inactive (the two spaces
+   * coincide, so the identity map is implied). Consumers that build index
+   * lists in concat space (FilterManager) translate through this so their
+   * output stays classifiable by isSubcollectionIndex / isVirtualFolderIndex
+   * / isMediaIndex.
+   */
+  [[nodiscard]] QList<int> unifiedConcatToActualMap() const;
+
+  /**
    * @brief Find visual index for a given file path.
    * @param filePath File path to find
    * @return Visual index or -1 if not found

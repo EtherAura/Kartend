@@ -19,14 +19,15 @@ void ScrollManager::applyFilter(const QString &searchText) {
   // Update FilterManager's source data before applying filter
   m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
                                  m_dataManager->filePathToDisplayName(),
-                                 m_dataManager->subcollections());
+                                 m_dataManager->subcollections(), m_dataManager->virtualFolders(),
+                                 m_dataManager->unifiedConcatToActualMap());
   m_filterManager->setContext(m_context);
   m_filterManager->applyFilter(searchText);
 
-  // Update local state from FilterManager
-  m_totalItems = m_filterManager->isFiltered()
-                     ? m_filterManager->filteredCount()
-                     : m_dataManager->subcollectionCount() + m_dataManager->fileCount();
+  // Update local state from FilterManager. The unfiltered fallback is the
+  // store's full count — virtual folders included.
+  m_totalItems = m_filterManager->isFiltered() ? m_filterManager->filteredCount()
+                                               : m_dataManager->totalItemCount();
 
   calculateVirtualMetrics();
   positionVirtualContainer();

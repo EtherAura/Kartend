@@ -182,10 +182,18 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
   qCDebug(lcSearchDiag)
       << QString("receiveItemsRange: updatedVisualIndices=%1").arg(updatedIndices.size());
 
-  // Release placeholder widgets so they get re-created with actual data
+  // Release placeholder widgets so they get re-created with actual data.
+  // Mirrors removeUnneededWidgets: the visible-row range is constant across
+  // this loop, so compute it once — lazily, only if something is actually
+  // released — instead of letting every one-arg releaseWidget call recompute
+  // it.
+  int visibleRows = -1;
   for (int visualIndex : updatedIndices) {
     if (ItemWidget *widget = m_activeWidgets.value(visualIndex, nullptr)) {
-      releaseWidget(widget);
+      if (visibleRows < 0) {
+        visibleRows = (getLastVisibleRow() - getFirstVisibleRow()) + 1;
+      }
+      releaseWidget(widget, visibleRows);
       removeActiveWidget(visualIndex);
     }
   }
@@ -230,10 +238,13 @@ void ScrollManager::injectCachedItems(int startIndex, const QStringList &filePat
   // Store cached data directly into the data manager
   QList<int> updatedIndices = m_dataManager->receiveItemsRange(mediaOffset, filePaths, fileNames);
 
-  // Set cached artwork paths on the widget factory for instant artwork lookup
+  // Set cached artwork paths on the widget factory for instant artwork lookup.
+  // Diag toggle snapshotted once per process — same pattern as
+  // getCurrentViewportForCache below; the env var can't change mid-run.
+  static const bool artworkDiag = qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG");
   if (!artworkPaths.isEmpty() && m_widgetFactory) {
     m_widgetFactory->setCachedArtworkPaths(artworkPaths);
-    if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
+    if (artworkDiag) {
       qCDebug(lcSearchDiag) << "[ArtworkDiag] injectCachedItems: setting" << artworkPaths.size()
                             << "cached artwork paths";
       if (!artworkPaths.isEmpty()) {
@@ -242,7 +253,7 @@ void ScrollManager::injectCachedItems(int startIndex, const QStringList &filePat
                               << "value=" << it.value();
       }
     }
-  } else if (qEnvironmentVariableIsSet("KARTEND_ARTWORK_DIAG")) {
+  } else if (artworkDiag) {
     qCDebug(lcSearchDiag) << "[ArtworkDiag] injectCachedItems: artworkPaths.isEmpty="
                           << artworkPaths.isEmpty()
                           << "m_widgetFactory=" << static_cast<bool>(m_widgetFactory);

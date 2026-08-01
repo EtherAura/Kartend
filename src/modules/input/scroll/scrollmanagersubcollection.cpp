@@ -53,7 +53,8 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
   // Update FilterManager's source data and apply subcollection filter
   m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
                                  m_dataManager->filePathToDisplayName(),
-                                 m_dataManager->subcollections());
+                                 m_dataManager->subcollections(), m_dataManager->virtualFolders(),
+                                 m_dataManager->unifiedConcatToActualMap());
   m_filterManager->setContext(m_context);
   m_filterManager->applySubcollectionFilter(subcollectionIndex);
 
@@ -61,8 +62,9 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
 }
 
 void ScrollManager::rebuildFilteredView() {
-  m_totalItems = m_filterManager ? m_filterManager->filteredCount()
-                                 : m_dataManager->subcollectionCount() + m_dataManager->fileCount();
+  // Unfiltered fallback is the store's full count — virtual folders included.
+  m_totalItems =
+      m_filterManager ? m_filterManager->filteredCount() : m_dataManager->totalItemCount();
   calculateVirtualMetrics();
   positionVirtualContainer();
 

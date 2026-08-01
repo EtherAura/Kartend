@@ -396,7 +396,9 @@ void VirtualScrollEngine::primeLayoutFor(const CollectionConfig &config) {
   if (m_owner->m_filterManager && m_owner->m_dataManager) {
     m_owner->m_filterManager->setSourceData(
         m_owner->m_dataManager->filePaths(), m_owner->m_dataManager->fileNames(),
-        m_owner->m_dataManager->filePathToDisplayName(), m_owner->m_dataManager->subcollections());
+        m_owner->m_dataManager->filePathToDisplayName(), m_owner->m_dataManager->subcollections(),
+        m_owner->m_dataManager->virtualFolders(),
+        m_owner->m_dataManager->unifiedConcatToActualMap());
     m_owner->m_filterManager->setContext(m_owner->m_context);
     if (m_owner->m_filterManager->isFiltered() &&
         !m_owner->m_filterManager->currentFilter().isEmpty()) {
@@ -404,10 +406,10 @@ void VirtualScrollEngine::primeLayoutFor(const CollectionConfig &config) {
     } else {
       m_owner->m_filterManager->clearFilter();
     }
-    m_owner->m_totalItems =
-        m_owner->m_filterManager->isFiltered()
-            ? m_owner->m_filterManager->filteredCount()
-            : m_owner->m_dataManager->subcollectionCount() + m_owner->m_dataManager->fileCount();
+    // Unfiltered fallback is the store's full count — virtual folders included.
+    m_owner->m_totalItems = m_owner->m_filterManager->isFiltered()
+                                ? m_owner->m_filterManager->filteredCount()
+                                : m_owner->m_dataManager->totalItemCount();
   }
   int savedTotal = m_owner->m_totalItems;
   m_owner->m_totalItems = 0;
@@ -576,22 +578,23 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
     return;
   }
 
-  int subCount = m_owner->m_dataManager->subcollectionCount();
-  int folderCount = m_owner->m_dataManager->virtualFolderCount();
   ItemWidget *itemWidget = nullptr;
 
   if (m_owner->m_widgetFactory) {
-    if (actualIndex < subCount) {
-      // Subcollection item
-      int subcollectionIndex = m_owner->m_dataManager->subcollectionIndexFromActual(actualIndex);
+    // Classify through the store's unified-aware helpers instead of raw band
+    // arithmetic: when unified sort is active, actual indices are positions in
+    // the permuted list, so `actualIndex < subCount` misclassifies items.
+    ScrollDataStore *store = m_owner->m_dataManager;
+    if (store->isSubcollectionIndex(actualIndex)) {
+      int subcollectionIndex = store->subcollectionIndexFromActual(actualIndex);
       itemWidget = m_owner->m_widgetFactory->createSubcollectionWidget(subcollectionIndex);
-    } else if (actualIndex < subCount + folderCount) {
-      // Virtual folder item
-      QString folderPath = m_owner->m_dataManager->virtualFolderFromActual(actualIndex);
+    } else if (store->isVirtualFolderIndex(actualIndex)) {
+      QString folderPath = store->virtualFolderFromActual(actualIndex);
       itemWidget = m_owner->m_widgetFactory->createVirtualFolderWidget(folderPath);
     } else {
-      // Media item
-      int mediaIndex = m_owner->m_dataManager->mediaIndexFromActual(actualIndex);
+      // Media item (including not-yet-loaded placeholder rows, whose
+      // mediaIndex resolves the same way the old band arithmetic did).
+      int mediaIndex = store->mediaIndexFromActual(actualIndex);
       int collectionIndex = m_owner->m_context.currentIndex;
       itemWidget = m_owner->m_widgetFactory->createMediaWidget(mediaIndex, collectionIndex);
     }

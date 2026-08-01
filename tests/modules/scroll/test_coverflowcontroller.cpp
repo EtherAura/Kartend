@@ -13,11 +13,15 @@
 #include <QTest>
 #include <QVBoxLayout>
 
+#include <QSignalSpy>
+
+#include "applicationcontext.h"
 #include "artworkutils.h"
 #include "collection/collectioncontext.h"
 #include "collectiontypes.h"
 #include "coverflowcontroller.h"
 #include "coverflowwidget.h"
+#include "filtermanager.h"
 #include "scrolldatamanager.h"
 #include "videothumbnailextractor.h"
 
@@ -78,6 +82,11 @@ private slots:
   void retry_cachedNegativeDropsPendingWithoutRearm();
   void retry_rebuildClearsPendingAndTimer();
   void retry_deactivationClearsPendingAndTimer();
+
+  // Activation must translate the carousel's filtered-visual index into the
+  // store's actual-index space before classifying (subcollection / virtual
+  // folder / media), mirroring rebuildCards' mapping.
+  void itemActivated_mapsFilteredVisualToActual();
 };
 
 void TestCoverFlowController::initTestCase() {
@@ -236,6 +245,86 @@ void TestCoverFlowController::retry_deactivationClearsPendingAndTimer() {
   h.controller.applyVisibility();
   QCOMPARE(h.controller.pendingArtworkCount(), 0);
   QVERIFY(!h.controller.artworkRetryActive());
+}
+
+void TestCoverFlowController::itemActivated_mapsFilteredVisualToActual() {
+  QTemporaryDir artDir;
+  QTemporaryDir mediaDir;
+  QVERIFY(artDir.isValid() && mediaDir.isValid());
+
+  // One subcollection tile ahead of two media items: the store's actual-index
+  // space is [Shelf 0][Alpha 1][Beta 2]. Declared before the FilterManager so
+  // the manager (which stores const pointers to these containers) is
+  // destroyed first.
+  static const QList<CollectionConfig> collections = [] {
+    QList<CollectionConfig> out;
+    CollectionConfig shelf;
+    shelf.name = QStringLiteral("Shelf");
+    out.append(shelf);
+    return out;
+  }();
+  static const QList<int> subs = {0};
+  const QStringList paths = {QStringLiteral("/items/Alpha.mp4"),
+                             QStringLiteral("/items/Beta.mp4")};
+  QHash<QString, QString> names;
+  names.insert(paths.at(0), QStringLiteral("Alpha"));
+  names.insert(paths.at(1), QStringLiteral("Beta"));
+  const QHash<QString, QString> emptyDisplayNames;
+
+  FilterManager filter;
+  filter.setCollections(&collections);
+  filter.setSourceData(paths, names, emptyDisplayNames, subs, {});
+
+  ApplicationContext appCtx;
+  appCtx.managers.filterManager = &filter;
+
+  CoverFlowHarness h(artDir.path(), mediaDir.path());
+  h.context.currentIndex = 0;
+  h.context.hasSubcollectionOverride = true;
+  h.context.subcollectionOverride = subs;
+  h.store.initializeSubcollections(h.context, &collections, nullptr);
+  h.store.filePaths() << paths.at(0) << paths.at(1);
+
+  // Re-run setupReferences with ctx wired so filterMgr() resolves — the
+  // harness ctor leaves ctx null (the retry tests don't need the filter).
+  CoverFlowControllerSetup setup;
+  setup.ctx = &appCtx;
+  setup.mediaScrollArea = h.scrollArea;
+  setup.context = &h.context;
+  setup.collections = &collections;
+  setup.dataManager = &h.store;
+  h.controller.setupReferences(setup);
+  h.controller.ensureWidget();
+  QVERIFY(h.controller.widget() != nullptr);
+
+  QSignalSpy subSpy(&h.controller, &CoverFlowController::subcollectionEntered);
+  QSignalSpy itemSpy(&h.controller, &CoverFlowController::itemActivated);
+
+  // Unfiltered: visual == actual, slot 0 is the subcollection tile.
+  emit h.controller.widget()->itemActivated(0);
+  QCOMPARE(subSpy.count(), 1);
+  QCOMPARE(subSpy.at(0).at(0).toInt(), 0);
+  QCOMPARE(itemSpy.count(), 0);
+
+  // Filter down to just Beta: filtered visual slot 0 → actual 2 (media).
+  // Without the visual→actual translation the handler classified slot 0 as
+  // the subcollection band and navigated into Shelf instead of launching.
+  filter.applyFilter(QStringLiteral("beta"));
+  QVERIFY(filter.isFiltered());
+  QCOMPARE(filter.filteredIndices(), (QList<int>{2}));
+  emit h.controller.widget()->itemActivated(0);
+  QCOMPARE(subSpy.count(), 1); // unchanged — not a subcollection activation
+  QCOMPARE(itemSpy.count(), 1);
+  QCOMPARE(itemSpy.at(0).at(0).toInt(), 0); // outward index stays visual
+
+  // Filter down to just the shelf: filtered visual slot 0 → actual 0
+  // (subcollection) — the mapped path still routes subcollections correctly.
+  filter.applyFilter(QStringLiteral("shelf"));
+  QCOMPARE(filter.filteredIndices(), (QList<int>{0}));
+  emit h.controller.widget()->itemActivated(0);
+  QCOMPARE(subSpy.count(), 2);
+  QCOMPARE(subSpy.at(1).at(0).toInt(), 0);
+  QCOMPARE(itemSpy.count(), 1);
 }
 
 QTEST_MAIN(TestCoverFlowController)

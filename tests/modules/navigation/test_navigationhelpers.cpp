@@ -78,6 +78,29 @@ private slots:
   void parentPathOfSingleSegmentIsEmpty();
   void parentPathDropsLastSegment();
   void parentPathTreatsTrailingSlashAsNoSegment();
+
+  // buildTitleBreadcrumbHtml
+  void titleHtmlOutOfRangeIndexIsEmpty();
+  void titleHtmlPlainRootIsEscapedName();
+  void titleHtmlRootInSubfolderLinksToRoot();
+  void titleHtmlSubcollectionLinksAncestorChain();
+  void titleHtmlSubcollectionInSubfolderLinksSelf();
+  void titleHtmlRoundTripsThroughParseBreadcrumbLink();
+
+  // buildSubfolderBreadcrumbHtml
+  void subfolderHtmlEmptyPathIsEmpty();
+  void subfolderHtmlSingleSegmentIsPlainText();
+  void subfolderHtmlIntermediateSegmentsAreLinks();
+  void subfolderHtmlEscapesSegmentNames();
+
+  // filterSubcollectionsByName
+  void filterSubsKeepsCaseInsensitiveMatches();
+  void filterSubsDropsOutOfRangeIndices();
+  void filterSubsEmptySearchReturnsInputUnchanged();
+
+  // shouldSkipRebuildAfterBackgroundRefresh
+  void bgRefreshSkipsRebuildWhenCountDidNotGrow();
+  void bgRefreshRebuildsWhenCountGrewOrViewEmpty();
 };
 
 // ------------------------------ computeCollectionDepth ----------------------
@@ -371,6 +394,148 @@ void TestNavigationHelpers::parentPathTreatsTrailingSlashAsNoSegment() {
   QCOMPARE(NavigationHelpers::parentSubfolderPath("Action/"), QString());
   // "Action/2024/" trims to "Action/2024", parent is "Action".
   QCOMPARE(NavigationHelpers::parentSubfolderPath("Action/2024/"), QString("Action"));
+}
+
+// ------------------------------ buildTitleBreadcrumbHtml --------------------
+
+namespace {
+const QString kColor = QStringLiteral("#aabbcc");
+} // namespace
+
+void TestNavigationHelpers::titleHtmlOutOfRangeIndexIsEmpty() {
+  QList<CollectionConfig> cs = {makeCollection("Movies")};
+  QVERIFY(NavigationHelpers::buildTitleBreadcrumbHtml(-1, cs, kColor).isEmpty());
+  QVERIFY(NavigationHelpers::buildTitleBreadcrumbHtml(1, cs, kColor).isEmpty());
+}
+
+void TestNavigationHelpers::titleHtmlPlainRootIsEscapedName() {
+  QList<CollectionConfig> cs = {makeCollection("Docs & Manuals")};
+  // Root collection outside a subfolder: plain text, HTML-escaped, no link.
+  QCOMPARE(NavigationHelpers::buildTitleBreadcrumbHtml(0, cs, kColor),
+           QStringLiteral("Docs &amp; Manuals"));
+}
+
+void TestNavigationHelpers::titleHtmlRootInSubfolderLinksToRoot() {
+  QList<CollectionConfig> cs = {makeCollection("Movies")};
+  cs[0].folderBrowsing.currentSubfolder = QStringLiteral("Action");
+  // While browsing a virtual subfolder the collection name becomes a "root:"
+  // link so one click returns to the collection root.
+  QCOMPARE(NavigationHelpers::buildTitleBreadcrumbHtml(0, cs, kColor),
+           QStringLiteral(
+               "<a href=\"root:\" style=\"color:#aabbcc; text-decoration:none;\">Movies</a>"));
+}
+
+void TestNavigationHelpers::titleHtmlSubcollectionLinksAncestorChain() {
+  QList<CollectionConfig> cs = {makeCollection("Movies"), makeCollection("Action", 0),
+                                makeCollection("Classics", 1)};
+  cs[1].isSubcollection = true;
+  cs[2].isSubcollection = true;
+  // Grandchild breadcrumb: both ancestors clickable (root-most first), the
+  // current collection as plain text, joined with " › ".
+  QCOMPARE(
+      NavigationHelpers::buildTitleBreadcrumbHtml(2, cs, kColor),
+      QStringLiteral(
+          "<a href=\"collection:0\" style=\"color:#aabbcc; text-decoration:none;\">Movies</a>"
+          " › "
+          "<a href=\"collection:1\" style=\"color:#aabbcc; text-decoration:none;\">Action</a>"
+          " › Classics"));
+}
+
+void TestNavigationHelpers::titleHtmlSubcollectionInSubfolderLinksSelf() {
+  QList<CollectionConfig> cs = {makeCollection("Movies"), makeCollection("Action", 0)};
+  cs[1].isSubcollection = true;
+  cs[1].folderBrowsing.currentSubfolder = QStringLiteral("2024");
+  // Inside a subfolder the current collection segment upgrades from plain
+  // text to a "root:" self-link.
+  const QString html = NavigationHelpers::buildTitleBreadcrumbHtml(1, cs, kColor);
+  QVERIFY(html.contains(QStringLiteral("href=\"collection:0\"")));
+  QVERIFY(html.contains(QStringLiteral("<a href=\"root:\" style=\"color:#aabbcc; "
+                                       "text-decoration:none;\">Action</a>")));
+}
+
+void TestNavigationHelpers::titleHtmlRoundTripsThroughParseBreadcrumbLink() {
+  // The builder and parseBreadcrumbLink are two halves of one contract: the
+  // hrefs the builder emits must decode to the matching link kinds.
+  QList<CollectionConfig> cs = {makeCollection("Movies"), makeCollection("Action", 0)};
+  cs[1].isSubcollection = true;
+  const QString html = NavigationHelpers::buildTitleBreadcrumbHtml(1, cs, kColor);
+  QVERIFY(html.contains(QStringLiteral("href=\"collection:0\"")));
+  const auto link = NavigationHelpers::parseBreadcrumbLink(QStringLiteral("collection:0"));
+  QCOMPARE(link.kind, NavigationHelpers::BreadcrumbLink::Kind::Collection);
+  QCOMPARE(link.collectionIndex, 0);
+}
+
+// ------------------------------ buildSubfolderBreadcrumbHtml ----------------
+
+void TestNavigationHelpers::subfolderHtmlEmptyPathIsEmpty() {
+  QVERIFY(NavigationHelpers::buildSubfolderBreadcrumbHtml(QString(), kColor).isEmpty());
+}
+
+void TestNavigationHelpers::subfolderHtmlSingleSegmentIsPlainText() {
+  // The current (deepest) segment is never a link — a single-segment path is
+  // all "current".
+  QCOMPARE(NavigationHelpers::buildSubfolderBreadcrumbHtml(QStringLiteral("Action"), kColor),
+           QStringLiteral("Action"));
+}
+
+void TestNavigationHelpers::subfolderHtmlIntermediateSegmentsAreLinks() {
+  // Intermediate segments carry the ACCUMULATED path in the href (jump
+  // straight to that level), the final segment is plain.
+  QCOMPARE(
+      NavigationHelpers::buildSubfolderBreadcrumbHtml(QStringLiteral("Action/2024/Q1"), kColor),
+      QStringLiteral(
+          "<a href=\"subfolder:Action\" style=\"color:#aabbcc; text-decoration:none;\">Action</a>"
+          " › "
+          "<a href=\"subfolder:Action/2024\" style=\"color:#aabbcc; "
+          "text-decoration:none;\">2024</a>"
+          " › Q1"));
+}
+
+void TestNavigationHelpers::subfolderHtmlEscapesSegmentNames() {
+  const QString html =
+      NavigationHelpers::buildSubfolderBreadcrumbHtml(QStringLiteral("A&B/now"), kColor);
+  QVERIFY(html.contains(QStringLiteral("A&amp;B")));
+  QVERIFY(!html.contains(QStringLiteral(">A&B<")));
+}
+
+// ------------------------------ filterSubcollectionsByName ------------------
+
+void TestNavigationHelpers::filterSubsKeepsCaseInsensitiveMatches() {
+  QList<CollectionConfig> cs = {makeCollection("Movies"), makeCollection("Action Reels", 0),
+                                makeCollection("Documentaries", 0)};
+  const QList<int> filtered =
+      NavigationHelpers::filterSubcollectionsByName({1, 2}, cs, QStringLiteral("action"));
+  QCOMPARE(filtered, QList<int>({1}));
+}
+
+void TestNavigationHelpers::filterSubsDropsOutOfRangeIndices() {
+  QList<CollectionConfig> cs = {makeCollection("Movies"), makeCollection("Action", 0)};
+  // A stale index (collection removed mid-flight) must be dropped, not crash
+  // or match.
+  const QList<int> filtered =
+      NavigationHelpers::filterSubcollectionsByName({1, 7, -2}, cs, QStringLiteral("a"));
+  QCOMPARE(filtered, QList<int>({1}));
+}
+
+void TestNavigationHelpers::filterSubsEmptySearchReturnsInputUnchanged() {
+  QList<CollectionConfig> cs = {makeCollection("Movies")};
+  const QList<int> input = {0, 42};
+  QCOMPARE(NavigationHelpers::filterSubcollectionsByName(input, cs, QString()), input);
+}
+
+// ------------------------------ shouldSkipRebuildAfterBackgroundRefresh -----
+
+void TestNavigationHelpers::bgRefreshSkipsRebuildWhenCountDidNotGrow() {
+  QVERIFY(NavigationHelpers::shouldSkipRebuildAfterBackgroundRefresh(/*view=*/10, /*count=*/10));
+  QVERIFY(NavigationHelpers::shouldSkipRebuildAfterBackgroundRefresh(10, 7));
+}
+
+void TestNavigationHelpers::bgRefreshRebuildsWhenCountGrewOrViewEmpty() {
+  // A grown count means the scan found new items — they only render after a
+  // full rebuild. An empty view always rebuilds.
+  QVERIFY(!NavigationHelpers::shouldSkipRebuildAfterBackgroundRefresh(10, 11));
+  QVERIFY(!NavigationHelpers::shouldSkipRebuildAfterBackgroundRefresh(0, 0));
+  QVERIFY(!NavigationHelpers::shouldSkipRebuildAfterBackgroundRefresh(0, 5));
 }
 
 QTEST_APPLESS_MAIN(TestNavigationHelpers)

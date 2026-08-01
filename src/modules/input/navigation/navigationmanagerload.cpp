@@ -21,7 +21,7 @@
 #include "navigationstackmanager.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
-#include "selectionrestoremanager.h"
+#include "selectionrestorecoordinator.h"
 #include "sessionmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
@@ -354,8 +354,8 @@ void NavigationManager::requestItemCountForContext(const CollectionContext &cont
              .arg(m_itemsQueryContext.queryIncludeAllCollections);
 
   ++m_itemCountRequestToken;
-  qCWarning(lcScanFlow) << "requestItemCountForContext: newToken=" << m_itemCountRequestToken
-                        << "collIdx=" << context.currentIndex << "filter='" << filter << "'";
+  qCDebug(lcScanFlow) << "requestItemCountForContext: newToken=" << m_itemCountRequestToken
+                      << "collIdx=" << context.currentIndex << "filter='" << filter << "'";
   databaseMgr()->fetchItemCount(m_itemsQueryContext, (*m_collections), m_itemsQueryFilter,
                                 m_itemCountRequestToken);
 }
@@ -387,6 +387,14 @@ void NavigationManager::onItemsLoaded(const QStringList &filePaths,
       scrollMgr()->setInitialScrollIndex(selIdx);
     }
     scrollMgr()->setupVirtualScrolling(totalItems, context);
+    // Virtual folders are only discovered inside setupVirtualScrolling (and
+    // the hideMissingArtwork baseline can shrink the view), so the
+    // subcollections + files sum above understates the real tile count by the
+    // folder band. Re-validate the remembered selection against the
+    // authoritative post-setup total so tiles past the folder band stay
+    // reachable instead of being clamped away.
+    totalItems = scrollMgr()->getTotalItems();
+    selIdx = calculateSelectionIndex(totalItems);
   }
 
   resumeItemsPageRendering();
@@ -474,10 +482,10 @@ void NavigationManager::onMediaLibraryError(const ErrorUtils::ErrorContext &erro
 }
 
 void NavigationManager::onBackgroundCollectionScanCompleted(const QString &collectionUuid) {
-  qCWarning(lcScanFlow) << "onBackgroundCollectionScanCompleted: uuid=" << collectionUuid;
+  qCDebug(lcScanFlow) << "onBackgroundCollectionScanCompleted: uuid=" << collectionUuid;
 
   if (!databaseMgr() || !m_collections || !m_currentCollectionIndex) {
-    qCWarning(lcScanFlow) << "Early return: missing deps";
+    qCDebug(lcScanFlow) << "Early return: missing deps";
     return;
   }
 
@@ -497,59 +505,71 @@ void NavigationManager::onBackgroundCollectionScanCompleted(const QString &colle
     return;
   }
 
+  // Resolve UUIDs through the hierarchy cache when available (O(1) lookup of
+  // pre-computed values); fall back to path expansion + SHA1 only when the
+  // cache hasn't been built yet. An empty result means the collection has no
+  // usable media directory, matching the cache's own skip rule.
+  const bool cacheValid = m_hierarchyCache && m_hierarchyCache->isValid();
+  auto resolveUuid = [this, cacheValid](int collectionIndex) -> QString {
+    if (cacheValid) {
+      return m_hierarchyCache->collectionUuid(collectionIndex);
+    }
+    CollectionConfig cfg = (*m_collections)[collectionIndex];
+    cfg.mediaDirectory = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+    if (cfg.mediaDirectory.trimmed().isEmpty()) {
+      return QString();
+    }
+    return CollectionUtils::computeCollectionUuid(cfg.name, cfg.mediaDirectory);
+  };
+
   // Only refresh counts if the completed scan affects the currently visible
   // collection (or its descendants when showAllSubcollectionItems is active).
-  CollectionConfig cur = (*m_collections)[idx];
-  cur.mediaDirectory = PathUtils::validateAndExpandPath(cur.mediaDirectory, cur.name);
+  const CollectionConfig &cur = (*m_collections)[idx];
+  const QString curUuid = resolveUuid(idx);
 
-  if (!cur.mediaDirectory.trimmed().isEmpty()) {
-    const QString curUuid = CollectionUtils::computeCollectionUuid(cur.name, cur.mediaDirectory);
-    qCWarning(lcScanFlow) << "UUID compare: cur=" << curUuid << "incoming=" << collectionUuid
-                          << "match=" << (curUuid == collectionUuid);
+  if (!curUuid.isEmpty()) {
+    qCDebug(lcScanFlow) << "UUID compare: cur=" << curUuid << "incoming=" << collectionUuid
+                        << "match=" << (curUuid == collectionUuid);
     if (curUuid == collectionUuid) {
-      qCWarning(lcScanFlow) << "UUID MATCH - calling loadCollectionData for idx=" << idx;
+      qCDebug(lcScanFlow) << "UUID MATCH - calling loadCollectionData for idx=" << idx;
       m_backgroundCountRefreshInProgress = true;
       m_backgroundCountRefreshCollectionIndex = idx;
       loadCollectionData(idx);
       return;
     }
   } else {
-    qCWarning(lcScanFlow) << "mediaDirectory empty for" << cur.name;
+    qCDebug(lcScanFlow) << "mediaDirectory empty for" << cur.name;
   }
 
   // For descendant scans when showAllSubcollectionItems is enabled:
   // Don't trigger intermediate refreshes while the loading overlay is still
   // active (indicating more scans are pending). MainWindow will trigger a
   // final reload once all scans complete.
-  qCWarning(lcScanFlow) << "Checking descendants: showAllSubcollectionItems="
-                        << cur.showAllSubcollectionItems;
+  qCDebug(lcScanFlow) << "Checking descendants: showAllSubcollectionItems="
+                      << cur.showAllSubcollectionItems;
   if (cur.showAllSubcollectionItems) {
     // Skip intermediate reloads if loading overlay is active (batch scan in
     // progress)
     if (m_loadingOverlay && m_loadingOverlay->isActive()) {
-      qCWarning(lcScanFlow) << "Skipping - loading overlay is active";
+      qCDebug(lcScanFlow) << "Skipping - loading overlay is active";
       return;
     }
 
     QList<int> descendants = CollectionUtils::collectDescendantIndices(idx, (*m_collections));
-    qCWarning(lcScanFlow) << "descendant count=" << descendants.size();
+    qCDebug(lcScanFlow) << "descendant count=" << descendants.size();
     for (int descendantIndex : descendants) {
       if (descendantIndex < 0 || descendantIndex >= (*m_collections).size()) {
         continue;
       }
-      CollectionConfig subCol = (*m_collections)[descendantIndex];
-      subCol.mediaDirectory = PathUtils::validateAndExpandPath(subCol.mediaDirectory, subCol.name);
-      qCWarning(lcScanFlow) << "Checking descendant" << descendantIndex << "name=" << subCol.name
-                            << "mediaDir=" << subCol.mediaDirectory;
-      if (subCol.mediaDirectory.trimmed().isEmpty()) {
+      const QString subUuid = resolveUuid(descendantIndex);
+      qCDebug(lcScanFlow) << "Checking descendant" << descendantIndex
+                          << "name=" << (*m_collections)[descendantIndex].name
+                          << "uuid=" << subUuid << "match=" << (subUuid == collectionUuid);
+      if (subUuid.isEmpty()) {
         continue;
       }
-      const QString subUuid =
-          CollectionUtils::computeCollectionUuid(subCol.name, subCol.mediaDirectory);
-      qCWarning(lcScanFlow) << "descendant UUID=" << subUuid
-                            << "match=" << (subUuid == collectionUuid);
       if (subUuid == collectionUuid) {
-        qCWarning(lcScanFlow) << "DESCENDANT MATCH - calling loadCollectionData";
+        qCDebug(lcScanFlow) << "DESCENDANT MATCH - calling loadCollectionData";
         m_backgroundCountRefreshInProgress = true;
         m_backgroundCountRefreshCollectionIndex = idx;
         loadCollectionData(idx);

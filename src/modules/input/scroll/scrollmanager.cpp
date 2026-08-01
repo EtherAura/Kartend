@@ -545,12 +545,30 @@ void ScrollManager::onVisualIndexForPathLoaded(int visualIndex, const QString &f
 
   if (visualIndex >= 0) {
     // The database returns position among media items only. In the UI,
-    // subcollections and virtual folders appear before media items,
-    // so we need to offset the index accordingly.
-    int prefixCount =
-        m_dataManager ? (m_dataManager->subcollectionCount() + m_dataManager->virtualFolderCount())
-                      : 0;
-    int adjustedIndex = visualIndex + prefixCount;
+    // subcollections and virtual folders appear before media items. Prefer the
+    // store's own path lookup — it accounts for the prefix bands AND the
+    // unified-sort permutation, where a flat prefix offset lands on the wrong
+    // tile. Fall back to prefix arithmetic when the path row hasn't been
+    // loaded yet (on-demand views, where unified sort is never active).
+    int adjustedIndex = m_dataManager ? m_dataManager->visualIndexFromFilePath(filePath) : -1;
+    if (adjustedIndex < 0) {
+      int prefixCount = m_dataManager ? (m_dataManager->subcollectionCount() +
+                                         m_dataManager->virtualFolderCount())
+                                      : 0;
+      adjustedIndex = visualIndex + prefixCount;
+    }
+    // Both branches above produce a store-space actual index, but when an
+    // in-memory filter is active (search text, hideMissingArtwork, …)
+    // selectItemByIndex addresses the filtered VISUAL space. Map through the
+    // filter's index list; when the restored item is filtered out, skip the
+    // restore entirely rather than selecting whichever tile happens to sit at
+    // that position.
+    if (m_filterManager && m_filterManager->isFiltered()) {
+      adjustedIndex = m_filterManager->filteredIndices().indexOf(adjustedIndex);
+      if (adjustedIndex < 0) {
+        return;
+      }
+    }
     emit selectItemByIndex(adjustedIndex);
   }
 }

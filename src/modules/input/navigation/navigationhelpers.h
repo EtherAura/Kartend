@@ -121,6 +121,52 @@ struct BreadcrumbLink {
 // the parent split, so "Action/" behaves like "Action".
 [[nodiscard]] auto parentSubfolderPath(const QString &currentSubfolder) -> QString;
 
+// Builds the items-page title breadcrumb HTML for a collection.
+//
+// Pure version of the assembly in NavigationManager::updateItemsPageTitle
+// (the inverse of parseBreadcrumbLink above):
+//
+// - Subcollection with ancestors: clickable "collection:<idx>" links from the
+//   root-most ancestor down to the direct parent, joined with " › ", followed
+//   by the collection itself (clickable "root:" only when a virtual subfolder
+//   is active below it, plain text otherwise).
+// - Root collection: clickable "root:" when in a subfolder, plain text
+//   otherwise.
+// - Names are HTML-escaped; links carry the caller-supplied color.
+// - Out-of-range collectionIndex -> empty string (caller clears the label).
+[[nodiscard]] auto buildTitleBreadcrumbHtml(int collectionIndex,
+                                            const QList<CollectionConfig> &collections,
+                                            const QString &linkColorHex) -> QString;
+
+// Builds the subfolder-path breadcrumb HTML shown under the title when the
+// user has navigated into a virtual folder.
+//
+// Each intermediate path segment is a clickable "subfolder:<accumulated>"
+// link; the final (current) segment is plain escaped text. Segments are
+// joined with " › ". Empty input -> empty output (caller hides the label).
+[[nodiscard]] auto buildSubfolderBreadcrumbHtml(const QString &subfolder,
+                                                const QString &linkColorHex) -> QString;
+
+// Filters a subcollection index list down to entries whose collection name
+// contains `searchText` (case-insensitive) — the tile-visibility rule during
+// an active search. Out-of-range indices are dropped. An empty `searchText`
+// returns the input unchanged (production only filters while search is
+// active).
+[[nodiscard]] auto filterSubcollectionsByName(const QList<int> &subcollections,
+                                              const QList<CollectionConfig> &collections,
+                                              const QString &searchText) -> QList<int>;
+
+// Whether a completed background count refresh can update the count in place
+// instead of forcing a full view rebuild.
+//
+// Pure version of the decision in NavigationManager::onItemCountLoaded: when
+// the view already renders items and the refreshed count did not grow, the
+// count is patched without resetting scroll/selection; a grown count (new
+// items from the scan) or an empty view requires the full rebuild so the new
+// items are actually loaded.
+[[nodiscard]] auto shouldSkipRebuildAfterBackgroundRefresh(int currentViewItems, int newCount)
+    -> bool;
+
 } // namespace NavigationHelpers
 
 #endif // NAVIGATIONHELPERS_H

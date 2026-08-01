@@ -15,10 +15,11 @@
 #include "isettingsmanager.h"
 #include "loadingoverlay.h"
 #include "loggingcategories.h"
+#include "navigationhelpers.h"
 #include "navigationmanager.h"
 #include "scrollmanager.h"
 #include "searchloadingoverlay.h"
-#include "selectionrestoremanager.h"
+#include "selectionrestorecoordinator.h"
 #include "timerutils.h"
 #include "uiconstants/selection.h"
 #include <QColor>
@@ -62,9 +63,6 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
 
   const CollectionConfig &config = (*m_collections)[collectionIndex];
 
-  // Build breadcrumb with clickable parent links
-  QString titleHtml;
-
   // Get tinted color for clickable links
   QPalette pal = titleLabel->palette();
   QColor highlightColor = pal.color(QPalette::Highlight);
@@ -73,50 +71,13 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   QColor linkColor = QColor::fromHsl(h, s / 2, 170); // Tinted, slightly saturated
   QString linkColorHex = linkColor.name();
 
-  // Check if we're in a subfolder - if so, make the collection name clickable
-  bool inSubfolder = !config.folderBrowsing.currentSubfolder.isEmpty();
-
-  if (config.isSubcollection) {
-    const QList<int> ancestors = CollectionUtils::ancestorIndexChain(config, *m_collections);
-    if (!ancestors.isEmpty()) {
-      // Build clickable breadcrumb from root-most ancestor down to direct
-      // parent. Each ancestor segment navigates back to that collection via
-      // the `collection:<index>` link scheme handled in
-      // onBreadcrumbLinkClicked (navigationmanagersubcollection.cpp:143).
-      const QString linkTemplate = QStringLiteral("<a href=\"collection:%1\" style=\"color:%2; "
-                                                  "text-decoration:none;\">%3</a>");
-      QStringList segments;
-      segments.reserve(ancestors.size() + 1);
-      for (int idx : ancestors) {
-        const QString name = (*m_collections)[idx].name.toHtmlEscaped();
-        segments << linkTemplate.arg(QString::number(idx), linkColorHex, name);
-      }
-      if (inSubfolder) {
-        // Current collection is clickable (returns to its root via `root:`)
-        // only when we've navigated into a virtual subfolder below it.
-        segments << QString("<a href=\"root:\" style=\"color:%1; "
-                            "text-decoration:none;\">%2</a>")
-                        .arg(linkColorHex, config.name.toHtmlEscaped());
-      } else {
-        segments << config.name.toHtmlEscaped();
-      }
-      titleHtml = segments.join(QStringLiteral(" › "));
-    } else {
-      titleHtml = config.name.toHtmlEscaped();
-    }
-  } else {
-    // Root collection - make clickable only if in a subfolder
-    if (inSubfolder) {
-      titleHtml = QString("<a href=\"root:\" style=\"color:%1; "
-                          "text-decoration:none;\">%2</a>")
-                      .arg(linkColorHex)
-                      .arg(config.name.toHtmlEscaped());
-    } else {
-      titleHtml = config.name.toHtmlEscaped();
-    }
-  }
-
-  titleLabel->setText(titleHtml);
+  // Breadcrumb assembly (ancestor "collection:<idx>" links, the "root:"
+  // self-link while in a virtual subfolder) is pure HTML composition —
+  // extracted to NavigationHelpers so it's unit-testable. The links land in
+  // onBreadcrumbLinkClicked (navigationmanagersubcollection.cpp), decoded by
+  // NavigationHelpers::parseBreadcrumbLink.
+  titleLabel->setText(
+      NavigationHelpers::buildTitleBreadcrumbHtml(collectionIndex, *m_collections, linkColorHex));
 
   // Kartend-w2n0: refresh the items-toolbar warning badge atomically with
   // the title so an active-collection switch can't leave the badge state
@@ -139,35 +100,11 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
         subfolderLinkConnected = true;
       }
 
-      // Build subfolder breadcrumb - show path segments as clickable links
-      QStringList pathParts = subfolder.split('/', Qt::SkipEmptyParts);
-      QString subfolderHtml;
-      QString accumulatedPath;
-
-      for (int i = 0; i < pathParts.size(); ++i) {
-        if (!accumulatedPath.isEmpty()) {
-          accumulatedPath += '/';
-        }
-        accumulatedPath += pathParts[i];
-
-        if (i > 0) {
-          subfolderHtml += " › ";
-        }
-
-        if (i < pathParts.size() - 1) {
-          // Intermediate folder - clickable to navigate to that level
-          subfolderHtml += QString("<a href=\"subfolder:%1\" style=\"color:%2; "
-                                   "text-decoration:none;\">%3</a>")
-                               .arg(accumulatedPath.toHtmlEscaped())
-                               .arg(linkColorHex)
-                               .arg(pathParts[i].toHtmlEscaped());
-        } else {
-          // Current folder - not clickable, just styled
-          subfolderHtml += pathParts[i].toHtmlEscaped();
-        }
-      }
-
-      subfolderLabel->setText(subfolderHtml);
+      // Subfolder breadcrumb — clickable "subfolder:<path>" links per
+      // intermediate segment, plain text for the current one. Pure HTML
+      // composition extracted to NavigationHelpers.
+      subfolderLabel->setText(
+          NavigationHelpers::buildSubfolderBreadcrumbHtml(subfolder, linkColorHex));
       subfolderLabel->setStyleSheet(QString("color: %1;").arg(linkColorHex));
       subfolderLabel->setVisible(true);
     } else {
@@ -222,7 +159,7 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
     // Background scan completed. If the view already has items and count is the
     // same or lower, just update without resetting scroll/selection state.
     // If count INCREASED (new items from scan), do a full rebuild to load them.
-    if (currentViewItems > 0 && count <= currentViewItems) {
+    if (NavigationHelpers::shouldSkipRebuildAfterBackgroundRefresh(currentViewItems, count)) {
       m_backgroundCountRefreshInProgress = false;
       m_backgroundCountRefreshCollectionIndex = -1;
 
@@ -269,18 +206,10 @@ void NavigationManager::onItemCountLoaded(int count, int requestToken) {
   } else {
     subcollections = getSubcollections(idx);
     if (searchActive) {
-      QList<int> filtered;
-      filtered.reserve(subcollections.size());
-      for (int subIdx : subcollections) {
-        if (subIdx < 0 || subIdx >= (*m_collections).size()) {
-          continue;
-        }
-        const QString &name = (*m_collections)[subIdx].name;
-        if (name.contains(searchText, Qt::CaseInsensitive)) {
-          filtered.append(subIdx);
-        }
-      }
-      subcollections = filtered;
+      // Tile visibility during search is a pure name-contains filter —
+      // extracted to NavigationHelpers.
+      subcollections =
+          NavigationHelpers::filterSubcollectionsByName(subcollections, *m_collections, searchText);
     }
   }
 

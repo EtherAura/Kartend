@@ -1,11 +1,13 @@
 #include "test_scrollmanager.h"
 
 #include "applicationmanager.h"
+#include "collection/collectioncontext.h"
 #include "mainwindow.h"
 #include "mocks/mockdatabasemanager.h"
 #include "mocks/mockedmainwindowfixture.h"
 #include "scrollmanager.h"
 
+#include <QSignalSpy>
 #include <QStringList>
 #include <QTest>
 
@@ -87,6 +89,117 @@ void TestScrollManager::filterChange_clearOnEmptyStateIsSafe() {
   // Same for applyFilter with empty text.
   sm->applyFilter(QString());
   QCOMPARE(sm->getTotalItems(), 0);
+}
+
+void TestScrollManager::visualIndexForPathRestore_mapsThroughActiveFilter() {
+  KartendTest::MockedMainWindowFixture fixture;
+  ScrollManager *sm = fixture.window()->getApplicationManager()->getScrollManager();
+  QVERIFY(sm);
+
+  // Three preloaded media items, no subcollections / virtual folders — the
+  // store's actual-index space is [Alpha 0, Beta 1, Gamma 2].
+  CollectionContext context;
+  context.filePaths = QStringList{QStringLiteral("/items/Alpha.bin"),
+                                  QStringLiteral("/items/Beta.bin"),
+                                  QStringLiteral("/items/Gamma.bin")};
+  context.fileNames.insert(context.filePaths.at(0), QStringLiteral("Alpha"));
+  context.fileNames.insert(context.filePaths.at(1), QStringLiteral("Beta"));
+  context.fileNames.insert(context.filePaths.at(2), QStringLiteral("Gamma"));
+  sm->setupVirtualScrolling(context.filePaths.size(), context);
+  QCOMPARE(sm->getTotalItems(), 3);
+
+  // In-memory filter keeps only Gamma: filtered visual slot 0 → actual 2.
+  sm->applyFilter(QStringLiteral("gamma"));
+  QCOMPARE(sm->getTotalItems(), 1);
+
+  QSignalSpy spy(sm, &ScrollManager::selectItemByIndex);
+
+  // The DB answers with Gamma's media-only position (2). The restore must
+  // emit the FILTERED visual index 0 — emitting the store-space 2 would
+  // select a tile that does not exist in the filtered view.
+  sm->setPendingSelectionRestoreByPath(context.filePaths.at(2));
+  sm->onVisualIndexForPathLoaded(2, context.filePaths.at(2));
+  QCOMPARE(spy.count(), 1);
+  QCOMPARE(spy.at(0).at(0).toInt(), 0);
+
+  // Beta is filtered out: the restore must be skipped, not land on a wrong
+  // tile.
+  sm->setPendingSelectionRestoreByPath(context.filePaths.at(1));
+  sm->onVisualIndexForPathLoaded(1, context.filePaths.at(1));
+  QCOMPARE(spy.count(), 1);
+}
+
+namespace {
+
+/// Builds a preloaded context of @p count media items named "Item NNN"
+/// (no subcollections / virtual folders), mirroring the shape the DB load
+/// path hands to setupVirtualScrolling for an already-fetched collection.
+CollectionContext makePopulatedContext(int count) {
+  CollectionContext context;
+  for (int i = 0; i < count; ++i) {
+    const QString path = QStringLiteral("/items/Item %1.bin").arg(i, 3, 10, QLatin1Char('0'));
+    context.filePaths.append(path);
+    context.fileNames.insert(path, QStringLiteral("Item %1").arg(i, 3, 10, QLatin1Char('0')));
+  }
+  return context;
+}
+
+} // namespace
+
+void TestScrollManager::setupVirtualScrolling_populatedItemsProduceScrollableLayout() {
+  KartendTest::MockedMainWindowFixture fixture;
+  ScrollManager *sm = fixture.window()->getApplicationManager()->getScrollManager();
+  QVERIFY(sm);
+
+  constexpr int kItemCount = 120;
+  const CollectionContext context = makePopulatedContext(kItemCount);
+  sm->setupVirtualScrolling(kItemCount, context);
+  QCOMPARE(sm->getTotalItems(), kItemCount);
+
+  // The computed geometry must be internally consistent: rows follow from
+  // the configured items-per-row, and the container height covers them.
+  const GridMetrics &metrics = sm->getMetrics();
+  QCOMPARE(metrics.itemsPerRow, sm->getCurrentGridWidth());
+  QVERIFY(metrics.itemsPerRow > 0);
+  const int expectedRows = (kItemCount + metrics.itemsPerRow - 1) / metrics.itemsPerRow;
+  QCOMPARE(metrics.totalRows, expectedRows);
+  QVERIFY(metrics.itemHeight > 0);
+  QVERIFY2(metrics.totalHeight >= metrics.totalRows * metrics.itemHeight,
+           "container height must cover every computed row");
+
+  // 30 default-height rows tower over any viewport this fixture can have:
+  // the scrollbar prediction (which drives MainWindow's scrollbar-policy
+  // routing) must say a vertical scrollbar is coming.
+  QVERIFY(sm->willNeedVerticalScrollbar());
+}
+
+void TestScrollManager::applyFilter_shrinksLayoutExtentAndClearRestoresIt() {
+  KartendTest::MockedMainWindowFixture fixture;
+  ScrollManager *sm = fixture.window()->getApplicationManager()->getScrollManager();
+  QVERIFY(sm);
+
+  constexpr int kItemCount = 120;
+  sm->setupVirtualScrolling(kItemCount, makePopulatedContext(kItemCount));
+  const int unfilteredHeight = sm->getMetrics().totalHeight;
+  const int unfilteredRows = sm->getMetrics().totalRows;
+  QVERIFY(unfilteredRows > 1);
+
+  // One match ("Item 007") → a single row whose container is strictly
+  // shorter than the unfiltered grid. applyFilter recalculates the metrics
+  // in place, so the layout must shrink immediately, not on the next
+  // collection switch.
+  sm->applyFilter(QStringLiteral("Item 007"));
+  QCOMPARE(sm->getTotalItems(), 1);
+  QCOMPARE(sm->getMetrics().totalRows, 1);
+  QVERIFY2(sm->getMetrics().totalHeight < unfilteredHeight,
+           "filtered container must be shorter than the unfiltered grid");
+
+  // Clearing the filter restores the full extent (same row count and
+  // container height as before the search).
+  sm->clearFilter();
+  QCOMPARE(sm->getTotalItems(), kItemCount);
+  QCOMPARE(sm->getMetrics().totalRows, unfilteredRows);
+  QCOMPARE(sm->getMetrics().totalHeight, unfilteredHeight);
 }
 
 void TestScrollManager::getFilePaths_isEmptyOnFreshFixture() {

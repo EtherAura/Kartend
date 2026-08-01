@@ -151,4 +151,100 @@ auto parentSubfolderPath(const QString &currentSubfolder) -> QString {
   return trimmed.left(lastSlash);
 }
 
+auto buildTitleBreadcrumbHtml(int collectionIndex, const QList<CollectionConfig> &collections,
+                              const QString &linkColorHex) -> QString {
+  if (collectionIndex < 0 || collectionIndex >= collections.size()) {
+    return {};
+  }
+  const CollectionConfig &config = collections[collectionIndex];
+  const bool inSubfolder = !config.folderBrowsing.currentSubfolder.isEmpty();
+
+  const QString rootLinkTemplate = QStringLiteral("<a href=\"root:\" style=\"color:%1; "
+                                                  "text-decoration:none;\">%2</a>");
+
+  if (config.isSubcollection) {
+    const QList<int> ancestors = CollectionUtils::ancestorIndexChain(config, collections);
+    if (ancestors.isEmpty()) {
+      return config.name.toHtmlEscaped();
+    }
+    // Clickable breadcrumb from root-most ancestor down to direct parent.
+    // Each ancestor segment navigates back to that collection via the
+    // `collection:<index>` link scheme decoded by parseBreadcrumbLink.
+    const QString linkTemplate = QStringLiteral("<a href=\"collection:%1\" style=\"color:%2; "
+                                                "text-decoration:none;\">%3</a>");
+    QStringList segments;
+    segments.reserve(ancestors.size() + 1);
+    for (int idx : ancestors) {
+      const QString name = collections[idx].name.toHtmlEscaped();
+      segments << linkTemplate.arg(QString::number(idx), linkColorHex, name);
+    }
+    if (inSubfolder) {
+      // Current collection is clickable (returns to its root via `root:`)
+      // only when we've navigated into a virtual subfolder below it.
+      segments << rootLinkTemplate.arg(linkColorHex, config.name.toHtmlEscaped());
+    } else {
+      segments << config.name.toHtmlEscaped();
+    }
+    return segments.join(QStringLiteral(" › "));
+  }
+
+  // Root collection — clickable only when in a subfolder.
+  if (inSubfolder) {
+    return rootLinkTemplate.arg(linkColorHex, config.name.toHtmlEscaped());
+  }
+  return config.name.toHtmlEscaped();
+}
+
+auto buildSubfolderBreadcrumbHtml(const QString &subfolder, const QString &linkColorHex)
+    -> QString {
+  const QStringList pathParts = subfolder.split('/', Qt::SkipEmptyParts);
+  QString html;
+  QString accumulatedPath;
+  for (int i = 0; i < pathParts.size(); ++i) {
+    if (!accumulatedPath.isEmpty()) {
+      accumulatedPath += '/';
+    }
+    accumulatedPath += pathParts[i];
+
+    if (i > 0) {
+      html += QStringLiteral(" › ");
+    }
+
+    if (i < pathParts.size() - 1) {
+      // Intermediate folder — clickable to navigate to that level.
+      html += QStringLiteral("<a href=\"subfolder:%1\" style=\"color:%2; "
+                             "text-decoration:none;\">%3</a>")
+                  .arg(accumulatedPath.toHtmlEscaped(), linkColorHex,
+                       pathParts[i].toHtmlEscaped());
+    } else {
+      // Current folder — not clickable, just styled.
+      html += pathParts[i].toHtmlEscaped();
+    }
+  }
+  return html;
+}
+
+auto filterSubcollectionsByName(const QList<int> &subcollections,
+                                const QList<CollectionConfig> &collections,
+                                const QString &searchText) -> QList<int> {
+  if (searchText.isEmpty()) {
+    return subcollections;
+  }
+  QList<int> filtered;
+  filtered.reserve(subcollections.size());
+  for (int subIdx : subcollections) {
+    if (subIdx < 0 || subIdx >= collections.size()) {
+      continue;
+    }
+    if (collections[subIdx].name.contains(searchText, Qt::CaseInsensitive)) {
+      filtered.append(subIdx);
+    }
+  }
+  return filtered;
+}
+
+auto shouldSkipRebuildAfterBackgroundRefresh(int currentViewItems, int newCount) -> bool {
+  return currentViewItems > 0 && newCount <= currentViewItems;
+}
+
 } // namespace NavigationHelpers

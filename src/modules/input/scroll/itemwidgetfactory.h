@@ -14,6 +14,33 @@ class IDatabaseManager;
 class WidgetPoolManager;
 #include "applicationcontext_fwd.h"
 
+namespace ItemWidgetFactoryHelpers {
+
+// Pure placeholder-artwork resolution policy extracted from
+// ItemWidgetFactory::resolvePlaceholderArtworkForCollection so the
+// precedence rules are unit-testable without a factory/widget graph
+// (same shape as the ScrollHelpers extractions):
+//
+//   1. The collection's own placeholderArtwork (inherited up the parent
+//      chain via CollectionUtils::resolvePlaceholderArtwork) wins.
+//   2. Otherwise the active context's configured placeholder is the
+//      fallback.
+//   3. A non-empty result is expanded through
+//      SettingsUtils::expandConfigVariables using the collection's name
+//      when @p collectionIndex is valid, else @p contextCollectionName —
+//      the expansion validates existence, so a dangling path resolves to
+//      an empty string.
+//
+// The per-index memo lives in ItemWidgetFactory (cleared by the
+// setCollections / setCollectionContext setters); this function is the
+// memoized computation.
+[[nodiscard]] QString resolvePlaceholderArtwork(const QList<CollectionConfig> *collections,
+                                                int collectionIndex,
+                                                const QString &contextPlaceholder,
+                                                const QString &contextCollectionName);
+
+} // namespace ItemWidgetFactoryHelpers
+
 /**
  * @brief Factory for creating and configuring ItemWidget instances.
  *
@@ -38,11 +65,19 @@ public:
   void setParentWidget(QWidget *parent) { m_parentWidget = parent; }
 
   // Context for widget creation
-  void setCollectionContext(const CollectionContext &context) { m_context = context; }
+  void setCollectionContext(const CollectionContext &context) {
+    m_context = context;
+    // Placeholder resolution reads the context (config fallback + collection
+    // name for variable expansion) — drop the memo when the context changes.
+    m_placeholderArtworkCache.clear();
+  }
   void setMetrics(int itemWidth, int itemHeight);
 
   // Collections list for looking up collection names
-  void setCollections(const QList<CollectionConfig> *collections) { m_collections = collections; }
+  void setCollections(const QList<CollectionConfig> *collections) {
+    m_collections = collections;
+    m_placeholderArtworkCache.clear();
+  }
 
   // Collection column width for list mode (synced from header drag-resize)
   void setCollectionColumnWidth(int width) { m_collectionColumnWidth = width; }
@@ -205,6 +240,12 @@ private:
   const QStringList *m_filePaths = nullptr;
   const QHash<QString, QString> *m_fileNames = nullptr;
   QHash<QString, QString> m_cachedArtworkPaths; // fullPath -> artworkPath from session cache
+  // Memoized resolvePlaceholderArtworkForCollection results keyed by
+  // collection index. The resolution walks the parent chain and expands
+  // config variables, and ran once per widget materialization for a value
+  // that only changes with the collections list or the active context —
+  // both of which clear this cache (see the setters above).
+  mutable QHash<int, QString> m_placeholderArtworkCache;
   QSet<int> m_pendingRangeRequests;             // Tracks chunk start indices with pending
                                                 // requests
   // Per-chunk count of consecutive empty (zero-row) responses. Bounds the

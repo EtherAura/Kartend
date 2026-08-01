@@ -24,14 +24,18 @@ class IDatabaseManager;
  * descendants
  *
  * The manager maintains a list of filtered indices that map visual positions
- * to actual item indices, enabling efficient virtual scrolling with filtering.
+ * to actual item indices in the ScrollDataStore's actual-index space
+ * [subcollections][virtualFolders][media], enabling efficient virtual
+ * scrolling with filtering. When the store's unified sort is active, callers
+ * pass the store's concat→actual permutation map so the emitted indices are
+ * positions in the permuted unified list (see setSourceData).
  *
  * Usage:
  *   // Setup dependencies
  *   filterManager->setApplicationContext(ctx);
  *   filterManager->setCollections(&collections);
  *   filterManager->setSourceData(filePaths, fileNames, displayNames,
- * subcollections);
+ * subcollections, virtualFolders);
  *
  *   // Apply text search
  *   filterManager->applyFilter("search text");
@@ -63,10 +67,22 @@ public:
    * @param fileNames Map of file path to display name.
    * @param filePathToDisplayName Map for subcollection item display names.
    * @param subcollections List of subcollection indices.
+   * @param virtualFolders List of virtual folder paths rendered between the
+   * subcollection band and the media band. Folders participate in name
+   * matching (by their display name, mirroring subcollections) and shift the
+   * media band so emitted indices line up with the ScrollDataStore's
+   * [subcollections][virtualFolders][media] actual-index space.
+   * @param unifiedConcatToActual When the store's unified sort is active, the
+   * permutation map from unpermuted concat positions to actual positions in
+   * the unified list (ScrollDataStore::unifiedConcatToActualMap()). Filtered
+   * indices are translated through it (and re-sorted so the filtered view
+   * keeps the unified display order). Pass an empty list when unified sort is
+   * inactive — the spaces coincide.
    */
   void setSourceData(const QStringList &filePaths, const QHash<QString, QString> &fileNames,
                      const QHash<QString, QString> &filePathToDisplayName,
-                     const QList<int> &subcollections);
+                     const QList<int> &subcollections, const QStringList &virtualFolders,
+                     const QList<int> &unifiedConcatToActual = {});
 
   /**
    * @brief Set current collection context for display name resolution.
@@ -141,7 +157,16 @@ private:
   void rebuildFilteredIndices();
   [[nodiscard]] bool matchesSubcollectionFilter(int subcollectionIndex,
                                                 const QString &needle) const;
+  [[nodiscard]] bool matchesVirtualFolderFilter(int folderIndex, const QString &needle) const;
   [[nodiscard]] bool matchesMediaItemFilter(int mediaIndex, const QString &needle) const;
+
+  // subcollection + virtual folder band size; media actual indices start here.
+  [[nodiscard]] int prefixItemCount() const;
+
+  // Translate m_filteredIndices from unpermuted concat space into the store's
+  // actual-index space when unified sort is active (no-op otherwise), then
+  // sort ascending so the filtered view keeps the unified display order.
+  void remapFilteredIndicesToStoreSpace();
   [[nodiscard]] QString getDisplayNameForMediaItem(const QString &rawEntry) const;
 
   // returns true when artwork lookup for the media file at
@@ -149,6 +174,11 @@ private:
   // directory or filename is empty so the predicate is a no-op for collections
   // that have no artwork pipeline configured.
   [[nodiscard]] bool mediaItemHasArtwork(int mediaIndex) const;
+
+  // Rebuild m_artworkKeySet from the DirectoryCache listings when the cached
+  // copy is stale (directory changed, or the cache's contentsGeneration
+  // moved). Cheap when fresh: one generation read plus a string compare.
+  void ensureArtworkKeySet() const;
 
   void determineTargetCollections(int subcollectionIndex, QSet<int> &targetCollections);
   [[nodiscard]] bool itemBelongsToTargetCollections(const QString &entry,
@@ -166,6 +196,12 @@ private:
   const QHash<QString, QString> *m_fileNames = nullptr;
   const QHash<QString, QString> *m_filePathToDisplayName = nullptr;
   const QList<int> *m_subcollections = nullptr;
+  const QStringList *m_virtualFolders = nullptr;
+
+  // Unified-sort permutation (concat position → actual position). Stored by
+  // value (implicitly shared) because callers pass a freshly built temporary;
+  // empty when the store's unified sort is inactive.
+  QList<int> m_concatToActual;
 
   // Context for resolution
   CollectionContext m_context;
@@ -188,6 +224,18 @@ private:
   // m_filteredIndices.
   bool m_hideMissingArtwork = false;
   QString m_hideMissingArtworkDirectory;
+
+  // Precomputed artwork-backed key set for the hideMissingArtwork predicate
+  // (ArtworkUtils::buildArtworkKeySet over m_hideMissingArtworkDirectory).
+  // Every filter pass used to run the full findArtworkForFileCached cascade
+  // per media item — up to 20 DirectoryCache probes under the global lock,
+  // each with a potential first-miss stat sweep — a multi-second GUI freeze
+  // at 10k+ items. The set is built once and reused until the cache's
+  // contentsGeneration moves or the directory changes (ensureArtworkKeySet).
+  mutable QSet<QString> m_artworkKeySet;
+  mutable quint64 m_artworkKeySetGeneration = 0;
+  mutable QString m_artworkKeySetDirectory;
+  mutable bool m_artworkKeySetValid = false;
 };
 
 #endif

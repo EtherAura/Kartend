@@ -178,22 +178,40 @@ void ItemWidgetFactory::updateCollectionIndexFromDatabase(const QString &fullPat
   }
 }
 
-QString ItemWidgetFactory::resolvePlaceholderArtworkForCollection(int collectionIndex) const {
+QString ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(
+    const QList<CollectionConfig> *collections, int collectionIndex,
+    const QString &contextPlaceholder, const QString &contextCollectionName) {
+  const bool validIndex = collections && collectionIndex >= 0 &&
+                          collectionIndex < collections->size();
   QString placeholderArtwork;
-  if (m_collections && collectionIndex >= 0 && collectionIndex < m_collections->size()) {
+  if (validIndex) {
     placeholderArtwork =
-        CollectionUtils::resolvePlaceholderArtwork(collectionIndex, *m_collections).trimmed();
+        CollectionUtils::resolvePlaceholderArtwork(collectionIndex, *collections).trimmed();
   }
   if (placeholderArtwork.isEmpty()) {
-    placeholderArtwork = m_context.config.placeholderArtwork.trimmed();
+    placeholderArtwork = contextPlaceholder.trimmed();
   }
   if (!placeholderArtwork.isEmpty()) {
     const QString collectionName =
-        (m_collections && collectionIndex >= 0 && collectionIndex < m_collections->size())
-            ? m_collections->at(collectionIndex).name
-            : m_context.config.name;
+        validIndex ? collections->at(collectionIndex).name : contextCollectionName;
     placeholderArtwork = SettingsUtils::expandConfigVariables(placeholderArtwork, collectionName);
   }
+  return placeholderArtwork;
+}
+
+QString ItemWidgetFactory::resolvePlaceholderArtworkForCollection(int collectionIndex) const {
+  // Memoized per collection index (negative results included): the
+  // parent-chain walk + expandConfigVariables ran on every widget
+  // materialization for a value that is constant until the collections list
+  // or the context changes — both setters clear the cache. The computation
+  // itself is the pure ItemWidgetFactoryHelpers policy function.
+  const auto cached = m_placeholderArtworkCache.constFind(collectionIndex);
+  if (cached != m_placeholderArtworkCache.constEnd()) {
+    return cached.value();
+  }
+  const QString placeholderArtwork = ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(
+      m_collections, collectionIndex, m_context.config.placeholderArtwork, m_context.config.name);
+  m_placeholderArtworkCache.insert(collectionIndex, placeholderArtwork);
   return placeholderArtwork;
 }
 
@@ -203,6 +221,9 @@ void ItemWidgetFactory::applyPlaceholderArtwork(ItemWidget *widget,
     return;
   }
 
+  // QPixmap's file constructor routes through QPixmap::load, which serves
+  // repeat loads of the same (path, mtime, size) from the global QPixmapCache
+  // — the decode is paid once per placeholder image, not once per widget.
   QPixmap pixmap(placeholderArtwork);
   if (!pixmap.isNull()) {
     widget->setPlaceholderArtworkPixmap(pixmap);
@@ -223,6 +244,13 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
       qCDebug(lcSearchDiag) << "[ArtworkDiag] configureArtworkForWidget: fullPath=" << fullPath
                             << "cachedArtworkPaths.size=" << m_cachedArtworkPaths.size()
                             << "cachedPath=" << (cachedPath.isEmpty() ? "(not found)" : cachedPath);
+    }
+    // List mode displays an artwork preview button (not the pixmap), so
+    // record that artwork exists rather than enqueueing a pixmap decode into
+    // the hidden image label (mirrors the override and legacy exits below).
+    if (widget && widget->isListMode() && !cachedPath.isEmpty()) {
+      widget->setHasArtwork(true);
+      return;
     }
     if (auto *art = artworkMgr(); art && !cachedPath.isEmpty()) {
       art->addPendingArtwork(widget, cachedPath);

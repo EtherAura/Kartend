@@ -10,7 +10,6 @@
 #include "navigationstackmanager.h"
 #include "scrollmanager.h"
 #include "settingsutils.h"
-#include "uiconstants/artwork.h"
 #include "uiconstants/navigation.h"
 #include "uiconstants/selection.h"
 
@@ -215,16 +214,14 @@ void NavigationManager::loadCurrentAndSubcollections() {
   }
 
   context.queryIncludeDescendants = true;
-  requestItemCountForContext(context, QString());
-
-  // Delay filter reapplication until item count query completes -
-  // ensures filter operates on the updated item list
-  QTimer::singleShot(UIConstants::Artwork::FILTER_REAPPLY_DELAY_MS, this, [this]() {
-    if (m_searchBar && !m_searchBar->text().trimmed().isEmpty() && scrollMgr()) {
-      const QString currentSearchText = m_searchBar->text().trimmed();
-      scrollMgr()->applyFilter(currentSearchText);
-    }
-  });
+  // Preserve any active search by passing it to the count query itself
+  // (mirrors safeReloadCollection). The old delayed applyFilter singleShot
+  // raced the load: firing after it wiped the freshly applied filter, firing
+  // before it matched over unloaded placeholder rows. An empty search bar
+  // still passes an empty filter, i.e. an unfiltered reload, exactly as
+  // before.
+  const QString activeFilter = m_searchBar ? m_searchBar->text().trimmed() : QString();
+  requestItemCountForContext(context, activeFilter);
 }
 
 // Renders the synthetic "Home" view: one tile per root collection

@@ -25,6 +25,18 @@ private slots:
   void testClearFilterRestoresUnfilteredView();
   void testGetActualIndexBoundsCheck();
   void testHideMissingArtworkFlagToggles();
+
+  // [subcollections][virtualFolders][media] index-space coverage.
+  void testSearchWithVirtualFoldersOffsetsMediaIndices();
+  void testSearchMatchesVirtualFolderByDisplayName();
+  void testHideMissingArtworkBaselineKeepsPrefixBands();
+  void testActualIndexRoundTripAcrossPrefixBands();
+  void testUnifiedSortMapRemapsFilteredIndices();
+
+  // Precomputed artwork key set (ArtworkUtils::buildArtworkKeySet) backing
+  // the hideMissingArtwork predicate.
+  void testBuildArtworkKeySetFromCachedListings();
+  void testHideMissingArtworkResolvesSubdirAndFullNameKeys();
 };
 
 #endif // KARTEND_TESTS_TEST_FILTERMANAGER_H

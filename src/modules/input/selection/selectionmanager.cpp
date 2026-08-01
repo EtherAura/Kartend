@@ -311,10 +311,11 @@ void SelectionManager::selectItemByIndex(int index, bool allowHorizontalScroll) 
     return;
   }
 
-  const QStringList &filePaths = scrollData()->getFilePaths();
   QList<int> subcollections = getSubcollections(*m_currentCollectionIndex);
-  int virtualFolderCount = scrollData()->getVirtualFolderCount();
-  int totalItems = subcollections.size() + virtualFolderCount + filePaths.size();
+  // Bound against the rendered total (as selectItemByHover does) — recomputing
+  // from subs + virtual folders + file paths diverges from what is actually
+  // shown under search, type filter, or a subcollection-count override.
+  const int totalItems = scrollData()->getTotalItems();
   if (index < 0 || index >= totalItems) {
     return;
   }
@@ -450,7 +451,7 @@ QString SelectionManager::titleForIndexInColl(int coll, int idx) const {
   // collections, fall back to the hierarchy-cache list since their data is
   // not currently rendered.
   const bool isCurrent = m_currentCollectionIndex && coll == *m_currentCollectionIndex;
-  if (isCurrent && scrollData()) {
+  if (isCurrent && scrollData() && scrollSearch()) {
     const int actualIdx = scrollSearch()->getFilteredIndex(idx);
     const int renderedSubCount = scrollData()->getSubcollectionCount();
     if (actualIdx >= 0 && actualIdx < renderedSubCount) {

@@ -20,7 +20,7 @@
 #include "navigationstackmanager.h"
 #include "pathutils.h"
 #include "scrollmanager.h"
-#include "selectionrestoremanager.h"
+#include "selectionrestorecoordinator.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants/keyboard.h"

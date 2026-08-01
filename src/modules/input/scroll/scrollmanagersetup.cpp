@@ -81,10 +81,10 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   // spinner). Null is safe — each manager falls back to direct raise()
   // when no layer manager is installed.
   if (m_ctx && m_overlayManager) {
-    m_overlayManager->setLayerManager(m_ctx->ui.overlayLayerManager);
+    m_overlayManager->setLayerManager(m_ctx->ui.overlayZOrderRegistry);
   }
   if (m_ctx && m_searchLoadingOverlay) {
-    m_searchLoadingOverlay->setLayerManager(m_ctx->ui.overlayLayerManager);
+    m_searchLoadingOverlay->setLayerManager(m_ctx->ui.overlayZOrderRegistry);
   }
 
   // Apply persisted column widths from settings via display manager.
@@ -270,7 +270,8 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
   if (m_filterManager) {
     m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
                                    m_dataManager->filePathToDisplayName(),
-                                   m_dataManager->subcollections());
+                                   m_dataManager->subcollections(), m_dataManager->virtualFolders(),
+                                   m_dataManager->unifiedConcatToActualMap());
     m_filterManager->setContext(m_context);
     if (m_context.config.hideMissingArtwork && !m_filterManager->isFiltered()) {
       m_filterManager->clearFilter();
