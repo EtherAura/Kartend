@@ -203,11 +203,11 @@ void QueryManager::initDatabase() {
   const auto recovery =
       MediaDbConnectionInit::ensureNotCorrupt(m_db, QStringLiteral("QueryManager::initDatabase"));
   if (recovery.announce) {
+    const QString quarantinePath = recovery.quarantinePath;
     // Why singleShot(0): keeps the announcement off the current call stack —
     // initDatabase runs both at worker start (before the host finishes
     // wiring) and inside the reconnect ladder; the zero-timer lands it on
     // the worker's event loop after wiring is complete.
-    const QString quarantinePath = recovery.quarantinePath;
     QTimer::singleShot(0, this, [this, quarantinePath] {
       emit errorOccurred(
           ErrorContext::critical(

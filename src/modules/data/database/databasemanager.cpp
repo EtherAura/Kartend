@@ -422,11 +422,11 @@ void DatabaseManager::initDatabase() {
   const auto recovery = MediaDbConnectionInit::ensureNotCorrupt(
       m_db, QStringLiteral("DatabaseManager::initDatabase"));
   if (recovery.announce) {
+    const QString quarantinePath = recovery.quarantinePath;
     // Why singleShot(0): initDatabase runs in the constructor, before the
     // host wires errorOccurred to the error-dialog chain — a direct emit
     // here would vanish. Wiring completes before the event loop first
     // spins, so a zero-timer defers the one-time announcement just past it.
-    const QString quarantinePath = recovery.quarantinePath;
     QTimer::singleShot(0, this, [this, quarantinePath] {
       emit errorOccurred(
           ErrorUtils::ErrorContext::critical(
