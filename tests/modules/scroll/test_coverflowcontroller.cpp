@@ -277,7 +277,7 @@ void TestCoverFlowController::itemActivated_mapsFilteredVisualToActual() {
 
   FilterManager filter;
   filter.setCollections(&collections);
-  filter.setSourceData(paths, names, emptyDisplayNames, subs, noVirtualFolders);
+  filter.setSourceData(&paths, &names, &emptyDisplayNames, &subs, &noVirtualFolders);
 
   ApplicationContext appCtx;
   appCtx.managers.filterManager = &filter;

@@ -27,17 +27,19 @@ void FilterManager::setHierarchyCache(const CollectionHierarchyCache *cache) {
   m_hierarchyCache = cache;
 }
 
-void FilterManager::setSourceData(const QStringList &filePaths,
-                                  const QHash<QString, QString> &fileNames,
-                                  const QHash<QString, QString> &filePathToDisplayName,
-                                  const QList<int> &subcollections,
-                                  const QStringList &virtualFolders,
+void FilterManager::setSourceData(const QStringList *filePaths,
+                                  const QHash<QString, QString> *fileNames,
+                                  const QHash<QString, QString> *filePathToDisplayName,
+                                  const QList<int> *subcollections,
+                                  const QStringList *virtualFolders,
                                   const QList<int> &unifiedConcatToActual) {
-  m_filePaths = &filePaths;
-  m_fileNames = &fileNames;
-  m_filePathToDisplayName = &filePathToDisplayName;
-  m_subcollections = &subcollections;
-  m_virtualFolders = &virtualFolders;
+  // Pointer parameters by design (Kartend-tnyff): these are stored, and the
+  // const-ref version silently bound (and dangled) temporaries.
+  m_filePaths = filePaths;
+  m_fileNames = fileNames;
+  m_filePathToDisplayName = filePathToDisplayName;
+  m_subcollections = subcollections;
+  m_virtualFolders = virtualFolders;
   m_concatToActual = unifiedConcatToActual;
   m_displayNameCache.clear(); // source data changed — drop precomputed names
 }

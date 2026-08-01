@@ -77,8 +77,8 @@ const QList<int> &seedOneSubcollection() {
 }
 
 void seedThreeItems(FilterManager &mgr) {
-  mgr.setSourceData(seedPaths(), seedNames(), seedEmptyDisplayNames(), seedEmptySubcollections(),
-                    seedEmptyFolders());
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
 }
 
 } // namespace
@@ -159,8 +159,8 @@ void TestFilterManager::testHideMissingArtworkFlagToggles() {
 
 void TestFilterManager::testSearchWithVirtualFoldersOffsetsMediaIndices() {
   FilterManager mgr;
-  mgr.setSourceData(seedPaths(), seedNames(), seedEmptyDisplayNames(), seedEmptySubcollections(),
-                    seedFolders());
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedFolders());
   mgr.applyFilter(QStringLiteral("gamma"));
   QVERIFY(mgr.isFiltered());
   // Actual-index space is [subcollections(0)][virtualFolders(2)][media]:
@@ -172,8 +172,8 @@ void TestFilterManager::testSearchWithVirtualFoldersOffsetsMediaIndices() {
 
 void TestFilterManager::testSearchMatchesVirtualFolderByDisplayName() {
   FilterManager mgr;
-  mgr.setSourceData(seedPaths(), seedNames(), seedEmptyDisplayNames(), seedEmptySubcollections(),
-                    seedFolders());
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedFolders());
   // "Nested/Extras" matches on its display name (last path component)...
   mgr.applyFilter(QStringLiteral("extras"));
   QVERIFY(mgr.isFiltered());
@@ -199,8 +199,8 @@ void TestFilterManager::testHideMissingArtworkBaselineKeepsPrefixBands() {
   ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artDir.path()});
 
   FilterManager mgr;
-  mgr.setSourceData(seedPaths(), seedNames(), seedEmptyDisplayNames(), seedOneSubcollection(),
-                    seedFolders());
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(), &seedOneSubcollection(),
+                    &seedFolders());
   mgr.setHideMissingArtworkFilter(true, artDir.path());
   QSignalSpy spy(&mgr, &FilterManager::filterChanged);
   mgr.clearFilter();
@@ -280,8 +280,8 @@ void TestFilterManager::testHideMissingArtworkResolvesSubdirAndFullNameKeys() {
       QStringLiteral("/items/Delta.bin"),
   };
   FilterManager mgr;
-  mgr.setSourceData(paths, seedEmptyDisplayNames(), seedEmptyDisplayNames(),
-                    seedEmptySubcollections(), seedEmptyFolders());
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
   mgr.setHideMissingArtworkFilter(true, artDir.path());
   QSignalSpy spy(&mgr, &FilterManager::filterChanged);
   mgr.clearFilter();
@@ -313,7 +313,7 @@ void TestFilterManager::testActualIndexRoundTripAcrossPrefixBands() {
 
   FilterManager mgr;
   mgr.setCollections(&collections);
-  mgr.setSourceData(seedPaths(), seedNames(), seedEmptyDisplayNames(), subs, seedFolders());
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(), &subs, &seedFolders());
   // "a" matches both shelves, the "Extras" folder, and all three media items;
   // "Docs" (concat index 2) is the only miss.
   mgr.applyFilter(QStringLiteral("a"));
@@ -333,8 +333,8 @@ void TestFilterManager::testUnifiedSortMapRemapsFilteredIndices() {
   // Alpha(m0) Beta(m1) Docs(f0) Extras(f1) Gamma(m2). Concat space is
   // [f0 f1 m0 m1 m2], so the concat→actual permutation is:
   static const QList<int> concatToActual = {2, 3, 0, 1, 4};
-  mgr.setSourceData(seedPaths(), seedNames(), seedEmptyDisplayNames(), seedEmptySubcollections(),
-                    seedFolders(), concatToActual);
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedFolders(), concatToActual);
   QSignalSpy spy(&mgr, &FilterManager::filterChanged);
   // "a" matches Extras + all three media items (concat {1, 2, 3, 4}), which
   // remap to actual {3, 0, 1, 4} and re-sort into unified display order.

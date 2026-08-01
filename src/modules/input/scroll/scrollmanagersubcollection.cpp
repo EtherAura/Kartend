@@ -51,9 +51,9 @@ void ScrollManager::applySubcollectionFilter(int subcollectionIndex) {
   }
 
   // Update FilterManager's source data and apply subcollection filter
-  m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
-                                 m_dataManager->filePathToDisplayName(),
-                                 m_dataManager->subcollections(), m_dataManager->virtualFolders(),
+  m_filterManager->setSourceData(&m_dataManager->filePaths(), &m_dataManager->fileNames(),
+                                 &m_dataManager->filePathToDisplayName(),
+                                 &m_dataManager->subcollections(), &m_dataManager->virtualFolders(),
                                  m_dataManager->unifiedConcatToActualMap());
   m_filterManager->setContext(m_context);
   m_filterManager->applySubcollectionFilter(subcollectionIndex);

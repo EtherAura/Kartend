@@ -34,8 +34,8 @@ class IDatabaseManager;
  *   // Setup dependencies
  *   filterManager->setApplicationContext(ctx);
  *   filterManager->setCollections(&collections);
- *   filterManager->setSourceData(filePaths, fileNames, displayNames,
- * subcollections, virtualFolders);
+ *   filterManager->setSourceData(&filePaths, &fileNames, &displayNames,
+ * &subcollections, &virtualFolders);
  *
  *   // Apply text search
  *   filterManager->applyFilter("search text");
@@ -63,6 +63,15 @@ public:
 
   /**
    * @brief Set source data for filtering.
+   *
+   * The five container parameters are POINTERS to caller-owned storage that
+   * must outlive every later FilterManager call (production passes
+   * ScrollDataStore members) — the manager stores them, it does not copy.
+   * Pointers rather than const refs on purpose (Kartend-tnyff): the
+   * reference version silently bound temporaries, and a braced `{}` argument
+   * compiled cleanly, dangled at the end of the call statement, and cost
+   * five CI jobs before ASan named it. `&QStringList{}` does not compile.
+   *
    * @param filePaths List of file paths to filter.
    * @param fileNames Map of file path to display name.
    * @param filePathToDisplayName Map for subcollection item display names.
@@ -79,9 +88,9 @@ public:
    * keeps the unified display order). Pass an empty list when unified sort is
    * inactive — the spaces coincide.
    */
-  void setSourceData(const QStringList &filePaths, const QHash<QString, QString> &fileNames,
-                     const QHash<QString, QString> &filePathToDisplayName,
-                     const QList<int> &subcollections, const QStringList &virtualFolders,
+  void setSourceData(const QStringList *filePaths, const QHash<QString, QString> *fileNames,
+                     const QHash<QString, QString> *filePathToDisplayName,
+                     const QList<int> *subcollections, const QStringList *virtualFolders,
                      const QList<int> &unifiedConcatToActual = {});
 
   /**

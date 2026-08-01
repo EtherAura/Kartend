@@ -59,7 +59,7 @@ struct SeededSources {
   }
 
   void install(FilterManager *fm) {
-    fm->setSourceData(filePaths, fileNames, displayNames, subcollections, virtualFolders);
+    fm->setSourceData(&filePaths, &fileNames, &displayNames, &subcollections, &virtualFolders);
   }
 };
 

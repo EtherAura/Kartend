@@ -395,9 +395,9 @@ void VirtualScrollEngine::primeLayoutFor(const CollectionConfig &config) {
   // subcollection filter so the new predicate composes with it.
   if (m_owner->m_filterManager && m_owner->m_dataManager) {
     m_owner->m_filterManager->setSourceData(
-        m_owner->m_dataManager->filePaths(), m_owner->m_dataManager->fileNames(),
-        m_owner->m_dataManager->filePathToDisplayName(), m_owner->m_dataManager->subcollections(),
-        m_owner->m_dataManager->virtualFolders(),
+        &m_owner->m_dataManager->filePaths(), &m_owner->m_dataManager->fileNames(),
+        &m_owner->m_dataManager->filePathToDisplayName(), &m_owner->m_dataManager->subcollections(),
+        &m_owner->m_dataManager->virtualFolders(),
         m_owner->m_dataManager->unifiedConcatToActualMap());
     m_owner->m_filterManager->setContext(m_owner->m_context);
     if (m_owner->m_filterManager->isFiltered() &&

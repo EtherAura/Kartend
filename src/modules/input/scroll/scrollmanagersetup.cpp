@@ -268,10 +268,10 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
   // unconditionally is cheap and keeps the FilterManager state consistent
   // across collection switches.
   if (m_filterManager) {
-    m_filterManager->setSourceData(m_dataManager->filePaths(), m_dataManager->fileNames(),
-                                   m_dataManager->filePathToDisplayName(),
-                                   m_dataManager->subcollections(), m_dataManager->virtualFolders(),
-                                   m_dataManager->unifiedConcatToActualMap());
+    m_filterManager->setSourceData(
+        &m_dataManager->filePaths(), &m_dataManager->fileNames(),
+        &m_dataManager->filePathToDisplayName(), &m_dataManager->subcollections(),
+        &m_dataManager->virtualFolders(), m_dataManager->unifiedConcatToActualMap());
     m_filterManager->setContext(m_context);
     if (m_context.config.hideMissingArtwork && !m_filterManager->isFiltered()) {
       m_filterManager->clearFilter();
