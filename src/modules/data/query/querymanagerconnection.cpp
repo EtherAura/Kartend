@@ -32,16 +32,22 @@ Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
 #define debugLog(msg) qCDebug(lcQueryManager) << msg
 
 void QueryManager::refreshWalView() {
+  // Release cached statements' open cursors FIRST: an exec'd-but-unfinished
+  // cursor keeps the connection's implicit read transaction open, pinning
+  // the WAL snapshot the BEGIN below is meant to refresh past (the BEGIN
+  // simply fails inside an open transaction). finish() keeps the compiled
+  // statements — the clear() that used to run here (after the BEGIN/COMMIT,
+  // so it didn't even unpin in time) threw away every prepared statement at
+  // the entry of each fetch, which is why the statement cache cached
+  // nothing (Kartend-de4ft).
+  m_statementCache.finishAll();
+
   // Starting and immediately committing a deferred transaction forces SQLite
   // to acquire a fresh read snapshot that includes all prior commits.
   // This is lighter than wal_checkpoint and doesn't interfere with writes.
   QSqlQuery query(m_db);
   query.exec("BEGIN");
   query.exec("COMMIT");
-
-  // Clear statement cache to prevent stale bound values from interfering
-  // with subsequent queries that need fresh data.
-  m_statementCache.clear();
 }
 
 // Gets or creates a prepared statement for the given SQL — thin wrapper

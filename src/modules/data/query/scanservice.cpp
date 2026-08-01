@@ -174,8 +174,10 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
     const bool hasItems = collectionHasItems(uuid);
     if (hasItems && storedSignature.trimmed().isEmpty()) {
       QSqlQuery &update = m_cache.get(QuerySQL::UPDATE_COLLECTION_EXT_SIGNATURE);
-      update.addBindValue(currentSignature);
-      update.addBindValue(uuid);
+      // Positional binds — cached statements must never addBindValue (see
+      // the PreparedStatementCache contract).
+      update.bindValue(0, currentSignature);
+      update.bindValue(1, uuid);
       (void)execAndLog(update, "Failed to backfill ext_signature", "ScanService::needsRescan");
     } else {
       return true;

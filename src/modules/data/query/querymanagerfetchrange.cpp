@@ -24,6 +24,7 @@
 #include "pathutils.h"
 #include "queryhelpers.h"
 #include "querymanagerhelpers.h"
+#include "querymanagersql.h"
 #include "searchqueryparser.h"
 #include "uiconstants/database.h"
 
@@ -222,11 +223,10 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
       QHash<QString, QString> fileToMediaDir;
       QHash<QString, int> fileToCollectionIndex;
 
-      // Simple position-based range query - O(1) regardless of offset
-      QSqlQuery cacheQuery(m_db);
-      cacheQuery.prepare("SELECT path, uuid FROM sorted_items_cache "
-                         "WHERE position >= ? AND position < ? "
-                         "ORDER BY position");
+      // Simple position-based range query - O(1) regardless of offset.
+      // Cached prepared statement (Kartend-de4ft): this fires once per
+      // scroll page, so the per-call prepare() was pure overhead.
+      QSqlQuery &cacheQuery = getPreparedStatement(QuerySQL::SELECT_SORTED_CACHE_RANGE);
       cacheQuery.bindValue(0, offset);
       cacheQuery.bindValue(1, offset + limit);
 
@@ -264,6 +264,10 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
                                 << rangeTimer.elapsed() << "resultCount=" << filePaths.size();
         }
 
+        // Release the cursor before returning: the statement is cached now,
+        // and an unfinished cursor would hold this connection's read
+        // transaction (and its WAL snapshot) open until the next fetch.
+        cacheQuery.finish();
         emit itemsRangeLoaded(offset, filePaths, fileNames, fileToArtworkDir, fileToMediaDir,
                               fileToCollectionIndex, context.currentIndex);
         return;
@@ -274,6 +278,7 @@ void QueryManager::fetchItemsRange(const CollectionContext &context,
                                    "falling back:"
                                 << cacheQuery.lastError().text();
         }
+        cacheQuery.finish(); // after the lastError() read above
       }
     } else {
       // Hash mismatch - cache is stale (filter changed)

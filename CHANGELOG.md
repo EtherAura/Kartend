@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Browsing does less repeated work per scroll and per search.** The
+  database worker's prepared-statement cache turned out to cache nothing —
+  every "cached" statement was recompiled on each use and the whole cache
+  was emptied at the start of every fetch. Statements are now genuinely
+  reused across a session, and the two hottest lookups (the scroll-page
+  range query and the find-item-position probe) go through the cache too.
 - **The window stays responsive through work it used to do on the interface
   thread.** Saving your collection list rewrote and flushed the entire
   configuration file on every toolbar filter toggle, sidebar drag, and menu

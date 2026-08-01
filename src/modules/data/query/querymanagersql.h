@@ -47,6 +47,17 @@ constexpr const char *SELECT_STAGED_SCAN_RESULTS =
     "SELECT rowid, path, rel_path, name, last_modified, file_size FROM scanned_items "
     "WHERE rowid > ? ORDER BY rowid LIMIT ?";
 
+// Added Kartend-de4ft — the sorted-cache fast paths built and prepared these
+// locally on every call (the range probe fires per scroll page, the position
+// probe per selection restore). Routed through PreparedStatementCache the
+// compiled statement is reused across the whole session; sorted_items_cache
+// is DELETE-repopulated, never dropped, so the statements stay valid.
+constexpr const char *SELECT_SORTED_CACHE_RANGE = "SELECT path, uuid FROM sorted_items_cache "
+                                                  "WHERE position >= ? AND position < ? "
+                                                  "ORDER BY position";
+constexpr const char *SELECT_SORTED_CACHE_POSITION =
+    "SELECT position FROM sorted_items_cache WHERE path = ?";
+
 } // namespace QuerySQL
 
 #endif // QUERYMANAGERSQL_H

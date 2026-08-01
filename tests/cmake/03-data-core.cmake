@@ -94,6 +94,15 @@ kartend_add_test(NAME QueryManagerBrokenSymlinks
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Contract test (Kartend-de4ft): a statement-cache hit returns the SAME
+# still-prepared statement (finish + positional rebind), a bind-then-bail
+# caller cannot poison the next use, and finishAll releases open cursors
+# without discarding the compiled statements.
+kartend_add_test(NAME PreparedStatementCache
+  SOURCES modules/query/test_preparedstatementcache.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # Regression test: items.path stores the ABSOLUTE path and items.rel_path the
 # media-dir-relative form (Kartend-4te3); the v13 reconcile rewrites pre-v13
 # relative-path rows in place. Reuses the same query-stack source list as

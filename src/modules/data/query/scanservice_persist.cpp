@@ -207,8 +207,10 @@ bool ScanService::applyStagedScanResultsAttempt(
       }
 
       QSqlQuery &sel = m_cache.get(QuerySQL::SELECT_STAGED_SCAN_RESULTS);
-      sel.addBindValue(lastRowId);
-      sel.addBindValue(APPLY_BATCH_SIZE);
+      // Positional binds — cached statements must never addBindValue (see
+      // the PreparedStatementCache contract).
+      sel.bindValue(0, lastRowId);
+      sel.bindValue(1, APPLY_BATCH_SIZE);
       if (!sel.exec()) {
         reportFailure(queryError("Failed to read staged scan results", sel.lastError()));
         return false;
@@ -279,15 +281,18 @@ bool ScanService::applyStagedScanResultsAttempt(
       // cache's max size. lastError() is read off the cached statement;
       // it still surfaces SQLite's "too many SQL variables" diagnostics.
       QSqlQuery &ins = m_cache.get(sql);
+      // Positional binds — cached statements must never addBindValue (see
+      // the PreparedStatementCache contract).
+      int bindPos = 0;
       for (int i = 0; i < paths.size(); ++i) {
-        ins.addBindValue(legacyId);
-        ins.addBindValue(uuid);
-        ins.addBindValue(paths[i]);
-        ins.addBindValue(relPaths[i]);
-        ins.addBindValue(names[i]);
-        ins.addBindValue(lastModified[i]);
-        ins.addBindValue(fileSizes[i]);
-        ins.addBindValue(nowEpochSec);
+        ins.bindValue(bindPos++, legacyId);
+        ins.bindValue(bindPos++, uuid);
+        ins.bindValue(bindPos++, paths[i]);
+        ins.bindValue(bindPos++, relPaths[i]);
+        ins.bindValue(bindPos++, names[i]);
+        ins.bindValue(bindPos++, lastModified[i]);
+        ins.bindValue(bindPos++, fileSizes[i]);
+        ins.bindValue(bindPos++, nowEpochSec);
       }
       if (!ins.exec()) {
         // The hot lock-contention site: the txn's first write after the

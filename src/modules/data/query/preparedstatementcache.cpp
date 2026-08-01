@@ -11,13 +11,14 @@ void PreparedStatementCache::setDatabase(const QSqlDatabase &db) {
 
 QSqlQuery &PreparedStatementCache::get(const QString &sql) {
   if (QSqlQuery *cached = m_cache.object(sql)) {
-    // Fully reset before reuse. QSqlQuery may retain bound values /
-    // internal state across exec() calls. If the cached instance is reused
-    // for dynamic search SQL, SQLite can report "Parameter count mismatch"
-    // unless we reinitialize it.
+    // Release the previous use's cursor (a cheap sqlite3_reset) and hand the
+    // still-prepared statement back for rebinding. Deliberately NOT the old
+    // reassign-and-prepare(), which made every hit cost the same as a miss
+    // (Kartend-de4ft). The "Parameter count mismatch" that re-preparing
+    // papered over is addBindValue's append semantics on a dirty counter —
+    // see the class-level CONTRACT: cached statements are bound positionally
+    // at every call site, which overwrites instead of appending.
     cached->finish();
-    *cached = QSqlQuery(m_db);
-    cached->prepare(sql);
     return *cached;
   }
 
@@ -36,4 +37,13 @@ QSqlQuery &PreparedStatementCache::get(const QString &sql) {
 
 void PreparedStatementCache::clear() {
   m_cache.clear();
+}
+
+void PreparedStatementCache::finishAll() {
+  const QList<QString> keys = m_cache.keys();
+  for (const QString &key : keys) {
+    if (QSqlQuery *cached = m_cache.object(key)) {
+      cached->finish();
+    }
+  }
 }

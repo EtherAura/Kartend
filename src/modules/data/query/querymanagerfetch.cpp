@@ -372,9 +372,12 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
     const QByteArray currentHash = computeSortCacheHash(uuids, QString(), ctx.sortMode);
     if (currentHash == m_sortedItemsCacheHash) {
       // Query sorted cache for this path
-      // The cache stores relative paths, so we need to check both
-      QSqlQuery cacheQuery(m_db);
-      cacheQuery.prepare("SELECT position FROM sorted_items_cache WHERE path = ?");
+      // The cache stores relative paths, so we need to check both.
+      // Cached prepared statement (Kartend-de4ft); rebinding position 0 per
+      // candidate overwrites, and finish() before every exit releases the
+      // cursor so the cached statement doesn't pin this connection's WAL
+      // snapshot after the fetch returns.
+      QSqlQuery &cacheQuery = getPreparedStatement(QuerySQL::SELECT_SORTED_CACHE_POSITION);
 
       // Convert to relative path if it's absolute
       for (auto it = dirMaps.uuidToMediaDir.begin(); it != dirMaps.uuidToMediaDir.end(); ++it) {
@@ -387,6 +390,7 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
           cacheQuery.bindValue(0, candidate);
           if (cacheQuery.exec() && cacheQuery.next()) {
             int position = cacheQuery.value(0).toInt();
+            cacheQuery.finish();
             emit visualIndexForPathLoaded(position, filePath);
             return;
           }
@@ -397,9 +401,11 @@ void QueryManager::fetchVisualIndexForPath(const CollectionContext &context,
       cacheQuery.bindValue(0, filePath);
       if (cacheQuery.exec() && cacheQuery.next()) {
         int position = cacheQuery.value(0).toInt();
+        cacheQuery.finish();
         emit visualIndexForPathLoaded(position, filePath);
         return;
       }
+      cacheQuery.finish(); // miss on every candidate — fall through to slow path
     }
   }
 
