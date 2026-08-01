@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Long sessions with video no longer grow without bound.** On some
+  graphics setups — typically a processor with built-in graphics alongside a
+  separate graphics card — the video decoder handed each clip to a
+  driver path that never released it afterwards. Every switch to a new video
+  left another one behind, so browsing a video-heavy collection, and attract
+  mode in particular, piled up graphics resources and memory for as long as
+  the app stayed open. An overnight session was measured holding several
+  gigabytes while sitting idle. Video now stays on decoder paths that clean
+  up after themselves, and memory settles instead of climbing.
 - **A damaged database no longer leaves the app silently empty.** A corrupt
   media.db "opened" successfully and every lookup quietly returned nothing —
   collections appeared empty with no explanation and no way back short of
