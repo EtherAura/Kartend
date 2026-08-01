@@ -361,3 +361,32 @@ kartend_add_test(NAME SettingsDialogLiveSave
 target_include_directories(test_settingsdialoglivesave PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
 
+# SettingsDialog unsaved-changes resolution for general settings: OK+Discard
+# must persist the dialog-open baseline (not the discarded edits), Save must
+# persist the edits on both close paths — including reject with no collection
+# selected, where handleSaveCollection can't carry the general-settings save.
+# Same harness shape as SettingsDialogLiveSave (fake IMainWindow host,
+# counting ISettingsManager, zero-interval modal driver).
+kartend_add_test(NAME SettingsDialogDiscard
+  SOURCES ui/dialogs/test_settingsdialogdiscard.cpp
+          integration/mocks/mocksettingsmanager.h
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_settingsdialogdiscard PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
+
+# SettingsDialogController post-dialog reconciliation: mid-session saves
+# (persistent Save button / drag-drop reparent / recursive import) persist
+# immediately, so a later Cancel must still run uuid migration + orphan purge
+# for what was persisted — and a cancelled session with no save must stay a
+# pure no-op. Driven through the createSettingsDialog factory seam with a
+# scripted ISettingsDialog fake and a recording IDatabaseManager double.
+kartend_add_test(NAME SettingsDialogController
+  SOURCES ui/dialogs/test_settingsdialogcontroller.cpp
+          integration/mocks/mockdatabasemanager.h
+          integration/mocks/mocksettingsmanager.h
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_settingsdialogcontroller PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
+

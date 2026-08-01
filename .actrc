@@ -30,7 +30,7 @@
 --container-options --cpus=4
 --container-options --memory=16g
 
-# Persist `actions/cache@v5` content across `act` invocations. Without this,
+# Persist `actions/cache@v6` content across `act` invocations. Without this,
 # every run starts from a cold ccache, which makes iterating on a failing
 # job painfully slow and hides "wait, why is this slow on CI but fast for
 # me?" issues. The directory is bind-mounted into act's internal cache
@@ -47,5 +47,7 @@
 
 # Default to the build workflow only. Without `-W`, act would also pick up
 # release.yml (tag-triggered) and try to drive its `softprops/action-gh-
-# release@v3` step, which doesn't make sense locally.
+# release@v3` step, which doesn't make sense locally. This also excludes
+# coverage.yml — ci-local.sh's `coverage` subcommand passes its own -W
+# (CLI flags come after these lines and last-one-wins) to reach it.
 -W .github/workflows/build.yml

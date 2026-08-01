@@ -1,0 +1,74 @@
+name: Setup ccache
+description: >
+  Restore the ccache cache and configure ccache the way every Kartend CI job
+  does: content-addressed key on the build config files, 2G max_size, and the
+  load-bearing pch_defines,time_macros sloppiness (Kartend-zhodi — PCH-using
+  compiles are not cacheable without it), then zero-stats so the job's
+  ccache --show-stats reports only this run. Replaces eight near-identical
+  inline copies across build.yml/coverage.yml (Kartend audit).
+
+  Cache-key policy — and the ACCEPTED STALENESS that comes with it — are
+  documented once at the `build` job's "Cache ccache" step comment in
+  build.yml (Kartend-pcc65/Kartend-kpnv9). Do not chase the hit rate here
+  without reading that first. Nuance preserved from those comments: the
+  'CMakeLists.txt' hashFiles pattern matches only the ROOT CMakeLists —
+  src/CMakeLists.txt and tests/CMakeLists.txt do NOT roll the key.
+
+inputs:
+  key-infix:
+    description: >
+      Middle portion of the cache key between "${runner.os}-" and the
+      config-files hash, e.g. "ccache-Release-gcc", "ccache-tsan",
+      "macos14-ccache-Debug". Also the first (most specific) restore prefix.
+    required: true
+  cache-path:
+    description: >
+      Directory the cache is stored/restored at, and ccache's cache_dir.
+      Default matches ccache's Linux XDG default; macOS jobs pass
+      ~/Library/Caches/ccache.
+    required: false
+    default: ~/.cache/ccache
+  extra-restore-infix:
+    description: >
+      Optional middle restore-key infix inserted between the key-infix
+      prefix and the fallback (the build matrix job passes
+      "ccache-<build_type>" so a new compiler cell can seed from the same
+      build type's other compiler).
+    required: false
+    default: ''
+  fallback-infix:
+    description: >
+      Infix of the last-resort restore prefix, "${runner.os}-<this>-".
+      Default shares across every Linux job; macOS passes "macos14-ccache"
+      so an image bump can keep macOS caches segregated (see the macOS job
+      comment in build.yml).
+    required: false
+    default: ccache
+
+runs:
+  using: composite
+  steps:
+    - name: Cache ccache
+      uses: actions/cache@v6
+      with:
+        path: ${{ inputs.cache-path }}
+        key: ${{ runner.os }}-${{ inputs.key-infix }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
+        # actions/cache ignores blank lines in restore-keys, so the optional
+        # extra-restore-infix line collapses away when the input is empty.
+        restore-keys: |
+          ${{ runner.os }}-${{ inputs.key-infix }}-
+          ${{ inputs.extra-restore-infix && format('{0}-{1}-', runner.os, inputs.extra-restore-infix) || '' }}
+          ${{ runner.os }}-${{ inputs.fallback-infix }}-
+
+    - name: Configure ccache
+      shell: bash
+      env:
+        KARTEND_CCACHE_DIR: ${{ inputs.cache-path }}
+      run: |
+        # Tilde arrives literally from the input default; expand it ourselves
+        # (the cache action above does its own expansion).
+        ccache --set-config=cache_dir="${KARTEND_CCACHE_DIR/#\~/$HOME}"
+        ccache --set-config=max_size=2G
+        # PCH-using compiles need this to be cacheable (Kartend-zhodi)
+        ccache --set-config=sloppiness=pch_defines,time_macros
+        ccache --zero-stats

@@ -59,7 +59,16 @@ Usage:
 
 The fan-out report (Kartend-5y7zm) is an informational metric: it counts how
 many call sites reach each sibling manager through `ctx->xxxManager()` so that
-coupling growth around the ApplicationContext hub is visible in review.
+coupling growth around the ApplicationContext hub is visible in review. Role
+accessor reads (`ctx->scrollGrid()`, `ctx->wheelAnimator()`, …) count toward
+their underlying manager via an alias table derived from the seedXxxRoles()
+groupings in applicationcontext.h (see ctx_role_aliases).
+
+The teardown slot-null guardrail enforces the Kartend-rdzu9 invariant: every
+ManagerRefs pointer slot in applicationcontext.h must be nulled — directly or
+via its seedXxxRoles(nullptr) group — inside
+ApplicationManager::destroyManagersAndClearContextSlots(), so teardown-phase
+`if (auto *m = ctx->x())` guards can never read a dangling pointer.
 
 The currentCollectionIndex back-channel guardrail (Kartend-dl0uz.1) keeps the
 raw `int *` into MainWindow's m_currentCollectionIndex read-only: every holder
@@ -110,8 +119,12 @@ INCLUDE_RE = re.compile(r'^\s*#\s*include\s+"([^"]+)"', re.MULTILINE)
 #   ctx->scrollManager()   /   m_ctx->scrollManager()
 # (no-get-prefix, arrow form — that's the ApplicationContext accessor style;
 # controller-ctx thunks use the dotted, get-prefixed `m_ctx.getXxxManager()`
-# form and are intentionally NOT counted here). Captures the accessor name.
-CTX_FANOUT_RE = re.compile(r"\b(?:m_)?ctx\s*->\s*([a-z]\w*Manager)\s*\(\s*\)")
+# form and are intentionally NOT counted here). Captures the accessor name;
+# compute_ctx_fanout() then keeps only `*Manager` accessors plus the role
+# accessors in the ctx_role_aliases() table (scrollGrid, wheelAnimator, …),
+# which count toward their underlying manager. Anything else (isValid,
+# currentIndex, interactionState) is ignored.
+CTX_FANOUT_RE = re.compile(r"\b(?:m_)?ctx\s*->\s*([a-z]\w*)\s*\(\s*\)")
 
 # ── ApplicationContext fan-out RATCHET (Kartend-n1hpy.1) ─────────────────────
 # The fan-out report below is informational; the ratchet turns its OUTGOING
@@ -132,7 +145,15 @@ FANOUT_BASELINE_PATH = REPO / ".scripts" / "ctx-fanout-baseline.json"
 
 
 def header_area_map() -> dict[str, str]:
-    """Map each src header's basename to its top-level area.
+    """Map each src header's basename to its area.
+
+    Areas are the top-level dirs under src/ ("utils", "chrome", "ui", …)
+    except under src/modules/, where the sub-area is kept
+    ("modules/data", "modules/behavior", …) because the module layers
+    occupy DIFFERENT rungs of the DAG — behavior sits above ui/ while
+    data/input/media sit below it — so a bare "modules" target would be
+    too coarse to lint ui/'s upward edges. The layer_upward matcher in
+    main() accepts either granularity.
 
     Fails with sys.exit(2) on a basename collision — two headers under
     src/ sharing the same `*.h` basename would silently overwrite each
@@ -155,7 +176,10 @@ def header_area_map() -> dict[str, str]:
             collisions.append((hdr.name, seen[hdr.name], hdr))
         else:
             seen[hdr.name] = hdr
-            area[hdr.name] = rel.parts[0]
+            if rel.parts[0] == "modules" and len(rel.parts) > 2:
+                area[hdr.name] = f"{rel.parts[0]}/{rel.parts[1]}"
+            else:
+                area[hdr.name] = rel.parts[0]
     if collisions:
         print("check-layering: header basename collisions detected:")
         for name, first, second in collisions:
@@ -201,6 +225,16 @@ def main() -> int:
         # forbidden upward edge is core/ — previously unlinted entirely
         # (Kartend-1ha73).
         "modules/behavior": {"core"},
+        # ui/ sits above data/input/media but BELOW modules/behavior (see
+        # above) and core/, so those two are its upward edges. The area map
+        # keeps modules sub-areas distinct exactly so this rule can forbid
+        # behavior without also forbidding the sanctioned data/input/media
+        # includes.
+        "ui": {"core", "modules/behavior"},
+        # api/ is the header-only role-interface floor: it may be included
+        # from anywhere, so it may itself reach DOWN only to utils/ (value
+        # types in interface signatures). Everything else is upward.
+        "api": {"chrome", "modules", "ui", "core"},
     }
     violations: list[tuple[str, str, str, str]] = []  # (layer, file, include, target)
 
@@ -214,7 +248,12 @@ def main() -> int:
                 if base in ALLOWLIST:
                     continue
                 target = area.get(base)
-                if target in upward:
+                if target is None:
+                    continue
+                # `upward` entries come in either granularity: a bare area
+                # ("modules") forbids every sub-area, while a scoped one
+                # ("modules/behavior") forbids only that rung.
+                if target in upward or target.split("/", 1)[0] in upward:
                     rel = str(path.relative_to(REPO))
                     violations.append((layer, rel, inc, target))
 
@@ -367,15 +406,38 @@ def main() -> int:
         )
         return 1
 
+    # Seventh guardrail: every ManagerRefs slot must be nulled in
+    # ApplicationManager::destroyManagersAndClearContextSlots() (the
+    # Kartend-rdzu9 invariant documented in applicationcontext.h).
+    teardown_findings = check_context_slot_teardown()
+    if teardown_findings:
+        print(
+            "check-layering: ManagerRefs slot(s) never nulled in "
+            "ApplicationManager::destroyManagersAndClearContextSlots():"
+        )
+        for slot, hint in teardown_findings:
+            print(f"  ctx->managers.{slot}  ->  {hint}")
+        print(
+            "\nFix: null every ManagerRefs pointer slot immediately BEFORE its "
+            "owning unique_ptr resets in destroyManagersAndClearContextSlots() "
+            "(applicationmanager.cpp) — directly, or through the group's "
+            "seedXxxRoles(nullptr) teardown overload. Otherwise a "
+            "teardown-phase `if (auto *m = ctx->x())` reads a dangling pointer "
+            "(see the INVARIANT comment under ManagerRefs in "
+            "applicationcontext.h)."
+        )
+        return 1
+
     print(
-        "check-layering: OK — src/utils/, src/chrome/, and "
-        "src/modules/{data,input,media}/ stay within their layers; setup "
+        "check-layering: OK — src/utils/, src/chrome/, src/api/, src/ui/, and "
+        "src/modules/{behavior,data,input,media}/ stay within their layers; setup "
         "structs carry only ctx + non-manager refs; "
         "no legacy MainWindow::getXxxManager() callers outside mainwindow*; "
         "IMainWindow exposes only applicationManager(); ctx accessor styles "
         "stay distinct (ApplicationContext no-get-prefix, controller-ctx "
         "get-prefixed); the currentCollectionIndex back-channel is const "
-        "outside its writer allowlist"
+        "outside its writer allowlist; every ManagerRefs slot is nulled in "
+        "ApplicationManager teardown"
     )
     # Informational coupling metric (Kartend-5y7zm) — never fails the lint.
     by_manager, _ = compute_ctx_fanout()
@@ -719,7 +781,69 @@ def check_current_index_backchannel() -> list[tuple[str, int, str]]:
     return findings
 
 
-# ── Seventh concern (metric, not guardrail): ApplicationContext fan-out ──────
+# ── Seventh guardrail helpers: teardown slot-nulling completeness ────────────
+#
+# applicationcontext.h documents the INVARIANT (Kartend-rdzu9): every pointer
+# slot in ManagerRefs must be explicitly nulled — directly
+# (`ctx->managers.x = nullptr;`) or via its group's
+# `ctx->managers.seedXxxRoles(nullptr)` — inside
+# ApplicationManager::destroyManagersAndClearContextSlots() before its owner
+# resets. A slot added without that line leaves teardown-phase
+# `if (auto *m = ctx->x())` reads dangling exactly when the guard matters.
+# Until now the invariant lived only in a comment; this check makes it fail
+# the lint. Grep-level on purpose, like every other guardrail here.
+
+
+def check_context_slot_teardown() -> list[tuple[str, str]]:
+    """Find ManagerRefs slots not nulled in destroyManagersAndClearContextSlots.
+
+    Returns (slot_or_marker, explanation) findings. Empty when
+    applicationcontext.h / applicationmanager.cpp are absent (fixture trees).
+    """
+    fields, seed_overloads = _manager_refs_model()
+    if fields is None or not APPMANAGER_CPP.is_file():
+        return []
+    raw = APPMANAGER_CPP.read_text(encoding="utf-8", errors="replace")
+    text = _blank_comments(raw)
+    m = re.search(
+        r"ApplicationManager::destroyManagersAndClearContextSlots\s*\(\s*\)\s*\{", text
+    )
+    if not m:
+        return [
+            (
+                "<function>",
+                "ApplicationManager::destroyManagersAndClearContextSlots() not "
+                "found in applicationmanager.cpp — renamed? Update this check.",
+            )
+        ]
+    open_idx = m.end() - 1
+    body = text[open_idx + 1 : _brace_body_end(text, open_idx) - 1]
+    directly_nulled = set(
+        re.findall(r"ctx\s*->\s*managers\s*\.\s*(\w+)\s*=\s*nullptr\s*;", body)
+    )
+    seeds_called = set(
+        re.findall(r"ctx\s*->\s*managers\s*\.\s*(seed\w+Roles)\s*\(\s*nullptr\s*\)", body)
+    )
+    covered = set(directly_nulled)
+    for seed_name in seeds_called:
+        covered |= seed_overloads.get(seed_name, set())
+    findings: list[tuple[str, str]] = []
+    for field in fields:
+        if field in covered:
+            continue
+        group = next(
+            (name for name, nulled in seed_overloads.items() if field in nulled), None
+        )
+        hint = (
+            f"null it via ctx->managers.{group}(nullptr)"
+            if group
+            else f"add `ctx->managers.{field} = nullptr;` before its owner resets"
+        )
+        findings.append((field, hint))
+    return findings
+
+
+# ── Eighth concern (metric, not guardrail): ApplicationContext fan-out ──────
 #
 # Kartend-5y7zm. The include-layering DAG is enforced vertically, but the
 # ApplicationContext is a horizontal back-channel: any manager holding `ctx`
@@ -731,11 +855,82 @@ def check_current_index_backchannel() -> list[tuple[str, int, str]]:
 # effort (Kartend-7pawj).
 
 
+# ── ManagerRefs model: parsed once from applicationcontext.h ────────────────
+#
+# Shared by the ctx-fanout role aliasing below and the teardown-slot guardrail
+# (check_context_slot_teardown). Parsing the real header instead of keeping a
+# hand-maintained table means a new role accessor / seedXxxRoles() group is
+# picked up automatically and can't silently drift out of the lint.
+APPCONTEXT_HEADER = SRC / "utils" / "app" / "applicationcontext.h"
+APPMANAGER_CPP = SRC / "modules" / "behavior" / "application" / "applicationmanager.cpp"
+MANAGER_REFS_FIELD_RE = re.compile(r"^\s*\w[\w:]*\s*\*\s*(\w+)\s*=\s*nullptr\s*;", re.MULTILINE)
+SEED_NULL_OVERLOAD_RE = re.compile(r"void\s+(seed\w+Roles)\s*\(\s*std::nullptr_t\s*\)\s*\{")
+NULLED_FIELD_RE = re.compile(r"\b(\w+)\s*=\s*nullptr\s*;")
+
+
+def _manager_refs_model() -> tuple[list[str] | None, dict[str, set[str]]]:
+    """Parse ApplicationContext::ManagerRefs from applicationcontext.h.
+
+    Returns (fields, seed_overloads):
+      fields          every pointer slot name declared `Foo *name = nullptr;`
+                      inside ManagerRefs, or None when the header is absent
+                      (fixture trees) — callers treat that as "skip".
+      seed_overloads  seedXxxRoles-name -> set of fields its std::nullptr_t
+                      teardown overload nulls.
+    """
+    if not APPCONTEXT_HEADER.is_file():
+        return None, {}
+    raw = APPCONTEXT_HEADER.read_text(encoding="utf-8", errors="replace")
+    text = _blank_comments(raw)
+    m = re.search(r"struct\s+ManagerRefs\s*\{", text)
+    if not m:
+        return None, {}
+    open_idx = m.end() - 1
+    body = text[open_idx + 1 : _brace_body_end(text, open_idx) - 1]
+    fields = MANAGER_REFS_FIELD_RE.findall(body)
+    seed_overloads: dict[str, set[str]] = {}
+    for sm in SEED_NULL_OVERLOAD_RE.finditer(body):
+        so = sm.end() - 1
+        sbody = body[so + 1 : _brace_body_end(body, so) - 1]
+        seed_overloads[sm.group(1)] = set(NULLED_FIELD_RE.findall(sbody))
+    return fields, seed_overloads
+
+
+def ctx_role_aliases() -> dict[str, str]:
+    """Role-accessor -> underlying-manager alias table (Kartend audit).
+
+    Mirrors the seedXxxRoles() groupings in applicationcontext.h by deriving
+    them from the parsed teardown overloads: within each group the single
+    `*Manager` field is the facade, every other field is a role view of the
+    same object (scrollGrid -> scrollManager, wheelAnimator ->
+    animationManager, userActivity -> artworkManager, …). Role reads through
+    ctx must count toward their manager's breadth in the fan-out ratchet —
+    otherwise narrowing a file onto role interfaces (the recommended fix for
+    a ratchet trip) would make its coupling invisible instead of visible.
+    Empty when applicationcontext.h is absent (fixture trees).
+    """
+    _, seed_overloads = _manager_refs_model()
+    aliases: dict[str, str] = {}
+    for nulled in seed_overloads.values():
+        facades = [f for f in nulled if f.endswith("Manager")]
+        if len(facades) != 1:
+            continue  # ambiguous group — leave its members unaliased
+        for field in nulled:
+            if field != facades[0]:
+                aliases[field] = facades[0]
+    return aliases
+
+
 def compute_ctx_fanout() -> tuple[dict[str, list[tuple[str, int]]], dict[str, set[str]]]:
     """Scan src/ for `ctx->xxxManager()` sibling reads.
 
     Comments are blanked first (reusing _blank_comments) so documentation
     examples and placeholders like `ctx->xxxManager()` don't inflate counts.
+
+    Role-accessor reads (`ctx->scrollGrid()`, `ctx->wheelAnimator()`, …) are
+    counted toward their underlying manager via ctx_role_aliases(), so a file
+    that swaps `ctx->scrollManager()` for three scroll role views still shows
+    (and ratchets) as reaching one manager — not as reaching zero.
 
     Returns:
       by_manager  manager-name -> list of (relative_path, line) call sites
@@ -743,6 +938,7 @@ def compute_ctx_fanout() -> tuple[dict[str, list[tuple[str, int]]], dict[str, se
       by_file     relative_path -> set of distinct managers it reaches
                   (outgoing fan-out: how wide a single file's ctx reach is)
     """
+    aliases = ctx_role_aliases()
     by_manager: dict[str, list[tuple[str, int]]] = {}
     by_file: dict[str, set[str]] = {}
     for path in sorted(SRC.rglob("*")):
@@ -752,7 +948,12 @@ def compute_ctx_fanout() -> tuple[dict[str, list[tuple[str, int]]], dict[str, se
         text = _blank_comments(raw)
         rel = str(path.relative_to(REPO))
         for m in CTX_FANOUT_RE.finditer(text):
-            manager = m.group(1)
+            accessor = m.group(1)
+            manager = aliases.get(accessor)
+            if manager is None:
+                if not accessor.endswith("Manager"):
+                    continue  # isValid()/currentIndex()/interactionState()/…
+                manager = accessor
             line = raw[: m.start()].count("\n") + 1
             by_manager.setdefault(manager, []).append((rel, line))
             by_file.setdefault(rel, set()).add(manager)

@@ -1,0 +1,34 @@
+name: Branch Lint
+
+# Feature-branch push gate (Kartend audit): build.yml's push trigger covers
+# only main/develop, so a feature-branch push ran NOTHING until its PR opened
+# — shellcheck typos, clang-format drift, and layering violations sat
+# invisible through every WIP push. This workflow runs the exact script-lint
+# step sequence (the shared .github/actions/script-lint composite consumed by
+# build.yml's REQUIRED script-lint job too, so the two can't drift) on every
+# non-main/develop push. Sub-minute, no matrix, no build.
+#
+# Deliberately NO paths-ignore: this is not a required check, so a doc-only
+# push burning ~30s of lint is cheaper than wiring its path list into the
+# required-checks lockstep scheme (check-required-checks-consistency.py).
+
+on:
+  push:
+    branches-ignore: [ main, develop ]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Rapid WIP pushes supersede each other — always cancel the older run.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  script-lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/script-lint

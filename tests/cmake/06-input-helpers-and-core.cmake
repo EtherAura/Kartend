@@ -370,3 +370,54 @@ target_include_directories(test_titlecountshelpers PRIVATE
   ${SRC_DIR}/core
   ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
 
+# ScrollEventHandler — scroll-event wiring + user-scroll activity tracking:
+# valueChanged forwarding (connect/disconnect/re-target lifecycle), slider
+# press/release/actionTriggered activity state incl. the delayed
+# InteractionStateHolder clear, vertical-only sliderMoved forwarding, and the
+# arrow-key-animation stop interlock. Real QScrollArea under offscreen QPA.
+kartend_add_test(NAME ScrollEventHandler
+  SOURCES modules/scroll/test_scrolleventhandler.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Widgets
+)
+
+# DataSourceCoordinator — ownership/wiring bundle for ScrollManager's four
+# data-source sub-managers: construction + Qt-parent runtime guards,
+# filterChanged re-emission with real FilterManager counts, the
+# filtered-index facade, and search-overlay show/hide routing.
+kartend_add_test(NAME DataSourceCoordinator
+  SOURCES modules/scroll/test_datasourcemanager.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Widgets
+)
+
+# ItemWidgetFactory — non-widget decision logic: the extracted
+# ItemWidgetFactoryHelpers::resolvePlaceholderArtwork precedence policy and
+# the pending range-request bookkeeping (single request per unloaded chunk,
+# bounded empty-response re-requests, retry-budget resets). The
+# widget-construction paths stay integration-covered.
+kartend_add_test(NAME ItemWidgetFactory
+  SOURCES modules/scroll/test_itemwidgetfactory.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils Qt6::Widgets
+)
+
+# AlphabeticNavigationHandler — PageUp/PageDown letter-jump against a
+# file-local IScrollDataSource fake (per-index display names) + the shared
+# StubSelectionManager: forward/backward group jumps, wraparound, the
+# all-same-letter no-op, case folding, and the subcollection / virtual-folder
+# / display-name-hash name sources.
+kartend_add_test(NAME AlphabeticNavigationHandler
+  SOURCES modules/keyboard/test_alphabeticnavigationhandler.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_alphabeticnavigationhandler PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
+
+# PlaylistMenuController — context-menu playlist actions against a capturing
+# IPlaylistManager double + stubbed DialogRunners (no modal opens headlessly):
+# create/add round-trips incl. cancel/blank-name/create-failure, rename and
+# delete-with-confirmation gating, export extension handling + the M3U lossy
+# note, import format sniffing + skipped-entry reporting, and the
+# smart-playlist create/edit dialog flows.
+kartend_add_test(NAME PlaylistMenuController
+  SOURCES modules/interaction/test_playlistmenucontroller.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)

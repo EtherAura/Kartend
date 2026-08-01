@@ -1,0 +1,180 @@
+name: Script lint
+description: >
+  Fast, build-independent preflight: shellcheck, the pinned clang-format
+  check, the python/metadata guardrails, and the translation drift check.
+  Extracted from build.yml's script-lint job so the same step sequence can
+  run both as the REQUIRED `script-lint` check there (main/develop pushes +
+  PRs) and as branch-lint.yml's feature-branch push gate — without the two
+  copies drifting. Expects the repo to be checked out already.
+
+runs:
+  using: composite
+  steps:
+    - name: Verify pinned clang-format version
+      # Kartend-gv2xq: the clang-format major version lives in exactly one
+      # place — .scripts/lib/clang-format-version.sh. The package name and
+      # check command below still spell "19" literally (apt needs the
+      # literal package name), so assert they match the source of truth and
+      # fail loud if the file is bumped without updating this action.
+      shell: bash
+      run: |
+        PINNED="$(. .scripts/lib/clang-format-version.sh && echo "$KARTEND_CLANG_FORMAT_VERSION")"
+        if [ "$PINNED" != "19" ]; then
+          echo "::error::clang-format pin is $PINNED in .scripts/lib/clang-format-version.sh but this action hardcodes clang-format-19. Update .github/actions/script-lint/action.yml + Dockerfile.ci + ci-local.sh to clang-format-$PINNED."
+          exit 1
+        fi
+
+    - name: Install lint dependencies
+      # qt6-l10n-tools ships lupdate for the translation drift check below
+      # (Kartend-pnlot.3); it pulls only Qt core libs, no GUI stack.
+      shell: bash
+      run: sudo apt-get install -y --no-install-recommends shellcheck clang-format-19 appstream desktop-file-utils qt6-l10n-tools
+
+    - name: Shellcheck
+      # -x follows `source` directives into .scripts/lib/*.sh so build.sh is
+      # analysed with its modules inlined (cross-file globals resolve). The
+      # lib files are linted directly too; each documents a
+      # disable=SC2154,SC2034 because those two checks can't see the
+      # build.sh-owned globals when a module is linted in isolation.
+      shell: bash
+      run: |
+        shellcheck --version
+        shellcheck -x .scripts/*.sh .scripts/lib/*.sh \
+          .scripts/git-hooks/pre-commit .scripts/git-hooks/pre-push .scripts/git-hooks/install.sh
+
+    - name: clang-format check (v19 pin)
+      # Kartend-cifqk: moved out of maintenance-check — the format check is
+      # purely file-based (no compdb), so failing it behind a ~52-minute
+      # clang build wasted an hour per drifted PR. Same v19 pin + file walk
+      # as .scripts/lib/quality.sh's do_clang_format, but ENFORCING.
+      shell: bash
+      run: |
+        clang-format-19 --version
+        fail=0
+        while IFS= read -r -d '' file; do
+          if ! clang-format-19 --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+            echo "::error file=$file::not formatted with clang-format-19 (run .scripts/build.sh --format-apply)"
+            fail=1
+          fi
+        done < <(find src tests \( -name '*.cpp' -o -name '*.h' \) -print0)
+        exit $fail
+
+    - name: Check module layering
+      # Build-independent guardrail (moved from maintenance-check,
+      # Kartend-cifqk — same below).
+      shell: bash
+      run: python3 .scripts/check-layering.py
+
+    - name: Check QTimer::singleShot 'why' comments
+      shell: bash
+      run: python3 .scripts/check-singleshot-comments.py
+
+    - name: Check src/modules ↔ tests/modules mapping
+      shell: bash
+      run: python3 .scripts/check-test-mapping.py
+
+    - name: Check bd issue ID leakage to user-facing surfaces
+      shell: bash
+      run: python3 .scripts/check-bd-id-leakage.py
+
+    - name: Check required-checks path lists stay in lockstep
+      shell: bash
+      run: python3 .scripts/check-required-checks-consistency.py
+
+    - name: Self-test the gatekeeper lint scripts
+      shell: bash
+      run: python3 .scripts/tests/test_lint_scripts.py
+
+    - name: Validate AppStream + desktop metadata
+      shell: bash
+      run: |
+        appstreamcli validate --pedantic packaging/*.metainfo.xml
+        desktop-file-validate packaging/*.desktop
+
+    - name: Check translation-source drift (lupdate)
+      # Kartend-pnlot.3: translations/kartend_en.ts (the translator seed) is
+      # refreshed manually — `cmake --build <builddir> --target
+      # update_translations` — which is easy to forget after touching tr()
+      # strings, and nothing else in CI runs lupdate at all. Cheap,
+      # configure-less cross-check: run lupdate straight over src/ into a
+      # temp .ts and compare message counts against the committed seed.
+      #
+      # Kartend-ny9fy: this was a ::warning for fear that a project-less
+      # lupdate walk might not match the CMake qt_add_lupdate extraction,
+      # making a mismatch unable to prove staleness. That caution backfired:
+      # the step reported a real two-message delta on every main run for
+      # weeks and everyone ignored it because the job stayed green, while
+      # two user-facing strings sat untranslatable (Kartend-6gig9).
+      #
+      # It is now fatal. The two extractions can only diverge over files
+      # lupdate sees but the build does not, and src/ has no platform-gated
+      # sources at all — no if(WIN32)/if(APPLE) in any src/ CMakeLists — so
+      # the walk and the target cover the same files. The one way they do
+      # diverge, a file missing from target_sources, is itself the bug this
+      # check exists to catch, so failing on it is correct rather than a
+      # false positive. If platform-conditional sources are ever added,
+      # revisit: the honest fix then is to drive the check from the
+      # generated <build>/.lupdate project instead of a bare walk.
+      shell: bash
+      run: |
+        # lupdate lands in different places per distro: on PATH, as
+        # lupdate6 (Arch), or off PATH in /usr/lib/qt6/bin (Debian/Ubuntu's
+        # qt6-l10n-tools) — try each so the snippet also runs locally.
+        LUPDATE="$(command -v lupdate || command -v lupdate6 || true)"
+        if [ -z "$LUPDATE" ] && [ -x /usr/lib/qt6/bin/lupdate ]; then
+          LUPDATE=/usr/lib/qt6/bin/lupdate
+        fi
+        if [ -z "$LUPDATE" ]; then
+          echo "::warning::lupdate not found (qt6-l10n-tools missing from the lint dependencies?) — translation drift check skipped."
+          exit 0
+        fi
+        "$LUPDATE" -silent -recursive src -ts "$RUNNER_TEMP/kartend_fresh.ts"
+        fresh="$(grep -c '<message' "$RUNNER_TEMP/kartend_fresh.ts" || true)"
+        total="$(grep -c '<message' translations/kartend_en.ts || true)"
+        # vanished/obsolete entries are kept in the seed for translators but
+        # correspond to no current source string — exclude them.
+        stale="$(grep -cE '<translation type="(vanished|obsolete)"' translations/kartend_en.ts || true)"
+        live=$(( total - stale ))
+        echo "Fresh lupdate extract: $fresh messages; committed kartend_en.ts: $live live ($stale vanished/obsolete)."
+        if [ "$fresh" -ne "$live" ]; then
+          # Name the actual strings rather than just the counts. Kartend-6gig9
+          # sat as an ignored two-message delta for weeks and diagnosing it
+          # meant diffing the two .ts files by hand; printing the offenders
+          # makes the cause obvious from the log alone.
+          python3 - "$RUNNER_TEMP/kartend_fresh.ts" translations/kartend_en.ts <<'PYEOF'
+        import sys, xml.etree.ElementTree as ET
+
+        def messages(path):
+            root, out = ET.parse(path).getroot(), {}
+            for ctx in root.findall('context'):
+                name = ctx.findtext('name') or ''
+                for m in ctx.findall('message'):
+                    loc = m.find('location')
+                    where = f"{loc.get('filename')}:{loc.get('line')}" if loc is not None else '?'
+                    out[(name, m.findtext('source') or '')] = where
+            return out
+
+        fresh, seed = messages(sys.argv[1]), messages(sys.argv[2])
+        for label, delta, hint in (
+            ("in source but MISSING from the seed", {k: v for k, v in fresh.items() if k not in seed},
+             "these strings cannot be translated at all today"),
+            ("in the seed but NO LONGER in source", {k: v for k, v in seed.items() if k not in fresh},
+             "these are leftovers a refresh would drop"),
+        ):
+            if not delta:
+                continue
+            print(f"\n{len(delta)} message(s) {label} ({hint}):")
+            for (ctx, src), where in sorted(delta.items()):
+                print(f"  [{ctx}] {src!r}\n      {where}")
+        PYEOF
+          echo "::error file=translations/kartend_en.ts::Translation seed is stale: a fresh lupdate extract over src/ finds $fresh messages but the committed kartend_en.ts carries $live. See the message list above."
+          echo "Two things cause this, and they need different fixes:"
+          echo "  1. The seed was not refreshed after tr()/translate() strings changed."
+          echo "     Fix: cmake --build <builddir> --target update_translations, then commit translations/kartend_en.ts (docs/dev/i18n.md)."
+          echo "  2. A source file is missing from target_sources in its directory's CMakeLists.txt."
+          echo "     qt_add_lupdate only scans files listed there, so refreshing will NOT help — the strings"
+          echo "     can never reach the seed. This is Kartend-6gig9: two header-only formatters were left out"
+          echo "     of src/utils/view/CMakeLists.txt and stayed untranslatable across two seed refreshes."
+          echo "     If a refresh does not clear this, check that every file named above is listed."
+          exit 1
+        fi

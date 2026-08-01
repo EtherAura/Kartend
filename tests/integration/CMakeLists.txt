@@ -193,5 +193,16 @@ foreach(_test IN LISTS _kartend_integration_tests)
   set(_test_home "${CMAKE_BINARY_DIR}/test-homes/${_test}")
   file(MAKE_DIRECTORY "${_test_home}")
   set_property(TEST ${_test} APPEND PROPERTY ENVIRONMENT "HOME=${_test_home}")
+  if (WIN32)
+    # On Windows QStandardPaths ignores HOME: test-mode locations derive from
+    # APPDATA / LOCALAPPDATA (and USERPROFILE feeds QDir::home). Mirror the
+    # per-test override block in tests/CMakeLists.txt so the planned
+    # `ctest -j` rollout keeps the integration classes isolated from the unit
+    # tests (and from each other) on Windows too.
+    set_property(TEST ${_test} APPEND PROPERTY ENVIRONMENT
+      "APPDATA=${_test_home}/AppData/Roaming"
+      "LOCALAPPDATA=${_test_home}/AppData/Local"
+      "USERPROFILE=${_test_home}")
+  endif()
   set_property(TEST ${_test} PROPERTY TIMEOUT 900)
 endforeach()

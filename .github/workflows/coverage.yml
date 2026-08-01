@@ -100,26 +100,14 @@ jobs:
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
 
-      - name: Cache ccache
-        uses: actions/cache@v6
+      - name: Set up ccache
+        # Cache-key policy, and the accepted staleness that comes with
+        # it, are documented once at the ccache step in build.yml
+        # (Kartend-pcc65). Do not chase the hit rate here without
+        # reading that first.
+        uses: ./.github/actions/setup-ccache
         with:
-          # Cache-key policy, and the accepted staleness that comes with
-          # it, are documented once at the ccache step in build.yml
-          # (Kartend-pcc65). Do not chase the hit rate here without
-          # reading that first.
-          path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-coverage-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-coverage-
-            ${{ runner.os }}-ccache-
-
-      - name: Configure ccache
-        run: |
-          ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=2G
-          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
-          ccache --set-config=sloppiness=pch_defines,time_macros
-          ccache --zero-stats
+          key-infix: ccache-coverage
 
       - name: Configure CMake (Debug + coverage)
         run: |

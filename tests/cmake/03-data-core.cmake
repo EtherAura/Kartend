@@ -47,7 +47,7 @@ kartend_add_test(NAME SessionManager
 # QueryManager cancellation semantics test
 kartend_add_test(NAME QueryManagerCancelScan
   SOURCES modules/query/test_querymanager_cancel_scan.cpp
-          modules/query/workersignalspy.h
+          support/workersignalspy.h
   LINK kartend_data kartend_api kartend_utils
 )
 
@@ -90,7 +90,7 @@ kartend_add_test(NAME QueryManagerCache
 # Reuses the same query-stack source list as QueryManagerCancelScan.
 kartend_add_test(NAME QueryManagerBrokenSymlinks
   SOURCES modules/query/test_querymanager_broken_symlinks.cpp
-          modules/query/workersignalspy.h
+          support/workersignalspy.h
   LINK kartend_data kartend_api kartend_utils
 )
 
@@ -100,7 +100,7 @@ kartend_add_test(NAME QueryManagerBrokenSymlinks
 # QueryManagerBrokenSymlinks.
 kartend_add_test(NAME QueryManagerAbsPath
   SOURCES modules/query/test_querymanager_abspath.cpp
-          modules/query/workersignalspy.h
+          support/workersignalspy.h
   LINK kartend_data kartend_api kartend_utils
 )
 
@@ -109,7 +109,7 @@ kartend_add_test(NAME QueryManagerAbsPath
 # then {artworkDir}/video/, the single-root layout the scraper writes to.
 kartend_add_test(NAME QueryManagerItemDetailVideo
   SOURCES modules/query/test_querymanager_itemdetail_video.cpp
-          modules/query/workersignalspy.h
+          support/workersignalspy.h
   LINK kartend_data kartend_api kartend_utils
 )
 
@@ -119,7 +119,7 @@ kartend_add_test(NAME QueryManagerItemDetailVideo
 # stale-reply dropping, and still replies (empty) for an empty uuid.
 kartend_add_test(NAME QueryManagerStateFlags
   SOURCES modules/query/test_querymanager_stateflags.cpp
-          modules/query/workersignalspy.h
+          support/workersignalspy.h
   LINK kartend_data kartend_api kartend_utils
 )
 
@@ -128,7 +128,7 @@ kartend_add_test(NAME QueryManagerStateFlags
 # Reuses the same query-stack source list as QueryManagerCancelScan.
 kartend_add_test(NAME QueryManagerCrossCollectionCount
   SOURCES modules/query/test_querymanager_cross_collection_count.cpp
-          modules/query/workersignalspy.h
+          support/workersignalspy.h
   LINK kartend_data kartend_api kartend_utils
 )
 
@@ -136,7 +136,7 @@ kartend_add_test(NAME QueryManagerCrossCollectionCount
 # invalidate the query worker's sorted-items cache (Kartend-6r4g2).
 kartend_add_test(NAME QueryManagerCacheInvalidation
   SOURCES modules/query/test_querymanager_cache_invalidation.cpp
-          modules/query/workersignalspy.h
+          support/workersignalspy.h
   LINK kartend_data kartend_api kartend_utils
 )
 
@@ -146,13 +146,13 @@ kartend_add_test(NAME QueryManagerCacheInvalidation
 # WHERE clauses.
 kartend_add_test(NAME QueryManagerCrossCollectionTokens
   SOURCES modules/query/test_querymanager_cross_collection_tokens.cpp
-          modules/query/workersignalspy.h
+          support/workersignalspy.h
   LINK kartend_data kartend_api kartend_utils
 )
 
 kartend_add_test(NAME QueryManagerShellCollectionSort
   SOURCES modules/query/test_querymanager_shell_collection_sort.cpp
-          modules/query/workersignalspy.h
+          support/workersignalspy.h
   LINK kartend_data kartend_api kartend_utils
 )
 
@@ -161,7 +161,7 @@ kartend_add_test(NAME QueryManagerShellCollectionSort
 # that are invisible at small N would surface.
 kartend_add_test(NAME QueryManagerFetchRangePaging
   SOURCES modules/query/test_querymanager_fetchrange_paging.cpp
-          modules/query/workersignalspy.h
+          support/workersignalspy.h
   LINK kartend_data kartend_api kartend_utils
 )
 
@@ -193,6 +193,16 @@ kartend_add_test(NAME QueryManagerCanonicalCache
 # cleanup, and thread-safe path-resolution helpers.
 kartend_add_test(NAME DatabaseManager
   SOURCES modules/database/test_databasemanager.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# DatabaseManager failure injection: unopenable media.db (directory / 0000
+# perms), garbage-bytes media.db (lazy open, first-statement NOTADB, no
+# destructive rewrite), and the clearCollection throw branch driven by
+# dropping the items table through an inspector connection (transaction
+# rollback proof). Real SQLite; the injections poison the file/schema only.
+kartend_add_test(NAME DatabaseManagerFailures
+  SOURCES modules/database/test_databasemanager_failures.cpp
   LINK kartend_data kartend_api kartend_utils
 )
 

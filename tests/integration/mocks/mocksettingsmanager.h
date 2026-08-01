@@ -31,8 +31,13 @@ public:
   void setSeedCollections(QList<CollectionConfig> seed) { m_seedCollections = std::move(seed); }
   [[nodiscard]] QStringList lastCollectionUuidCollisions() const override { return {}; }
   ErrorUtils::Result<void> saveCollections(const QList<CollectionConfig> &) override {
+    ++m_saveCollectionsCalls;
     return ErrorUtils::Result<void>::success();
   }
+  /// Number of saveCollections invocations. Burst-coalescing tests assert a
+  /// storm of interactive toggles produces one debounced write, not one per
+  /// click — the write itself stays dropped like every other mock save.
+  [[nodiscard]] int saveCollectionsCalls() const { return m_saveCollectionsCalls; }
   void loadGeneralSettings(GeneralSettings &settings) override {
     // Mirror MainWindowFixture's sandbox pre-seed: without this, the default
     // firstRunComplete=false queues the modal first-run wizard during
@@ -62,6 +67,7 @@ public:
 private:
   QHash<int, int> m_lastSelected;
   QList<CollectionConfig> m_seedCollections;
+  int m_saveCollectionsCalls = 0;
 };
 
 } // namespace KartendTest

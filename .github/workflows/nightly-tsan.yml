@@ -308,6 +308,77 @@ jobs:
           cd build/bench
           ctest -L benchmark --output-on-failure
 
+      # Rolling baseline for night-over-night diffing (below). The primary key
+      # is unique per run so every night SAVES a fresh table; restore-keys'
+      # prefix match then restores the most recent previous night. Keyed
+      # per-branch so a manual workflow_dispatch from a topic branch doesn't
+      # poison main's baseline (restore still falls through to any branch's
+      # table rather than starting blind).
+      - name: Restore previous benchmark baseline
+        uses: actions/cache/restore@v6
+        with:
+          path: bench-baseline
+          key: ${{ runner.os }}-bench-baseline-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-bench-baseline-${{ github.ref_name }}-
+            ${{ runner.os }}-bench-baseline-
+
+      - name: Compare against previous baseline
+        # Day-over-day regression visibility (the summary table below shows
+        # absolutes, but nothing compared runs). Parse the QBENCHMARK RESULT
+        # pairs into "<suite::slot> <value> <unit>" rows, diff against the
+        # restored table, and WARN on slots that got >2.0x slower — a
+        # deliberately generous threshold because shared-runner wallclock is
+        # too noisy to gate on. Warn-only by construction: every path exits 0
+        # and only writes summary/annotation text.
+        run: |
+          LOG=build/bench/Testing/Temporary/LastTest.log
+          mkdir -p bench-current bench-baseline
+          if [ -f "$LOG" ]; then
+            awk '/^RESULT/ { name=$3; if (getline > 0) print name, $1, $2 }' "$LOG" \
+              > bench-current/results.txt
+          else
+            : > bench-current/results.txt
+          fi
+          {
+            echo "## Benchmark baseline comparison"
+            echo
+            if [ ! -s bench-baseline/results.txt ]; then
+              echo "_No previous baseline in the cache — this run seeds it; comparisons start next night._"
+            elif [ ! -s bench-current/results.txt ]; then
+              echo "_No RESULT lines in this run's log — baseline kept from the previous run._"
+            else
+              # Join on slot name; ratio in awk (shell has no float math).
+              # Unit mismatches (msecs vs instructions after a harness change)
+              # are skipped rather than mis-scaled.
+              awk 'NR==FNR { prev[$1]=$2; unit[$1]=$3; next }
+                   {
+                     if (!($1 in prev)) { printf "- `%s`: new slot (no baseline)\n", $1; next }
+                     if (unit[$1] != $3) { printf "- `%s`: unit changed %s -> %s, skipped\n", $1, unit[$1], $3; next }
+                     if (prev[$1] + 0 == 0) next
+                     ratio = ($2 + 0) / (prev[$1] + 0)
+                     if (ratio > 2.0) {
+                       printf "- :warning: `%s` is %.2fx slower than the previous run (%s -> %s %s)\n", $1, ratio, prev[$1], $2, $3
+                       printf "::warning title=Benchmark regression::%s is %.2fx slower than the previous nightly (%s -> %s %s)\n", $1, ratio, prev[$1], $2, $3 > "/dev/stderr"
+                       flagged = 1
+                     }
+                   }
+                   END { if (!flagged) print "No slot regressed past the 2.0x threshold against the previous run." }' \
+                bench-baseline/results.txt bench-current/results.txt
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          # Current table becomes the next run's baseline (only when this run
+          # actually produced one — an empty table must not wipe the baseline).
+          if [ -s bench-current/results.txt ]; then
+            cp bench-current/results.txt bench-baseline/results.txt
+          fi
+
+      - name: Save benchmark baseline for the next run
+        uses: actions/cache/save@v6
+        with:
+          path: bench-baseline
+          key: ${{ runner.os }}-bench-baseline-${{ github.ref_name }}-${{ github.run_id }}
+
       - name: Publish results to step summary
         # QBENCHMARK emits two-line "RESULT : <suite::slot>:" + walltime
         # pairs; ctest stores every test's stdout in LastTest.log regardless

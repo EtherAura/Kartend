@@ -247,6 +247,18 @@ foreach(_test IN LISTS _kartend_tests)
   set(_test_home "${CMAKE_BINARY_DIR}/test-homes/${_test}")
   file(MAKE_DIRECTORY "${_test_home}")
   set_property(TEST ${_test} APPEND PROPERTY ENVIRONMENT "HOME=${_test_home}")
+  if (WIN32)
+    # On Windows QStandardPaths ignores HOME: test-mode locations derive from
+    # APPDATA / LOCALAPPDATA (and USERPROFILE feeds QDir::home and anything
+    # resolving "~"). Point all three into the same per-test sandbox so the
+    # planned `ctest -j` rollout gets the same cross-process isolation the
+    # HOME override provides on POSIX — without this, parallel Windows tests
+    # share one AppData tree and clobber each other's INI/SQLite state.
+    set_property(TEST ${_test} APPEND PROPERTY ENVIRONMENT
+      "APPDATA=${_test_home}/AppData/Roaming"
+      "LOCALAPPDATA=${_test_home}/AppData/Local"
+      "USERPROFILE=${_test_home}")
+  endif()
   get_test_property(${_test} TIMEOUT _test_timeout)
   if (NOT _test_timeout)
     set_property(TEST ${_test} PROPERTY TIMEOUT 300)

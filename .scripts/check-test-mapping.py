@@ -80,14 +80,17 @@ INTEGRATION_ONLY: set[str] = {
     # so no INTEGRATION_ONLY entry is needed.
 }
 
-# src/chrome .cpp that are intentionally NOT unit-tested — headless-hostile
+# Source .cpp that are intentionally NOT unit-tested — headless-hostile
 # QWidget paint/lifecycle shells and decode paths (docs/dev/testing.md: "test
 # the extractable helpers, leave the QWidget shell"). Keyed by repo-relative
 # path with a one-line reason. The advisory coverage report below segregates
 # these from not-yet-triaged gaps, so anything still printed as an "unexempted
-# gap" is a NEW, unexamined hole rather than a known-accepted one. Scoped to
-# src/chrome for now; src/core UI-coordinator gaps stay listed (a broader
-# category, much of it integration-tested — left visible deliberately).
+# gap" is a NEW, unexamined hole rather than a known-accepted one. Eligible
+# paths are anywhere the report scans — src/chrome widgets AND src/modules
+# widget shells (a feature folder's QWidget partials, e.g. a header/overlay
+# widget, are the same test-the-helpers-not-the-shell category). src/core
+# UI-coordinator gaps stay listed (a broader category, much of it
+# integration-tested — left visible deliberately).
 #
 # THIS DICT IS A RATCHET, NOT A PARKING LOT (Kartend-pnlot.11). An exemption
 # means "no extractable logic here today", not "never testable". So:
@@ -100,8 +103,10 @@ INTEGRATION_ONLY: set[str] = {
 #     just that the file is untested.
 #
 # The metric is the entry count, and it should trend down. It was 14 when
-# this note was written (2026-07-25); if you find it materially higher, the
-# ratchet has slipped and that is worth a look rather than a shrug.
+# this note was written (2026-07-25); +1 on 2026-07-31 when the coverage
+# report was extended to src/modules (first module widget-shell entry). If
+# you find it materially higher, the ratchet has slipped and that is worth a
+# look rather than a shrug.
 COVERAGE_EXEMPT: dict[str, str] = {
     "src/chrome/items/itemwidget.cpp": "QWidget item shell; paint/lifecycle, no extractable logic",
     "src/chrome/items/itemwidgetlifecycle.cpp": "QWidget lifecycle partial of itemwidget",
@@ -116,7 +121,18 @@ COVERAGE_EXEMPT: dict[str, str] = {
     "src/chrome/media/videopreviewwidget.cpp": "QWidget video surface; needs a live decoder",
     "src/chrome/media/videothumbnailextractor.cpp": "FFmpeg/GPU decode path; not headless-testable",
     "src/chrome/overlays/artworkpreviewoverlay.cpp": "QWidget hover overlay; paint/geometry shell",
-    "src/chrome/overlays/overlaylayermanager.cpp": "QWidget z-order/layout manager; runtime-only",
+    # Renamed from overlaylayermanager.cpp (2026-07-31). Its restack/reregister
+    # contract IS asserted — by the OverlayZOrderRegistry cases hosted in
+    # tests/ui/widgets/test_coverflowwidget.cpp — but the name-match report
+    # cannot credit a cross-cutting suite, so the entry stays to keep the gap
+    # list honest rather than to declare it untestable.
+    "src/chrome/overlays/overlayzorderregistry.cpp": (
+        "covered by the OverlayZOrderRegistry cases in test_coverflowwidget.cpp"
+    ),
+    # First src/modules widget-shell entry (the report scans src/modules too):
+    "src/modules/input/scroll/listheaderwidget.cpp": (
+        "QWidget list-header shell; column paint + drag-resize hit-testing"
+    ),
 }
 
 
@@ -263,13 +279,18 @@ def check_test_registration() -> bool:
 
 
 def report_core_chrome_coverage() -> None:
-    """Non-fatal visibility report for src/core and src/chrome (Kartend-tu2hq).
+    """Non-fatal visibility report for src/core, src/chrome and src/modules
+    (Kartend-tu2hq; extended to src/modules leaf features).
 
-    Unlike src/modules (per-feature test folders) and tests/utils (cluster
-    mirror), src/core controllers and src/chrome widgets have no structural
-    test-mapping rule, so missing coverage there is invisible. This report
-    lists each .cpp with no matching tests/**/test_<stem>.cpp (a unit OR an
-    integration test file named after it) so the gap is at least tracked.
+    src/core controllers and src/chrome widgets have no structural
+    test-mapping rule at all, so missing coverage there is invisible.
+    src/modules DOES have the per-feature folder rule above, but that only
+    guarantees the folder exists — a 20-TU feature with one test file passes
+    it, so per-file gaps inside a feature were just as invisible. This report
+    lists each .cpp (for src/modules: every .cpp under each
+    src/modules/<group>/<feature>/ leaf) with no matching
+    tests/**/test_<stem>.cpp (a unit OR an integration test file named after
+    it) so the gap is at least tracked.
 
     Intentionally advisory: it prints but never changes the exit status. Many
     of these are genuinely hard to unit-test (UI-coordinator code exercised via
@@ -294,13 +315,17 @@ def report_core_chrome_coverage() -> None:
     # foo under a different name, and does NOT verify the test asserts anything
     # about foo. Read 'covered' as "has a same-named test file", not "tested".
     print(
-        "check-test-mapping: NOTE — core/chrome coverage below is name-match "
-        "only (src/foo.cpp <-> test_foo.cpp); it does not credit cross-cutting "
+        "check-test-mapping: NOTE — the coverage reports below are name-match "
+        "only (src/foo.cpp <-> test_foo.cpp); they do not credit cross-cutting "
         "suites or verify assertions."
     )
 
     seen_exempt: set[str] = set()
-    for area, label in ((SRC_CORE, "src/core"), (SRC_CHROME, "src/chrome")):
+    for area, label in (
+        (SRC_CORE, "src/core"),
+        (SRC_CHROME, "src/chrome"),
+        (SRC_MODULES, "src/modules"),
+    ):
         if not area.is_dir():
             continue
         cpps = sorted(area.rglob("*.cpp"))

@@ -4,7 +4,7 @@
 # Backed by .actrc at the repo root, which pins the runner image, container
 # resource caps to match GHA's ubuntu-24.04 runner (4 vCPUs, 16GB), and the
 # artifact server path. The wrapper here adds:
-#   * version check (act 0.2.86+ is required for actions/cache@v5 = node24)
+#   * version check (act 0.2.86+ is required for actions/cache@v6 = node24)
 #   * artifact-server dir auto-create
 #   * friendly subcommands so you don't have to remember exact job IDs
 #
@@ -24,8 +24,9 @@
 #
 # Faster Docker-direct variants (skip act overhead — same image, much quicker
 # iteration when chasing CI failures). Require `docker build -f
-# .scripts/Dockerfile.ci -t kartend-ci .` once; subcommands assume the image
-# exists and re-use the warm cache.
+# .scripts/Dockerfile.ci -t kartend-ci .` once; each docker:* subcommand
+# checks the image exists first (require_ci_image) and prints that build
+# command when it doesn't, then re-uses the warm cache on later runs.
 #   .scripts/ci-local.sh docker:tidy     # maintenance-check via kartend-ci
 #   .scripts/ci-local.sh docker:build    # Release+clang build + ctest via kartend-ci
 #   .scripts/ci-local.sh docker:tsan     # TSan build + ctest via kartend-ci
@@ -34,7 +35,7 @@
 # Why prune exists:
 #   `act` creates one named Docker volume per job+matrix cell (e.g.
 #   `act-Build-and-Test-build-<hash>`) and REUSES it on subsequent runs.
-#   `actions/checkout@v6` is emulated as a plain `docker cp` of the host
+#   `actions/checkout@v7` is emulated as a plain `docker cp` of the host
 #   working tree into the container — files in the volume that no longer
 #   exist on host (e.g. a header that was renamed in a refactor) are NOT
 #   deleted by the cp, so the build sees BOTH the current source AND the
@@ -57,7 +58,7 @@ info() { printf '\033[36mci-local:\033[0m %s\n' "$*" >&2; }
 # Find act, preferring a newer one in ~/.local/bin over a possibly-stale
 # system-packaged version. The Ubuntu/Gentoo-shipped act tends to lag the
 # upstream release, and act 0.2.64 (Ubuntu noble's current version at time
-# of writing) doesn't speak the node24 runtime that actions/cache@v5 needs.
+# of writing) doesn't speak the node24 runtime that actions/cache@v6 needs.
 find_act() {
   for candidate in "$HOME/.local/bin/act" "$(command -v act 2>/dev/null || true)"; do
     if [ -z "$candidate" ] || [ ! -x "$candidate" ]; then continue; fi
@@ -146,6 +147,18 @@ prune_act_volumes() {
   echo "$volumes" | xargs -r docker volume rm >/dev/null
 }
 
+# Fail fast (with the exact build command) when a docker:* subcommand is
+# invoked before the kartend-ci image has ever been built — ci-local.md
+# promises this check, and without it the first-use failure was docker's
+# opaque "Unable to find image 'kartend-ci:latest' locally" pull error.
+require_ci_image() {
+  if ! docker image inspect kartend-ci >/dev/null 2>&1; then
+    err "kartend-ci image not found. Build it once, then re-run:"
+    err "  docker build -f .scripts/Dockerfile.ci -t kartend-ci ."
+    exit 2
+  fi
+}
+
 # Map a subcommand to the volume-name pattern act will use for its jobs.
 # Tight matching keeps unrelated jobs warm across a focused re-run.
 volume_pattern_for() {
@@ -154,7 +167,9 @@ volume_pattern_for() {
     no-zstd)                                                            echo "act-Build-and-Test-build-no-zstd-" ;;
     asan|sanitizers)                                                    echo "act-Build-and-Test-sanitizers-" ;;
     tsan|thread-sanitizer)                                              echo "act-Build-and-Test-thread-sanitizer-" ;;
-    coverage|cov)                                                       echo "act-Build-and-Test-coverage-" ;;
+    # coverage lives in its own workflow (coverage.yml, `name: Coverage`),
+    # so its volumes follow that workflow's name, not Build-and-Test's.
+    coverage|cov)                                                       echo "act-Coverage-coverage-" ;;
     tidy|maintenance|maintenance-check)                                 echo "act-Build-and-Test-maintenance-check-" ;;
     all|"")                                                             echo "act-Build-and-Test-" ;;
     *)                                                                  echo "" ;;
@@ -238,7 +253,11 @@ case "$ARG" in
     info "      will succeed; only the upload step at the end will fail."
     info "      That step works correctly on real GitHub Actions."
     prune_act_volumes "$(volume_pattern_for "$ARG")"
-    exec "$ACT_BIN" -j coverage "$@"
+    # The coverage job lives in coverage.yml, not the build.yml that .actrc
+    # pins via -W. CLI flags are appended after .actrc's contents and act's
+    # flag parsing is last-one-wins, so this -W overrides the .actrc default
+    # for exactly this invocation.
+    exec "$ACT_BIN" -W .github/workflows/coverage.yml -j coverage "$@"
     ;;
   tidy|maintenance|maintenance-check)
     prune_act_volumes "$(volume_pattern_for "$ARG")"
@@ -255,8 +274,9 @@ case "$ARG" in
   #
   # The image (kartend-ci) is built once via `docker build -f
   # .scripts/Dockerfile.ci -t kartend-ci .` — re-running auto-skips when the
-  # cache is warm. Subcommands here assume the image already exists; build
-  # it explicitly if `docker images kartend-ci` is empty.
+  # cache is warm. Each subcommand below calls require_ci_image first, so a
+  # missing image fails fast with that build command instead of docker's
+  # opaque registry-pull error.
   #
   # Kartend-75w9n — every docker:* run below passes
   #   --user "$(id -u):$(id -g)" -e HOME=/tmp
@@ -274,8 +294,13 @@ case "$ARG" in
   # containers are --rm, so the ccache directory has never survived a run and
   # no cross-run hit rate is being given up here.
   docker:tidy|docker:maintenance|docker:maintenance-check)
+    require_ci_image
     info "running kartend-ci maintenance-check (clang-tidy + format + IWYU + cppcheck)"
-    info "this matches the CI maintenance-check job exactly — same image, same Qt, same clang version"
+    # Same image / Qt / clang as CI's maintenance-check, but NOT an exact
+    # match: this runs the full advisory analysis trio over src/ without
+    # test TUs, while CI configures --tests and runs a diff-scoped (PR) or
+    # curated enforcing (push) clang-tidy pass — see docs/dev/ci-local.md.
+    info "same image, Qt, and clang as CI maintenance-check (analysis scope differs — see ci-local.md)"
     exec docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
       -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
       # Kartend-75w9n: the clang-format pin used to be symlinked into
@@ -308,6 +333,7 @@ case "$ARG" in
     ;;
 
   docker:build|docker:release|docker:release-clang)
+    require_ci_image
     info "running kartend-ci Release+clang build (matches CI's build (Release, clang) matrix cell)"
     exec docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
       -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
@@ -326,6 +352,7 @@ case "$ARG" in
     ;;
 
   docker:tsan|docker:thread-sanitizer)
+    require_ci_image
     info "running kartend-ci TSan build (matches CI thread-sanitizer job)"
     exec docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
       -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '

@@ -41,6 +41,9 @@ pgo_use=false
 pgo_build=false
 keep_builds=false
 use_ccache=true
+# Repeatable --cmake-arg=<ARG> collector; folded into extra_cmake_args below
+# so the args reach every mode's configure invocation (incl. both PGO passes).
+user_cmake_args=()
 build_tests=false
 run_tests=false
 coverage_build=false
@@ -89,6 +92,7 @@ for arg in "$@"; do
     --pgo-use)     pgo_use=true ;;
     --pgo)         pgo_build=true ;;
     --keep-builds) keep_builds=true ;;
+    --cmake-arg=*) user_cmake_args+=("${arg#--cmake-arg=}") ;;
     --no-ccache)   use_ccache=false ;;
     --clang)       force_clang=true ;;
     --analysis=*)  analysis_mode="${arg#--analysis=}" ;;
@@ -221,11 +225,18 @@ if $use_ccache && command -v ccache >/dev/null 2>&1; then
   ccache_available=true
 fi
 
-# Common cmake args injected after every cmake_args= declaration. Currently
-# only --prefix; add future cross-cutting args here.
+# Common cmake args injected after every cmake_args= declaration: --prefix
+# plus any repeatable --cmake-arg=<ARG> passthroughs. Injection lands after
+# the mode's base declaration (so a user -D overrides those, last-one-wins)
+# but before the flags derived from other CLI options (--tests, --coverage,
+# --no-ccache, sanitizers), which therefore still win over a conflicting
+# --cmake-arg. Add future cross-cutting args here.
 extra_cmake_args=()
 if [ -n "$install_prefix" ]; then
   extra_cmake_args+=(-DCMAKE_INSTALL_PREFIX="$install_prefix")
+fi
+if [ ${#user_cmake_args[@]} -gt 0 ]; then
+  extra_cmake_args+=("${user_cmake_args[@]}")
 fi
 
 # --uninstall: standalone path. Pick the most recent build dir under build/
@@ -388,6 +399,7 @@ build_marker_file=".kartend-build-dir"
 if $maintenance_build; then
   ALL_STEPS=(); NEXT_STEP_IDX=0; PROGRESS_CUR=0
   plan_step "Prepare build directory"
+  plan_step "Python guardrail checks"
   plan_step "Configure"
   plan_step "Build"
   if $run_tests; then
@@ -438,6 +450,18 @@ if $maintenance_build; then
   prep_tmp_log="$(mktemp "$root_dir/build/${build_type}.prepare.XXXX.log")"
   run_step "Prepare build directory" "$prep_tmp_log" maybe_prepare_build_dir "$build_dir" "$logs_dir" "$build_type"
   mkdir -p "$logs_dir" && mv -f "$prep_tmp_log" "$logs_dir/prepare.log"
+
+  # Python guardrail lints (do_python_guardrails, lib/quality.sh): the same
+  # check-*.py set CI's script-lint job enforces. Build-independent and <1s,
+  # so they run BEFORE Configure — a layering violation fails here in a
+  # second instead of after the ~10-min maintenance build. run_quality_check
+  # (not run_step) so a python3-less machine records "skipped" in the
+  # ran-vs-skipped summary; the explicit exit below still makes real
+  # findings fatal, matching CI.
+  if ! run_quality_check "Python guardrail checks" "$logs_dir/python-guardrails.log" do_python_guardrails "$root_dir"; then
+    err_msg "Python guardrail checks failed (layering / singleshot-comments / test-mapping / bd-id-leakage / required-checks). See ${logs_dir#"$root_dir/"}/python-guardrails.log"
+    exit 1
+  fi
 
   cmake_args=(
     -S "$root_dir"

@@ -129,24 +129,50 @@ jobs:
             | tee ${{ steps.version.outputs.tarball }}.sha256
 
       # ─── Binary .deb via CPack ──────────────────────────────────────────
-      # Same package set as build.yml's gcc Release matrix cell; pulseaudio is
-      # dropped because the release job doesn't run tests. dpkg-dev is bundled
-      # in the runner image so CPACK_DEBIAN_PACKAGE_SHLIBDEPS resolves cleanly.
+      # Feature-dev package set mirrors build.yml's tested `build (Release,
+      # gcc)` cell (libzstd-dev, libarchive-dev, libsdl2-dev, qtkeychain-
+      # qt6-dev) so the shipped .deb carries the same optional backends CI
+      # tests. Test/tooling-only packages from that cell (pulseaudio, unzip,
+      # p7zip-full, ccache, clang, lld) are dropped — this job runs no tests.
+      # dpkg-dev is bundled in the runner image so
+      # CPACK_DEBIAN_PACKAGE_SHLIBDEPS resolves cleanly.
 
       - name: Install build dependencies for .deb
         uses: ./.github/actions/install-deps
         with:
-          packages: g++ cmake ninja-build qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev
+          packages: g++ cmake ninja-build qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev libsdl2-dev qtkeychain-qt6-dev
 
       - name: Configure release build
         run: |
+          set -euo pipefail
+          # The KARTEND_ENABLE_* flags below only *allow* detection — cmake/
+          # OptionalBackends.cmake probes with pkg_check_modules(... QUIET),
+          # so a missing -dev package silently falls back to the degraded
+          # path. Passing them explicitly plus grepping the configure
+          # transcript for the STATUS lines the root CMakeLists prints makes
+          # the .deb's feature set asserted rather than accidental: a package
+          # dropped from the install list above fails the release here
+          # instead of shipping a .deb quietly missing features.
           cmake -S . -B build/release -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/usr \
             -DKARTEND_BUILD_TESTS=OFF \
             -DKARTEND_ENABLE_CCACHE=OFF \
             -DKARTEND_MAINTENANCE=OFF \
-            -DKARTEND_PORTABLE_RELEASE=ON
+            -DKARTEND_PORTABLE_RELEASE=ON \
+            -DKARTEND_ENABLE_ZSTD=ON \
+            -DKARTEND_ENABLE_LIBARCHIVE=ON \
+            -DKARTEND_ENABLE_SDL2_GAMEPAD=ON \
+            2>&1 | tee configure.log
+          for want in \
+            "using SDL2 gamepad backend" \
+            "zstd found" \
+            "libarchive found"; do
+            if ! grep -qF "$want" configure.log; then
+              echo "::error::Configure output missing '$want' — the .deb would ship without this feature. Check the apt package list in the install step above."
+              exit 1
+            fi
+          done
 
       - name: Build kartend
         run: cmake --build build/release --parallel

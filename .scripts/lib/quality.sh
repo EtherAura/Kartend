@@ -67,6 +67,34 @@ sanitize_compdb() {
   ' "$in" > "$out.tmp" && mv "$out.tmp" "$out"
 }
 
+# Python guardrail lints — the same check-*.py scripts CI's script-lint job
+# enforces (layering DAG + DI invariants, singleShot "why" comments, the
+# src<->tests mapping, bd-ID leakage, required-checks path lockstep). They are
+# build-independent and finish in well under a second, so --maintenance runs
+# them up front: CONTRIBUTING documents the maintenance gate as including the
+# layering lint, and before this helper existed that claim was only true in
+# CI. Prints "skipped: ..." (and still returns 0) when python3 is absent so
+# run_quality_check records the skip in the ran-vs-skipped summary instead of
+# reporting a green gate that ran nothing.
+do_python_guardrails() {
+  local rootdir="$1"
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "skipped: python3 not found — the guardrail lints still run in CI's script-lint job"
+    return 0
+  fi
+  local script rc=0
+  for script in \
+    check-layering.py \
+    check-singleshot-comments.py \
+    check-test-mapping.py \
+    check-bd-id-leakage.py \
+    check-required-checks-consistency.py; do
+    echo "== $script =="
+    python3 "$rootdir/.scripts/$script" || rc=1
+  done
+  return "$rc"
+}
+
 # Optional tool runners
 #
 # Kartend-z4ev0: when KARTEND_TIDY_ONLY_FILES is set (a path to a

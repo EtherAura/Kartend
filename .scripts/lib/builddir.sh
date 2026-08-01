@@ -35,15 +35,17 @@ prune_other_builds() {
     [ -d "$d" ] || continue
     # Never treat a symlink as a prunable build dir (Kartend-pnlot.9): the
     # `current` convenience link resolves into a real build dir, so the
-    # marker/CMakeCache checks below would match through it.
+    # marker check below would match through it.
     [ -L "$d" ] && continue
     [ "$(basename "$d")" = "$keep_basename" ] && continue
-    # Prune dirs created by this script (.kartend-build-dir marker) AND
-    # any dir that looks like a CMake build dir (CMakeCache.txt) so
-    # hand-named legacy build folders don't accumulate (Kartend-bkq3).
-    # Conservative: dirs without either signal are left alone — could be
-    # the user's own scratch space.
-    if [ -f "$d/$build_marker_file" ] || [ -f "$d/CMakeCache.txt" ]; then
+    # Prune ONLY dirs this script created, identified by the marker file
+    # write_build_marker drops on prepare. A bare CMakeCache.txt used to be
+    # treated as an equivalent signal, but that deleted build dirs the
+    # script never owned — hand-configured cmake dirs, IDE trees, and the
+    # ci-local.sh docker builds (build/Release-clang, build/TSan) all carry
+    # a CMakeCache.txt with no marker. Anything without the marker is left
+    # alone now; it is not ours to delete.
+    if [ -f "$d/$build_marker_file" ]; then
       rm -rf -- "$d"
     fi
   done

@@ -49,166 +49,17 @@ jobs:
     # python/metadata guardrails. Split out from maintenance-check (~52 min)
     # so a shell typo / one-line formatting drift / layering violation fails
     # in ~30s instead of costing a contributor an hour of CI (Kartend-cifqk).
+    # The step sequence lives in the script-lint composite action
+    # (.github/actions/script-lint) so branch-lint.yml can run the identical
+    # checks on feature-branch pushes without a second drifting copy. This
+    # job's NAME stays `script-lint` — it is a REQUIRED check on main
+    # (Kartend-gy0o4); a composite keeps the check name intact where a
+    # reusable workflow would rename it to `script-lint / <job>`.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
-      - name: Verify pinned clang-format version
-        # Kartend-gv2xq: the clang-format major version lives in exactly one
-        # place — .scripts/lib/clang-format-version.sh. The package name and
-        # check command below still spell "19" literally (apt needs the
-        # literal package name), so assert they match the source of truth and
-        # fail loud if the file is bumped without updating this workflow.
-        run: |
-          PINNED="$(. .scripts/lib/clang-format-version.sh && echo "$KARTEND_CLANG_FORMAT_VERSION")"
-          if [ "$PINNED" != "19" ]; then
-            echo "::error::clang-format pin is $PINNED in .scripts/lib/clang-format-version.sh but this workflow hardcodes clang-format-19. Update .github/workflows/build.yml + Dockerfile.ci + ci-local.sh to clang-format-$PINNED."
-            exit 1
-          fi
-
-      - name: Install lint dependencies
-        # qt6-l10n-tools ships lupdate for the translation drift check below
-        # (Kartend-pnlot.3); it pulls only Qt core libs, no GUI stack.
-        run: sudo apt-get install -y --no-install-recommends shellcheck clang-format-19 appstream desktop-file-utils qt6-l10n-tools
-
-      - name: Shellcheck
-        # -x follows `source` directives into .scripts/lib/*.sh so build.sh is
-        # analysed with its modules inlined (cross-file globals resolve). The
-        # lib files are linted directly too; each documents a
-        # disable=SC2154,SC2034 because those two checks can't see the
-        # build.sh-owned globals when a module is linted in isolation.
-        run: |
-          shellcheck --version
-          shellcheck -x .scripts/*.sh .scripts/lib/*.sh \
-            .scripts/git-hooks/pre-commit .scripts/git-hooks/pre-push .scripts/git-hooks/install.sh
-
-      - name: clang-format check (v19 pin)
-        # Kartend-cifqk: moved out of maintenance-check — the format check is
-        # purely file-based (no compdb), so failing it behind a ~52-minute
-        # clang build wasted an hour per drifted PR. Same v19 pin + file walk
-        # as .scripts/lib/quality.sh's do_clang_format, but ENFORCING.
-        run: |
-          clang-format-19 --version
-          fail=0
-          while IFS= read -r -d '' file; do
-            if ! clang-format-19 --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
-              echo "::error file=$file::not formatted with clang-format-19 (run .scripts/build.sh --format-apply)"
-              fail=1
-            fi
-          done < <(find src tests \( -name '*.cpp' -o -name '*.h' \) -print0)
-          exit $fail
-
-      - name: Check module layering
-        # Build-independent guardrail (moved from maintenance-check,
-        # Kartend-cifqk — same below).
-        run: python3 .scripts/check-layering.py
-
-      - name: Check QTimer::singleShot 'why' comments
-        run: python3 .scripts/check-singleshot-comments.py
-
-      - name: Check src/modules ↔ tests/modules mapping
-        run: python3 .scripts/check-test-mapping.py
-
-      - name: Check bd issue ID leakage to user-facing surfaces
-        run: python3 .scripts/check-bd-id-leakage.py
-
-      - name: Check required-checks path lists stay in lockstep
-        run: python3 .scripts/check-required-checks-consistency.py
-
-      - name: Self-test the gatekeeper lint scripts
-        run: python3 .scripts/tests/test_lint_scripts.py
-
-      - name: Validate AppStream + desktop metadata
-        run: |
-          appstreamcli validate --pedantic packaging/*.metainfo.xml
-          desktop-file-validate packaging/*.desktop
-
-      - name: Check translation-source drift (lupdate)
-        # Kartend-pnlot.3: translations/kartend_en.ts (the translator seed) is
-        # refreshed manually — `cmake --build <builddir> --target
-        # update_translations` — which is easy to forget after touching tr()
-        # strings, and nothing else in CI runs lupdate at all. Cheap,
-        # configure-less cross-check: run lupdate straight over src/ into a
-        # temp .ts and compare message counts against the committed seed.
-        #
-        # Kartend-ny9fy: this was a ::warning for fear that a project-less
-        # lupdate walk might not match the CMake qt_add_lupdate extraction,
-        # making a mismatch unable to prove staleness. That caution backfired:
-        # the step reported a real two-message delta on every main run for
-        # weeks and everyone ignored it because the job stayed green, while
-        # two user-facing strings sat untranslatable (Kartend-6gig9).
-        #
-        # It is now fatal. The two extractions can only diverge over files
-        # lupdate sees but the build does not, and src/ has no platform-gated
-        # sources at all — no if(WIN32)/if(APPLE) in any src/ CMakeLists — so
-        # the walk and the target cover the same files. The one way they do
-        # diverge, a file missing from target_sources, is itself the bug this
-        # check exists to catch, so failing on it is correct rather than a
-        # false positive. If platform-conditional sources are ever added,
-        # revisit: the honest fix then is to drive the check from the
-        # generated <build>/.lupdate project instead of a bare walk.
-        run: |
-          # lupdate lands in different places per distro: on PATH, as
-          # lupdate6 (Arch), or off PATH in /usr/lib/qt6/bin (Debian/Ubuntu's
-          # qt6-l10n-tools) — try each so the snippet also runs locally.
-          LUPDATE="$(command -v lupdate || command -v lupdate6 || true)"
-          if [ -z "$LUPDATE" ] && [ -x /usr/lib/qt6/bin/lupdate ]; then
-            LUPDATE=/usr/lib/qt6/bin/lupdate
-          fi
-          if [ -z "$LUPDATE" ]; then
-            echo "::warning::lupdate not found (qt6-l10n-tools missing from the lint dependencies?) — translation drift check skipped."
-            exit 0
-          fi
-          "$LUPDATE" -silent -recursive src -ts "$RUNNER_TEMP/kartend_fresh.ts"
-          fresh="$(grep -c '<message' "$RUNNER_TEMP/kartend_fresh.ts" || true)"
-          total="$(grep -c '<message' translations/kartend_en.ts || true)"
-          # vanished/obsolete entries are kept in the seed for translators but
-          # correspond to no current source string — exclude them.
-          stale="$(grep -cE '<translation type="(vanished|obsolete)"' translations/kartend_en.ts || true)"
-          live=$(( total - stale ))
-          echo "Fresh lupdate extract: $fresh messages; committed kartend_en.ts: $live live ($stale vanished/obsolete)."
-          if [ "$fresh" -ne "$live" ]; then
-            # Name the actual strings rather than just the counts. Kartend-6gig9
-            # sat as an ignored two-message delta for weeks and diagnosing it
-            # meant diffing the two .ts files by hand; printing the offenders
-            # makes the cause obvious from the log alone.
-            python3 - "$RUNNER_TEMP/kartend_fresh.ts" translations/kartend_en.ts <<'PYEOF'
-          import sys, xml.etree.ElementTree as ET
-
-          def messages(path):
-              root, out = ET.parse(path).getroot(), {}
-              for ctx in root.findall('context'):
-                  name = ctx.findtext('name') or ''
-                  for m in ctx.findall('message'):
-                      loc = m.find('location')
-                      where = f"{loc.get('filename')}:{loc.get('line')}" if loc is not None else '?'
-                      out[(name, m.findtext('source') or '')] = where
-              return out
-
-          fresh, seed = messages(sys.argv[1]), messages(sys.argv[2])
-          for label, delta, hint in (
-              ("in source but MISSING from the seed", {k: v for k, v in fresh.items() if k not in seed},
-               "these strings cannot be translated at all today"),
-              ("in the seed but NO LONGER in source", {k: v for k, v in seed.items() if k not in fresh},
-               "these are leftovers a refresh would drop"),
-          ):
-              if not delta:
-                  continue
-              print(f"\n{len(delta)} message(s) {label} ({hint}):")
-              for (ctx, src), where in sorted(delta.items()):
-                  print(f"  [{ctx}] {src!r}\n      {where}")
-          PYEOF
-            echo "::error file=translations/kartend_en.ts::Translation seed is stale: a fresh lupdate extract over src/ finds $fresh messages but the committed kartend_en.ts carries $live. See the message list above."
-            echo "Two things cause this, and they need different fixes:"
-            echo "  1. The seed was not refreshed after tr()/translate() strings changed."
-            echo "     Fix: cmake --build <builddir> --target update_translations, then commit translations/kartend_en.ts (docs/dev/i18n.md)."
-            echo "  2. A source file is missing from target_sources in its directory's CMakeLists.txt."
-            echo "     qt_add_lupdate only scans files listed there, so refreshing will NOT help — the strings"
-            echo "     can never reach the seed. This is Kartend-6gig9: two header-only formatters were left out"
-            echo "     of src/utils/view/CMakeLists.txt and stayed untranslatable across two seed refreshes."
-            echo "     If a refresh does not clear this, check that every file named above is listed."
-            exit 1
-          fi
+      - uses: ./.github/actions/script-lint
 
   build:
     runs-on: ubuntu-24.04
@@ -249,6 +100,12 @@ jobs:
           - build_type: Release
             compiler: gcc
             cmake_extra: -DKARTEND_MAINTENANCE=ON
+            # libsdl2-dev only on this cell: SDL2 is the primary Linux gamepad
+            # backend, and without it no Linux CI cell ever compiles the SDL2
+            # path. One cell (the REQUIRED check, which also carries the
+            # -Werror maintenance overlay) is enough for compile coverage
+            # without paying the install on every cell.
+            extra_packages: libsdl2-dev
 
     steps:
       - uses: actions/checkout@v7
@@ -256,80 +113,70 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
+          # ${{ matrix.extra_packages }} is empty for every cell except the
+          # Release+gcc overlay above (same mechanism as cmake_extra).
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full ${{ matrix.extra_packages }}
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
 
-      - name: Cache ccache
-        uses: actions/cache@v6
+      - name: Set up ccache
+        # Cache key is content-addressed on the build config files. A
+        # source-only change (the common case) reuses the existing cache;
+        # a config change rolls a new cache. Avoid github.run_id keys —
+        # they force a write on every run and balloon the repo cache size
+        # (11 ccache steps x max_size=2G against a 10 GB repo limit).
+        #
+        # Kartend-kpnv9: the hash deliberately does NOT include this
+        # workflow file any more. It used to, so editing an unrelated job —
+        # the Windows leg, a comment — rolled a brand new key and cold-built
+        # every Linux ccache job. Dropping it is safe because ccache hashes
+        # the real compiler command line itself: if a configure flag here
+        # does change compilation, those entries simply miss rather than
+        # being served wrongly. The workflow file was buying invalidation we
+        # already get for free, at the cost of throwing the cache away.
+        #
+        # ACCEPTED LIMITATION — the cache goes stale and we live with it
+        # (Kartend-pcc65, decided 2026-07-25). Read this before "fixing" the
+        # hit rate, because the obvious remedies are worse.
+        #
+        # Source files are not in the hash, so an ordinary source-only
+        # change leaves the key UNCHANGED — an exact primary-key hit. And
+        # actions/cache does not save on an exact hit. The cache is
+        # therefore populated once, when a config change rolls the key, and
+        # never written back afterwards. Objects for changed or new sources
+        # are never persisted, so the hit rate decays as the tree drifts
+        # away from whenever the key last rolled.
+        #
+        # Measured on the sanitizers job (run 30166939300):
+        #   Cache size (GB):  2.0 / 2.0 (99.97%)   <- full, at max_size
+        #   Hits:               18 / 1029 (1.75%)
+        # i.e. saturated with entries that no longer match anything being
+        # compiled, and with no mechanism to flush them.
+        #
+        # Why we accept it rather than fix it:
+        #   * Always-write keys (github.run_id/sha) would refresh the cache
+        #     but write ~11 caches per run against a 10 GB per-repo limit;
+        #     they would LRU-evict each other and plausibly do worse.
+        #   * Shrinking max_size to fit more generations in that budget is
+        #     backwards: 2 GB already holds only about ONE build's objects
+        #     (1029 cacheable compiles), so smaller means more thrash.
+        #   * The failure mode is mild — a cold-ish compile costs minutes on
+        #     jobs whose real cost is elsewhere (Kartend-cdklm: the Windows
+        #     leg was link-bound, not compile-bound).
+        # Revisit only with real per-job cache sizes in hand; the 10 GB
+        # budget cannot be divided sensibly without them.
+        #
+        # Nuance worth knowing if you touch the key: 'CMakeLists.txt' in the
+        # hash below matches only the ROOT one — the pattern is not
+        # recursive, so src/CMakeLists.txt and tests/CMakeLists.txt do NOT
+        # roll it. Kartend-wjgjy rewrote tests/CMakeLists.txt without
+        # rolling any cache key. Harmless there (it changed link type, not
+        # compile lines), but do not assume "all build config" is covered.
+        uses: ./.github/actions/setup-ccache
         with:
-          # Cache key is content-addressed on the build config files. A
-          # source-only change (the common case) reuses the existing cache;
-          # a config change rolls a new cache. Avoid github.run_id keys —
-          # they force a write on every run and balloon the repo cache size
-          # (11 ccache steps x max_size=2G against a 10 GB repo limit).
-          #
-          # Kartend-kpnv9: the hash deliberately does NOT include this
-          # workflow file any more. It used to, so editing an unrelated job —
-          # the Windows leg, a comment — rolled a brand new key and cold-built
-          # every Linux ccache job. Dropping it is safe because ccache hashes
-          # the real compiler command line itself: if a configure flag here
-          # does change compilation, those entries simply miss rather than
-          # being served wrongly. The workflow file was buying invalidation we
-          # already get for free, at the cost of throwing the cache away.
-          #
-          # ACCEPTED LIMITATION — the cache goes stale and we live with it
-          # (Kartend-pcc65, decided 2026-07-25). Read this before "fixing" the
-          # hit rate, because the obvious remedies are worse.
-          #
-          # Source files are not in the hash, so an ordinary source-only
-          # change leaves the key UNCHANGED — an exact primary-key hit. And
-          # actions/cache does not save on an exact hit. The cache is
-          # therefore populated once, when a config change rolls the key, and
-          # never written back afterwards. Objects for changed or new sources
-          # are never persisted, so the hit rate decays as the tree drifts
-          # away from whenever the key last rolled.
-          #
-          # Measured on the sanitizers job (run 30166939300):
-          #   Cache size (GB):  2.0 / 2.0 (99.97%)   <- full, at max_size
-          #   Hits:               18 / 1029 (1.75%)
-          # i.e. saturated with entries that no longer match anything being
-          # compiled, and with no mechanism to flush them.
-          #
-          # Why we accept it rather than fix it:
-          #   * Always-write keys (github.run_id/sha) would refresh the cache
-          #     but write ~11 caches per run against a 10 GB per-repo limit;
-          #     they would LRU-evict each other and plausibly do worse.
-          #   * Shrinking max_size to fit more generations in that budget is
-          #     backwards: 2 GB already holds only about ONE build's objects
-          #     (1029 cacheable compiles), so smaller means more thrash.
-          #   * The failure mode is mild — a cold-ish compile costs minutes on
-          #     jobs whose real cost is elsewhere (Kartend-cdklm: the Windows
-          #     leg was link-bound, not compile-bound).
-          # Revisit only with real per-job cache sizes in hand; the 10 GB
-          # budget cannot be divided sensibly without them.
-          #
-          # Nuance worth knowing if you touch the key: 'CMakeLists.txt' in the
-          # hash below matches only the ROOT one — the pattern is not
-          # recursive, so src/CMakeLists.txt and tests/CMakeLists.txt do NOT
-          # roll it. Kartend-wjgjy rewrote tests/CMakeLists.txt without
-          # rolling any cache key. Harmless there (it changed link type, not
-          # compile lines), but do not assume "all build config" is covered.
-          path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ matrix.compiler }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-${{ matrix.build_type }}-${{ matrix.compiler }}-
-            ${{ runner.os }}-ccache-${{ matrix.build_type }}-
-            ${{ runner.os }}-ccache-
-
-      - name: Configure ccache
-        run: |
-          ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=2G
-          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
-          ccache --set-config=sloppiness=pch_defines,time_macros
-          ccache --zero-stats
+          key-infix: ccache-${{ matrix.build_type }}-${{ matrix.compiler }}
+          extra-restore-infix: ccache-${{ matrix.build_type }}
 
       - name: Create build directory
         run: mkdir -p build/${{ matrix.build_type }}-${{ matrix.compiler }}
@@ -436,32 +283,24 @@ jobs:
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
 
-      - name: Cache ccache
-        uses: actions/cache@v6
+      - name: Set up ccache
+        uses: ./.github/actions/setup-ccache
         with:
-          path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-no-zstd-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-no-zstd-
-            ${{ runner.os }}-ccache-
-
-      - name: Configure ccache
-        run: |
-          ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=2G
-          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
-          ccache --set-config=sloppiness=pch_defines,time_macros
-          ccache --zero-stats
+          key-infix: ccache-no-zstd
 
       - name: Configure CMake
         run: |
           mkdir -p build/no-zstd
           cd build/no-zstd
+          # LIBARCHIVE=OFF pins what the package list above only implies
+          # (libarchive-dev omitted) — without the flag, runner-image drift
+          # shipping libarchive as a transitive dep would silently re-enable it.
           cmake -G Ninja ../.. \
             -DCMAKE_BUILD_TYPE=Release \
             -DKARTEND_BUILD_TESTS=ON \
             -DKARTEND_PORTABLE_RELEASE=ON \
             -DKARTEND_ENABLE_ZSTD=OFF \
+            -DKARTEND_ENABLE_LIBARCHIVE=OFF \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -490,6 +329,59 @@ jobs:
       - name: ccache stats
         run: ccache --show-stats
 
+  # Compile-only -Werror coverage of the no-libarchive fallback (RomHasher's
+  # shell-out-to-7z/unzip/bsdtar path). Every other Linux job installs
+  # libarchive-dev, so without this leg the KARTEND_HAS_LIBARCHIVE=0 side of
+  # the #ifdef gates is never compiled under -Werror and a warning there
+  # could land silently. Build only — the fallback's runtime behaviour is
+  # already exercised by the extractor-tool tests in the jobs above; this
+  # job exists purely so the fallback TUs (src + tests) go through the
+  # maintenance warning set.
+  build-no-libarchive-maintenance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install dependencies
+        # Deliberately omit libarchive-dev. KARTEND_ENABLE_LIBARCHIVE=OFF
+        # below makes the omission explicit even on runners that ship
+        # libarchive as a transitive dep of some other package. No
+        # pulseaudio/unzip/p7zip-full either — this job runs no tests.
+        uses: ./.github/actions/install-deps
+        with:
+          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev qtkeychain-qt6-dev
+
+      - name: Set up ccache
+        uses: ./.github/actions/setup-ccache
+        with:
+          key-infix: ccache-no-libarchive
+
+      - name: Configure CMake
+        run: |
+          mkdir -p build/no-libarchive
+          cd build/no-libarchive
+          # Same Release + PORTABLE_RELEASE + BUILD_TESTS shape as the
+          # build-no-zstd sibling (tests are BUILT so their fallback-gated
+          # TUs compile under -Werror too — they just never run here), plus
+          # KARTEND_MAINTENANCE=ON for the -Werror warning set.
+          cmake -G Ninja ../.. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DKARTEND_BUILD_TESTS=ON \
+            -DKARTEND_PORTABLE_RELEASE=ON \
+            -DKARTEND_MAINTENANCE=ON \
+            -DKARTEND_ENABLE_LIBARCHIVE=OFF \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: |
+          cd build/no-libarchive
+          cmake --build . --parallel $(nproc)
+
+      - name: ccache stats
+        run: ccache --show-stats
+
   sanitizers:
     runs-on: ubuntu-24.04
     # Kartend-cqnsi: normal runtime ~11 min, but a single stalled apt mirror
@@ -510,27 +402,17 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
+          # libzstd-dev keeps this job on the same optional-backend set as the
+          # build matrix — only build-no-zstd omits it deliberately.
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
 
-      - name: Cache ccache
-        uses: actions/cache@v6
+      - name: Set up ccache
+        uses: ./.github/actions/setup-ccache
         with:
-          path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-sanitize-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-sanitize-
-            ${{ runner.os }}-ccache-
-
-      - name: Configure ccache
-        run: |
-          ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=2G
-          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
-          ccache --set-config=sloppiness=pch_defines,time_macros
-          ccache --zero-stats
+          key-infix: ccache-sanitize
 
       - name: Create build directory
         run: mkdir -p build/Sanitize
@@ -625,22 +507,10 @@ jobs:
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
 
-      - name: Cache ccache
-        uses: actions/cache@v6
+      - name: Set up ccache
+        uses: ./.github/actions/setup-ccache
         with:
-          path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-tsan-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-tsan-
-            ${{ runner.os }}-ccache-
-
-      - name: Configure ccache
-        run: |
-          ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=2G
-          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
-          ccache --set-config=sloppiness=pch_defines,time_macros
-          ccache --zero-stats
+          key-infix: ccache-tsan
 
       # NOTE: deliberately no -DKARTEND_SLIM_DEBUG_INFO=ON here, unlike the
       # ASan job. -g1 breaks this job's suppressions — see the
@@ -754,7 +624,9 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev clang-tidy clang-format-19 cppcheck iwyu jq
+          # libzstd-dev keeps this job on the same optional-backend set as the
+          # build matrix, so the analysis passes see the zstd-enabled TUs.
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev clang-tidy clang-format-19 cppcheck iwyu jq
 
       - name: Pin clang-format to v19
         # Ubuntu 24.04's default `clang-format` is v18, which formats slightly
@@ -773,23 +645,11 @@ jobs:
           fi
           sudo ln -sf /usr/bin/clang-format-19 /usr/local/bin/clang-format
 
-      - name: Cache ccache
-        uses: actions/cache@v6
+      - name: Set up ccache
+        uses: ./.github/actions/setup-ccache
         with:
-          path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-maintenance-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-maintenance-
-            ${{ runner.os }}-ccache-
+          key-infix: ccache-maintenance
 
-      - name: Configure ccache
-        run: |
-          ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=2G
-          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
-          ccache --set-config=sloppiness=pch_defines,time_macros
-          ccache --zero-stats
-          
       # The build-independent guardrails (layering, singleshot comments,
       # test mapping, bd-id leakage, AppStream/desktop validation) and the
       # clang-format check moved to the fast script-lint job
@@ -1168,22 +1028,10 @@ jobs:
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
 
-      - name: Cache ccache
-        uses: actions/cache@v6
+      - name: Set up ccache
+        uses: ./.github/actions/setup-ccache
         with:
-          path: ~/.cache/ccache
-          key: ${{ runner.os }}-ccache-qt68-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
-          restore-keys: |
-            ${{ runner.os }}-ccache-qt68-
-            ${{ runner.os }}-ccache-
-
-      - name: Configure ccache
-        run: |
-          ccache --set-config=cache_dir=$HOME/.cache/ccache
-          ccache --set-config=max_size=2G
-          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
-          ccache --set-config=sloppiness=pch_defines,time_macros
-          ccache --zero-stats
+          key-infix: ccache-qt68
 
       - name: Configure CMake
         run: |
@@ -1256,25 +1104,17 @@ jobs:
           modules: 'qtmultimedia qtimageformats'
           cache: true
 
-      - name: Cache ccache
-        uses: actions/cache@v6
+      - name: Set up ccache
+        # The macos14 infix bakes the runner image label into the key AND
+        # both restore prefixes, so a macOS image bump (e.g. macos-14 →
+        # macos-15) starts from a clean ccache rather than reusing objects
+        # built against the old SDK. (A runs-on change also rolls the
+        # hashFiles() component, but the literal makes the intent explicit.)
+        uses: ./.github/actions/setup-ccache
         with:
-          path: ~/Library/Caches/ccache
-          # Include the runner image label so a macOS image bump (e.g.
-          # macos-14 → macos-15) starts from a clean ccache rather than reusing
-          # objects built against the old SDK. (A runs-on change also rolls the
-          # hashFiles() component, but the literal makes the intent explicit.)
-          key: ${{ runner.os }}-macos14-ccache-${{ matrix.build_type }}-${{ hashFiles('CMakeLists.txt', '**/*.cmake') }}
-          restore-keys: |
-            ${{ runner.os }}-macos14-ccache-${{ matrix.build_type }}-
-            ${{ runner.os }}-macos14-ccache-
-
-      - name: Configure ccache
-        run: |
-          ccache --set-config=max_size=2G
-          # PCH-using compiles need this to be cacheable (Kartend-zhodi)
-          ccache --set-config=sloppiness=pch_defines,time_macros
-          ccache --zero-stats
+          key-infix: macos14-ccache-${{ matrix.build_type }}
+          cache-path: ~/Library/Caches/ccache
+          fallback-infix: macos14-ccache
 
       - name: Configure CMake
         run: |

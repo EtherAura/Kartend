@@ -50,6 +50,8 @@ Build options:
   --archive         Create a source archive (.backups/*.tar.gz)
   --reports         Assemble source/UI reports into .backups/reports
   --keep-builds     Don't prune other build directories
+  --cmake-arg=ARG   Extra argument for the CMake configure step (repeatable;
+                    later mode-derived flags still win on conflicts)
   --no-ccache       Disable ccache launcher even if installed
   --clang           Force Clang/LLD toolchain for release builds (default:
                     use the system compiler; maintenance and PGO modes
