@@ -34,6 +34,7 @@ target_sources(kartend_utils PRIVATE
   errorpresentation_default.cpp
   interactionstateholder.cpp
   loggingcategories.cpp
+  mediabackendconfig.cpp
   scrapelogger.cpp
   settingsutils.cpp
   applicationcontext.h
@@ -104,6 +105,7 @@ target_sources(kartend_utils PRIVATE
   errorutils.h
   interactionstateholder.h
   loggingcategories.h
+  mediabackendconfig.h
   propertyutils.h
   scrapelogger.h
   settingskeys.h

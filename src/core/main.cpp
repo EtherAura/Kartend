@@ -27,6 +27,7 @@
 #include "kartreader.h"
 #include "kartwriter.h"
 #include "mainwindow.h"
+#include "mediabackendconfig.h"
 #include "pathutils.h"
 #include "settingsmanager.h"
 
@@ -39,6 +40,11 @@
 // resolve it. On non-Windows the rename macro isn't defined, and main
 // has implicit C linkage anyway, so this is a no-op.
 extern "C" auto main(int argc, char *argv[]) -> int {
+  // Kartend-0vnvo: keep Qt's FFmpeg plugin off the hardware-decode backends
+  // that leak a DRM render-node fd + Mesa worker thread per setSource().
+  // Must run before the first QMediaPlayer exists, hence before QApplication.
+  MediaBackendConfig::applyDecodingHwDeviceTypePolicy();
+
   // Enable Wayland-native features when running on Wayland
   // This improves integration with compositors like KWin, Sway, Hyprland
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
