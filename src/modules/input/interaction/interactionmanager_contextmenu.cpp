@@ -28,6 +28,7 @@
 #include "idetailspane.h"
 #include "idetailspanemanager.h"
 #include "imainwindow.h"
+#include "interactionhelpers.h"
 #include "inavigationmanager.h"
 #include "iplaylistmanager.h"
 #include "iselectionmanager.h"
@@ -57,13 +58,19 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
 
   const bool isSubcollection = widget->isSubcollection();
   const bool isVirtualFolder = widget->isVirtualFolder();
-  const bool isMediaItem = !isSubcollection && !isVirtualFolder;
   const QString filePath = widget->getFilePath();
+  // Pure structural classification (media item vs navigable tile → which
+  // top-level entries appear) lives in InteractionHelpers so it is
+  // unit-testable without the widget graph.
+  const InteractionHelpers::ContextTargetFlags target =
+      InteractionHelpers::classifyContextTarget(isSubcollection, isVirtualFolder,
+                                                !filePath.isEmpty());
+  const bool isMediaItem = target.isMediaItem;
 
   QMenu menu;
 
   // --- Launch action (only for media items with a file path) ---
-  if (isMediaItem && !filePath.isEmpty()) {
+  if (target.showLaunch) {
     QAction *launchAction = menu.addAction(tr("Launch"));
     QObject::connect(launchAction, &QAction::triggered, this, [this, filePath]() {
       if (!databaseMgr() || !m_currentCollectionIndex) {
@@ -76,7 +83,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
   }
 
   // --- Open (enter) action for subcollections and virtual folders ---
-  if (isSubcollection || isVirtualFolder) {
+  if (target.showOpen) {
     QAction *openAction = menu.addAction(tr("Open"));
     QObject::connect(openAction, &QAction::triggered, this, [this]() {
       if (scrollMgr()) {
@@ -352,10 +359,8 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         }
         const int currentOverride =
             uuid.isEmpty() ? -1 : databaseMgr()->loadItemMetadata(uuid, filePath).launcherIndex;
-        const int defaultIndex =
-            currentOverride >= 0 && currentOverride < launcherCount
-                ? currentOverride
-                : std::clamp(owning.launcher.defaultLauncherIndex, 0, launcherCount - 1);
+        const int defaultIndex = InteractionHelpers::pickLauncherIndex(
+            currentOverride, owning.launcher.defaultLauncherIndex, launcherCount);
         QObject::connect(setLauncherAction, &QAction::triggered, this,
                          [this, filePath, collectionName, launcherNames, defaultIndex]() {
                            // The chooser dialog lives in the UI layer; route
@@ -398,6 +403,15 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections);
     const bool insidePlaylist =
         insideCollection && (*m_collections)[*m_currentCollectionIndex].isPlaylist;
+    // Which playlist-scoped actions the menu offers is a pure decision on the
+    // (static/smart, reserved) shape of the viewed playlist — extracted so
+    // the smart/reserved gating is unit-testable.
+    const InteractionHelpers::PlaylistMenuFlags playlistFlags =
+        InteractionHelpers::playlistContextFlags(
+            insidePlaylist,
+            insidePlaylist && (*m_collections)[*m_currentCollectionIndex].isSmartPlaylist,
+            insidePlaylist &&
+                !(*m_collections)[*m_currentCollectionIndex].playlistReservedKind.isEmpty());
 
     if (isMediaItem && !filePath.isEmpty()) {
       // Resolve the source collection's uuid (using the file→collection map
@@ -508,7 +522,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       // Inside a static playlist, also offer the inverse action. Skipped
       // for smart playlists — removal would not stick (the next open
       // re-evaluates the filter and the item reappears).
-      if (insidePlaylist && !(*m_collections)[*m_currentCollectionIndex].isSmartPlaylist) {
+      if (playlistFlags.showRemoveFromPlaylist) {
         const QString playlistId = (*m_collections)[*m_currentCollectionIndex].playlistId;
         QAction *removeAction = menu.addAction(tr("Remove from playlist"));
         QObject::connect(removeAction, &QAction::triggered, this,
@@ -533,13 +547,6 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       menu.addSeparator();
       const QString playlistId = (*m_collections)[*m_currentCollectionIndex].playlistId;
       const QString currentName = (*m_collections)[*m_currentCollectionIndex].name;
-      // built-in playlists keep rename (so users can localize
-      // the label) but hide delete — PlaylistManager refuses the call anyway,
-      // and surfacing a button that always errors is worse UX than just
-      // omitting it.
-      const bool isReserved =
-          !(*m_collections)[*m_currentCollectionIndex].playlistReservedKind.isEmpty();
-      const bool isSmart = (*m_collections)[*m_currentCollectionIndex].isSmartPlaylist;
 
       QAction *renameAction = menu.addAction(tr("Rename playlist…"));
       QObject::connect(renameAction, &QAction::triggered, this, [this, playlistId, currentName]() {
@@ -551,7 +558,7 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
       // Smart-playlist edit action — sits next to rename so the two
       // metadata-edit affordances are adjacent. Hidden for static
       // playlists since there's nothing filter-shaped to edit.
-      if (isSmart) {
+      if (playlistFlags.showEditSmartFilter) {
         QAction *editFilterAction = menu.addAction(tr("Edit smart filter…"));
         QObject::connect(editFilterAction, &QAction::triggered, this,
                          [this, playlistId, currentName]() {
@@ -582,7 +589,10 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
                          }
                        });
 
-      if (!isReserved) {
+      // Built-in playlists keep rename (so users can localize the label) but
+      // hide delete — PlaylistManager refuses the call anyway, and surfacing
+      // a button that always errors is worse UX than just omitting it.
+      if (playlistFlags.showDeletePlaylist) {
         QAction *deleteAction = menu.addAction(tr("Delete playlist…"));
         QObject::connect(deleteAction, &QAction::triggered, this,
                          [this, playlistId, currentName]() {

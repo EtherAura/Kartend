@@ -1,6 +1,7 @@
 // Archive extraction helpers split out from launchmanager.cpp.
 #include "archivesafety.h"
 #include "errorutils.h"
+#include "extensionutils.h"
 #include "launchmanager.h"
 #include "pathutils.h"
 #include "uiconstants/launch.h"
@@ -62,15 +63,10 @@ bool extractionSizeExceeds(const QString &directory, qint64 maxBytes) {
 } // namespace
 
 bool LaunchManager::isArchiveFile(const QString &filePath) {
-  static const QStringList archiveExtensions = {".zip", ".7z",  ".rar", ".gz",
-                                                ".tar", ".bz2", ".xz"};
-  QString lowerPath = filePath.toLower();
-  for (const QString &ext : archiveExtensions) {
-    if (lowerPath.endsWith(ext)) {
-      return true;
-    }
-  }
-  return false;
+  // Delegates to the shared archive-extension table so this predicate and
+  // RomHasher::isArchivePath can never drift apart — a file the launcher
+  // unpacks must also be unpacked for scraper hash-ID.
+  return ExtensionUtils::isArchivePath(filePath);
 }
 
 auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QString &targetExtension,

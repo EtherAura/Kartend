@@ -24,6 +24,10 @@ private slots:
   void testClearSelectionYieldsNoSelection();
   void testClearSelectionAndFocusYieldsNoSelection();
   void testIsWheelScrollingInitiallyFalse();
+  void testStopRepeatResetsTransientInputState();
+  void testStopRepeatFlushesPendingSuppressedSelection();
+  void testArtworkPreviewLaunchRequestClearsExpandState();
+  void testSelectionChangeNotificationResetsExpandState();
 };
 
 #endif // KARTEND_TESTS_TEST_INTERACTIONMANAGER_H

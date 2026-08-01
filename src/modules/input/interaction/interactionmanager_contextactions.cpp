@@ -18,6 +18,7 @@
 #include "collection/typehelpers.h"
 #include "collection/validationhelpers.h"
 #include "idatabasemanager.h"
+#include "interactionhelpers.h"
 #include "itemmetadata.h"
 #include "launchmanager.h"
 #include "pathutils.h"
@@ -50,24 +51,17 @@ void InteractionManager::previewLaunchCommand(const QString &filePath, const QSt
   // dialog here — the preview is meant to be a fast read-only surface, so
   // the user gets to see what would happen with the most likely launcher.
   // If they want a different one, they can pick via "Always launch with…".
-  int launcherIndex = -1;
+  int overrideIndex = -1;
   if (owning.launcher.launcherCount() > 0) {
     const QString expandedMediaDir =
         PathUtils::validateAndExpandPath(owning.mediaDirectory, owning.name);
     const QString uuid = CollectionUtils::computeCollectionUuid(owning.name, expandedMediaDir);
     if (!uuid.isEmpty()) {
-      const auto md = databaseMgr()->loadItemMetadata(uuid, filePath);
-      if (md.launcherIndex >= 0 && md.launcherIndex < owning.launcher.launcherCount()) {
-        launcherIndex = md.launcherIndex;
-      }
+      overrideIndex = databaseMgr()->loadItemMetadata(uuid, filePath).launcherIndex;
     }
-    if (launcherIndex < 0) {
-      launcherIndex =
-          std::clamp(owning.launcher.defaultLauncherIndex, 0, owning.launcher.launcherCount() - 1);
-    }
-  } else {
-    launcherIndex = 0;
   }
+  const int launcherIndex = InteractionHelpers::pickLauncherIndex(
+      overrideIndex, owning.launcher.defaultLauncherIndex, owning.launcher.launcherCount());
 
   const LauncherConfig launcher = LauncherUtils::resolvePreset(
       owning.launcher.launcherAt(launcherIndex),

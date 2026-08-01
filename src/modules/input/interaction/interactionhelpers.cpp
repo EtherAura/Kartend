@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include <QFileInfo>
+
 namespace InteractionHelpers {
 
 auto stepSizeForViewType(ViewType viewType, int gridWidth) -> int {
@@ -51,6 +53,55 @@ auto resolveOwnerIndex(int dbIndex, int fallbackIndex, int collectionsSize) -> i
     return fallbackIndex;
   }
   return -1;
+}
+
+auto classifyContextTarget(bool isSubcollection, bool isVirtualFolder, bool hasFilePath)
+    -> ContextTargetFlags {
+  ContextTargetFlags flags;
+  flags.isMediaItem = !isSubcollection && !isVirtualFolder;
+  flags.showLaunch = flags.isMediaItem && hasFilePath;
+  flags.showOpen = isSubcollection || isVirtualFolder;
+  return flags;
+}
+
+auto playlistContextFlags(bool insidePlaylist, bool isSmartPlaylist, bool isReservedPlaylist)
+    -> PlaylistMenuFlags {
+  PlaylistMenuFlags flags;
+  if (!insidePlaylist) {
+    return flags;
+  }
+  flags.showRemoveFromPlaylist = !isSmartPlaylist;
+  flags.showEditSmartFilter = isSmartPlaylist;
+  flags.showDeletePlaylist = !isReservedPlaylist;
+  return flags;
+}
+
+auto pickLauncherIndex(int overrideIndex, int defaultLauncherIndex, int launcherCount) -> int {
+  if (launcherCount <= 0) {
+    return 0;
+  }
+  if (overrideIndex >= 0 && overrideIndex < launcherCount) {
+    return overrideIndex;
+  }
+  return std::clamp(defaultLauncherIndex, 0, launcherCount - 1);
+}
+
+auto classifyExpandActivation(bool expandModeEnabled, int expandedItemIndex, int activationIndex,
+                              bool overlayVisible) -> ExpandActivation {
+  if (!expandModeEnabled) {
+    return ExpandActivation::LaunchDirectly;
+  }
+  if (expandedItemIndex == activationIndex && activationIndex >= 0 && overlayVisible) {
+    return ExpandActivation::CollapseThenLaunch;
+  }
+  return ExpandActivation::TryExpand;
+}
+
+auto displayTitleForFilePath(const QString &filePath) -> QString {
+  if (filePath.isEmpty()) {
+    return {};
+  }
+  return QFileInfo(filePath).completeBaseName().replace('_', ' ').simplified();
 }
 
 } // namespace InteractionHelpers

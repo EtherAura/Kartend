@@ -274,7 +274,10 @@ void InteractionManager::updateFilePathForSelection(int index, const QList<int> 
 
 void InteractionManager::clearSelection() {
   if (m_selectionManager) {
-    m_selectionManager->clearSelection(m_isShuttingDown);
+    // Dereference — m_isShuttingDown is a pointer into MainWindow's flag and
+    // is non-null for the manager's whole life; passing it raw would convert
+    // to a permanently-true bool.
+    m_selectionManager->clearSelection(m_isShuttingDown && *m_isShuttingDown);
   }
 }
 

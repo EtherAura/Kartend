@@ -46,10 +46,16 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
                                .arg(trimmed)
                                .arg(currentSelectedIndex);
 
+  // Only touch the font on the empty↔non-empty transition: setFont triggers
+  // a style/layout pass on the line edit, which is wasted work on every
+  // keystroke where the italic state doesn't actually change.
   if (m_searchBar) {
+    const bool wantItalic = !hasSearch;
     QFont searchFont = m_searchBar->font();
-    searchFont.setItalic(!hasSearch);
-    m_searchBar->setFont(searchFont);
+    if (searchFont.italic() != wantItalic) {
+      searchFont.setItalic(wantItalic);
+      m_searchBar->setFont(searchFont);
+    }
   }
 
   if (!hasSearch) {
@@ -74,10 +80,18 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
       m_searchItemsLoadedConn = QMetaObject::Connection();
     }
 
+    // The clear-path routing (root-view rebuild vs pre-search restore vs
+    // full reload) is a pure decision over the saved pre-search state —
+    // extracted to SearchHelpers so the state machine is unit-testable.
+    const SearchHelpers::SearchClearAction clearAction =
+        SearchHelpers::classifySearchClearAction(collIndex, m_preSearchInRootView,
+                                                 scrollMgr() && scrollMgr()->hasPreSearchState(),
+                                                 m_preSearchMode);
+
     // Root / Home view clear: rebuild the synthetic Home tile view rather
     // than trying to restore pre-search state (none was saved — there was
     // no host collection to snapshot).
-    if (collIndex < 0 && m_preSearchInRootView && navMgr()) {
+    if (clearAction == SearchHelpers::SearchClearAction::RestoreRootView && navMgr()) {
       navMgr()->loadRootView();
       m_preSearchInRootView = false;
       emit requestScrollbarRecovery();
@@ -88,8 +102,8 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
 
     if (collIndex >= 0) {
       // If we have saved pre-search state, just restore it instead of reloading
-      if (scrollMgr() && scrollMgr()->hasPreSearchState()) {
-        if (m_preSearchMode == SearchMode::CurrentCollection) {
+      if (clearAction != SearchHelpers::SearchClearAction::ReloadCollection) {
+        if (clearAction == SearchHelpers::SearchClearAction::RebuildAndRestorePreSearch) {
           // CurrentCollection searches are DB-backed (count + on-demand
           // ranges), so the scroll data backing the search view is different
           // from the pre-search view. Rebuild the pre-search view and then
@@ -105,6 +119,13 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
           if (m_generalSettings) {
             context.sortMode = m_generalSettings->view.sortMode;
             context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
+            // mirror toolbar filters so subcollection tile visibility honors
+            // the active type filter / hide-subs toggle after the restore
+            // (matches NavigationManager's canonical context builders —
+            // omitting these rebuilt the pre-search view with tiles the
+            // toolbar had hidden).
+            context.collectionTypeFilter = m_generalSettings->view.collectionTypeFilter;
+            context.hideSubcollectionTiles = m_generalSettings->view.hideSubcollectionTiles;
           }
 
           const int totalItems =
@@ -159,12 +180,8 @@ void SearchManager::onSearchTextChanged(const QString &text, int currentSelected
       m_preSearchSelectedIndex = settingsMgr()->getLastSelectedItem(collIndex);
     }
     // Save scroll view state for fast restoration when search is cleared.
-    // Only CurrentCollection uses the pre-search restore path: it reloads via
-    // setupVirtualScrolling on the same collection context. CurrentAndSub-
-    // collections and AllCollections are DB-backed and can change the visible
-    // data backing (and the subcollection/virtual-folder tile composition), so
-    // they take the full reload path on clear instead. See bd.
-    const bool canUsePreSearchState = (m_currentSearchMode == SearchMode::CurrentCollection);
+    // Only CurrentCollection qualifies — see SearchHelpers::shouldSavePreSearchState.
+    const bool canUsePreSearchState = SearchHelpers::shouldSavePreSearchState(m_currentSearchMode);
     if (scrollMgr() && canUsePreSearchState) {
       m_preSearchTotalItems = scrollMgr()->getTotalItems();
       scrollMgr()->savePreSearchState();
@@ -203,10 +220,17 @@ void SearchManager::performDebouncedSearch() {
 
   const int collIndex = (m_currentCollectionIndex ? *m_currentCollectionIndex : -1);
 
+  // Pipeline routing is a pure decision over (host collection, root-view
+  // flag, active mode) — extracted to SearchHelpers so the dispatch table is
+  // unit-testable with explicit state.
+  const SearchHelpers::SearchDispatch dispatch = SearchHelpers::classifySearchDispatch(
+      collIndex, m_collections ? m_collections->size() : 0, navMgr() && navMgr()->isInRootView(),
+      m_currentSearchMode);
+
   // Root / Home view: no collection is selected (collIndex == -1) but
   // search must still work. Route directly to the cross-collection query
   // pipeline — the only mode that makes sense without a host collection.
-  if (collIndex < 0 && navMgr() && navMgr()->isInRootView()) {
+  if (dispatch == SearchHelpers::SearchDispatch::RootAllCollections) {
     qCDebug(lcSearchDiag) << "dispatch filterItemsAllCollections (root view)";
     if (scrollMgr()) {
       scrollMgr()->showSearchLoadingOverlay();
@@ -215,7 +239,7 @@ void SearchManager::performDebouncedSearch() {
     return;
   }
 
-  if (collIndex < 0 || !m_collections || collIndex >= m_collections->size()) {
+  if (dispatch == SearchHelpers::SearchDispatch::None) {
     return;
   }
 
@@ -232,8 +256,8 @@ void SearchManager::performDebouncedSearch() {
     context.excludeSubfoldersFromSort = m_generalSettings->view.excludeSubfoldersFromSort;
   }
 
-  switch (m_currentSearchMode) {
-  case SearchMode::CurrentCollection: {
+  switch (dispatch) {
+  case SearchHelpers::SearchDispatch::CurrentCollection: {
     // CurrentCollection uses on-demand range loading; in-memory filtering can
     // be incomplete. Use the DB-backed count + range pipeline.
     qCDebug(lcSearchDiag) << "dispatch filterItems(CurrentCollection)";
@@ -244,7 +268,7 @@ void SearchManager::performDebouncedSearch() {
     navMgr()->filterItems(trimmed);
     break;
   }
-  case SearchMode::CurrentAndSubcollections: {
+  case SearchHelpers::SearchDispatch::CurrentAndSubcollections: {
     // Always DB-backed: items are loaded on-demand even when
     // showAllSubcollectionItems is true, so the in-memory file list is mostly
     // empty placeholders. Filtering it would silently drop unloaded items.
@@ -257,7 +281,7 @@ void SearchManager::performDebouncedSearch() {
     navMgr()->filterItemsCurrentAndSubcollections(trimmed);
     break;
   }
-  case SearchMode::AllCollections: {
+  case SearchHelpers::SearchDispatch::AllCollections: {
     // DB-backed: query across all collections without loading everything into
     // memory.
     qCDebug(lcSearchDiag) << "dispatch filterItemsAllCollections";
@@ -268,6 +292,11 @@ void SearchManager::performDebouncedSearch() {
     navMgr()->filterItemsAllCollections(trimmed);
     break;
   }
+  case SearchHelpers::SearchDispatch::None:
+  case SearchHelpers::SearchDispatch::RootAllCollections:
+    // Both handled by the early returns above; listed so the switch stays
+    // exhaustive without a default.
+    break;
   }
 }
 
@@ -299,18 +328,20 @@ void SearchManager::scheduleSearchBarRefocusIfNeeded() {
 }
 
 void SearchManager::refocusSearchBarUnlessDeliberate() {
-  if (!m_searchBar || !m_searchBar->isVisible()) {
+  if (!m_searchBar) {
     return;
   }
   QWidget *focused = QApplication::focusWidget();
-  if (focused == m_searchBar) {
-    return; // already where we want it
-  }
-  // A QLineEdit other than the search bar means the user deliberately moved
-  // focus into another field — don't steal it back. Transient grabbers during a
-  // results update (result tiles, etc.) aren't text inputs, so we still reclaim
-  // focus from those (Kartend-8oau).
-  if (qobject_cast<QLineEdit *>(focused)) {
+  // The decision itself (visible / already-focused / deliberate-text-target)
+  // is pure and lives in SearchHelpers; this slot only samples the live
+  // widget state. A QLineEdit other than the search bar means the user
+  // deliberately moved focus into another field — don't steal it back.
+  // Transient grabbers during a results update (result tiles, etc.) aren't
+  // text inputs, so we still reclaim focus from those (Kartend-8oau).
+  const bool focusIsOtherTextInput =
+      focused != m_searchBar && qobject_cast<QLineEdit *>(focused) != nullptr;
+  if (!SearchHelpers::shouldRefocusSearchBar(m_searchBar->isVisible(), focused == m_searchBar,
+                                             focusIsOtherTextInput)) {
     return;
   }
   m_searchBar->setFocus(Qt::OtherFocusReason);

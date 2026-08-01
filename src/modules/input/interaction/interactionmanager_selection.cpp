@@ -42,6 +42,7 @@
 #include "idetailspane.h"
 #include "idetailspanemanager.h"
 #include "inavigationmanager.h"
+#include "interactionhelpers.h"
 #include "isessionmanager.h"
 #include "isettingsmanager.h"
 #include "itemwidget.h"
@@ -403,10 +404,13 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const -> QString
   const bool isCurrent = m_currentCollectionIndex && coll == *m_currentCollectionIndex;
   if (isCurrent && scrollMgr()) {
     const int actualIdx = scrollMgr()->getFilteredIndex(idx);
-    const int renderedSubCount = scrollMgr()->getSubcollectionCount();
-    if (actualIdx >= 0 && actualIdx < renderedSubCount) {
-      int subIdx = scrollMgr()->subcollectionIndexFromActual(actualIdx);
-      if (m_collections && subIdx >= 0 && subIdx < m_collections->size()) {
+    // Unified-aware classification: subcollectionIndexFromActual returns -1
+    // for non-subcollection indices, so no raw `< subCount` band check that
+    // would miss subcollections permuted past the band by unified sort (see
+    // processEnterOrReturnKey).
+    const int subIdx = (actualIdx >= 0) ? scrollMgr()->subcollectionIndexFromActual(actualIdx) : -1;
+    if (subIdx >= 0) {
+      if (m_collections && subIdx < m_collections->size()) {
         return (*m_collections)[subIdx].name;
       }
       return {};
@@ -425,10 +429,7 @@ auto InteractionManager::titleForIndexInColl(int coll, int idx) const -> QString
   if (path.isEmpty() && (scrollMgr())) {
     path = scrollMgr()->filePathForVisualIndex(idx);
   }
-  if (!path.isEmpty()) {
-    return QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
-  }
-  return {};
+  return InteractionHelpers::displayTitleForFilePath(path);
 }
 
 void InteractionManager::persistSelectionForIndex(int coll, int idx) {
@@ -439,14 +440,11 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
   // Use a stable session key that also scopes by virtual subfolder (if active).
   QString sessionKey =
       CollectionUtils::selectionSessionKeyFor((*m_collections)[coll], *m_collections);
-  QString title;
   QString path = m_selectionManager ? m_selectionManager->selectedFilePath() : QString();
   if (path.isEmpty() && (scrollMgr())) {
     path = scrollMgr()->filePathForVisualIndex(idx);
   }
-  if (!path.isEmpty()) {
-    title = QFileInfo(path).completeBaseName().replace('_', ' ').simplified();
-  }
+  const QString title = InteractionHelpers::displayTitleForFilePath(path);
   if (sessionMgr()) {
     sessionMgr()->setLastSelected(sessionKey, idx, title);
   }

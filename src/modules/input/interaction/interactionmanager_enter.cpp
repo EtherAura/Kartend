@@ -68,18 +68,20 @@ auto InteractionManager::processEnterOrReturnKey(int totalItems) -> bool {
   if (currentSelection < 0 || currentSelection >= totalItems) {
     return true;
   }
-  // Use the *rendered* subcollection count from the scroll data, not the
-  // hierarchy cache. During search the rendered list contains only matching
-  // subcollections (or none), while getSubcollections() still returns the full
-  // unfiltered parent's children. Using the latter caused media items to be
-  // misclassified as subcollections, navigating into the wrong child and
-  // "clearing the search and breaking the view."
+  // Classify via the rendered scroll data, not the hierarchy cache. During
+  // search the rendered list contains only matching subcollections (or none),
+  // while getSubcollections() still returns the full unfiltered parent's
+  // children. Using the latter caused media items to be misclassified as
+  // subcollections, navigating into the wrong child and "clearing the search
+  // and breaking the view." subcollectionIndexFromActual routes through the
+  // store's unified-aware mapping and returns -1 for non-subcollection
+  // indices — a raw `actualIndex < subCount` band check would skip
+  // subcollections that unified sort permutes past the subcollection band
+  // (mirrors VirtualScrollEngine::ensureWidgetForIndex).
   const int actualIndex =
       scrollMgr() ? scrollMgr()->getFilteredIndex(currentSelection) : currentSelection;
-  const int renderedSubCount = scrollMgr() ? scrollMgr()->getSubcollectionCount() : 0;
-  if (actualIndex >= 0 && actualIndex < renderedSubCount) {
-    const int subCollIdx =
-        scrollMgr() ? scrollMgr()->subcollectionIndexFromActual(actualIndex) : -1;
+  if (scrollMgr() && actualIndex >= 0) {
+    const int subCollIdx = scrollMgr()->subcollectionIndexFromActual(actualIndex);
     if (subCollIdx >= 0) {
       return handleEnterOnSubcollection(actualIndex, subCollIdx);
     }
@@ -228,7 +230,17 @@ auto InteractionManager::maybeExpandInsteadOfLaunch(const QString &filePath, int
     return false;
   }
   const CollectionConfig &collection = (*m_collections)[effectiveIdx];
-  if (!collection.expandMode) {
+  // The three-way routing (launch directly / collapse-then-launch / try to
+  // expand) is a pure decision on the expand-mode flag + overlay state —
+  // extracted to InteractionHelpers so the two-stage activation contract is
+  // unit-testable. "Already expanded for this exact item AND the overlay is
+  // still visible" falls through to launch and clears; if the user dismissed
+  // the overlay by clicking outside (without changing selection), the next
+  // activation is a fresh first-stage expand.
+  const auto activation = InteractionHelpers::classifyExpandActivation(
+      collection.expandMode, m_state.expandedItemIndex(), activationIndex,
+      scrollMgr() && scrollMgr()->isArtworkPreviewVisible());
+  if (activation == InteractionHelpers::ExpandActivation::LaunchDirectly) {
     return false;
   }
   // Use the owning collection's artwork directory so the preview matches
@@ -238,12 +250,7 @@ auto InteractionManager::maybeExpandInsteadOfLaunch(const QString &filePath, int
                             ? collectionIndex
                             : effectiveIdx;
   const CollectionConfig &artworkOwner = (*m_collections)[artworkOwnerIdx];
-  // Already expanded for this exact item AND the overlay is still visible
-  // → fall through to launch and clear. If the user dismissed the overlay
-  // by clicking outside (without changing selection), treat the next
-  // activation as a fresh first-stage expand.
-  if (m_state.expandedItemIndex() == activationIndex && activationIndex >= 0 && scrollMgr() &&
-      scrollMgr()->isArtworkPreviewVisible()) {
+  if (activation == InteractionHelpers::ExpandActivation::CollapseThenLaunch) {
     m_state.clearExpandedItem();
     scrollMgr()->hideArtworkPreview();
     return false;

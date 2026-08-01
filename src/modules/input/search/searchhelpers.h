@@ -64,6 +64,70 @@ using HasDirectItemsLookup = std::function<bool(int)>;
                                const QList<CollectionConfig> &collections,
                                const HasDirectItemsLookup &hasDirectItemsLookup) -> bool;
 
+// Whether entering search should snapshot the pre-search scroll/widget state
+// for instant restore on clear.
+//
+// Only CurrentCollection uses the pre-search restore path: it reloads via
+// setupVirtualScrolling on the same collection context. CurrentAndSub-
+// collections and AllCollections are DB-backed and can change the visible
+// data backing (and the subcollection/virtual-folder tile composition), so
+// they take the full reload path on clear instead.
+[[nodiscard]] auto shouldSavePreSearchState(SearchMode mode) -> bool;
+
+// What SearchManager::onSearchTextChanged should do when the search text
+// transitions to empty. Pure decision over the saved pre-search state:
+//
+// - RestoreRootView: search started from the synthetic Home view (no host
+//   collection) — rebuild the root tile view.
+// - RebuildAndRestorePreSearch: a CurrentCollection search saved scroll state
+//   — rebuild the pre-search view, then restore the cached widgets/scroll.
+// - ClearFilterAndRestore: an in-memory-filter mode saved state — clearFilter
+//   restores directly.
+// - ReloadCollection: no snapshot to restore — full reload via
+//   filterItems(QString()).
+// - None: no host collection and search didn't start from the root view —
+//   nothing view-shaped to restore.
+enum class SearchClearAction {
+  None,
+  RestoreRootView,
+  RebuildAndRestorePreSearch,
+  ClearFilterAndRestore,
+  ReloadCollection,
+};
+
+[[nodiscard]] auto classifySearchClearAction(int collIndex, bool preSearchInRootView,
+                                             bool hasPreSearchState, SearchMode preSearchMode)
+    -> SearchClearAction;
+
+// Which query pipeline a debounced non-empty search dispatches to.
+//
+// - RootAllCollections: no host collection but the user is in the root/Home
+//   view — the cross-collection pipeline is the only one that makes sense.
+// - None: no valid host collection and not in the root view — nothing to
+//   query against.
+// - Otherwise the pipeline follows the active SearchMode 1:1 (all three are
+//   DB-backed; see the dispatch comments in performDebouncedSearch).
+enum class SearchDispatch {
+  None,
+  RootAllCollections,
+  CurrentCollection,
+  CurrentAndSubcollections,
+  AllCollections,
+};
+
+[[nodiscard]] auto classifySearchDispatch(int collIndex, int collectionsSize, bool inRootView,
+                                          SearchMode mode) -> SearchDispatch;
+
+// The refocus-unless-deliberate heuristic (Kartend-8oau): after a results
+// update, focus is reclaimed for the search bar only when
+// - the search bar is visible,
+// - it doesn't already have focus, and
+// - focus is NOT in another text input (a QLineEdit other than the search
+//   bar means the user deliberately moved focus; transient grabbers like
+//   result tiles are not text inputs and are reclaimed from).
+[[nodiscard]] auto shouldRefocusSearchBar(bool searchBarVisible, bool focusIsSearchBar,
+                                          bool focusIsOtherTextInput) -> bool;
+
 } // namespace SearchHelpers
 
 #endif // SEARCHHELPERS_H

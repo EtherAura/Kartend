@@ -43,6 +43,36 @@ private slots:
   void resolveTreatsOutOfRangeDbIndexAsInvalid();
   void resolveTreatsOutOfRangeFallbackAsInvalid();
   void resolveReturnsMinusOneWhenCollectionsEmpty();
+
+  // classifyContextTarget
+  void contextTargetMediaItemWithPathShowsLaunch();
+  void contextTargetMediaItemWithoutPathHidesLaunch();
+  void contextTargetSubcollectionShowsOpenOnly();
+  void contextTargetVirtualFolderShowsOpenOnly();
+
+  // playlistContextFlags
+  void playlistFlagsAllOffOutsidePlaylist();
+  void playlistFlagsStaticPlaylistOffersRemoveAndDelete();
+  void playlistFlagsSmartPlaylistOffersEditFilterNotRemove();
+  void playlistFlagsReservedPlaylistHidesDelete();
+
+  // pickLauncherIndex
+  void launcherPickPrefersValidOverride();
+  void launcherPickIgnoresOutOfRangeOverride();
+  void launcherPickClampsDefaultIntoRange();
+  void launcherPickReturnsZeroWhenNoLaunchers();
+
+  // classifyExpandActivation
+  void expandActivationLaunchesDirectlyWhenModeOff();
+  void expandActivationCollapsesWhenSameItemStillVisible();
+  void expandActivationReExpandsWhenOverlayDismissed();
+  void expandActivationExpandsOnDifferentItem();
+  void expandActivationNegativeIndexNeverCollapses();
+
+  // displayTitleForFilePath
+  void displayTitleFlattensUnderscoresAndWhitespace();
+  void displayTitleDropsExtensionKeepsInnerDots();
+  void displayTitleEmptyPathYieldsEmptyTitle();
 };
 
 // ------------------------------ stepSizeForViewType -------------------------
@@ -198,6 +228,157 @@ void TestInteractionHelpers::resolveTreatsOutOfRangeFallbackAsInvalid() {
 
 void TestInteractionHelpers::resolveReturnsMinusOneWhenCollectionsEmpty() {
   QCOMPARE(InteractionHelpers::resolveOwnerIndex(0, 0, 0), -1);
+}
+
+// ------------------------------ classifyContextTarget -----------------------
+
+void TestInteractionHelpers::contextTargetMediaItemWithPathShowsLaunch() {
+  const auto flags = InteractionHelpers::classifyContextTarget(
+      /*isSubcollection=*/false, /*isVirtualFolder=*/false, /*hasFilePath=*/true);
+  QVERIFY(flags.isMediaItem);
+  QVERIFY(flags.showLaunch);
+  QVERIFY(!flags.showOpen);
+}
+
+void TestInteractionHelpers::contextTargetMediaItemWithoutPathHidesLaunch() {
+  // A media tile without a resolved path has nothing to hand the launcher —
+  // "Launch" must not be offered even though the item is media-kind.
+  const auto flags = InteractionHelpers::classifyContextTarget(false, false, false);
+  QVERIFY(flags.isMediaItem);
+  QVERIFY(!flags.showLaunch);
+  QVERIFY(!flags.showOpen);
+}
+
+void TestInteractionHelpers::contextTargetSubcollectionShowsOpenOnly() {
+  // Subcollection tiles get "Open" (the enter-equivalent) and never "Launch",
+  // even when a stray file path is attached.
+  const auto flags = InteractionHelpers::classifyContextTarget(true, false, true);
+  QVERIFY(!flags.isMediaItem);
+  QVERIFY(!flags.showLaunch);
+  QVERIFY(flags.showOpen);
+}
+
+void TestInteractionHelpers::contextTargetVirtualFolderShowsOpenOnly() {
+  const auto flags = InteractionHelpers::classifyContextTarget(false, true, false);
+  QVERIFY(!flags.isMediaItem);
+  QVERIFY(!flags.showLaunch);
+  QVERIFY(flags.showOpen);
+}
+
+// ------------------------------ playlistContextFlags ------------------------
+
+void TestInteractionHelpers::playlistFlagsAllOffOutsidePlaylist() {
+  // Outside a playlist none of the playlist-scoped actions apply, regardless
+  // of the (meaningless) smart/reserved inputs.
+  const auto flags = InteractionHelpers::playlistContextFlags(
+      /*insidePlaylist=*/false, /*isSmartPlaylist=*/true, /*isReservedPlaylist=*/false);
+  QVERIFY(!flags.showRemoveFromPlaylist);
+  QVERIFY(!flags.showEditSmartFilter);
+  QVERIFY(!flags.showDeletePlaylist);
+}
+
+void TestInteractionHelpers::playlistFlagsStaticPlaylistOffersRemoveAndDelete() {
+  const auto flags = InteractionHelpers::playlistContextFlags(true, false, false);
+  QVERIFY(flags.showRemoveFromPlaylist);
+  QVERIFY(!flags.showEditSmartFilter);
+  QVERIFY(flags.showDeletePlaylist);
+}
+
+void TestInteractionHelpers::playlistFlagsSmartPlaylistOffersEditFilterNotRemove() {
+  // Removal from a smart playlist would not stick (the next open re-evaluates
+  // the filter), so the action is hidden; the filter editor appears instead.
+  const auto flags = InteractionHelpers::playlistContextFlags(true, true, false);
+  QVERIFY(!flags.showRemoveFromPlaylist);
+  QVERIFY(flags.showEditSmartFilter);
+  QVERIFY(flags.showDeletePlaylist);
+}
+
+void TestInteractionHelpers::playlistFlagsReservedPlaylistHidesDelete() {
+  // Built-ins (favorites) keep rename but hide delete — PlaylistManager
+  // refuses the call anyway.
+  const auto flags = InteractionHelpers::playlistContextFlags(true, false, true);
+  QVERIFY(flags.showRemoveFromPlaylist);
+  QVERIFY(!flags.showDeletePlaylist);
+}
+
+// ------------------------------ pickLauncherIndex ---------------------------
+
+void TestInteractionHelpers::launcherPickPrefersValidOverride() {
+  QCOMPARE(InteractionHelpers::pickLauncherIndex(/*override=*/2, /*default=*/0, /*count=*/4), 2);
+}
+
+void TestInteractionHelpers::launcherPickIgnoresOutOfRangeOverride() {
+  // A stale override (launcher list shrank since it was stored) must fall
+  // back to the default, not index past the end.
+  QCOMPARE(InteractionHelpers::pickLauncherIndex(/*override=*/7, /*default=*/1, /*count=*/3), 1);
+  QCOMPARE(InteractionHelpers::pickLauncherIndex(/*override=*/-1, /*default=*/1, /*count=*/3), 1);
+}
+
+void TestInteractionHelpers::launcherPickClampsDefaultIntoRange() {
+  // defaultLauncherIndex can also go stale; it clamps to the last launcher.
+  QCOMPARE(InteractionHelpers::pickLauncherIndex(-1, /*default=*/9, /*count=*/3), 2);
+  QCOMPARE(InteractionHelpers::pickLauncherIndex(-1, /*default=*/-4, /*count=*/3), 0);
+}
+
+void TestInteractionHelpers::launcherPickReturnsZeroWhenNoLaunchers() {
+  // The "no configured launchers" placeholder the preview path uses.
+  QCOMPARE(InteractionHelpers::pickLauncherIndex(-1, 0, /*count=*/0), 0);
+  QCOMPARE(InteractionHelpers::pickLauncherIndex(3, 2, /*count=*/-1), 0);
+}
+
+// ------------------------------ classifyExpandActivation --------------------
+
+void TestInteractionHelpers::expandActivationLaunchesDirectlyWhenModeOff() {
+  QCOMPARE(InteractionHelpers::classifyExpandActivation(/*enabled=*/false, /*expanded=*/3,
+                                                        /*activation=*/3, /*visible=*/true),
+           InteractionHelpers::ExpandActivation::LaunchDirectly);
+}
+
+void TestInteractionHelpers::expandActivationCollapsesWhenSameItemStillVisible() {
+  // Second activation on the already-expanded item while the overlay is up
+  // → collapse and fall through to launch.
+  QCOMPARE(InteractionHelpers::classifyExpandActivation(true, 3, 3, true),
+           InteractionHelpers::ExpandActivation::CollapseThenLaunch);
+}
+
+void TestInteractionHelpers::expandActivationReExpandsWhenOverlayDismissed() {
+  // The user dismissed the overlay (click outside) without changing
+  // selection: the next activation is a fresh first-stage expand, not a
+  // launch.
+  QCOMPARE(InteractionHelpers::classifyExpandActivation(true, 3, 3, /*visible=*/false),
+           InteractionHelpers::ExpandActivation::TryExpand);
+}
+
+void TestInteractionHelpers::expandActivationExpandsOnDifferentItem() {
+  QCOMPARE(InteractionHelpers::classifyExpandActivation(true, /*expanded=*/1, /*activation=*/4,
+                                                        true),
+           InteractionHelpers::ExpandActivation::TryExpand);
+}
+
+void TestInteractionHelpers::expandActivationNegativeIndexNeverCollapses() {
+  // expandedItemIndex == activationIndex == -1 (nothing expanded, no valid
+  // activation) must not read as "same item" — it is a first-stage expand.
+  QCOMPARE(InteractionHelpers::classifyExpandActivation(true, -1, -1, true),
+           InteractionHelpers::ExpandActivation::TryExpand);
+}
+
+// ------------------------------ displayTitleForFilePath ---------------------
+
+void TestInteractionHelpers::displayTitleFlattensUnderscoresAndWhitespace() {
+  QCOMPARE(InteractionHelpers::displayTitleForFilePath(
+               QStringLiteral("/media/videos/My_Holiday__Reel.mp4")),
+           QStringLiteral("My Holiday Reel"));
+}
+
+void TestInteractionHelpers::displayTitleDropsExtensionKeepsInnerDots() {
+  // completeBaseName drops only the part after the LAST dot.
+  QCOMPARE(
+      InteractionHelpers::displayTitleForFilePath(QStringLiteral("/audio/Album v1.2_final.flac")),
+      QStringLiteral("Album v1.2 final"));
+}
+
+void TestInteractionHelpers::displayTitleEmptyPathYieldsEmptyTitle() {
+  QVERIFY(InteractionHelpers::displayTitleForFilePath(QString()).isEmpty());
 }
 
 QTEST_APPLESS_MAIN(TestInteractionHelpers)

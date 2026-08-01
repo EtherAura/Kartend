@@ -67,7 +67,7 @@ bool EventManager::handleMouseDoubleClick(QObject *obj, QEvent *event) {
 
   // If the double-clicked widget represents a subcollection or virtual folder,
   // allow the widget to handle the event so its signal is emitted.
-  if (scrollData() &&
+  if (scrollData() && scrollSearch() &&
       CollectionUtils::isInteractiveViewIndex(m_currentCollectionIndex, m_collections)) {
     int visualIndex = -1;
     const auto &active = scrollData()->getActiveWidgets();

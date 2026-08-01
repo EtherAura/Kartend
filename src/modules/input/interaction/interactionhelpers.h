@@ -3,6 +3,8 @@
 
 #include "collectiontypes.h"
 
+#include <QString>
+
 // Pure helpers extracted from InteractionManager so they can be unit-tested
 // without instantiating the full UI/manager graph.
 //
@@ -48,6 +50,70 @@ struct HoldScrollStep {
 // Returns `dbIndex` when it points into the collections list; otherwise the
 // `fallbackIndex` if that is in range; otherwise -1.
 [[nodiscard]] auto resolveOwnerIndex(int dbIndex, int fallbackIndex, int collectionsSize) -> int;
+
+// Structural classification of a right-clicked item, driving which top-level
+// context-menu entries are offered.
+//
+// - A "media item" is anything that is neither a subcollection tile nor a
+//   virtual-folder tile.
+// - "Launch" is offered only for media items that carry a file path (a media
+//   tile without a resolved path has nothing to hand the launcher).
+// - "Open" is the enter-equivalent for the two navigable tile kinds.
+struct ContextTargetFlags {
+  bool isMediaItem = false;
+  bool showLaunch = false;
+  bool showOpen = false;
+};
+
+[[nodiscard]] auto classifyContextTarget(bool isSubcollection, bool isVirtualFolder,
+                                         bool hasFilePath) -> ContextTargetFlags;
+
+// Visibility of the playlist-scoped context-menu actions.
+//
+// - "Remove from playlist" only inside a *static* playlist — removal from a
+//   smart playlist would not stick (the next open re-evaluates the filter).
+// - "Edit smart filter…" only for smart playlists (nothing filter-shaped to
+//   edit on a static one).
+// - "Delete playlist…" hidden for reserved built-ins (PlaylistManager refuses
+//   the call anyway; surfacing a button that always errors is worse UX).
+struct PlaylistMenuFlags {
+  bool showRemoveFromPlaylist = false;
+  bool showEditSmartFilter = false;
+  bool showDeletePlaylist = false;
+};
+
+[[nodiscard]] auto playlistContextFlags(bool insidePlaylist, bool isSmartPlaylist,
+                                        bool isReservedPlaylist) -> PlaylistMenuFlags;
+
+// Picks the launcher index an item activation will use.
+//
+// Mirrors the production precedence shared by the launch-preview dialog and
+// the "Always launch with…" default: the per-item override wins when it is a
+// valid index, otherwise the collection's default launcher clamped into
+// range. `launcherCount <= 0` returns 0 (the "no configured launchers"
+// placeholder the preview path uses).
+[[nodiscard]] auto pickLauncherIndex(int overrideIndex, int defaultLauncherIndex,
+                                     int launcherCount) -> int;
+
+// Expand-mode (two-stage activation) routing decision.
+//
+// - LaunchDirectly: expand-mode is off for the viewing collection — the
+//   activation proceeds straight to launch.
+// - CollapseThenLaunch: this exact item is already expanded AND the overlay is
+//   still visible — hide the overlay, clear the expand state, and launch.
+// - TryExpand: first-stage activation — attempt to show the preview overlay
+//   (the caller still falls back to launch when the overlay has nothing to
+//   show, so a media-less item can never be trapped un-launchable).
+enum class ExpandActivation { LaunchDirectly, CollapseThenLaunch, TryExpand };
+
+[[nodiscard]] auto classifyExpandActivation(bool expandModeEnabled, int expandedItemIndex,
+                                            int activationIndex, bool overlayVisible)
+    -> ExpandActivation;
+
+// Human-readable display title derived from a media file path: the complete
+// base name with underscores flattened to spaces and whitespace runs
+// collapsed. Empty input yields an empty title.
+[[nodiscard]] auto displayTitleForFilePath(const QString &filePath) -> QString;
 
 } // namespace InteractionHelpers
 

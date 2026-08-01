@@ -75,4 +75,45 @@ auto allowAllFor(const CollectionConfig &cfg, int collIndex, bool hasSubs,
   return false;
 }
 
+auto shouldSavePreSearchState(SearchMode mode) -> bool {
+  return mode == SearchMode::CurrentCollection;
+}
+
+auto classifySearchClearAction(int collIndex, bool preSearchInRootView, bool hasPreSearchState,
+                               SearchMode preSearchMode) -> SearchClearAction {
+  if (collIndex < 0) {
+    return preSearchInRootView ? SearchClearAction::RestoreRootView : SearchClearAction::None;
+  }
+  if (hasPreSearchState) {
+    return preSearchMode == SearchMode::CurrentCollection
+               ? SearchClearAction::RebuildAndRestorePreSearch
+               : SearchClearAction::ClearFilterAndRestore;
+  }
+  return SearchClearAction::ReloadCollection;
+}
+
+auto classifySearchDispatch(int collIndex, int collectionsSize, bool inRootView, SearchMode mode)
+    -> SearchDispatch {
+  if (collIndex < 0 && inRootView) {
+    return SearchDispatch::RootAllCollections;
+  }
+  if (collIndex < 0 || collIndex >= collectionsSize) {
+    return SearchDispatch::None;
+  }
+  switch (mode) {
+  case SearchMode::CurrentCollection:
+    return SearchDispatch::CurrentCollection;
+  case SearchMode::CurrentAndSubcollections:
+    return SearchDispatch::CurrentAndSubcollections;
+  case SearchMode::AllCollections:
+    return SearchDispatch::AllCollections;
+  }
+  return SearchDispatch::None;
+}
+
+auto shouldRefocusSearchBar(bool searchBarVisible, bool focusIsSearchBar,
+                            bool focusIsOtherTextInput) -> bool {
+  return searchBarVisible && !focusIsSearchBar && !focusIsOtherTextInput;
+}
+
 } // namespace SearchHelpers

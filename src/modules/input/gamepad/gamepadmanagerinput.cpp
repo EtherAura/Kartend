@@ -12,10 +12,19 @@ void GamepadManager::setSuspended(bool suspended) {
   m_suspended = suspended;
   if (suspended) {
     // Drop any held direction + keyboard repeat so movement doesn't stick
-    // under the launched program. applyActiveDirection(None) handles the
-    // keyboard reset; gating the dispatch chokepoints below keeps further
-    // presses/directions from routing until resume.
-    applyActiveDirection(Direction::None);
+    // under the launched program. Reset directly rather than through
+    // applyActiveDirection(None): that path early-returns during binding
+    // capture, which would leave the held direction and repeat running (and
+    // m_activeDirection stale on resume). Gating the dispatch chokepoints
+    // keeps further presses/directions from routing until resume.
+    if (m_activeDirection != Direction::None) {
+      emit requestScrollAnimationStop();
+      m_activeDirection = Direction::None;
+      if (auto *kb = keyboardMgr()) {
+        kb->setPhysicalKeyDown(false);
+        kb->stopRepeat(false);
+      }
+    }
   }
 }
 
