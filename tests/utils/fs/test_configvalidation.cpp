@@ -35,6 +35,13 @@ private slots:
   void validateCollection_optionalArtworkDirMissingIsWarning();
   void validateCollection_collectionPlaceholderMediaDirIsExpanded();
 
+  // Kartend-ufxpm: one warning per launcher state (the non-executable case
+  // used to ALSO emit a contradictory "does not exist"), and cycles longer
+  // than self-parenting are reported.
+  void validateCollection_nonExecutableLauncherWarnsOnce();
+  void validateCollection_missingPathLauncherWarnsOnce();
+  void validateAllCollections_twoCycleIsError();
+
   void validateAllCollections_emptyListWarns();
   void validateAllCollections_parentIndexOutOfRangeIsError();
   void validateAllCollections_selfParentIsError();
@@ -236,6 +243,80 @@ void TestConfigValidation::validateCollection_optionalArtworkDirMissingIsWarning
   bool found = false;
   for (const QString &w : r.warnings) {
     if (w.contains(QStringLiteral("artwork directory does not exist"))) {
+      found = true;
+      break;
+    }
+  }
+  QVERIFY(found);
+}
+
+void TestConfigValidation::validateCollection_nonExecutableLauncherWarnsOnce() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString launcher = dir.filePath(QStringLiteral("launcher.sh"));
+  {
+    QFile f(launcher);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("#!/bin/sh\n");
+  }
+  QFile::setPermissions(launcher, QFile::ReadOwner | QFile::WriteOwner); // present, not executable
+
+  CollectionConfig c = makeLeaf(QStringLiteral("Test"), dir.path());
+  c.launcher.launcherPath = launcher;
+  const auto r = ConfigValidation::validateCollection(c, 0, /*isContainer=*/false);
+
+  int launcherWarnings = 0;
+  bool sawNotExecutable = false;
+  for (const QString &w : r.warnings) {
+    if (w.contains(QStringLiteral("launcher"))) {
+      ++launcherWarnings;
+      sawNotExecutable = sawNotExecutable || w.contains(QStringLiteral("not executable"));
+    }
+  }
+  // Exactly ONE launcher warning, and it names the real state — previously a
+  // second "does not exist" fired for the same launcher.
+  QCOMPARE(launcherWarnings, 1);
+  QVERIFY(sawNotExecutable);
+}
+
+void TestConfigValidation::validateCollection_missingPathLauncherWarnsOnce() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  CollectionConfig c = makeLeaf(QStringLiteral("Test"), dir.path());
+  c.launcher.launcherPath = dir.filePath(QStringLiteral("gone/launcher"));
+  const auto r = ConfigValidation::validateCollection(c, 0, /*isContainer=*/false);
+
+  int launcherWarnings = 0;
+  bool sawDoesNotExist = false;
+  for (const QString &w : r.warnings) {
+    if (w.contains(QStringLiteral("launcher"))) {
+      ++launcherWarnings;
+      sawDoesNotExist = sawDoesNotExist || w.contains(QStringLiteral("does not exist"));
+    }
+  }
+  QCOMPARE(launcherWarnings, 1);
+  QVERIFY(sawDoesNotExist);
+}
+
+void TestConfigValidation::validateAllCollections_twoCycleIsError() {
+  // Corrupt input: 1 → 2 → 1 among subcollections. The old check only
+  // caught parent == i, so this passed validation unreported.
+  QList<CollectionConfig> collections;
+  collections << makeLeaf(QStringLiteral("Root"));
+  CollectionConfig b = makeLeaf(QStringLiteral("B"));
+  b.parentCollectionIndex = 2;
+  b.isSubcollection = true;
+  collections << b;
+  CollectionConfig c = makeLeaf(QStringLiteral("C"));
+  c.parentCollectionIndex = 1;
+  c.isSubcollection = true;
+  collections << c;
+
+  const auto r = ConfigValidation::validateAllCollections(collections);
+  QVERIFY(!r.valid);
+  bool found = false;
+  for (const QString &e : r.errors) {
+    if (e.contains(QStringLiteral("circular parent chain"))) {
       found = true;
       break;
     }

@@ -3,6 +3,7 @@
 #include "configvalidation.h"
 
 #include "collection/collectionconfig.h"
+#include "collection/hierarchyhelpers.h"
 #include "collection/typehelpers.h"
 #include "pathutils.h"
 
@@ -80,33 +81,27 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
   // marquee, details pane) still set and read the fields directly, so the
   // struct fields themselves stay in place.
 
-  // Launcher validation (optional but validate if present)
+  // Launcher validation (optional but validate if present). One warning per
+  // launcher, keyed to its actual state — the previous shape let a
+  // present-but-not-executable path fall through to a second "does not
+  // exist" warning that contradicted the first (Kartend-ufxpm), and routed
+  // "~launcher" (path branch) through the command-name message.
   if (!config.launcher.launcherPath.isEmpty()) {
-    QString launcherPath = config.launcher.launcherPath;
-    bool launcherValid = false;
+    const QString launcherPath = config.launcher.launcherPath;
 
-    // Check if it's an absolute or relative path
-    if (launcherPath.contains('/') || launcherPath.startsWith("~")) {
+    if (launcherPath.contains('/') || launcherPath.startsWith('~')) {
+      // Path-like: missing, present-but-not-executable, or fine.
       const QString expandedPath =
           PathUtils::expandPathWithoutExistenceCheck(launcherPath, config.name);
-      QFileInfo launcherInfo(expandedPath);
-      if (launcherInfo.exists()) {
-        if (launcherInfo.isExecutable()) {
-          launcherValid = true;
-        } else {
-          result.addWarning(prefix + "launcher is not executable: " + launcherPath);
-        }
+      const QFileInfo launcherInfo(expandedPath);
+      if (!launcherInfo.exists()) {
+        result.addWarning(prefix + "launcher does not exist: " + launcherPath);
+      } else if (!launcherInfo.isExecutable()) {
+        result.addWarning(prefix + "launcher is not executable: " + launcherPath);
       }
-    } else {
-      // It's a command name - check if it's in PATH
-      launcherValid = isCommandInPath(launcherPath);
-    }
-
-    if (!launcherValid && !launcherPath.contains('/')) {
-      // Only warn if we haven't already added a warning above
+    } else if (!isCommandInPath(launcherPath)) {
+      // Bare command name — the PATH lookup is the only existence check.
       result.addWarning(prefix + "launcher not found in PATH: " + launcherPath);
-    } else if (!launcherValid) {
-      result.addWarning(prefix + "launcher does not exist: " + launcherPath);
     }
   }
 
@@ -270,9 +265,20 @@ ValidationResult validateAllCollections(const QList<CollectionConfig> &collectio
                           .arg(i)
                           .arg(parentIndex));
     }
-    // Detect circular parent references
+    // Detect circular parent references. Self-parenting keeps its specific
+    // message; deeper cycles reuse the visited-set ancestor walk that
+    // wouldCreateCircularReference already implements — the old check only
+    // caught parent == i, so a 2-cycle (or longer) passed unreported
+    // (Kartend-ufxpm). The helper asks "may i have parentIndex as parent?"
+    // — with parentIndex being i's CURRENT parent, a true answer means i's
+    // ancestor chain reaches back to i or is itself cyclic.
     if (parentIndex == i) {
       result.addError(QString("Collection '%1' (index %2) has itself as parent")
+                          .arg(collections[i].name)
+                          .arg(i));
+    } else if (parentIndex >= 0 && parentIndex < collections.size() &&
+               CollectionUtils::wouldCreateCircularReference(i, parentIndex, collections)) {
+      result.addError(QString("Collection '%1' (index %2) has a circular parent chain")
                           .arg(collections[i].name)
                           .arg(i));
     }

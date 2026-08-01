@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Collection validation no longer contradicts itself about a launcher that
+  exists but is not executable (it warned "not executable" and "does not
+  exist" about the same file), and circular parent chains between
+  collections are now reported — previously only a collection listed as its
+  own parent was caught.
 - **Filtered and sorted views no longer show the wrong items.** Folders shown
   as tiles were left out of the index the filter works in, so a filtered view
   could misclassify them and hide or misplace the items around them. With
