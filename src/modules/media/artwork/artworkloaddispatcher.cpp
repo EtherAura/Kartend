@@ -1,5 +1,7 @@
 #include "artworkloaddispatcher.h"
 
+#include <algorithm>
+
 #include "artworkutils.h"
 #include "cachemanager.h"
 #include "extensionutils.h"
@@ -101,12 +103,45 @@ private:
 
 namespace {
 
+// Kartend-wztmg: slack over the tile's measured size, so a modest relayout
+// (a window nudge, a sidebar toggle) recomposes from the cached image instead
+// of forcing a re-decode of the whole viewport.
+constexpr qreal kDecodeHeadroom = 1.25;
+// Never decode below this: a pathological layout reporting a few logical
+// pixels shouldn't poison the path-keyed cache with a thumbnail-sized entry.
+constexpr int kMinDecodePx = 128;
+// Slack before an oversized cache hit is worth rescaling. Entries written by
+// an older build (or a wider grid) are common; only rewrite when the saving
+// is real.
+constexpr qreal kOversizeTolerance = 1.35;
+
+// Longest edge, in device pixels, worth decoding for a tile whose artwork
+// label measured `targetLabelSize` logical px at `dpr`.
+//
+// Kartend-wztmg: this used to be a flat BOX_SIZE * dpr for every tile. On a
+// 200px grid at 1.4x scaling that decoded 560px art to draw it at 280 — 4x
+// the pixels, held for the process lifetime by the path-keyed memory cache
+// (heaptrack: 173M retained across 140 images, 1.24M apiece). BOX_SIZE stays
+// the ceiling, so this can only ever decode less than before, never more.
+//
+// An invalid/empty size means the widget had not been laid out at dispatch;
+// fall back to the old behaviour rather than guess.
+auto artworkDecodePx(const QSize &targetLabelSize, qreal dpr) -> int {
+  const int boxPx = qRound(UIConstants::Artwork::BOX_SIZE * dpr);
+  if (!targetLabelSize.isValid() || targetLabelSize.isEmpty()) {
+    return boxPx;
+  }
+  const int longestEdge = std::max(targetLabelSize.width(), targetLabelSize.height());
+  const int wanted = qRound(longestEdge * dpr * kDecodeHeadroom);
+  return std::clamp(wanted, kMinDecodePx, boxPx);
+}
+
 // Decode-at-target-size: avoids loading full-resolution artwork unnecessarily,
 // a major CPU+RAM win for large cover sets. DPR-aware so HiDPI displays get
 // crisp output. Worker-thread safe — touches only QImageReader; the DPR
 // argument must be snapshotted on the GUI thread by the caller because
 // QGuiApplication::primaryScreen() is documented as a GUI-thread accessor.
-auto loadAndProcessImage(const QString &path, qreal dpr) -> QImage {
+auto loadAndProcessImage(const QString &path, qreal dpr, int targetPx) -> QImage {
   if (path.isEmpty() || !QFile::exists(path)) {
     return {};
   }
@@ -117,7 +152,7 @@ auto loadAndProcessImage(const QString &path, qreal dpr) -> QImage {
   if (!ExtensionUtils::isDecodableImagePath(path)) {
     return {};
   }
-  const int actualSize = qRound(UIConstants::Artwork::BOX_SIZE * dpr);
+  const int actualSize = targetPx;
 
   QImageReader reader(path);
   reader.setAutoTransform(true);
@@ -151,7 +186,7 @@ QList<ArtworkInfo::Result>
 processBatchOnWorker(const QList<ArtworkInfo> &batch, const std::atomic<quint64> &generationCounter,
                      quint64 capturedGeneration,
                      const std::shared_ptr<ArtworkDispatcherCacheHandle> &cacheHandle,
-                     qreal fallbackDpr) {
+                     qreal fallbackDpr, std::atomic<int> &lastDecodePx) {
   // Worker-only contract: QImage is reentrant, QPixmap is not. Any code path
   // that reaches here on the GUI thread would risk a future maintainer
   // constructing QPixmap below, which Qt explicitly forbids off the main
@@ -177,15 +212,39 @@ processBatchOnWorker(const QList<ArtworkInfo> &batch, const std::atomic<quint64>
     // Disk-cache reads go through the shared handle, never a raw cache
     // pointer — the handle is invalidated in ~ArtworkLoadDispatcher so a
     // task abandoned by the bounded pool drain no-ops here (Kartend-xoftg).
+    const int decodePx = artworkDecodePx(info.targetLabelSize, dpr);
+    if (decodePx > 0) {
+      lastDecodePx.store(decodePx, std::memory_order_relaxed);
+    }
     QImage img = cacheHandle ? cacheHandle->tryLoadFromDiskCache(info.artworkPath) : QImage{};
-    const bool loadedFromDiskCache = !img.isNull();
+    bool loadedFromDiskCache = !img.isNull();
+    if (loadedFromDiskCache) {
+      // Kartend-wztmg: the disk cache is keyed by artwork path alone, so an
+      // entry can predate this build (written at the old flat BOX_SIZE) or
+      // belong to a differently-sized grid. Reconcile it against what this
+      // tile actually needs, in whichever direction it is wrong.
+      const int haveEdge = std::max(img.width(), img.height());
+      if (haveEdge < decodePx) {
+        // Too small to compose a crisp card — re-decode from the original
+        // rather than upscale. Falls through to the fresh-decode branch,
+        // which also rewrites the cache entry at the size we want.
+        img = QImage();
+        loadedFromDiskCache = false;
+      } else if (haveEdge > qRound(decodePx * kOversizeTolerance)) {
+        // Oversized (the common case on an existing cache): shrink before it
+        // reaches the memory cache, which would otherwise retain the full
+        // original for the process lifetime. Scaling here keeps the disk
+        // entry untouched and costs far less than the disk read it follows.
+        img = img.scaled(decodePx, decodePx, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+      }
+    }
     if (loadedFromDiskCache) {
       // Disk-cached PNGs decode with a default (1.0) DPR. Tag them with the
       // same DPR a fresh decode gets so the pixmaps and memory-cache entries
       // built from this image are consistently tagged either way.
       img.setDevicePixelRatio(dpr);
     } else {
-      img = loadAndProcessImage(info.artworkPath, dpr);
+      img = loadAndProcessImage(info.artworkPath, dpr, decodePx);
     }
     if (QApplication::closingDown() ||
         isCancelledForGeneration(generationCounter, capturedGeneration)) {
@@ -221,8 +280,8 @@ processBatchOnWorker(const QList<ArtworkInfo> &batch, const std::atomic<quint64>
 QList<ArtworkPrecacheResult>
 processPrecacheOnWorker(const QStringList &paths, const std::atomic<quint64> &generationCounter,
                         quint64 capturedGeneration,
-                        const std::shared_ptr<ArtworkDispatcherCacheHandle> &cacheHandle,
-                        qreal dpr) {
+                        const std::shared_ptr<ArtworkDispatcherCacheHandle> &cacheHandle, qreal dpr,
+                        const std::atomic<int> &lastDecodePx) {
   // Worker-only contract — see processBatchOnWorker.
   Q_ASSERT_X(QThread::currentThread() != QCoreApplication::instance()->thread(),
              "processPrecacheOnWorker",
@@ -235,13 +294,30 @@ processPrecacheOnWorker(const QStringList &paths, const std::atomic<quint64> &ge
       break;
     }
     // Shared-handle disk-cache read — see processBatchOnWorker (Kartend-xoftg).
+    // Kartend-wztmg: precache runs ahead of the viewport, so there is no
+    // widget to measure. Reuse the size the last real batch settled on — the
+    // grid it is precaching for — and fall back to the historical flat
+    // BOX_SIZE only before any batch has run. Matching the batch size matters
+    // for more than memory: the cache is path-keyed, so a precache entry
+    // written at a different size is what the tile would later pick up.
+    const int rememberedPx = lastDecodePx.load(std::memory_order_relaxed);
+    const int decodePx =
+        rememberedPx > 0 ? rememberedPx : qRound(UIConstants::Artwork::BOX_SIZE * dpr);
     QImage img = cacheHandle ? cacheHandle->tryLoadFromDiskCache(artworkPath) : QImage{};
-    const bool loadedFromDiskCache = !img.isNull();
+    bool loadedFromDiskCache = !img.isNull();
+    if (loadedFromDiskCache &&
+        std::max(img.width(), img.height()) > qRound(decodePx * kOversizeTolerance)) {
+      // Oversized entry from an older build or a wider grid — shrink before
+      // it lands in the memory cache. Unlike the batch path there is no
+      // undersize re-decode here: precache is speculative, and a slightly
+      // small entry is repaired by the batch path when the tile scrolls in.
+      img = img.scaled(decodePx, decodePx, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
     if (loadedFromDiskCache) {
       // Consistent DPR tagging for disk-cache hits — see processBatchOnWorker.
       img.setDevicePixelRatio(dpr);
     } else {
-      img = loadAndProcessImage(artworkPath, dpr);
+      img = loadAndProcessImage(artworkPath, dpr, decodePx);
     }
     if (QApplication::closingDown() ||
         isCancelledForGeneration(generationCounter, capturedGeneration)) {
@@ -260,7 +336,8 @@ processPrecacheOnWorker(const QStringList &paths, const std::atomic<quint64> &ge
 
 ArtworkLoadDispatcher::ArtworkLoadDispatcher(ICacheManager *cacheManager, QObject *parent)
     : QObject(parent), m_cacheHandle(std::make_shared<ArtworkDispatcherCacheHandle>(cacheManager)),
-      m_currentGeneration(std::make_shared<std::atomic<quint64>>(0)) {
+      m_currentGeneration(std::make_shared<std::atomic<quint64>>(0)),
+      m_lastDecodePx(std::make_shared<std::atomic<int>>(0)) {
   const int idealThreads = QThread::idealThreadCount();
   const int base = idealThreads > 0 ? (idealThreads / UIConstants::Concurrency::WORKER_POOL_DIVISOR)
                                     : UIConstants::Concurrency::WORKER_POOL_MIN_THREADS;
@@ -345,6 +422,7 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
   // dtor invalidates the handle so abandoned tasks no-op (Kartend-xoftg).
   const auto cacheHandle = m_cacheHandle;
   const auto generationCounter = m_currentGeneration;
+  const auto lastDecodePx = m_lastDecodePx;
   // Snapshot the live generation at dispatch time. cancelAll() bumps the
   // counter atomically; this captures the value *now*, so this task only
   // bails if a *future* cancelAll() (or destruction) moves the counter
@@ -363,17 +441,18 @@ void ArtworkLoadDispatcher::dispatchBatch(QList<ArtworkInfo> batch, bool highPri
                                 ? QGuiApplication::primaryScreen()->devicePixelRatio()
                                 : qreal{1.0};
 
-  QFuture<void> future = QtConcurrent::run(
-      m_threadPool, [batch = std::move(batch), highPriority, generationCounter, generation,
-                     batchItemCount, appReceiver, cacheHandle, handler, fallbackDpr]() {
-        if (QApplication::closingDown() || !generationCounter ||
+  QFuture<void> future =
+      QtConcurrent::run(m_threadPool, [batch = std::move(batch), highPriority, generationCounter,
+                                       generation, batchItemCount, appReceiver, cacheHandle,
+                                       handler, fallbackDpr, lastDecodePx]() {
+        if (QApplication::closingDown() || !generationCounter || !lastDecodePx ||
             isCancelledForGeneration(*generationCounter, generation)) {
           return;
         }
         QElapsedTimer timer;
         timer.start();
-        QList<ArtworkInfo::Result> results =
-            processBatchOnWorker(batch, *generationCounter, generation, cacheHandle, fallbackDpr);
+        QList<ArtworkInfo::Result> results = processBatchOnWorker(
+            batch, *generationCounter, generation, cacheHandle, fallbackDpr, *lastDecodePx);
         const qint64 elapsedMs = timer.elapsed();
         if (QApplication::closingDown() || !generationCounter ||
             isCancelledForGeneration(*generationCounter, generation)) {
@@ -411,6 +490,7 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
   // Shared handle, not a raw cache pointer — see dispatchBatch (Kartend-xoftg).
   const auto cacheHandle = m_cacheHandle;
   const auto generationCounter = m_currentGeneration;
+  const auto lastDecodePx = m_lastDecodePx;
   const quint64 generation =
       generationCounter ? generationCounter->load(std::memory_order_acquire) : quint64{0};
   QObject *appReceiver = QCoreApplication::instance();
@@ -421,17 +501,17 @@ void ArtworkLoadDispatcher::dispatchPrecacheBatch(QStringList paths,
                         ? QGuiApplication::primaryScreen()->devicePixelRatio()
                         : qreal{1.0};
 
-  QFuture<void> future =
-      QtConcurrent::run(m_threadPool, [paths = std::move(paths), generationCounter, generation,
-                                       batchItemCount, appReceiver, cacheHandle, handler, dpr]() {
-        if (QApplication::closingDown() || !generationCounter ||
+  QFuture<void> future = QtConcurrent::run(
+      m_threadPool, [paths = std::move(paths), generationCounter, generation, batchItemCount,
+                     appReceiver, cacheHandle, handler, dpr, lastDecodePx]() {
+        if (QApplication::closingDown() || !generationCounter || !lastDecodePx ||
             isCancelledForGeneration(*generationCounter, generation)) {
           return;
         }
         QElapsedTimer timer;
         timer.start();
-        QList<ArtworkPrecacheResult> results =
-            processPrecacheOnWorker(paths, *generationCounter, generation, cacheHandle, dpr);
+        QList<ArtworkPrecacheResult> results = processPrecacheOnWorker(
+            paths, *generationCounter, generation, cacheHandle, dpr, *lastDecodePx);
         const qint64 elapsedMs = timer.elapsed();
         if (QApplication::closingDown() || !generationCounter ||
             isCancelledForGeneration(*generationCounter, generation)) {
