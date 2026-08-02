@@ -2,6 +2,7 @@
 #define MEDIABACKENDCONFIG_H
 
 #include <QByteArray>
+#include <QProcessEnvironment>
 
 /// Startup policy for Qt Multimedia's FFmpeg backend.
 ///
@@ -30,6 +31,22 @@ namespace MediaBackendConfig {
 /// off entirely). Returns true when the policy was applied, false when an
 /// existing setting was honoured instead.
 auto applyDecodingHwDeviceTypePolicy() -> bool;
+
+/// Kartend-fmdq5: drop our injected backend list from a child process's
+/// environment.
+///
+/// applyDecodingHwDeviceTypePolicy() works by putting the list in this
+/// process's environment, and QProcess children inherit it — so a launched
+/// Qt application would silently be held to Kartend's backend policy too.
+/// That only ever affects children that are themselves Qt apps using the
+/// FFmpeg media backend (non-Qt launchers never read the variable), but it is
+/// coupling we did not intend to export.
+///
+/// An operator-supplied value is deliberately left alone: if someone set
+/// QT_FFMPEG_DECODING_HW_DEVICE_TYPES themselves, children inherited it
+/// before this existed and should keep inheriting it. Only the value we
+/// injected is removed.
+void removeInjectedDecodingHwDeviceTypes(QProcessEnvironment &env);
 
 } // namespace MediaBackendConfig
 

@@ -14,11 +14,13 @@
 #include "errorpresentation.h"
 #include "errorutils.h"
 #include "launchmanager.h"
+#include "mediabackendconfig.h"
 
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QTimer>
 
 #include <memory>
@@ -46,6 +48,16 @@ namespace {
 // cmd-escaped tokens. Runtime confirmation of the cmd.exe round-trip is a
 // manual MSVC-CI check (headless Linux CI cannot exercise it).
 void startLauncherProcess(QProcess *child, const QString &launcherPath, const QStringList &args) {
+  // Kartend-fmdq5: children inherit our environment, including the FFmpeg
+  // backend list main() injects (Kartend-0vnvo). Hand the launcher the
+  // environment minus that one variable so Kartend's media policy does not
+  // silently follow it. Basing this on systemEnvironment() keeps everything
+  // else exactly as inherited; an operator-supplied value is left in place
+  // (see removeInjectedDecodingHwDeviceTypes).
+  QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+  MediaBackendConfig::removeInjectedDecodingHwDeviceTypes(env);
+  child->setProcessEnvironment(env);
+
 #ifdef Q_OS_WIN
   const QString suffix = QFileInfo(launcherPath).suffix().toLower();
   if (suffix == QLatin1String("cmd") || suffix == QLatin1String("bat")) {

@@ -46,6 +46,8 @@ private slots:
   void apply_setsPolicyWhenUnset();
   void apply_keepsExplicitOverride();
   void apply_keepsExplicitHardwareDecodingOptOut();
+  void childEnv_dropsTheValueWeInjected();
+  void childEnv_keepsAnOperatorSuppliedValue();
 };
 
 void TestMediaBackendConfig::cleanup() {
@@ -98,6 +100,37 @@ void TestMediaBackendConfig::apply_keepsExplicitHardwareDecodingOptOut() {
   qputenv(kVar, ",");
   QVERIFY(!MediaBackendConfig::applyDecodingHwDeviceTypePolicy());
   QCOMPARE(qgetenv(kVar), QByteArrayLiteral(","));
+}
+
+void TestMediaBackendConfig::childEnv_dropsTheValueWeInjected() {
+  // Kartend-fmdq5: launched processes inherit our environment, so the backend
+  // list main() injects would silently constrain any child that is itself a Qt
+  // app using the FFmpeg backend.
+  QProcessEnvironment env;
+  env.insert(QString::fromLatin1(kVar),
+             QString::fromLatin1(MediaBackendConfig::decodingHwDeviceTypes()));
+  env.insert(QStringLiteral("KARTEND_UNRELATED"), QStringLiteral("keep-me"));
+
+  MediaBackendConfig::removeInjectedDecodingHwDeviceTypes(env);
+
+  QVERIFY(!env.contains(QString::fromLatin1(kVar)));
+  // Only that one key goes; the rest of the inherited environment is intact.
+  QCOMPARE(env.value(QStringLiteral("KARTEND_UNRELATED")), QStringLiteral("keep-me"));
+}
+
+void TestMediaBackendConfig::childEnv_keepsAnOperatorSuppliedValue() {
+  // A value that isn't ours came from the operator: children inherited it
+  // before this scrubbing existed and should keep inheriting it, since removing
+  // it would silently override a deliberate choice. Both a narrowed list and
+  // the documented "no hardware decoding" spelling must survive.
+  for (const QString &supplied : {QStringLiteral("vaapi"), QStringLiteral(",")}) {
+    QProcessEnvironment env;
+    env.insert(QString::fromLatin1(kVar), supplied);
+
+    MediaBackendConfig::removeInjectedDecodingHwDeviceTypes(env);
+
+    QCOMPARE(env.value(QString::fromLatin1(kVar)), supplied);
+  }
 }
 
 QTEST_MAIN(TestMediaBackendConfig)
