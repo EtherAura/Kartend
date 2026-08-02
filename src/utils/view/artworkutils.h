@@ -152,14 +152,27 @@ private:
   // The write lock is reserved for inserts/patches/clear, which are brief
   // (directory scans happen outside the lock).
   mutable QReadWriteLock m_lock;
-  // Maps directory path -> (baseMatchKey -> full artwork path). A contained
-  // key with a NULL/empty value is a cached NEGATIVE result (Kartend-bjrw1):
-  // the per-extension stat sweep ran once for that (dir, baseName) and found
-  // nothing, so re-materializing the same tile skips the sweep entirely.
-  // Negative entries (like positives) live until clear() — a file dropped in
-  // mid-session becomes visible on the next collection switch, same contract
-  // as the directory listing itself.
-  QHash<QString, QHash<QString, QString>> m_cache;
+  // Kartend-235kv: one listing per directory, with paths stored factored.
+  // Storing the full absolute path per file meant the directory half repeated
+  // for every entry — heaptrack measured 68.5M retained across 277k artwork
+  // files. `pathPrefix` holds the "<directory>/" spelling exactly as the scan
+  // produced it (captured once, from the first entry), and `byKey` values are
+  // bare file names; positive lookups reconstruct prefix + fileName. The
+  // byte-identical reconstruction matters: these paths key CacheManager's
+  // memory cache and the MD5-keyed disk artwork cache, so a changed spelling
+  // would orphan every existing entry.
+  struct DirectoryListing {
+    QString pathPrefix;
+    QHash<QString, QString> byKey;
+  };
+  // Maps directory path -> listing (baseMatchKey -> bare file name). A
+  // contained key with a NULL/empty value is a cached NEGATIVE result
+  // (Kartend-bjrw1): the per-extension stat sweep ran once for that
+  // (dir, baseName) and found nothing, so re-materializing the same tile
+  // skips the sweep entirely. Negative entries (like positives) live until
+  // clear() — a file dropped in mid-session becomes visible on the next
+  // collection switch, same contract as the directory listing itself.
+  QHash<QString, DirectoryListing> m_cache;
   // Directories requested but not yet scanned
   QSet<QString> m_queuedDirectories;
   // Bumped (under the write lock) on every m_cache mutation; lets derived
