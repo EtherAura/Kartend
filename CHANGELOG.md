@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Apps you launch are no longer affected by Kartend's own video settings.**
+  The video-decoder preference Kartend sets for itself was being inherited by
+  anything it launched, so a launched app built on the same toolkit quietly
+  picked up Kartend's choice instead of making its own. Launched apps now get
+  a clean slate. If you set that preference yourself, it is still passed
+  through untouched.
 - **Long sessions with video no longer grow without bound.** On some
   graphics setups — typically a processor with built-in graphics alongside a
   separate graphics card — the video decoder handed each clip to a
