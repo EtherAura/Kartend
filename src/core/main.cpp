@@ -98,6 +98,30 @@ extern "C" auto main(int argc, char *argv[]) -> int {
   QSurfaceFormat::setDefaultFormat(format);
 
   QApplication app(argc, argv);
+
+#if defined(__linux__) && defined(__GLIBC__)
+  // Kartend-8e822: periodically hand glibc's freed-but-retained heap pages
+  // back to the OS. The mallopt() pair above keeps LARGE (artwork-sized)
+  // buffers on the mmap path, where a free returns pages immediately — but
+  // small-allocation churn (strings, hash nodes, image metadata) still parks
+  // freed pages on arena free lists, where they count against RSS until the
+  // arena happens to shrink from its top. malloc_trim(0) instead releases
+  // interior free pages of every arena (madvise(MADV_DONTNEED)), so RSS
+  // tracks live data rather than each arena's high-water mark.
+  //
+  // Fired from a pool thread, not the GUI thread: the trim walks all arenas
+  // (capped at 4 above) holding each arena's lock briefly, and even a
+  // millisecond-scale stall is worth keeping off the paint path on a machine
+  // that live-streams its desktop. Capture-free lambda; the timer dies with
+  // the QApplication.
+  constexpr int kHeapTrimIntervalMs = 5 * 60 * 1000;
+  auto *heapTrimTimer = new QTimer(&app);
+  heapTrimTimer->setInterval(kHeapTrimIntervalMs);
+  QObject::connect(heapTrimTimer, &QTimer::timeout, &app,
+                   []() { QThreadPool::globalInstance()->start([]() { malloc_trim(0); }); });
+  heapTrimTimer->start();
+#endif
+
   QApplication::setApplicationName(APP_NAME);
   QApplication::setApplicationVersion(APP_VERSION);
   QApplication::setWindowIcon(QIcon(":/icon.svg"));
