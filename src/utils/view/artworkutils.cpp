@@ -119,27 +119,36 @@ void DirectoryCache::ensureDirectoryCached(const QString &directory) {
 
   QDir dir(directory);
   if (!dir.exists()) {
-    // Cache empty hash to avoid repeated checks
+    // Cache empty listing to avoid repeated checks
     QWriteLocker locker(&m_lock);
-    m_cache.insert(directory, QHash<QString, QString>());
+    m_cache.insert(directory, DirectoryListing());
     ++m_contentsGeneration;
     qCDebug(lcPerfTrace) << "ensureDirectoryCached: dir NOT EXISTS ms=" << perfTimer.elapsed()
                          << "dir=" << directory;
     return;
   }
 
-  QHash<QString, QString> dirContents;
+  DirectoryListing dirContents;
   const QStringList &imageFilters = ExtensionUtils::imageFilters();
 
   // Scan directory WITHOUT holding mutex - this is the slow part
   QDirIterator it(directory, imageFilters, QDir::Files);
   int fileCount = 0;
   while (it.hasNext()) {
-    QString path = it.next();
-    QString baseName = baseMatchKey(QFileInfo(path).completeBaseName());
+    const QFileInfo fi = it.nextFileInfo();
+    const QString fileName = fi.fileName();
+    // Kartend-235kv: capture the "<directory>/" prefix once, from the
+    // iterator's own path spelling, so prefix + fileName reconstructs the
+    // exact bytes it.next() used to return — path-keyed caches (memory and
+    // MD5 disk) keep hitting across this change.
+    if (dirContents.pathPrefix.isEmpty()) {
+      const QString path = fi.filePath();
+      dirContents.pathPrefix = path.left(path.size() - fileName.size());
+    }
+    QString baseName = baseMatchKey(fi.completeBaseName());
     // First match wins (preserves priority of extensions in imageFilters)
-    if (!dirContents.contains(baseName)) {
-      dirContents.insert(baseName, path);
+    if (!dirContents.byKey.contains(baseName)) {
+      dirContents.byKey.insert(baseName, fileName);
     }
     ++fileCount;
   }
@@ -185,19 +194,23 @@ QString DirectoryCache::findInDirectory(const QString &baseName, const QString &
     const auto dirIt = m_cache.constFind(artworkDirectory);
     dirCached = dirIt != m_cache.constEnd();
     if (dirCached) {
-      const auto keyIt = dirIt->constFind(key);
+      const auto keyIt = dirIt->byKey.constFind(key);
       // A present-but-empty value is a cached NEGATIVE result
       // (Kartend-bjrw1): the stat sweep below already ran for this
       // (dir, baseName) and found nothing — short-circuit without
       // touching the filesystem again.
-      keyKnown = keyIt != dirIt->constEnd();
-      if (keyKnown) {
-        result = *keyIt;
+      keyKnown = keyIt != dirIt->byKey.constEnd();
+      if (keyKnown && !keyIt->isEmpty()) {
+        // Kartend-235kv: values are bare file names; rebuild the full path
+        // from the listing's captured prefix. One small concat per positive
+        // hit, immediately ahead of the artwork decode it feeds.
+        result = dirIt->pathPrefix + *keyIt;
       }
       if (lcPerfTrace().isDebugEnabled() && timer.elapsed() > 2) {
         qCDebug(lcPerfTrace) << "findInDirectory: CACHED lockMs=" << afterLock
                              << "totalMs=" << timer.elapsed() << "found=" << !result.isEmpty()
-                             << "dirContentsSize=" << dirIt->size() << "dir=" << artworkDirectory;
+                             << "dirContentsSize=" << dirIt->byKey.size()
+                             << "dir=" << artworkDirectory;
       }
     } else if (lcPerfTrace().isDebugEnabled()) {
       static int queuedLogCount = 0;
@@ -241,13 +254,23 @@ QString DirectoryCache::findInDirectory(const QString &baseName, const QString &
     // scopes are short — the filesystem probe runs unlocked so other
     // lookups aren't serialised behind it.
     QWriteLocker patchLocker(&m_lock);
-    m_cache[artworkDirectory].insert(key, candidate);
+    DirectoryListing &listing = m_cache[artworkDirectory];
+    const QString candidateFileName = QFileInfo(candidate).fileName();
+    // A listing patched before any scan entry exists (dir cached empty, file
+    // dropped in later) has no prefix yet — derive it from the candidate the
+    // sweep just stat'ed. Scanned listings keep their scan-time prefix so
+    // sibling entries stay uniformly spelled.
+    if (listing.pathPrefix.isEmpty()) {
+      listing.pathPrefix = candidate.left(candidate.size() - candidateFileName.size());
+    }
+    listing.byKey.insert(key, candidateFileName);
     ++m_contentsGeneration;
+    // Return the exact string the sweep probed, not a reconstruction.
     return candidate;
   }
   {
     QWriteLocker patchLocker(&m_lock);
-    m_cache[artworkDirectory].insert(key, QString());
+    m_cache[artworkDirectory].byKey.insert(key, QString());
     ++m_contentsGeneration;
   }
   return {};
@@ -383,9 +406,9 @@ QSet<QString> DirectoryCache::collectPositiveKeys(const QStringList &directories
         uncached.append(dir);
         continue;
       }
-      for (auto it = dirIt->constBegin(); it != dirIt->constEnd(); ++it) {
+      for (auto it = dirIt->byKey.constBegin(); it != dirIt->byKey.constEnd(); ++it) {
         // A present-but-empty value is a cached NEGATIVE (Kartend-bjrw1) —
-        // only real artwork paths contribute a key.
+        // only real artwork entries contribute a key.
         if (!it.value().isEmpty()) {
           keys.insert(it.key());
         }

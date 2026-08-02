@@ -220,6 +220,21 @@ protected:
                                       const QModelIndex &sourceParent) const override;
 
 private:
+  /// Kartend-qxxh6: bracket a filter-parameter change.
+  ///
+  /// invalidateFilter() is deprecated (Qt schedules its removal for 6.13) in
+  /// favour of beginFilterChange() / endFilterChange(). The replacement pair
+  /// is not usable everywhere we build though: beginFilterChange() arrived in
+  /// 6.9 and endFilterChange() plus the Direction enum only in 6.10, while CI
+  /// still compiles against Qt 6.4. Calling the new API unconditionally
+  /// breaks that build; calling the old one unconditionally fails the
+  /// maintenance build, which compiles with clang -Werror and so treats the
+  /// deprecation warning as an error.
+  ///
+  /// Wrap the split once here rather than at each of the three setters.
+  void beginRowFilterChange();
+  void endRowFilterChange();
+
   bool m_complete = true;
   bool m_partial = true;
   bool m_empty = true;

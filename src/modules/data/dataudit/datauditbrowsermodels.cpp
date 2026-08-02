@@ -488,21 +488,45 @@ GameListFilterProxy::GameListFilterProxy(QObject *parent) : QSortFilterProxyMode
   setFilterCaseSensitivity(Qt::CaseInsensitive);
 }
 
+// See the declaration in datauditbrowsermodels.h for why these are wrapped
+// (Kartend-qxxh6). Note the ordering contract Qt documents: beginFilterChange()
+// runs BEFORE the parameters are touched, endFilterChange() after — which is
+// why the setters below no longer simply assign and then invalidate.
+void GameListFilterProxy::beginRowFilterChange() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+  beginFilterChange();
+#endif
+}
+
+void GameListFilterProxy::endRowFilterChange() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+  // Rows only: this proxy implements filterAcceptsRow() and not
+  // filterAcceptsColumn(), so a Direction::Both pass would re-run a column
+  // filter that does not exist.
+  endFilterChange(Direction::Rows);
+#else
+  invalidateFilter();
+#endif
+}
+
 void GameListFilterProxy::setStateFilter(bool complete, bool partial, bool empty) {
+  beginRowFilterChange();
   m_complete = complete;
   m_partial = partial;
   m_empty = empty;
-  invalidateFilter();
+  endRowFilterChange();
 }
 
 void GameListFilterProxy::setRequireFixes(bool on) {
+  beginRowFilterChange();
   m_requireFixes = on;
-  invalidateFilter();
+  endRowFilterChange();
 }
 
 void GameListFilterProxy::setRequireMia(bool on) {
+  beginRowFilterChange();
   m_requireMia = on;
-  invalidateFilter();
+  endRowFilterChange();
 }
 
 bool GameListFilterProxy::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const {

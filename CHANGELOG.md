@@ -20,7 +20,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   returning them to the system. Measured on a large collection over a
   twelve-hour session: memory settles around 1 GB instead of climbing, with
   no swap. If covers look soft after resizing the window, raising the
-  artwork cache setting restores the previous crispness.
+  artwork cache setting restores the previous crispness. Two further
+  trims followed: the index of your artwork folders stored the full path
+  of every file, repeating the same folder name thousands of times over,
+  and the app now periodically hands memory it has finished with back to
+  the system instead of holding on to it between bursts of activity.
 - **Browsing does less repeated work per scroll and per search.** The
   database worker's prepared-statement cache turned out to cache nothing —
   every "cached" statement was recompiled on each use and the whole cache
@@ -44,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Apps you launch are no longer affected by Kartend's own video settings.**
+  The video-decoder preference Kartend sets for itself was being inherited by
+  anything it launched, so a launched app built on the same toolkit quietly
+  picked up Kartend's choice instead of making its own. Launched apps now get
+  a clean slate. If you set that preference yourself, it is still passed
+  through untouched.
 - **Long sessions with video no longer grow without bound.** On some
   graphics setups — typically a processor with built-in graphics alongside a
   separate graphics card — the video decoder handed each clip to a
