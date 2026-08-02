@@ -17,6 +17,10 @@
 
 #include <cstdlib>
 
+#if defined(__linux__) && defined(__GLIBC__)
+#include <malloc.h>
+#endif
+
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
 #include "errordialog.h"
@@ -40,6 +44,34 @@
 // resolve it. On non-Windows the rename macro isn't defined, and main
 // has implicit C linkage anyway, so this is a no-op.
 extern "C" auto main(int argc, char *argv[]) -> int {
+#if defined(__linux__) && defined(__GLIBC__)
+  // Kartend-44ypc: stop the allocator sitting on freed artwork buffers.
+  //
+  // A heaptrack run on a 53k-item collection measured a 623M peak heap
+  // against a 1.28G RSS — roughly 650M held by glibc rather than live data.
+  // Two defaults drive that, and both are worth overriding here:
+  //
+  //   M_MMAP_THRESHOLD is *dynamic* by default: glibc raises it (up to 32M)
+  //   whenever it sees an mmap'd block freed. Decoded artwork is ~640K a
+  //   piece, so after the first few frees the threshold climbs past that and
+  //   every subsequent image is carved out of the main heap instead. Those
+  //   blocks can only be returned to the OS when they happen to sit at the
+  //   top of the heap, so a scroll session leaves the arena pockmarked.
+  //   Setting it explicitly also pins it — glibc stops auto-tuning once the
+  //   value is set by hand — so image-sized allocations keep going through
+  //   mmap and are handed straight back on free.
+  //
+  //   M_ARENA_MAX defaults to 8 * nproc (192 on a 12900K). Every arena that
+  //   any thread touches keeps its own free lists, and this app runs a wide
+  //   pool. Capping the count trades a little allocator contention for a far
+  //   smaller resident footprint.
+  //
+  // Both must be set before the first allocation-heavy thread starts, which
+  // is why they sit at the very top of main().
+  mallopt(M_MMAP_THRESHOLD, 128 * 1024);
+  mallopt(M_ARENA_MAX, 4);
+#endif
+
   // Kartend-0vnvo: keep Qt's FFmpeg plugin off the hardware-decode backends
   // that leak a DRM render-node fd + Mesa worker thread per setSource().
   // Must run before the first QMediaPlayer exists, hence before QApplication.

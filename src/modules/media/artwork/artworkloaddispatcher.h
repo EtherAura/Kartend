@@ -123,6 +123,16 @@ private:
   /// its next check because the counter no longer matches its captured
   /// value).
   std::shared_ptr<std::atomic<quint64>> m_currentGeneration;
+  /// Kartend-wztmg: longest edge (device px) the most recent tile batch
+  /// decided it needed. Batches derive this per item from the widget's
+  /// measured label size; precache, which runs ahead of the viewport and has
+  /// no widget to measure, reads it so its (path-keyed, therefore shared)
+  /// cache entries match what the tiles will ask for. 0 until the first batch
+  /// runs, which means "fall back to the flat BOX_SIZE".
+  ///
+  /// shared_ptr for the same reason as m_currentGeneration: an in-flight
+  /// worker may outlive the dispatcher's pool drain and still touch it.
+  std::shared_ptr<std::atomic<int>> m_lastDecodePx;
   /// shutdown() ran (whether invoked by a caller or the destructor). Keeps
   /// the destructor's own shutdown call a no-op after an early explicit one.
   bool m_shutdownDone = false;

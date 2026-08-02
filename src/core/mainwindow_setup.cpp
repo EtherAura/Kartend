@@ -1,4 +1,6 @@
 // Sibling TU: UI setup/init for MainWindow.
+#include <algorithm>
+
 #include <QActionGroup>
 #include <QApplication>
 #include <QCoreApplication>
@@ -412,14 +414,30 @@ void MainWindow::setupUIReferences() {
 }
 
 void MainWindow::applyPixmapCacheBudget(int megabytes) {
+  // Kartend-pyfb4: `megabytes` is the TOTAL in-memory artwork budget the user
+  // asked for ("Memory allocated for caching artwork images"), and it funds
+  // two independent pixmap caches — Qt's process-global QPixmapCache and
+  // CacheManager::artworkCache. Handing the full figure to each meant a
+  // configured 500 MB authorised ~1 GB resident, so the setting understated
+  // its own cost by 2x. Split it instead, so the number means what it says.
+  //
+  // The artwork cache takes the floor half and QPixmapCache the remainder, so
+  // an odd total loses nothing. Both halves are floored at 1 MB because this
+  // is a public IAppearanceApplier entry point: the settings UI clamps to
+  // [10,500], but a direct caller could otherwise drive a half to 0, which
+  // QCache/QPixmapCache read as evict-everything.
+  constexpr int kMinHalfMB = 1;
+  const int totalMB = std::max(2 * kMinHalfMB, megabytes);
+  const int artworkMB = std::max(kMinHalfMB, totalMB / 2);
+  const int qtPixmapMB = std::max(kMinHalfMB, totalMB - artworkMB);
   // QPixmapCache::setCacheLimit takes KB; our settings store MB.
-  QPixmapCache::setCacheLimit(megabytes * 1024);
+  QPixmapCache::setCacheLimit(qtPixmapMB * 1024);
   // CacheManager::artworkCache budget is owned by the manager itself —
   // before m_appManager->getCacheManager() is wired up (very early startup), the
   // CacheManager holds its construction-time legacy default and will
   // pick up the user value on the next call.
   if (auto *cm = m_appManager->getCacheManager()) {
-    cm->setArtworkCacheBudgetMB(megabytes);
+    cm->setArtworkCacheBudgetMB(artworkMB);
     // The on-disk eviction budget rides along so both artwork-cache budgets
     // stay in lockstep through the one entry point (same drift-avoidance
     // rationale as Kartend-10pb). Read from the live settings rather than a

@@ -538,8 +538,9 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     }
     m_generalSettings = mwSettings;
 
-    // applyPixmapCacheBudget propagates the new size to QPixmapCache and the
-    // CacheManager artworkCache in lockstep (Kartend-10pb).
+    // applyPixmapCacheBudget splits the new size across QPixmapCache and the
+    // CacheManager artworkCache (Kartend-pyfb4) — the setting is the combined
+    // budget, not the figure handed to each.
     mainWindow->applyPixmapCacheBudget(m_generalSettings.media.pixmapCacheSizeMB);
     VideoThumbnailExtractor::instance()->setExtractionTimeoutMs(
         m_generalSettings.media.videoThumbnailExtractionTimeoutMs);

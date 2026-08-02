@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Uses roughly half the memory during long sessions.** Three things were
+  adding up. Cover art was decoded at a fixed size chosen for the largest
+  place it might ever appear, so a grid showing 200-pixel covers still kept
+  400-pixel images in memory for every item; art is now decoded to fit the
+  size it is actually drawn at. The "artwork cache" setting quietly funded
+  two separate caches with the full amount each, so a configured 500 MB
+  reserved a gigabyte — it now means what it says, split across both. And
+  the memory allocator was holding on to freed image buffers instead of
+  returning them to the system. Measured on a large collection over a
+  twelve-hour session: memory settles around 1 GB instead of climbing, with
+  no swap. If covers look soft after resizing the window, raising the
+  artwork cache setting restores the previous crispness.
 - **Browsing does less repeated work per scroll and per search.** The
   database worker's prepared-statement cache turned out to cache nothing —
   every "cached" statement was recompiled on each use and the whole cache
