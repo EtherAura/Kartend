@@ -10,6 +10,7 @@
 #include "videopreviewwidget.h"
 
 #include <algorithm>
+#include <utility>
 
 #include <QAudioOutput>
 #include <QHideEvent>
@@ -189,10 +190,24 @@ void VideoPreviewWidget::paintCurrentImageScaled() {
   // frame the user actually looks at, including the post-pause repaint and
   // a resize while paused) gets SmoothTransformation.
   const bool streaming = m_player && m_player->playbackState() == QMediaPlayer::PlayingState;
-  QPixmap pix = QPixmap::fromImage(m_currentImage);
-  pix = pix.scaled(target, Qt::KeepAspectRatio,
-                   streaming ? Qt::FastTransformation : Qt::SmoothTransformation);
-  m_imageLabel->setPixmap(pix);
+
+  // Kartend-q7w3a: scale first, convert once — and hand the result over as an
+  // rvalue.
+  //
+  // This used to convert to a QPixmap at FULL frame size and then scale that,
+  // which costs two allocations per frame (the larger of them full-size) at up
+  // to 60fps per active preview. Scaling the QImage first makes the single
+  // remaining allocation the small one.
+  //
+  // The std::move matters as much as the ordering: QPixmap::fromImage(QImage&&)
+  // routes to fromImageInPlace(), whereas the const-ref overload deep-copies
+  // whenever the source is still referenced elsewhere and a format re-tag is
+  // needed — the same sharing trap that made the artwork path expensive
+  // (Kartend-7z067). `scaled` is a local with no other owner, so in-place
+  // conversion is safe here.
+  QImage frame = m_currentImage.scaled(
+      target, Qt::KeepAspectRatio, streaming ? Qt::FastTransformation : Qt::SmoothTransformation);
+  m_imageLabel->setPixmap(QPixmap::fromImage(std::move(frame)));
 }
 
 void VideoPreviewWidget::playVideo(const QString &filePath) {
