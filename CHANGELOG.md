@@ -48,6 +48,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Changes you make are no longer lost when you log out or restart.** When
+  the system shuts down it asks each open app to close; Kartend never heard
+  the request, because the gamepad library it uses was intercepting that
+  signal and nothing was listening for it. The app stayed open until the
+  system gave up waiting and forced it closed — and because settings are
+  written while closing, anything adjusted during that session was lost.
+  Kartend now closes normally when asked, saving on the way out, so logging
+  out or rebooting keeps your changes (Kartend-ewl6x).
 - **Apps you launch are no longer affected by Kartend's own video settings.**
   The video-decoder preference Kartend sets for itself was being inherited by
   anything it launched, so a launched app built on the same toolkit quietly
