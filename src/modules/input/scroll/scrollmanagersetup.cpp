@@ -281,6 +281,25 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
     }
   }
 
+  // Kartend-4ex9z: m_totalItems is final at this point, so publish it.
+  //
+  // Search is a DB-level re-query, not an in-memory filter: while a search is
+  // active the data manager genuinely holds only the matching rows, and
+  // clearing the search kicks off an ASYNCHRONOUS reload that lands here.
+  // ScrollManager::clearFilter has already emitted filterChanged by then —
+  // synchronously, against the still-filtered data — so without this emit the
+  // last word on the count is the pre-reload one and the window title stays
+  // stuck on the filtered total ("Documentaries (1 items)" for a 6-item
+  // collection) indefinitely.
+  //
+  // Emitted for the empty case too, below the zero check, so a collection that
+  // resolves to nothing also corrects the title rather than keeping a stale
+  // count.
+  const int visibleNow = (m_filterManager && m_filterManager->isFiltered())
+                             ? m_filterManager->filteredCount()
+                             : m_totalItems;
+  emit filterChanged(visibleNow, m_totalItems);
+
   if (m_totalItems == 0) {
     setupEmptyVirtualScrolling();
     return;
