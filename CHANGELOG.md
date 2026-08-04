@@ -48,6 +48,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`kartend --version` and `kartend --help` now work on a machine with no
+  desktop running.** They crashed instead of printing, because the application
+  window system was started before the command line was read — so the two
+  options that exist precisely to be scripted were the ones that could not be
+  used from a script, a packaging check, or an SSH session (Kartend-3edfq).
 - **Apps you launch are no longer affected by Kartend's own video settings.**
   The video-decoder preference Kartend sets for itself was being inherited by
   anything it launched, so a launched app built on the same toolkit quietly
