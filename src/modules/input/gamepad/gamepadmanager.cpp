@@ -42,6 +42,22 @@ GamepadManager::GamepadManager(QObject *parent) : QObject(parent) {
 #endif
 
 #ifdef KARTEND_HAS_SDL2_GAMEPAD
+  // Kartend-ewl6x: SDL installs its OWN SIGINT/SIGTERM handlers during
+  // SDL_InitSubSystem unless this hint says otherwise, and it translates those
+  // signals into an SDL_QUIT event. We drive Qt's event loop and never pump
+  // SDL's event queue, so that translation is unobservable — the signal is
+  // simply swallowed and the app becomes unkillable by SIGTERM (losing the
+  // settings flush on logout/reboot).
+  //
+  // This also has to happen because SDL's handlers would REPLACE the ones
+  // main.cpp installs: GamepadManager is constructed during MainWindow
+  // construction, i.e. after that installation. Setting the hint keeps SDL out
+  // of signal handling entirely and leaves ours in place.
+  //
+  // Must precede any SDL_InitSubSystem call — the hint is only consulted while
+  // handlers are being installed.
+  SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+
   // SDL gamecontroller polling: keeps implementation dependency-free from
   // the rest of the app and avoids an additional event filter path.
   if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) == 0) {

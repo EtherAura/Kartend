@@ -8,6 +8,7 @@
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QLoggingCategory>
+#include <QSocketNotifier>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QSurfaceFormat>
@@ -20,6 +21,12 @@
 
 #if defined(__linux__) && defined(__GLIBC__)
 #include <malloc.h>
+#endif
+
+#ifdef Q_OS_UNIX
+#include <csignal>
+#include <sys/socket.h>
+#include <unistd.h>
 #endif
 
 #include "collection/collectionconfig.h"
@@ -37,6 +44,11 @@
 #include "settingsmanager.h"
 
 #include <QSqlDatabase>
+
+// Entry-point category. Per the note in utils/app/loggingcategories.h, the
+// shared categories there are cross-cutting diagnostics; a per-owner category
+// like this one belongs next to its owner.
+Q_LOGGING_CATEGORY(lcAppMain, "kartend.main")
 
 namespace {
 
@@ -70,6 +82,62 @@ bool onlyInformationalArgs(int argc, char *const argv[]) {
 }
 
 } // namespace
+
+#ifdef Q_OS_UNIX
+namespace {
+
+// Self-pipe write/read ends for the termination signal handler.
+int g_termPipe[2] = {-1, -1};
+
+// Runs in signal context, so it may only call async-signal-safe functions.
+// write() is on POSIX's safe list; nothing else here would be.
+extern "C" void kartendTermSignalHandler(int /*signo*/) {
+  const char wake = 1;
+  // Deliberately unchecked: there is nothing async-signal-safe to do about a
+  // failed write, and a full pipe already means a wake-up is pending.
+  const ssize_t ignored = ::write(g_termPipe[0], &wake, sizeof(wake));
+  static_cast<void>(ignored);
+}
+
+// Kartend-ewl6x: make SIGTERM shut the app down *cleanly* rather than either
+// being swallowed (SDL's old behaviour) or killing the process outright.
+//
+// Restoring the default disposition would fix "cannot be killed" but not the
+// actual harm — the process would die between the settings mutation and the
+// flush. MainWindow's destructor is what persists settings, and it only runs
+// when exec() returns, so the signal has to become a QApplication::quit() on
+// the event loop.
+//
+// The self-pipe is the standard Qt idiom for that: the handler does nothing
+// but write a byte, and a QSocketNotifier turns the readable pipe into a
+// normal queued slot invocation where arbitrary Qt calls are legal again.
+//
+// SIGINT is included so a foreground Ctrl-C saves too. The notifier is
+// parented to the app, so it dies with it.
+bool installTerminationHandler(QApplication &app) {
+  if (::socketpair(AF_UNIX, SOCK_STREAM, 0, g_termPipe) != 0) {
+    return false;
+  }
+  auto *notifier = new QSocketNotifier(g_termPipe[1], QSocketNotifier::Read, &app);
+  QObject::connect(notifier, &QSocketNotifier::activated, &app, [notifier]() {
+    // Disable first: a second signal must not queue another quit() while the
+    // first shutdown is already unwinding.
+    notifier->setEnabled(false);
+    char wake = 0;
+    const ssize_t ignored = ::read(g_termPipe[1], &wake, sizeof(wake));
+    static_cast<void>(ignored);
+    QApplication::quit();
+  });
+
+  struct sigaction action = {};
+  action.sa_handler = kartendTermSignalHandler;
+  sigemptyset(&action.sa_mask);
+  action.sa_flags = SA_RESTART;
+  return ::sigaction(SIGTERM, &action, nullptr) == 0 && ::sigaction(SIGINT, &action, nullptr) == 0;
+}
+
+} // namespace
+#endif
 
 // extern "C" linkage is needed on Windows: SDL2's pkg-config injects
 // -Dmain=SDL_main so SDL2main's WinMain can dispatch into our entry
@@ -150,6 +218,17 @@ extern "C" auto main(int argc, char *argv[]) -> int {
   }
 
   QApplication app(argc, argv);
+
+#ifdef Q_OS_UNIX
+  // Kartend-ewl6x. Installed here, before MainWindow (and therefore before
+  // GamepadManager's SDL init), so the ordering against SDL is explicit —
+  // SDL is kept out of signal handling by SDL_HINT_NO_SIGNAL_HANDLERS in
+  // gamepadmanager.cpp, otherwise its handlers would replace these.
+  if (!installTerminationHandler(app)) {
+    qCWarning(lcAppMain, "Failed to install SIGTERM/SIGINT handler; "
+                         "shutdown via signal will not save settings");
+  }
+#endif
 
 #if defined(__linux__) && defined(__GLIBC__)
   // Kartend-8e822: periodically hand glibc's freed-but-retained heap pages
