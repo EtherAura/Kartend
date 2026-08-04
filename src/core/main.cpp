@@ -16,6 +16,7 @@
 #include <QTranslator>
 
 #include <cstdlib>
+#include <cstring>
 
 #if defined(__linux__) && defined(__GLIBC__)
 #include <malloc.h>
@@ -36,6 +37,39 @@
 #include "settingsmanager.h"
 
 #include <QSqlDatabase>
+
+namespace {
+
+// Kartend-3edfq: does the command line consist ONLY of flags that print
+// something and exit, needing no GUI?
+//
+// Plain C comparison rather than QString: this runs before QApplication
+// exists, and the check has no reason to depend on Qt being up.
+bool onlyInformationalArgs(int argc, char *const argv[]) {
+  if (argc <= 1) {
+    return false;
+  }
+  // The spellings QCommandLineParser::addHelpOption()/addVersionOption()
+  // recognise. "-?" is the Windows-only help alias; harmless to accept
+  // everywhere since an unknown option still falls through to the real parse.
+  static constexpr const char *kInformationalFlags[] = {"-v",     "--version", "-h",
+                                                        "--help", "-?",        "--help-all"};
+  for (int i = 1; i < argc; ++i) {
+    bool matched = false;
+    for (const char *flag : kInformationalFlags) {
+      if (std::strcmp(argv[i], flag) == 0) {
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      return false;
+    }
+  }
+  return true;
+}
+
+} // namespace
 
 // extern "C" linkage is needed on Windows: SDL2's pkg-config injects
 // -Dmain=SDL_main so SDL2main's WinMain can dispatch into our entry
@@ -96,6 +130,24 @@ extern "C" auto main(int argc, char *argv[]) -> int {
   format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
   format.setSwapInterval(1); // VSync enabled (0 to disable for lower latency)
   QSurfaceFormat::setDefaultFormat(format);
+
+  // Kartend-3edfq: `kartend --version` (and --help) died with SIGABRT on any
+  // machine without a display — QApplication aborts when it cannot connect to
+  // one, and it is constructed long before QCommandLineParser::process() below
+  // ever sees those flags. Packaging smoke tests, CI probes and "what version
+  // is installed" scripts all run headless, so the flags that exist precisely
+  // to be scriptable were the ones that could not be scripted.
+  //
+  // Selecting the offscreen QPA plugin for these purely informational runs
+  // lets the existing parser print and exit normally. Deliberately NOT a
+  // hand-rolled --version/--help printer: the help text is generated from the
+  // option definitions below, so a second copy here would drift from them.
+  //
+  // Only when the caller has not chosen a platform themselves — an explicit
+  // QT_QPA_PLATFORM always wins.
+  if (onlyInformationalArgs(argc, argv) && qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
+    qputenv("QT_QPA_PLATFORM", "offscreen");
+  }
 
   QApplication app(argc, argv);
 
