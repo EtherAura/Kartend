@@ -59,6 +59,7 @@
 #include "collection/startup_settings_persistence.h"
 #include "collection/toolbar_settings_persistence.h"
 #include "collection/view_settings_persistence.h"
+#include "settingskeys.h"
 
 namespace {
 
@@ -75,6 +76,9 @@ class TestSettingsPersistenceRoundtrip : public QObject {
 
 private slots:
   void appearanceSettings();
+  void titleTintMigration_freshConfig_leavesTintOff();
+  void titleTintMigration_legacyKeysWithoutToggle_keepTintOn();
+  void titleTintMigration_explicitToggleWins();
   void archiveOptions();
   void attractSettings();
   void collectionBackground();
@@ -136,6 +140,7 @@ QString TestSettingsPersistenceRoundtrip::freshIniPath() {
 
 void TestSettingsPersistenceRoundtrip::appearanceSettings() {
   AppearanceSettings in;
+  in.titleTintEnabled = !in.titleTintEnabled;
   in.titleTintSaturation += 1;
   in.titleTintLightness += 1;
   in.titleBaseColor = QStringLiteral("#112233");
@@ -144,6 +149,55 @@ void TestSettingsPersistenceRoundtrip::appearanceSettings() {
   in.uiTextZoomPercent += 1; // stays inside the TextZoom clamp
   verifyRoundTrip("AppearanceSettings", in, AppearanceSettingsPersistence::save,
                   AppearanceSettingsPersistence::load);
+}
+
+// ── Kartend-bbcu6 title-tint migration ───────────────────────────────────
+// Not a round trip: these pin load()'s behaviour when the titleTintEnabled
+// key is ABSENT, which is the only state an upgrading install can be in.
+// Getting this wrong either silently restyles an existing user's library or
+// saddles every new install with the old unreadable tint, and neither shows
+// up in a save->load test because save() always writes the key.
+
+void TestSettingsPersistenceRoundtrip::titleTintMigration_freshConfig_leavesTintOff() {
+  const QString iniPath = freshIniPath();
+  QSettings in(iniPath, QSettings::IniFormat); // nothing written at all
+  AppearanceSettings loaded;
+  AppearanceSettingsPersistence::load(in, loaded);
+  QVERIFY2(!loaded.titleTintEnabled,
+           "a config with no appearance keys is a NEW install: tint must default off");
+}
+
+void TestSettingsPersistenceRoundtrip::titleTintMigration_legacyKeysWithoutToggle_keepTintOn() {
+  const QString iniPath = freshIniPath();
+  {
+    QSettings out(iniPath, QSettings::IniFormat);
+    // Exactly what a pre-toggle install looks like: tint knobs present, the
+    // enable key absent because it did not exist yet.
+    out.setValue(kartend::settings::keys::kTitleTintSaturation, 180);
+    out.setValue(kartend::settings::keys::kTitleTintLightness, 60);
+    out.sync();
+  }
+  QSettings in(iniPath, QSettings::IniFormat);
+  AppearanceSettings loaded;
+  AppearanceSettingsPersistence::load(in, loaded);
+  QVERIFY2(loaded.titleTintEnabled,
+           "an upgrading install must keep its tinted titles, not silently restyle");
+}
+
+void TestSettingsPersistenceRoundtrip::titleTintMigration_explicitToggleWins() {
+  const QString iniPath = freshIniPath();
+  {
+    QSettings out(iniPath, QSettings::IniFormat);
+    // Legacy knobs present AND the user has since turned the tint off. The
+    // explicit choice must not be overridden by the migration inference.
+    out.setValue(kartend::settings::keys::kTitleTintSaturation, 180);
+    out.setValue(kartend::settings::keys::kTitleTintEnabled, false);
+    out.sync();
+  }
+  QSettings in(iniPath, QSettings::IniFormat);
+  AppearanceSettings loaded;
+  AppearanceSettingsPersistence::load(in, loaded);
+  QVERIFY2(!loaded.titleTintEnabled, "an explicit false must beat the legacy-key inference");
 }
 
 void TestSettingsPersistenceRoundtrip::archiveOptions() {

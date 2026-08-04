@@ -67,6 +67,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   six — so the title quietly misreported how big the collection was for the
   rest of the session. The title now returns to the real total, in the same
   style it uses everywhere else (Kartend-4ex9z).
+- **Item titles now use your theme's normal text colour.** They were always
+  tinted towards the accent colour, and the shipped tint was dark enough to be
+  hard to read on a dark theme — measured at 1.6:1 contrast against Breeze
+  Dark, where the accessibility guideline asks for 4.5:1. If you prefer the
+  tinted look it is still there, as **Settings > Appearance > Colors > Tint item
+  titles with accent colour**; installs that had already customised the tint
+  keep it switched on (Kartend-bbcu6).
 - **Apps you launch are no longer affected by Kartend's own video settings.**
   The video-decoder preference Kartend sets for itself was being inherited by
   anything it launched, so a launched app built on the same toolkit quietly

@@ -56,6 +56,7 @@ private:
   void onBrowseListRowColor();
   void onBrowseListAltRowColor();
   void onLoadColorScheme();
+  void updateTitleTintControlsEnabled();
   void updateBackgroundButtonForType();
 
   Ui::AppearanceColorsPanel *ui;
