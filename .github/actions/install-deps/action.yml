@@ -18,6 +18,16 @@ inputs:
       Space-separated list of apt packages to install (e.g.
       "cmake ninja-build qt6-base-dev libqt6sql6-sqlite").
     required: true
+  no-install-recommends:
+    description: >-
+      Pass --no-install-recommends to the install. Defaults to "false" —
+      apt's own default, and what every build job has always used — so
+      adding this input does not change the dependency closure any
+      existing caller sees. script-lint sets it to "true": its five lint
+      tools need no recommends, and every megabyte it does not download
+      is a megabyte a stalled mirror cannot hang on (Kartend-j94zp).
+    required: false
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -57,16 +67,18 @@ runs:
       shell: bash
       # DEBIAN_FRONTEND=noninteractive prevents tzdata/etc. from prompting if
       # any of the requested packages pulls them in transitively. Recommends
-      # are left at apt's default (installed) — the previous cache wrapper
-      # also installed them, and dropping them would silently change the
+      # are left at apt's default (installed) unless a caller opts out via
+      # no-install-recommends — the previous cache wrapper also installed
+      # them, and dropping them for everyone would silently change the
       # dependency closure each job sees. APT_OPTS mirrors the update step
       # (Kartend-cqnsi) so the package downloads get the same retry/timeout
       # resilience as the index refresh.
       run: |
-        sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS install -y \
+        sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $RECOMMENDS_OPT install -y \
           ${{ inputs.packages }}
       env:
         APT_OPTS: >-
           -o Acquire::Retries=3
           -o Acquire::http::Timeout=30
           -o Acquire::https::Timeout=30
+        RECOMMENDS_OPT: ${{ inputs.no-install-recommends == 'true' && '--no-install-recommends' || '' }}
