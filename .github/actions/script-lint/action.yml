@@ -27,8 +27,23 @@ runs:
     - name: Install lint dependencies
       # qt6-l10n-tools ships lupdate for the translation drift check below
       # (Kartend-pnlot.3); it pulls only Qt core libs, no GUI stack.
-      shell: bash
-      run: sudo apt-get install -y --no-install-recommends shellcheck clang-format-19 appstream desktop-file-utils qt6-l10n-tools
+      #
+      # Kartend-j94zp: this was a bare `apt-get install` while install-deps
+      # had carried Acquire retry/timeout hardening since Kartend-cqnsi. The
+      # gap cost a whole run: apt took ~7 minutes to produce its first byte,
+      # then stalled mid-download on libllvm15t64 from azure.archive.ubuntu.com
+      # until branch-lint's 10-minute timeout-minutes killed the job (run
+      # 30912927057). Every check below was reported `skipped` and the branch
+      # went red with zero lint signal. Route through install-deps rather than
+      # copying the -o flags here, so there is ONE hardened apt path to keep
+      # current instead of two that drift apart again.
+      uses: ./.github/actions/install-deps
+      with:
+        packages: shellcheck clang-format-19 appstream desktop-file-utils qt6-l10n-tools
+        # These five need no recommends, and install-deps runs an
+        # `apt-get update` this step used to skip — ~5s, and what makes
+        # local `act` reproduction via .scripts/ci-local.sh work at all.
+        no-install-recommends: 'true'
 
     - name: Shellcheck
       # -x follows `source` directives into .scripts/lib/*.sh so build.sh is
