@@ -20,6 +20,36 @@
 #   RELEASE_PERF_* — high-performance Release-only. -march=native makes the
 #                    binary non-portable, so KARTEND_PORTABLE_RELEASE skips it
 #                    (and -O3/fast-math) for distro packaging.
+
+# ── LTO flavour: ONE source of truth ─────────────────────────────────────────
+# Kartend-f51g3. `-flto=auto` is a GCC spelling meaning "parallel LTO with
+# nproc jobs", but Clang's driver expands it to `-flto=full` — monolithic,
+# whole-program LTO. Verified: `clang++ -flto=auto -c x.cpp -###` emits
+# "-flto=full", against "-flto=thin" for `-flto=thin`.
+#
+# On macOS Release that meant the app AND each of ~200 test executables did a
+# whole-program LTO link of all six area libs against Qt, three at a time
+# (the Build step runs `cmake --build --parallel $(sysctl -n hw.ncpu)`) on a
+# 3-vCPU / 7 GB macos-14 runner. ld64 died with SIGABRT:
+#   clang: error: unable to execute command: Abort trap: 6
+#   clang: error: linker command failed due to signal
+# ThinLTO keeps cross-TU optimisation but emits per-TU summaries and runs
+# codegen in parallel instead of building one monolithic module, which is
+# what makes its peak link memory tractable. ld64 supports it natively.
+#
+# Scoped to Apple on purpose: the Linux and Windows legs are not failing, and
+# switching their LTO flavour would shift Release codegen for no reason.
+#
+# This single variable feeds the compile side AND every link site below. The
+# flavour MUST agree across them — bitcode emitted for one flavour is not what
+# the other's link step expects — so it is deliberately not spelled out
+# separately at each site. MSVC ignores it (it uses /GL + /LTCG instead).
+if (APPLE)
+  set(KARTEND_LTO_FLAG -flto=thin)
+else()
+  set(KARTEND_LTO_FLAG -flto=auto)
+endif()
+
 if (MSVC)
   # MSVC equivalents of the GNU/ELF hardening set:
   #   /sdl       — additional security-development-lifecycle checks (extra
@@ -59,8 +89,8 @@ else()
   endif()
 
   if (KARTEND_PORTABLE_RELEASE)
-    set(RELEASE_PERF_COMPILE_OPTS -flto=auto -DQT_NO_DEBUG)
-    set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,--gc-sections -Wl,--as-needed)
+    set(RELEASE_PERF_COMPILE_OPTS ${KARTEND_LTO_FLAG} -DQT_NO_DEBUG)
+    set(RELEASE_PERF_LINK_OPTS ${KARTEND_LTO_FLAG} -Wl,--gc-sections -Wl,--as-needed)
   else()
     # Removed flags (the perf gain on a Qt frontend is in the noise, the risk
     # is real):
@@ -75,18 +105,18 @@ else()
     #     addresses for distinct objects" guarantee; rarely matters in
     #     practice but breaks identity comparisons of string literals.
     set(RELEASE_PERF_COMPILE_OPTS
-      -O3 -march=native -flto=auto
+      -O3 -march=native ${KARTEND_LTO_FLAG}
       -fomit-frame-pointer -funroll-loops
       -fno-semantic-interposition -ftree-vectorize
       -DQT_NO_DEBUG
     )
-    set(RELEASE_PERF_LINK_OPTS -flto=auto -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed)
+    set(RELEASE_PERF_LINK_OPTS ${KARTEND_LTO_FLAG} -Wl,-O3 -Wl,--gc-sections -Wl,--as-needed)
   endif()
 
   # Apple's ld rejects the GNU-ld perf options (-Wl,-O3 / --gc-sections /
   # --as-needed); keep only the portable LTO flag on macOS.
   if (APPLE)
-    set(RELEASE_PERF_LINK_OPTS -flto=auto)
+    set(RELEASE_PERF_LINK_OPTS ${KARTEND_LTO_FLAG})
   endif()
 
   # lld is only compatible with Clang LTO objects; GCC LTO (GIMPLE) requires
@@ -116,7 +146,7 @@ if (MSVC)
   )
 else()
   set(KARTEND_LTO_LINK_OPTIONS
-    $<$<CONFIG:Release>:-flto=auto>
+    $<$<CONFIG:Release>:${KARTEND_LTO_FLAG}>
   )
   if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND NOT APPLE)
     list(APPEND KARTEND_LTO_LINK_OPTIONS $<$<CONFIG:Release>:-fuse-ld=lld>)
