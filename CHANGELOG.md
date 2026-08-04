@@ -61,6 +61,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   written while closing, anything adjusted during that session was lost.
   Kartend now closes normally when asked, saving on the way out, so logging
   out or rebooting keeps your changes (Kartend-ewl6x).
+- **The window title no longer keeps a search's item count after you clear the
+  search.** Searching narrows the collection, and clearing it restored the grid
+  but left the title reading e.g. "Documentaries (1 items)" for a collection of
+  six — so the title quietly misreported how big the collection was for the
+  rest of the session. The title now returns to the real total, in the same
+  style it uses everywhere else (Kartend-4ex9z).
 - **Apps you launch are no longer affected by Kartend's own video settings.**
   The video-decoder preference Kartend sets for itself was being inherited by
   anything it launched, so a launched app built on the same toolkit quietly

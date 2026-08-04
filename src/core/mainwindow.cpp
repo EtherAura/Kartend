@@ -610,11 +610,20 @@ void MainWindow::setupManagerConnections() {
 
 void MainWindow::updateWindowTitleWithFilter(int visible, int total) {
   if (m_currentCollectionIndex >= 0 && m_currentCollectionIndex < m_collections.size()) {
-    QString base = m_collections[m_currentCollectionIndex].name;
     if (visible < total) {
+      // A filter is genuinely narrowing the view: show both numbers. This is
+      // the ONLY case that writes the title from here.
+      QString base = m_collections[m_currentCollectionIndex].name;
       setWindowTitle(QString("%1 (%2/%3 items)").arg(base).arg(visible).arg(total));
     } else {
-      setWindowTitle(QString("%1 (%2 items)").arg(base).arg(total));
+      // Kartend-4ex9z: nothing is filtered, so the canonical title owns the
+      // window again. This branch used to write its own "(N items)" string,
+      // which left the app showing two different title formats depending on
+      // which path happened to write last — "(6 Items)" from
+      // TitleCountsHelpers on launch versus "(6 items)" here. Delegating also
+      // means the count comes from the same source as everywhere else rather
+      // than from whatever this signal happened to carry.
+      refreshTitleCounts();
     }
   }
   // Keep the top-bar position label in sync with the denominator.
