@@ -40,7 +40,7 @@
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/ui/dialogs/settings/appearance/appearancecolorspanel.cpp" line="+234"/>
+        <location filename="../src/ui/dialogs/settings/appearance/appearancecolorspanel.cpp" line="+223"/>
         <source>Default</source>
         <translation type="unfinished"></translation>
     </message>
@@ -50,14 +50,14 @@
         <location line="+8"/>
         <location line="+8"/>
         <location line="+8"/>
-        <location line="+34"/>
+        <location line="+35"/>
         <location line="+8"/>
         <location filename="../src/ui/dialogs/settings/appearance/appearancecolorspanel.cpp" line="-2"/>
         <source>Pick...</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-85"/>
+        <location line="-86"/>
         <source>Select background color or image</source>
         <translation type="unfinished"></translation>
     </message>
@@ -100,13 +100,13 @@
         <location line="+0"/>
         <location line="+8"/>
         <location line="+8"/>
-        <location line="+34"/>
+        <location line="+35"/>
         <location line="+8"/>
         <source>System Default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-57"/>
+        <location line="-58"/>
         <source>Select primary UI color</source>
         <translation type="unfinished"></translation>
     </message>
@@ -147,6 +147,16 @@
     </message>
     <message>
         <location line="+6"/>
+        <source>Tint item titles with the accent colour instead of using the theme&apos;s normal text colour. Off by default — the theme colour is guaranteed readable against its own background.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Tint item titles with accent colour</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>Title Saturation:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -221,7 +231,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-152"/>
+        <location line="-153"/>
         <source>Color Scheme</source>
         <translation type="unfinished"></translation>
     </message>
@@ -241,7 +251,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+129"/>
+        <location line="+130"/>
         <source>Corner darkness 0-100 (0 = no effect, 100 = pitch black at the corners)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -707,7 +717,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/appearance/appearancetitlespanel.cpp" line="+83"/>
+        <location filename="../src/ui/dialogs/settings/appearance/appearancetitlespanel.cpp" line="+73"/>
         <source>Select Title Font</source>
         <translation type="unfinished"></translation>
     </message>
@@ -770,7 +780,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/appearance/appearancetoolbarpanel.cpp" line="+71"/>
+        <location filename="../src/ui/dialogs/settings/appearance/appearancetoolbarpanel.cpp" line="+61"/>
         <source>Select Header Logo</source>
         <translation type="unfinished"></translation>
     </message>
@@ -946,12 +956,12 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/artwork/artworktabpanel.cpp" line="+156"/>
+        <location filename="../src/ui/dialogs/settings/artwork/artworktabpanel.cpp" line="+144"/>
         <source>Select Artwork Directory</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-93"/>
+        <location line="-81"/>
         <source>Export placeholder PNGs for missing covers…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -961,7 +971,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+109"/>
+        <location line="+97"/>
         <source>Cannot export placeholders</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2571,7 +2581,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
 <context>
     <name>DatAudit::RomFileModel</name>
     <message>
-        <location line="+135"/>
+        <location line="+159"/>
         <source>yes</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2629,7 +2639,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
 <context>
     <name>DatAuditAuditPage</name>
     <message>
-        <location filename="../src/ui/dialogs/dataudit/datauditauditpage.cpp" line="+89"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditauditpage_results.cpp" line="+50"/>
         <source>All</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2679,7 +2689,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+160"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditauditpage.cpp" line="+208"/>
         <source>Flat layout detected — audit can skip subfolders.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2722,7 +2732,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         </translation>
     </message>
     <message>
-        <location line="+137"/>
+        <location line="+120"/>
         <source>Add DAT files</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2739,10 +2749,10 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     <message>
         <location line="+17"/>
         <location line="+4"/>
-        <location line="+263"/>
+        <location line="+135"/>
         <location line="+11"/>
         <location line="+6"/>
-        <location line="+10"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditauditpage_fix.cpp" line="+67"/>
         <location line="+8"/>
         <location line="+20"/>
         <location line="+30"/>
@@ -2750,7 +2760,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-352"/>
+        <location line="-156"/>
         <source>Add at least one folder to scan.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2779,7 +2789,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+23"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditauditpage_results.cpp" line="+39"/>
         <source>Have %1 · Wrong name %2 · Wrong content %3 · Unknown %4 · Missing %5 · Corrupt %6   (catalogue %7, files %8)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2810,7 +2820,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+56"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditauditpage_fix.cpp" line="-84"/>
         <source>Re-scrape renamed items</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2823,24 +2833,24 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         </translation>
     </message>
     <message>
-        <location line="+26"/>
-        <location line="+27"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditauditpage.cpp" line="+45"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditauditpage_fix.cpp" line="+26"/>
         <source>An audit is already running — wait for it to finish.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-17"/>
-        <location line="+24"/>
+        <location line="+10"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditauditpage_fix.cpp" line="+7"/>
         <source>Couldn&apos;t load that profile.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-17"/>
+        <location line="+7"/>
         <source>This profile has no folders or DAT files to audit.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+38"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditauditpage_fix.cpp" line="+21"/>
         <source>This profile has no audited results to fix yet.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2885,7 +2895,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/dataudit/datauditauditpage_build.cpp" line="+42"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditauditpage_build.cpp" line="+43"/>
         <source>The scan folder and DAT files are seeded from the linked collection (its content folder and configured DATs), then managed here — add or remove them freely to override.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3131,7 +3141,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
 <context>
     <name>DatAuditController</name>
     <message numerus="yes">
-        <location filename="../src/core/datauditcontroller.cpp" line="+64"/>
+        <location filename="../src/core/datauditcontroller.cpp" line="+66"/>
         <source>%n new DAT catalogue(s) match your collections — File → DAT Audit → Library…</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -3139,7 +3149,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         </translation>
     </message>
     <message>
-        <location line="+62"/>
+        <location line="+118"/>
         <source>Choose a DAT library folder</source>
         <translation type="unfinished"></translation>
     </message>
@@ -3160,7 +3170,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
 <context>
     <name>DatAuditDialog</name>
     <message>
-        <location filename="../src/ui/dialogs/dataudit/datauditdialog.cpp" line="+73"/>
+        <location filename="../src/ui/dialogs/dataudit/datauditdialog.cpp" line="+72"/>
         <source>DAT Manager</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5105,7 +5115,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 <context>
     <name>InteractionManager</name>
     <message>
-        <location filename="../src/modules/input/interaction/interactionmanager_contextmenu.cpp" line="+67"/>
+        <location filename="../src/modules/input/interaction/interactionmanager_contextmenu.cpp" line="+73"/>
         <source>Launch</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5205,12 +5215,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+29"/>
         <source>Clear launcher override</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+53"/>
+        <location line="+62"/>
         <source>Remove from Favorites</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5250,7 +5260,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+24"/>
         <source>Rename playlist…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5275,12 +5285,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+13"/>
         <source>Delete playlist…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/input/interaction/interactionmanager_selection.cpp" line="+338"/>
+        <location filename="../src/modules/input/interaction/interactionmanager_selection.cpp" line="+339"/>
         <source>This collection&apos;s launcher paths are unresolvable on this host:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5689,7 +5699,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/input/launch/launchmanager_process.cpp" line="+107"/>
+        <location filename="../src/modules/input/launch/launchmanager_process.cpp" line="+119"/>
         <source>Another launched item appears to be running:
 %1</source>
         <translation type="unfinished"></translation>
@@ -6144,7 +6154,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/launchers/launchertabpanel.cpp" line="+130"/>
+        <location filename="../src/ui/dialogs/settings/launchers/launchertabpanel.cpp" line="+118"/>
         <source>No cores detected</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7153,7 +7163,7 @@ Will change:
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow_setup.cpp" line="+113"/>
+        <location filename="../src/core/mainwindow_setup.cpp" line="+115"/>
         <source>Collection configuration problem</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7406,7 +7416,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/menucontroller_dynamicmenus.cpp" line="+75"/>
+        <location filename="../src/core/menucontroller_dynamicmenus.cpp" line="+76"/>
         <location line="+13"/>
         <source>(no recent items)</source>
         <translation type="unfinished"></translation>
@@ -7423,7 +7433,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+33"/>
+        <location line="+41"/>
         <source>Right</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7453,7 +7463,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+18"/>
+        <location line="+26"/>
         <source>Switch to grid view</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7586,7 +7596,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/input/navigation/navigationmanagersubcollection.cpp" line="+298"/>
+        <location filename="../src/modules/input/navigation/navigationmanagersubcollection.cpp" line="+295"/>
         <source>Home</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7854,7 +7864,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../src/modules/input/scroll/coverflowcontroller.cpp" line="+500"/>
+        <location filename="../src/modules/input/scroll/coverflowcontroller.cpp" line="+513"/>
         <source>Cover</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9509,7 +9519,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
     </message>
     <message>
         <location line="+7"/>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialogform.cpp" line="+229"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialogform.cpp" line="+220"/>
         <source>Header Logo</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9699,7 +9709,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+339"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+354"/>
         <source>deselecting</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9722,7 +9732,7 @@ Would you like to rescan now?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+233"/>
+        <location line="+234"/>
         <source>Unsaved Changes</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9874,7 +9884,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+127"/>
+        <location line="+150"/>
         <source>Path to libretro core file (.so/.dll/.dylib)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9889,7 +9899,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+227"/>
+        <location line="+236"/>
         <source>General settings could not be saved: the settings host is unavailable.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9939,7 +9949,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+37"/>
+        <location line="+31"/>
         <source>Linked Parents</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10066,7 +10076,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
 <context>
     <name>SettingsDialogController</name>
     <message>
-        <location filename="../src/ui/controllers/settingsdialogcontroller/settingsdialogcontroller.cpp" line="+663"/>
+        <location filename="../src/ui/controllers/settingsdialogcontroller/settingsdialogcontroller.cpp" line="+696"/>
         <source>Collection Added</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10517,7 +10527,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     <message>
         <location line="+0"/>
         <location line="+34"/>
-        <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.cpp" line="+99"/>
+        <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.cpp" line="+60"/>
         <source>Default</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10721,7 +10731,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.cpp" line="-171"/>
+        <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.cpp" line="-132"/>
         <source>Select Details Pane Text Color</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10751,7 +10761,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+117"/>
+        <location line="+78"/>
         <source>None</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11361,7 +11371,7 @@ Continue?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+97"/>
+        <location line="+99"/>
         <source>&lt;All types&gt;</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11637,16 +11647,16 @@ Continue?</source>
 <context>
     <name>kart::KartManager</name>
     <message>
-        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+475"/>
+        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+551"/>
         <location line="+1"/>
         <location line="+7"/>
-        <location line="+89"/>
+        <location line="+92"/>
         <location line="+32"/>
         <source>Import Kart</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-129"/>
+        <location line="-132"/>
         <location line="+2"/>
         <location line="+61"/>
         <location line="+2"/>
@@ -11662,12 +11672,14 @@ Continue?</source>
     <message>
         <location line="+11"/>
         <location line="+5"/>
-        <location line="+112"/>
+        <location line="+110"/>
+        <location line="+9"/>
+        <location line="+37"/>
         <source>Export Kart</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-117"/>
+        <location line="-161"/>
         <source>KartManager not wired</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11683,12 +11695,12 @@ Continue?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+18"/>
         <source>Importing Kart</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+72"/>
+        <location line="+113"/>
         <source>Exporting Kart</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11696,7 +11708,7 @@ Continue?</source>
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/core/main.cpp" line="+102"/>
+        <location filename="../src/core/main.cpp" line="+164"/>
         <source>Kartend - Qt6/KDE multimedia collection launcher.</source>
         <translation type="unfinished"></translation>
     </message>
