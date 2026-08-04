@@ -202,6 +202,7 @@ inline constexpr auto kTileColor = "tileColor";
 inline constexpr auto kTitleBaseColor = "titleBaseColor";
 inline constexpr auto kTitleExclusionEnabled = "titleExclusionEnabled";
 inline constexpr auto kTitleExclusionPatterns = "titleExclusionPatterns";
+inline constexpr auto kTitleTintEnabled = "titleTintEnabled";
 inline constexpr auto kTitleTintLightness = "titleTintLightness";
 inline constexpr auto kTitleTintSaturation = "titleTintSaturation";
 inline constexpr auto kToolbarBackdropBlur = "toolbarBackdropBlur";

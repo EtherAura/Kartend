@@ -114,6 +114,9 @@ public:
   [[nodiscard]] bool isVirtualFolder() const { return m_isVirtualFolder; }
   [[nodiscard]] const QString &virtualFolderPath() const { return m_virtualFolderPath; }
   void applyTitleTint();
+  /// Colour for item TITLE TEXT: the palette text colour unless the
+  /// accent tint is enabled. See titleTint() for the accent itself.
+  static QColor titleTextColor();
   static QColor titleTint();
   QColor m_titleTintColor; // Cached tint color for custom painting
   // Coalesces the duplicate PaletteChange a system-accent re-broadcast delivers
@@ -146,6 +149,9 @@ public:
   [[nodiscard]] static ItemPlaceholderRenderer::TileTheme currentTileTheme();
 
   // Static configuration for title appearance (set from GeneralSettings)
+  /// Kartend-bbcu6: when false (the default) titles paint in the palette's
+  /// text colour and the saturation/lightness knobs below are unused.
+  static void setTitleTintEnabled(bool enabled);
   static void setTitleTintSaturation(int saturation);
   static void setTitleTintLightness(int lightness);
   static void setTitleBaseColor(const QString &hexColor);
@@ -179,6 +185,7 @@ public:
   /// Convenience for unit-tests / hot-update flows: clears the registry
   /// so the next paint shows no badges.
   static void clearStateFlagsRegistry();
+  static bool s_titleTintEnabled;
   static int s_titleTintSaturation;
   static int s_titleTintLightness;
   static QString s_titleBaseColor;

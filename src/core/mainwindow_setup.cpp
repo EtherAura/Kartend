@@ -172,6 +172,7 @@ void MainWindow::setupUI() {
   applyGlobalUiFont(m_generalSettings);
 
   // Apply text appearance settings to ItemWidget statics
+  ItemWidget::setTitleTintEnabled(m_generalSettings.appearance.titleTintEnabled);
   ItemWidget::setTitleTintSaturation(m_generalSettings.appearance.titleTintSaturation);
   ItemWidget::setTitleTintLightness(m_generalSettings.appearance.titleTintLightness);
   ItemWidget::setTitleBaseColor(m_generalSettings.appearance.titleBaseColor);

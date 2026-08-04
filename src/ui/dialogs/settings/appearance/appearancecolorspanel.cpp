@@ -27,6 +27,11 @@ AppearanceColorsPanel::AppearanceColorsPanel(QWidget *parent)
   const auto onSpin = QOverload<int>::of(&QSpinBox::valueChanged);
 
   // Per-collection inputs → changed() for dirty detection.
+  // Kartend-bbcu6: the saturation/lightness knobs only mean anything while
+  // tinting is on, so grey them out rather than leaving dead controls live.
+  connect(ui->titleTintEnabledCheckBox, &QCheckBox::toggled, this,
+          &AppearanceColorsPanel::updateTitleTintControlsEnabled);
+
   connect(ui->backgroundColorRadio, &QRadioButton::toggled, this, [this](bool checked) {
     if (checked) updateBackgroundButtonForType();
     emit changed();
@@ -182,19 +187,33 @@ void AppearanceColorsPanel::save() {
 
 void AppearanceColorsPanel::refresh() {
   if (!m_model || !m_model->generalSettings) return;
+  SettingsFormBinding::loadInto(ui->titleTintEnabledCheckBox,
+                                m_model->generalSettings->appearance.titleTintEnabled);
   SettingsFormBinding::loadInto(ui->titleSaturationSpinBox,
                                 m_model->generalSettings->appearance.titleTintSaturation);
   SettingsFormBinding::loadInto(ui->titleLightnessSpinBox,
                                 m_model->generalSettings->appearance.titleTintLightness);
   SettingsFormBinding::loadInto(ui->baseColorEdit,
                                 m_model->generalSettings->appearance.titleBaseColor);
+  updateTitleTintControlsEnabled();
 }
 
 void AppearanceColorsPanel::writeBackGlobals() {
   if (!m_model || !m_model->generalSettings) return;
+  m_model->generalSettings->appearance.titleTintEnabled = ui->titleTintEnabledCheckBox->isChecked();
   m_model->generalSettings->appearance.titleTintSaturation = ui->titleSaturationSpinBox->value();
   m_model->generalSettings->appearance.titleTintLightness = ui->titleLightnessSpinBox->value();
   m_model->generalSettings->appearance.titleBaseColor = ui->baseColorEdit->text().trimmed();
+}
+
+void AppearanceColorsPanel::updateTitleTintControlsEnabled() {
+  const bool on = ui->titleTintEnabledCheckBox->isChecked();
+  ui->label_textAppearance->setEnabled(on);
+  ui->titleSaturationSpinBox->setEnabled(on);
+  ui->label_titleLightness->setEnabled(on);
+  ui->titleLightnessSpinBox->setEnabled(on);
+  ui->label_baseColor->setEnabled(on);
+  ui->baseColorEdit->setEnabled(on);
 }
 
 void AppearanceColorsPanel::updateBackgroundButtonForType() {

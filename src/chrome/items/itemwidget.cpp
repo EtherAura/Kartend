@@ -36,6 +36,7 @@
 Q_LOGGING_CATEGORY(lcItemWidget, "kartend.itemwidget")
 
 // Static configuration members - initialized to UIConstants defaults
+bool ItemWidget::s_titleTintEnabled = false;
 int ItemWidget::s_titleTintSaturation = UIConstants::Color::TITLE_TINT_SATURATION;
 int ItemWidget::s_titleTintLightness = UIConstants::Color::TITLE_TINT_LIGHTNESS;
 QString ItemWidget::s_titleBaseColor;
@@ -68,6 +69,10 @@ void ItemWidget::setTitleTintLightness(int lightness) {
 
 void ItemWidget::setTitleBaseColor(const QString &hexColor) {
   s_titleBaseColor = hexColor;
+}
+
+void ItemWidget::setTitleTintEnabled(bool enabled) {
+  s_titleTintEnabled = enabled;
 }
 
 void ItemWidget::setCustomFontFamily(const QString &fontFamily) {
@@ -167,6 +172,30 @@ ItemWidget::~ItemWidget() {
 
 // Compute title tint from highlight color with configurable
 // saturation/lightness
+// Kartend-bbcu6: the colour item TITLE TEXT is painted in.
+//
+// Distinct from titleTint() below, which is the accent derivation and stays
+// unconditional because the placeholder tile's hatch pattern is keyed off it
+// (currentTileTheme()) and must keep tracking the system accent whether or not
+// titles are tinted. Collapsing the two broke exactly that — the hatch went
+// achromatic and stopped following accent changes.
+auto ItemWidget::titleTextColor() -> QColor {
+  if (s_titleTintEnabled) {
+    return titleTint();
+  }
+  // Default: the palette's text colour, like every other label in the app.
+  // WindowText rather than Text because these captions sit on the window
+  // background, not inside an item view — the roles differ under some schemes.
+  //
+  // Not merely a taste default. titleTint() forces ABSOLUTE saturation and
+  // lightness onto the highlight's hue, so a pair that reads well on a light
+  // background lands near background luminance on a dark one: the old
+  // unconditional default measured 1.63:1 against Breeze Dark, failing both
+  // WCAG AA (4.5:1) and the 3:1 large-text floor. A palette colour cannot fail
+  // that way — the theme already guarantees it against its own background.
+  return QApplication::palette().color(QPalette::WindowText);
+}
+
 auto ItemWidget::titleTint() -> QColor {
   // Title tint is NOT affected by per-collection primary color
   // Primary color only affects selection borders and placeholder patterns
@@ -223,7 +252,7 @@ void ItemWidget::startPulseAnimation() {
 // Apply title tint - caches the color for custom painting in paintEvent
 // Qt 6.9.2 ignores QLabel stylesheets, so we paint the text manually
 void ItemWidget::applyTitleTint() {
-  m_titleTintColor = titleTint();
+  m_titleTintColor = titleTextColor();
   if (nameLabel) {
     // Make label text transparent - we'll paint it ourselves in paintEvent
     nameLabel->setStyleSheet(

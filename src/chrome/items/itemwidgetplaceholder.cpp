@@ -44,7 +44,9 @@ void ItemWidget::drawTitleOnPlaceholder(QPixmap &pixmap, qreal dpr) const {
   }
   ItemPlaceholderRenderer::TitleStyle style;
   style.customFontFamily = s_customFontFamily;
-  style.tintColor = m_titleTintColor.isValid() ? m_titleTintColor : titleTint();
+  // Title text drawn ON the placeholder tile follows the TEXT colour; the
+  // tile's hatch accent above deliberately still uses titleTint().
+  style.tintColor = m_titleTintColor.isValid() ? m_titleTintColor : titleTextColor();
   // Match the on-tile font to the item's nameLabel font when available so
   // the overlay reads as the title's natural typeface; fall back to the
   // app font when nameLabel hasn't been laid out yet (e.g. early reuse
