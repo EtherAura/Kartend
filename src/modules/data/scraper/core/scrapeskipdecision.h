@@ -100,7 +100,11 @@ struct ScrapeSkipContext {
   /// type NOT in this set is treated as optional — the provider doesn't reliably
   /// supply it for this system (e.g. video/figurine/pictograms on PlayStation),
   /// so requiring it would keep every item unskippable. Built by
-  /// computePrevalentMediaTypes from the collection-wide presence index.
+  /// computePrevalentMediaTypes from the collection-wide presence index. Only
+  /// consulted for items that already have at least one wanted type on disk —
+  /// an item with NO wanted media gets every non-known-absent wanted type
+  /// treated as required, since an all-empty collection makes nothing prevalent
+  /// and coverage would otherwise be vacuously true (Kartend-1wfi2).
   QSet<QString> requiredMediaTypes;
   bool hasWindow = false;
   QDateTime cutoff;

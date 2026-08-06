@@ -81,6 +81,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file manager preview, sorting by type). The saved bytes are now inspected
   and the file named for what it really is; links that do carry an extension
   keep behaving exactly as before (Kartend-aiws7).
+- **A "fill missing" scrape no longer permanently skips items that have
+  metadata but no media yet.** The skip logic decides which media types are
+  worth requiring by looking at what is already on disk across the
+  collection — but on a collection with no media at all, nothing qualifies,
+  so every item counted as fully covered and the scrape reported "skipped"
+  without fetching anything. Once a collection reached "metadata complete,
+  zero media", no amount of re-running would ever fetch media. Items with
+  none of the requested media now stay in the queue until the provider has
+  been asked, and only genuinely media-less titles settle down as skipped
+  (Kartend-1wfi2).
 - **`kartend --version` and `kartend --help` now work on a machine with no
   desktop running.** They crashed instead of printing, because the application
   window system was started before the command line was read — so the two

@@ -308,6 +308,7 @@ private slots:
   void fillMissingKnownAbsentMediaCountsAsCovered();
   void computeMediaAbsentTypesDerivesUnsuppliedWantedTypes();
   void fillMissingIgnoresCollectionWideUnobtainableMedia();
+  void fillMissingZeroMediaItemIsNotVacuouslyCovered();
   void computePrevalentMediaTypesAppliesThreshold();
   void quotaExhaustedStopsBatchAndSkipsRemainingItems();
   void quotaExhaustedAbortsInFlightItemsAtConcurrency();
@@ -1529,6 +1530,54 @@ void TestBatchScrapeRunner::fillMissingIgnoresCollectionWideUnobtainableMedia() 
   MD withAbsent = completeRow();
   withAbsent.mediaAbsent = {QStringLiteral("marquee")};
   ctx.metadataByPath[path] = withAbsent;
+  QVERIFY(Scraper::shouldSkipScrapedItem(path, ctx));
+}
+
+void TestBatchScrapeRunner::fillMissingZeroMediaItemIsNotVacuouslyCovered() {
+  // Kartend-1wfi2: prevalence is computed from media already on disk, so a
+  // collection where NOTHING has media yet makes no type prevalent and the
+  // ib46d gate waved every wanted type through — "metadata complete + zero
+  // media" was a stable dead end (VM repro 2026-08-04: run 2 reported
+  // "Skipped: 1" and fetched nothing). An item with none of the wanted media
+  // on disk must stay queued unless every wanted type is known-absent.
+  using MD = ItemMetadataStore::ItemMetadata;
+  const auto completeRow = []() {
+    MD md;
+    md.source = QStringLiteral("screenscraper");
+    md.title = QStringLiteral("T");
+    md.description = QStringLiteral("D");
+    md.genre = QStringLiteral("G");
+    md.developer = QStringLiteral("Dev");
+    md.publisher = QStringLiteral("Pub");
+    md.releaseDate = QStringLiteral("1990");
+    return md;
+  };
+  const QString path = QStringLiteral("/games/PS1.bin");
+
+  Scraper::ScrapeSkipContext ctx;
+  ctx.mode = Scraper::RescrapeMode::FillMissing;
+  ctx.writeMetadata = true;
+  ctx.dbCheckPossible = true;
+  ctx.wantedTypes = {QStringLiteral("screenshot"), QStringLiteral("background")};
+  // Empty presence index + empty prevalent set = the no-media-yet collection.
+  ctx.requiredMediaTypes = {};
+  ctx.metadataByPath[path] = completeRow();
+
+  // Metadata complete, zero media on disk → must NOT skip.
+  QVERIFY(!Scraper::shouldSkipScrapedItem(path, ctx));
+
+  // Every wanted type recorded known-absent → provider has nothing for this
+  // item; NOW the skip is legitimate (kihyx semantics preserved).
+  MD allAbsent = completeRow();
+  allAbsent.mediaAbsent = {QStringLiteral("screenshot"), QStringLiteral("background")};
+  ctx.metadataByPath[path] = allAbsent;
+  QVERIFY(Scraper::shouldSkipScrapedItem(path, ctx));
+
+  // One type on disk for this item flips it back under the prevalence gate:
+  // the other type is not prevalent collection-wide → optional → skip (the
+  // ib46d sparse-type behaviour is unchanged for items with some media).
+  ctx.metadataByPath[path] = completeRow();
+  ctx.presentByType[QStringLiteral("screenshot")] = {QStringLiteral("ps1")};
   QVERIFY(Scraper::shouldSkipScrapedItem(path, ctx));
 }
 

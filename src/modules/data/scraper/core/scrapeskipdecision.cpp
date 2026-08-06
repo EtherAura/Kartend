@@ -250,8 +250,23 @@ bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) {
     const auto &absentList = ctx.metadataByPath.value(path).mediaAbsent;
     for (const QString &t : absentList) knownAbsent.insert(t.toLower());
   }
-  bool allWantedMediaCovered = true;
+  // Vacuous-coverage guard (Kartend-1wfi2): prevalence is derived from what is
+  // already on disk collection-wide, so on a collection with no media yet NO
+  // type is prevalent and the gate below would wave every wanted type through —
+  // "metadata complete + zero media" became a stable dead end where FillMissing
+  // skipped every item and media was never retried. An item with none of the
+  // wanted media on disk gets no benefit of the prevalence doubt: every wanted
+  // type not recorded known-absent blocks its skip. Items the provider truly
+  // has no media for settle via the known-absent set after one attempt.
+  bool itemHasAnyWantedMediaOnDisk = false;
   for (const QString &type : ctx.wantedTypes) { // ctx.wantedTypes are lowercase
+    if (typeCoveredFor(baseNameLower, type)) {
+      itemHasAnyWantedMediaOnDisk = true;
+      break;
+    }
+  }
+  bool allWantedMediaCovered = true;
+  for (const QString &type : ctx.wantedTypes) {
     if (typeCoveredFor(baseNameLower, type)) continue;
     if (knownAbsent.contains(type)) continue; // this item's provider never supplied it → covered
     // Prevalence gate (Kartend-ib46d): only a media type the provider reliably
@@ -260,8 +275,10 @@ bool shouldSkipScrapedItem(const QString &path, const ScrapeSkipContext &ctx) {
     // or advertises but never delivers as files (video/figurine/pictograms/
     // background on PlayStation) — are optional, so their absence doesn't keep the
     // item unskippable forever. Types genuinely missing for a specific item but
-    // common overall stay handled per-item by the known-absent set above.
-    if (!ctx.requiredMediaTypes.contains(type)) continue;
+    // common overall stay handled per-item by the known-absent set above. Only
+    // consulted when the item has at least one wanted type on disk (see the
+    // vacuous-coverage guard above).
+    if (itemHasAnyWantedMediaOnDisk && !ctx.requiredMediaTypes.contains(type)) continue;
     allWantedMediaCovered = false;
     break;
   }
