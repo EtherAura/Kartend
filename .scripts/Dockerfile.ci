@@ -58,7 +58,7 @@ RUN apt-get update \
       `# than CI does. GitHub's ubuntu-24.04 image ships zip, which is why real` \
       `# CI never noticed.` \
       unzip zip p7zip-full \
-      qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev \
+      qt6-base-dev qt6-multimedia-dev qt6-tools-dev qt6-image-formats-plugins libqt6sql6-sqlite libzstd-dev \
       libarchive-dev qtkeychain-qt6-dev \
       `# libsdl2-dev: SDL2 is the primary Linux gamepad backend; installing it` \
       `# keeps that path compiling in container repros, matching the CI cell` \

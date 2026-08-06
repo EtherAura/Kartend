@@ -119,7 +119,7 @@ jobs:
         with:
           # ${{ matrix.extra_packages }} is empty for every cell except the
           # Release+gcc overlay above (same mechanism as cmake_extra).
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full ${{ matrix.extra_packages }}
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev qt6-image-formats-plugins libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full ${{ matrix.extra_packages }}
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -286,7 +286,7 @@ jobs:
         # transitive dep of some other package.
         uses: ./.github/actions/install-deps
         with:
-          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite qtkeychain-qt6-dev pulseaudio unzip p7zip-full
+          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev qt6-image-formats-plugins libqt6sql6-sqlite qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -414,7 +414,7 @@ jobs:
         with:
           # libzstd-dev keeps this job on the same optional-backend set as the
           # build matrix — only build-no-zstd omits it deliberately.
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev qt6-image-formats-plugins libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
@@ -512,7 +512,7 @@ jobs:
       - name: Install dependencies
         uses: ./.github/actions/install-deps
         with:
-          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
+          packages: clang cmake ninja-build lld ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev qt6-image-formats-plugins libqt6sql6-sqlite libzstd-dev libarchive-dev qtkeychain-qt6-dev pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio

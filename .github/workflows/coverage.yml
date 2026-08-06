@@ -95,7 +95,7 @@ jobs:
           # romhasher/launchmanager tests need real extractors. Without them
           # those tests QSKIP silently and deflate the very numbers the
           # coverage floors below gate on.
-          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev lcov pulseaudio unzip p7zip-full
+          packages: g++ cmake ninja-build ccache qt6-base-dev qt6-multimedia-dev qt6-tools-dev qt6-image-formats-plugins libqt6sql6-sqlite libarchive-dev qtkeychain-qt6-dev lcov pulseaudio unzip p7zip-full
 
       - name: Start dummy pulseaudio
         uses: ./.github/actions/setup-pulseaudio
