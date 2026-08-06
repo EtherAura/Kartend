@@ -73,6 +73,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Scraped images, videos, and manuals are now saved with a file extension
+  that matches what is actually inside the file.** When a provider's download
+  link carries no usable file extension, the scraper used to fall back to a
+  fixed default per kind — so a WebP image arrived named `.png`, and the name
+  lied to anything that trusts extensions (exporting to another program, a
+  file manager preview, sorting by type). The saved bytes are now inspected
+  and the file named for what it really is; links that do carry an extension
+  keep behaving exactly as before (Kartend-aiws7).
 - **`kartend --version` and `kartend --help` now work on a machine with no
   desktop running.** They crashed instead of printing, because the application
   window system was started before the command line was read — so the two

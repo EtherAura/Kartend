@@ -2,10 +2,12 @@
 // QTemporaryDir; DB-side assertions use a tiny inline subclass of
 // MockDatabaseManager that captures saveItemMetadata + saveItemArtwork
 // calls without needing a real SQLite backend.
+#include <QBuffer>
 #include <QByteArray>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QList>
@@ -72,6 +74,11 @@ private slots:
   void manualAsset_routesToManualDirectoryWithUrlExtension();
   void videoAsset_doesNotCreateItemArtworkRow();
   void videoAsset_defaultsExtensionToMp4WhenUrlHasNoSuffix();
+  void imageAsset_suffixlessUrlSniffsWebpFromBytes();
+  void imageAsset_suffixlessUrlUnrecognisedBytesDefaultToPng();
+  void imageAsset_urlExtensionWinsOverSniff();
+  void videoAsset_suffixlessUrlSniffsWebmFromBytes();
+  void manualAsset_suffixlessUrlSniffsEpubVsCbz();
   void kindForType_classifiesVideoVariantsAndManual();
   void videoNormalizedAsset_routesToVideoDirectoryAsVideoKind();
   void screenshot_writesIntoTypedSubdirNotFlatRoot();
@@ -369,6 +376,153 @@ void TestScrapePersistence::videoAsset_defaultsExtensionToMp4WhenUrlHasNoSuffix(
   QVERIFY(QFile::exists(tmp.path() + "/video/foo.mp4"));
   // The bogus ".php" extension from the URL must NOT come through.
   QVERIFY(!QFile::exists(tmp.path() + "/video/foo.php"));
+}
+
+namespace {
+
+/// Real encoded image bytes in the given Qt image format ("WEBP",
+/// "PNG", ...) so the sniff path sees exactly what a CDN would serve,
+/// not a hand-rolled magic header.
+QByteArray encodedImageBytes(const char *format) {
+  QImage img(8, 8, QImage::Format_RGB32);
+  img.fill(Qt::red);
+  QByteArray bytes;
+  QBuffer buf(&bytes);
+  if (!buf.open(QIODevice::WriteOnly) || !img.save(&buf, format)) {
+    return {};
+  }
+  return bytes;
+}
+
+} // namespace
+
+void TestScrapePersistence::imageAsset_suffixlessUrlSniffsWebpFromBytes() {
+  // Kartend-aiws7: Steam's store CDN serves background_raw URLs with no
+  // path extension and WebP bytes. The old per-kind fallback named the
+  // file .png with RIFF/WebP inside — Qt still rendered it (QImageReader
+  // content-sniffs on load) but the name lied to anything keying off
+  // extension. The payload must now be sniffed and land as .webp.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  CapturingDb db;
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  const QByteArray webp = encodedImageBytes("WEBP");
+  QVERIFY(!webp.isEmpty());
+  const QList<Scraper::PendingMediaWrite> media = {makeMediaWithUrl(
+      QStringLiteral("background"), QStringLiteral("Background"),
+      QUrl(QStringLiteral(
+          "https://store.akamai.steamstatic.com/images/storepagebackground/app/620")),
+      webp)};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
+                                                QStringLiteral("foo"), item, media);
+
+  QCOMPARE(result.mediaWritten, 1);
+  QVERIFY(QFile::exists(tmp.path() + "/background/foo.webp"));
+  QVERIFY(!QFile::exists(tmp.path() + "/background/foo.png"));
+}
+
+void TestScrapePersistence::imageAsset_suffixlessUrlUnrecognisedBytesDefaultToPng() {
+  // A payload no image plugin recognises keeps the old per-kind
+  // default — same fallback as before the sniff existed.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  CapturingDb db;
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  const QList<Scraper::PendingMediaWrite> media = {makeMediaWithUrl(
+      QStringLiteral("screenshot"), QStringLiteral("S"),
+      QUrl(QStringLiteral("https://example.com/media?id=1")), QByteArray("NOT_AN_IMAGE"))};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
+                                                QStringLiteral("foo"), item, media);
+
+  QCOMPARE(result.mediaWritten, 1);
+  QVERIFY(QFile::exists(tmp.path() + "/screenshot/foo.png"));
+}
+
+void TestScrapePersistence::imageAsset_urlExtensionWinsOverSniff() {
+  // A whitelisted URL suffix is still honoured without looking at the
+  // bytes — sniffing only fills the no-usable-suffix gap. Renaming
+  // suffix-carrying assets would churn FillMissing's exact-path skip
+  // gate on every provider that re-encodes.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  CapturingDb db;
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  const QByteArray webp = encodedImageBytes("WEBP");
+  QVERIFY(!webp.isEmpty());
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMediaWithUrl(QStringLiteral("screenshot"), QStringLiteral("S"),
+                       QUrl(QStringLiteral("https://example.com/shots/foo.png")), webp)};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
+                                                QStringLiteral("foo"), item, media);
+
+  QCOMPARE(result.mediaWritten, 1);
+  QVERIFY(QFile::exists(tmp.path() + "/screenshot/foo.png"));
+  QVERIFY(!QFile::exists(tmp.path() + "/screenshot/foo.webp"));
+}
+
+void TestScrapePersistence::videoAsset_suffixlessUrlSniffsWebmFromBytes() {
+  // EBML magic + "webm" DocType in the header → .webm instead of the
+  // blind .mp4 default. The DocType string sits inside the first few
+  // dozen bytes of any real WebM.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  CapturingDb db;
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  QByteArray ebml = QByteArrayLiteral("\x1A\x45\xDF\xA3");
+  ebml.append(QByteArrayLiteral("\x9F\x42\x86\x81\x01"));
+  ebml.append("B\x82");
+  ebml.append(QByteArrayLiteral("\x84"));
+  ebml.append("webm");
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMediaWithUrl(QStringLiteral("video"), QStringLiteral("V"),
+                       QUrl(QStringLiteral("https://example.com/media?id=2")), ebml)};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
+                                                QStringLiteral("foo"), item, media);
+
+  QCOMPARE(result.mediaWritten, 1);
+  QVERIFY(QFile::exists(tmp.path() + "/video/foo.webm"));
+  QVERIFY(!QFile::exists(tmp.path() + "/video/foo.mp4"));
+}
+
+void TestScrapePersistence::manualAsset_suffixlessUrlSniffsEpubVsCbz() {
+  // Zip-magic payloads split on the EPUB marker: the spec-mandated
+  // stored-first "mimetype" entry puts "application/epub+zip" verbatim
+  // in the leading bytes; a zip without it is treated as CBZ.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  CapturingDb db;
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  QByteArray epub = QByteArrayLiteral("PK\x03\x04");
+  epub.append(QByteArray(26, '\0'));
+  epub.append("mimetypeapplication/epub+zip");
+  QByteArray cbz = QByteArrayLiteral("PK\x03\x04");
+  cbz.append(QByteArray(26, '\0'));
+  cbz.append("page001.png");
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMediaWithUrl(QStringLiteral("manual"), QStringLiteral("M"),
+                       QUrl(QStringLiteral("https://example.com/media?id=3")), epub)};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/foo.bin", tmp.path(),
+                                                QStringLiteral("foo"), item, media);
+  QCOMPARE(result.mediaWritten, 1);
+  QVERIFY(QFile::exists(tmp.path() + "/manual/foo.epub"));
+
+  const QList<Scraper::PendingMediaWrite> media2 = {
+      makeMediaWithUrl(QStringLiteral("manual"), QStringLiteral("M"),
+                       QUrl(QStringLiteral("https://example.com/media?id=4")), cbz)};
+  const auto result2 = Scraper::applyScrapedItem(&db, "u1", "/m/bar.bin", tmp.path(),
+                                                 QStringLiteral("bar"), item, media2);
+  QCOMPARE(result2.mediaWritten, 1);
+  QVERIFY(QFile::exists(tmp.path() + "/manual/bar.cbz"));
 }
 
 void TestScrapePersistence::kindForType_classifiesVideoVariantsAndManual() {

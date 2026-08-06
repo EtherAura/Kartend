@@ -7,10 +7,12 @@
 
 #include <optional>
 
+#include <QBuffer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -65,11 +67,50 @@ bool isStandardArtworkType(const QString &type) {
 // providers (per-kind Content-Type prefix / size cap) and the skip-decision
 // coverage index share the same classification as this file's write router.
 
+/// Content-sniffed extension for a video payload whose URL carried no
+/// usable suffix. Magic-number checks for the containers in
+/// ExtensionUtils::videoBaseExtensions(); empty when unrecognised.
+QString sniffedVideoExtension(const QByteArray &bytes) {
+  // EBML header → Matroska family; the DocType string a few bytes in
+  // distinguishes WebM from generic MKV.
+  if (bytes.startsWith(QByteArrayLiteral("\x1A\x45\xDF\xA3"))) {
+    return bytes.left(64).contains("webm") ? QStringLiteral("webm") : QStringLiteral("mkv");
+  }
+  // ISO BMFF: 4-byte box size, then "ftyp" + major brand. QuickTime
+  // brands ("qt  ") → .mov; everything else (isom / mp4x / avc1 / m4v
+  // variants) is close enough to MP4 that .mp4 is the honest name.
+  if (bytes.size() >= 12 && bytes.mid(4, 4) == QByteArrayLiteral("ftyp")) {
+    return bytes.mid(8, 2) == QByteArrayLiteral("qt") ? QStringLiteral("mov")
+                                                      : QStringLiteral("mp4");
+  }
+  if (bytes.startsWith(QByteArrayLiteral("RIFF")) && bytes.mid(8, 4) == QByteArrayLiteral("AVI ")) {
+    return QStringLiteral("avi");
+  }
+  return {};
+}
+
+/// Content-sniffed extension for a manual payload whose URL carried no
+/// usable suffix. Covers the kDocExts whitelist; empty when unrecognised.
+QString sniffedManualExtension(const QByteArray &bytes) {
+  if (bytes.startsWith(QByteArrayLiteral("%PDF"))) return QStringLiteral("pdf");
+  if (bytes.startsWith(QByteArrayLiteral("AT&TFORM"))) return QStringLiteral("djvu");
+  if (bytes.startsWith(QByteArrayLiteral("Rar!"))) return QStringLiteral("cbr");
+  if (bytes.startsWith(QByteArrayLiteral("PK\x03\x04"))) {
+    // EPUB mandates a stored first entry named "mimetype" containing
+    // "application/epub+zip", so the string appears verbatim in the
+    // leading bytes; any other zip-with-pages is treated as CBZ.
+    return bytes.left(256).contains("epub+zip") ? QStringLiteral("epub") : QStringLiteral("cbz");
+  }
+  return {};
+}
+
 /// Picks the on-disk extension for a written asset. Honours the URL
-/// suffix when present so an MP4 stays MP4 and a WebM stays WebM;
-/// falls back to a sensible per-kind default for asset URLs that
-/// don't carry a recognisable extension.
-QString extensionForAsset(const QUrl &url, MediaKind kind) {
+/// suffix when present so an MP4 stays MP4 and a WebM stays WebM. For
+/// asset URLs without a recognisable extension the payload bytes are
+/// content-sniffed before falling back to the per-kind default —
+/// Steam's store CDN serves extension-less background URLs with WebP
+/// bytes, which the bare default used to name `.png` (Kartend-aiws7).
+QString extensionForAsset(const QUrl &url, MediaKind kind, const QByteArray &bytes) {
   // QUrl::path() preserves the URL-decoded path including any
   // querystring-free trailing segment — exactly the part QFileInfo
   // can suffix-extract from. Filtered through a short whitelist so a
@@ -86,12 +127,33 @@ QString extensionForAsset(const QUrl &url, MediaKind kind) {
                                         ExtensionUtils::videoBaseExtensions().end());
   static const QSet<QString> kDocExts{"pdf", "epub", "cbz", "cbr", "djvu"};
   switch (kind) {
-  case MediaKind::Image:
-    return kImageExts.contains(rawExt) ? rawExt : QStringLiteral("png");
-  case MediaKind::Video:
-    return kVideoExts.contains(rawExt) ? rawExt : QStringLiteral("mp4");
-  case MediaKind::Manual:
-    return kDocExts.contains(rawExt) ? rawExt : QStringLiteral("pdf");
+  case MediaKind::Image: {
+    if (kImageExts.contains(rawExt)) return rawExt;
+    // The image plugins already know their own magic — ask them rather
+    // than hand-rolling signatures. This is the same plugin set that
+    // decodes the file later, so a sniffed name is decodable by
+    // construction. Gated through the whitelist so a plugin-recognised
+    // format the lookup tables don't admit (e.g. svg) still lands on
+    // the default rather than an unresolvable extension.
+    QBuffer probe;
+    probe.setData(bytes);
+    if (probe.open(QIODevice::ReadOnly)) {
+      QString fmt = QString::fromLatin1(QImageReader::imageFormat(&probe)).toLower();
+      if (fmt == QLatin1String("jpeg")) fmt = QStringLiteral("jpg");
+      if (kImageExts.contains(fmt)) return fmt;
+    }
+    return QStringLiteral("png");
+  }
+  case MediaKind::Video: {
+    if (kVideoExts.contains(rawExt)) return rawExt;
+    const QString sniffed = sniffedVideoExtension(bytes);
+    return sniffed.isEmpty() ? QStringLiteral("mp4") : sniffed;
+  }
+  case MediaKind::Manual: {
+    if (kDocExts.contains(rawExt)) return rawExt;
+    const QString sniffed = sniffedManualExtension(bytes);
+    return sniffed.isEmpty() ? QStringLiteral("pdf") : sniffed;
+  }
   }
   Q_UNREACHABLE();
 }
@@ -205,7 +267,8 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
   //   video → video/
   //   manual → manual/
   // File extensions are inferred from each asset's source URL with
-  // a per-kind whitelist (default png / mp4 / pdf). No copy is made
+  // a per-kind whitelist, content-sniffing the payload when the URL
+  // carries no usable suffix (default png / mp4 / pdf). No copy is made
   // at the flat artwork root — the grid tile and details-pane preview
   // resolve the primary cover straight from the typed subdirectories
   // (see ArtworkUtils::findArtworkForFile).
@@ -238,7 +301,7 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
         continue;
       }
       const MediaKind kind = kindForType(write.asset.type);
-      const QString ext = extensionForAsset(write.asset.url, kind);
+      const QString ext = extensionForAsset(write.asset.url, kind, write.bytes);
 
       // Per-kind subdirectory name under artworkDirectory. "front"
       // is the cross-provider primary-cover tag and is a standard
