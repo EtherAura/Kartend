@@ -7,6 +7,7 @@
 
 #include <QList>
 #include <QString>
+#include <QStringList>
 
 #include "scrapertypes.h"
 
@@ -123,6 +124,18 @@ struct ScraperChoice {
 /// collection, or an unmatched custom tag. Drives the creation dialog's
 /// "media type → scraper" auto-association.
 [[nodiscard]] QString defaultScraperForType(const QString &collectionType);
+
+/// Media-type keys the "What to scrape" grid should tick by default when
+/// @p cfg is the scrape target — the curated set of the provider the
+/// scrape would actually resolve (same pin-then-category rule as
+/// claimLookupProvider, without constructing it). Empty when that
+/// provider has no curated set; callers then keep the global
+/// metadata + front default. Kartend-6e90v: the global default is tuned
+/// for ROM scraping, but a launcher-import collection's interesting
+/// media are screenshot / background / video — a user hand-running a
+/// scrape with the ROM ticks got metadata + cover only and reasonably
+/// concluded nothing happened.
+[[nodiscard]] QStringList defaultMediaTypesForCollection(const CollectionConfig &cfg);
 
 } // namespace MetadataProviderRegistry
 

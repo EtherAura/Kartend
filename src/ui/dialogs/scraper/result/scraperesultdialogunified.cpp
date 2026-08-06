@@ -12,10 +12,13 @@
 
 #include "applicationcontext.h"
 #include "batchprogressview.h"
+#include "collection/collectionconfig.h"
+#include "collection/validationhelpers.h"
 #include "flowlayout.h"
 #include "formbuilders.h"
 #include "isettingsmanager.h"
 #include "mediatypecheckboxbuilder.h"
+#include "metadataproviderregistry.h"
 #include "scraperesultselectionmodel.h"
 #include "scraperesultthumbnailloader.h"
 #include "singleitemview.h"
@@ -916,6 +919,21 @@ void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
   // its single item, leaving every other collection in the unchecked
   // default state.
   m_dlg->m_selectionModel->preCheckSingleItem(preCollectionIndex, preItemPath);
+
+  // Provider-aware media ticks (Kartend-6e90v): when the dialog opens
+  // scoped to one collection, re-tick the "What to scrape" grid with the
+  // curated default set of the provider that collection resolves to —
+  // e.g. a launcher-import Steam collection gets screenshot / background /
+  // video instead of the ROM-tuned front-only default, so a hand-run
+  // scrape fetches the media the provider actually supplies. Providers
+  // without a curated set (empty list) leave the table defaults alone.
+  // The un-scoped flow keeps the global defaults: its target mixes
+  // collections with potentially different providers.
+  if (CollectionUtils::isValidIndex(preCollectionIndex, m_dlg->m_scraperCtx.collections)) {
+    const CollectionConfig &cfg = (*m_dlg->m_scraperCtx.collections)[preCollectionIndex];
+    MediaTypeCheckboxBuilder::applyProviderDefaults(
+        m_dlg->m_mediaTypeChecks, MetadataProviderRegistry::defaultMediaTypesForCollection(cfg));
+  }
 }
 
 void ScrapeResultDialogUnified::setUnifiedSetupEnabled(bool enabled) {

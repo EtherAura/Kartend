@@ -91,7 +91,10 @@ It's fill-missing throughout: re-importing or re-syncing only fetches
 what's absent, so scraped art and hand-edited fields are left alone. The
 collection also stays pinned to the **Steam Store** scraper, so a manual
 scrape later (for a game whose store page has since gained a trailer, say)
-uses the same exact-id matching.
+uses the same exact-id matching. When you open the scrape dialog on a
+launcher collection, the "What to scrape" boxes come pre-ticked with what
+the store actually supplies — cover, screenshot, background, and video —
+rather than the disc-and-box set used for file collections.
 
 ## Artwork
 

@@ -46,6 +46,7 @@ private slots:
   void claimLookupProvider_untaggedFallsBackToFirstLookupCapable();
   void claimLookupProvider_unmatchedCustomTagReturnsNull();
   void claimLookupProvider_specMetadataMatchesBuiltIn();
+  void defaultMediaTypesForCollection_followsProviderResolution();
 };
 
 namespace {
@@ -415,6 +416,27 @@ void TestMetadataProviderRegistry::claimLookupProvider_specMetadataMatchesBuiltI
     QVERIFY2(claimed, qPrintable(QString("no claim for canonical category %1").arg(cat)));
     QCOMPARE(claimed->id(), MetadataProviderRegistry::defaultScraperForType(cat));
   }
+}
+
+void TestMetadataProviderRegistry::defaultMediaTypesForCollection_followsProviderResolution() {
+  // Kartend-6e90v: the curated tick set rides the same pin-then-category
+  // resolution as claimLookupProvider. A launcher-import collection pinning
+  // the Steam storefront gets exactly the asset types SteamStoreParser
+  // emits; the resolution result — not the pin string — drives the answer.
+  const QStringList steamSet = MetadataProviderRegistry::defaultMediaTypesForCollection(
+      cfgFor(QStringLiteral("games"), QStringLiteral("steam")));
+  QCOMPARE(steamSet, (QStringList{QStringLiteral("front"), QStringLiteral("screenshot"),
+                                  QStringLiteral("background"), QStringLiteral("video")}));
+
+  // A plain games collection resolves to ScreenScraper, which has no curated
+  // set — callers keep the grid's metadata + front table defaults.
+  QVERIFY(MetadataProviderRegistry::defaultMediaTypesForCollection(cfgFor(QStringLiteral("games")))
+              .isEmpty());
+
+  // An unmatched custom tag resolves to no provider at all → empty.
+  QVERIFY(MetadataProviderRegistry::defaultMediaTypesForCollection(
+              cfgFor(QStringLiteral("no-such-category")))
+              .isEmpty());
 }
 
 QTEST_MAIN(TestMetadataProviderRegistry)

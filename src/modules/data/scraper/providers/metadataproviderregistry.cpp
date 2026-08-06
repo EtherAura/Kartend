@@ -97,6 +97,11 @@ struct ProviderSpec {
   /// table stays constexpr-friendly plain data.
   std::unique_ptr<MetadataProvider> (*makeApi)(const GeneralSettingsAccessor &,
                                                const CollectionAccessor &);
+  /// Media-type keys (lowercase, matching MediaTypeCheckboxBuilder's curated
+  /// table) the "What to scrape" grid should tick by default when this
+  /// provider is the resolved scraper. Empty = no curated set; the grid
+  /// keeps its global metadata + front default (Kartend-6e90v).
+  QStringList defaultMediaTypes = {};
 };
 
 const std::vector<ProviderSpec> &providerSpecs() {
@@ -143,7 +148,13 @@ const std::vector<ProviderSpec> &providerSpecs() {
                     .makeApi = [](const GeneralSettingsAccessor &,
                                   const CollectionAccessor &) -> std::unique_ptr<MetadataProvider> {
                       return std::make_unique<SteamStoreProvider>();
-                    }});
+                    },
+                    // Exactly the asset types SteamStoreParser emits: an
+                    // installed Steam game has no box/cart art to chase,
+                    // and defaulting to metadata + front only made a
+                    // hand-run scrape look like a no-op (Kartend-6e90v).
+                    .defaultMediaTypes = {QStringLiteral("front"), QStringLiteral("screenshot"),
+                                          QStringLiteral("background"), QStringLiteral("video")}});
 
     // ── Video (2) ────────────────────────────────────────────────────
     // TMDB uses the API-backed provider when a settings accessor is
@@ -341,6 +352,15 @@ QString defaultScraperForType(const QString &collectionType) {
     }
   }
   return {};
+}
+
+QStringList defaultMediaTypesForCollection(const CollectionConfig &cfg) {
+  // Same resolution rule as claimLookupProvider (pin wins, else first
+  // lookup-capable category match) so the ticks describe the provider the
+  // scrape will actually run — but selection-only: no provider is built.
+  const ProviderSpec *spec =
+      selectLookupSpec(cfg.scraperOverrides.scraperProviderId.trimmed(), cfg.type);
+  return spec ? spec->defaultMediaTypes : QStringList{};
 }
 
 QList<MetadataProvider *> forCategory(const std::vector<std::unique_ptr<MetadataProvider>> &all,

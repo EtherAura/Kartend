@@ -4,6 +4,7 @@
 #include <QCoreApplication>
 #include <QHash>
 #include <QString>
+#include <QStringList>
 
 class QCheckBox;
 class QGroupBox;
@@ -33,6 +34,16 @@ public:
   /// must reparent it via a layout. Passing a null `parent` is supported
   /// (the returned widget can be reparented later by the layout owner).
   [[nodiscard]] static QGroupBox *build(QWidget *parent, QHash<QString, QCheckBox *> &outChecks);
+
+  /// Re-tick the grid for a provider's curated default set
+  /// (MetadataProviderRegistry::defaultMediaTypesForCollection): every
+  /// media checkbox becomes checked iff its key is in @p types. The
+  /// synthetic `_metadata` entry is left as-is — the curated sets
+  /// describe media palettes, not whether text fields are wanted. No-op
+  /// when @p types is empty so collections whose provider has no curated
+  /// set keep the table defaults (Kartend-6e90v).
+  static void applyProviderDefaults(const QHash<QString, QCheckBox *> &checks,
+                                    const QStringList &types);
 };
 
 #endif // MEDIATYPECHECKBOXBUILDER_H

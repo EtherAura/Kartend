@@ -4,6 +4,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QLatin1String>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -65,6 +66,15 @@ constexpr MediaTypeEntry kMediaTypes[] = {
 };
 
 } // namespace
+
+void MediaTypeCheckboxBuilder::applyProviderDefaults(const QHash<QString, QCheckBox *> &checks,
+                                                     const QStringList &types) {
+  if (types.isEmpty()) return;
+  for (auto it = checks.constBegin(); it != checks.constEnd(); ++it) {
+    if (it.key() == QLatin1String("_metadata")) continue;
+    it.value()->setChecked(types.contains(it.key()));
+  }
+}
 
 QGroupBox *MediaTypeCheckboxBuilder::build(QWidget *parent,
                                            QHash<QString, QCheckBox *> &outChecks) {

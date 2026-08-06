@@ -14,6 +14,7 @@
 #include <QHash>
 #include <QPushButton>
 #include <QScopedPointer>
+#include <QStringList>
 #include <QTest>
 
 namespace {
@@ -38,6 +39,8 @@ private slots:
   void defaultOnSetIsMetadataAndFrontOnly();
   void selectAllChecksEveryBox();
   void selectNoneClearsEveryBox();
+  void applyProviderDefaultsReticksMediaButNotMetadata();
+  void applyProviderDefaultsEmptySetIsNoOp();
 };
 
 void TestMediaTypeCheckboxBuilder::buildsThirtyTwoUniqueLowercaseKeys() {
@@ -109,6 +112,45 @@ void TestMediaTypeCheckboxBuilder::selectNoneClearsEveryBox() {
   for (auto it = checks.constBegin(); it != checks.constEnd(); ++it) {
     QVERIFY2(!it.value()->isChecked(),
              qPrintable(QStringLiteral("%1 still checked after Select none").arg(it.key())));
+  }
+}
+
+void TestMediaTypeCheckboxBuilder::applyProviderDefaultsReticksMediaButNotMetadata() {
+  // Kartend-6e90v: a provider's curated set re-ticks the media grid — keys
+  // in the set on, every other media key off — while the synthetic
+  // `_metadata` gate keeps its current state (the curated sets describe
+  // media palettes, not whether text fields are wanted).
+  QHash<QString, QCheckBox *> checks;
+  QScopedPointer<QGroupBox> group(MediaTypeCheckboxBuilder::build(nullptr, checks));
+  QVERIFY(group);
+
+  const QStringList steamish = {QStringLiteral("front"), QStringLiteral("screenshot"),
+                                QStringLiteral("background"), QStringLiteral("video")};
+  MediaTypeCheckboxBuilder::applyProviderDefaults(checks, steamish);
+
+  for (auto it = checks.constBegin(); it != checks.constEnd(); ++it) {
+    if (it.key() == QStringLiteral("_metadata")) {
+      QVERIFY(it.value()->isChecked()); // untouched table default
+      continue;
+    }
+    QVERIFY2(it.value()->isChecked() == steamish.contains(it.key()),
+             qPrintable(QStringLiteral("tick for %1 wrong after provider defaults").arg(it.key())));
+  }
+}
+
+void TestMediaTypeCheckboxBuilder::applyProviderDefaultsEmptySetIsNoOp() {
+  // Providers without a curated set must leave the table defaults alone —
+  // an empty list re-ticking everything off would nuke the front default.
+  QHash<QString, QCheckBox *> checks;
+  QScopedPointer<QGroupBox> group(MediaTypeCheckboxBuilder::build(nullptr, checks));
+  QVERIFY(group);
+
+  MediaTypeCheckboxBuilder::applyProviderDefaults(checks, {});
+
+  for (auto it = checks.constBegin(); it != checks.constEnd(); ++it) {
+    const bool expectedOn =
+        it.key() == QStringLiteral("_metadata") || it.key() == QStringLiteral("front");
+    QCOMPARE(it.value()->isChecked(), expectedOn);
   }
 }
 
