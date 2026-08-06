@@ -44,6 +44,11 @@ runs:
         # `apt-get update` this step used to skip — ~5s, and what makes
         # local `act` reproduction via .scripts/ci-local.sh work at all.
         no-install-recommends: 'true'
+        # Well under branch-lint's 10-minute job timeout so a crawling
+        # mirror surfaces as install-deps' labelled timeout error, not an
+        # opaque job cancellation (Kartend-wym32). These five packages
+        # install in well under a minute on a healthy mirror.
+        install-timeout-seconds: '300'
 
     - name: Shellcheck
       # -x follows `source` directives into .scripts/lib/*.sh so build.sh is

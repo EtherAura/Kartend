@@ -63,9 +63,13 @@ jobs:
 
   build:
     runs-on: ubuntu-24.04
-    # Catch a hung build/test before it burns the 6h default. ~30 min covers
-    # the slowest matrix cell (~13 min) with cold-ccache + runner headroom.
-    timeout-minutes: 30
+    # Catch a hung build/test before it burns the 6h default. The slowest
+    # matrix cell is ~13 min with cold ccache; 45 matches sanitizers /
+    # thread-sanitizer so mirror weather in install-deps converts to a slower
+    # green instead of a false red (Kartend-wym32: build-no-zstd burned its
+    # whole 30-min budget on a slow-but-alive mirror the Acquire inactivity
+    # timeouts cannot catch; install-deps now also bounds the install itself).
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -268,7 +272,11 @@ jobs:
   # is untested and could rot silently.
   build-no-zstd:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # 45 rather than 30: this job died on main run 30916204629 after a
+    # slow-but-alive apt mirror consumed the entire budget inside
+    # install-deps — presented as "cancelled", not "failed". Matches the
+    # sanitizers jobs' headroom (Kartend-wym32).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
@@ -339,7 +347,9 @@ jobs:
   # maintenance warning set.
   build-no-libarchive-maintenance:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # 45 rather than 30: same install-deps mirror-weather headroom as the
+    # other install-deps jobs (Kartend-wym32).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 

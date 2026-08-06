@@ -28,6 +28,19 @@ inputs:
       is a megabyte a stalled mirror cannot hang on (Kartend-j94zp).
     required: false
     default: 'false'
+  install-timeout-seconds:
+    description: >-
+      Hard bound (seconds) on the `apt-get install` invocation, enforced
+      with `timeout` because GitHub does not support timeout-minutes on
+      composite-action steps (Kartend-wym32). The Acquire options only
+      catch stalls and failures; a slow-but-alive mirror trickling bytes
+      needs this wall-clock bound to fail as a labelled dependency
+      problem instead of an opaque job cancellation. Callers whose job
+      timeout is tight should pass a value comfortably below it so the
+      label — not the job kill — is what surfaces (script-lint passes
+      300 under its 10-minute job).
+    required: false
+    default: '600'
 
 runs:
   using: 'composite'
@@ -55,8 +68,16 @@ runs:
         # signed", which fails this update outright (it took build-no-zstd red on
         # main). Nothing here needs them, so drop the sources before refreshing
         # the index. -f keeps it a no-op when they are absent (e.g. act's image).
+        #
+        # Kartend-wym32: `timeout` bounds each attempt because the Acquire
+        # timeouts fire only on INACTIVITY — a mirror trickling bytes trips
+        # neither them nor Acquire::Retries, and an unbounded update would eat
+        # into the install's budget. A healthy update takes ~5s; 120s is
+        # mirror-weather headroom, and the existing retry gives a second
+        # attempt a fresh connection to route around the sick backend.
         sudo rm -f /etc/apt/sources.list.d/microsoft* /etc/apt/sources.list.d/azure-cli*
-        sudo apt-get $APT_OPTS update -qq || { sleep 5; sudo apt-get $APT_OPTS update -qq; }
+        timeout 120 sudo apt-get $APT_OPTS update -qq \
+          || { sleep 5; timeout 120 sudo apt-get $APT_OPTS update -qq; }
       env:
         APT_OPTS: >-
           -o Acquire::Retries=3
@@ -73,12 +94,30 @@ runs:
       # dependency closure each job sees. APT_OPTS mirrors the update step
       # (Kartend-cqnsi) so the package downloads get the same retry/timeout
       # resilience as the index refresh.
+      # Kartend-wym32: the Acquire timeouts fire only on INACTIVITY and
+      # Acquire::Retries only on FAILURE, so a slow-but-alive mirror trickling
+      # bytes trips neither — build-no-zstd once burned its entire 30-minute
+      # job budget inside this step and died as an unexplained "cancelled".
+      # GitHub does not support timeout-minutes on composite-action steps, so
+      # an explicit `timeout` bounds the install instead: a healthy install
+      # takes ~1-3 min, and on the 600s kill the step fails as a clearly
+      # labelled dependency problem rather than an opaque job cancellation.
+      # No retry after the kill — a SIGTERM mid-dpkg can leave dpkg needing
+      # `--configure -a`, and a blind rerun would fail more confusingly than
+      # the labelled timeout does.
       run: |
-        sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $RECOMMENDS_OPT install -y \
-          ${{ inputs.packages }}
+        status=0
+        timeout "$INSTALL_TIMEOUT" \
+          sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $RECOMMENDS_OPT install -y \
+          ${{ inputs.packages }} || status=$?
+        if [ "$status" -eq 124 ]; then
+          echo "::error title=apt install timed out::Dependency install exceeded ${INSTALL_TIMEOUT}s — the apt mirror is crawling (Kartend-wym32). Re-run the job to get a different mirror backend."
+        fi
+        exit "$status"
       env:
         APT_OPTS: >-
           -o Acquire::Retries=3
           -o Acquire::http::Timeout=30
           -o Acquire::https::Timeout=30
         RECOMMENDS_OPT: ${{ inputs.no-install-recommends == 'true' && '--no-install-recommends' || '' }}
+        INSTALL_TIMEOUT: ${{ inputs.install-timeout-seconds }}
