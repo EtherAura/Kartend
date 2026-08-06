@@ -354,7 +354,16 @@ case "$ARG" in
   docker:tsan|docker:thread-sanitizer)
     require_ci_image
     info "running kartend-ci TSan build (matches CI thread-sanitizer job)"
+    # --security-opt seccomp=unconfined: TSan calls
+    # personality(ADDR_NO_RANDOMIZE) at startup to switch off ASLR for its
+    # fixed shadow layout, and Docker's default seccomp profile whitelists
+    # only a handful of personality values — this one EPERMs, which TSan
+    # treats as a fatal CHECK (tsan_platform_linux.cpp:282) before main()
+    # runs. Verified 2026-08-05 on kernel 7.1.4-cachyos-optim: with the
+    # profile relaxed a TSan probe binary runs clean, and the older
+    # 'unexpected memory mapping' failure from the 7.1.2 era is gone.
     exec docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+      --security-opt seccomp=unconfined \
       -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
       cd /src
       pulseaudio --start --exit-idle-time=-1 2>/dev/null || true
