@@ -149,45 +149,74 @@ runs:
           exit 0
         fi
         "$LUPDATE" -silent -recursive src -ts "$RUNNER_TEMP/kartend_fresh.ts"
-        fresh="$(grep -c '<message' "$RUNNER_TEMP/kartend_fresh.ts" || true)"
-        total="$(grep -c '<message' translations/kartend_en.ts || true)"
-        # vanished/obsolete entries are kept in the seed for translators but
-        # correspond to no current source string — exclude them.
-        stale="$(grep -cE '<translation type="(vanished|obsolete)"' translations/kartend_en.ts || true)"
-        live=$(( total - stale ))
-        echo "Fresh lupdate extract: $fresh messages; committed kartend_en.ts: $live live ($stale vanished/obsolete)."
-        if [ "$fresh" -ne "$live" ]; then
-          # Name the actual strings rather than just the counts. Kartend-6gig9
-          # sat as an ignored two-message delta for weeks and diagnosing it
-          # meant diffing the two .ts files by hand; printing the offenders
-          # makes the cause obvious from the log alone.
-          python3 - "$RUNNER_TEMP/kartend_fresh.ts" translations/kartend_en.ts <<'PYEOF'
+        # Kartend-376w7: the gate compares SOURCE STRINGS, not raw message
+        # counts or (context, source) pairs. Different lupdate generations can
+        # file the same string under different contexts — the runner's older
+        # lupdate mis-scopes a trailing-return-type method into its return
+        # type's class ([QMessageBox] instead of [SettingsDialog]) — so a
+        # pair-level compare would go red on parser noise no seed refresh can
+        # fix, while the old count compare both passed that swap silently and
+        # missed a count-neutral add+remove pair entirely. Source-level sets
+        # catch real drift in both directions and stay immune to cross-version
+        # context reassignment; context-only disagreements are printed as an
+        # informational note so they read as "context differs, not missing".
+        # Known blind spot, accepted with the looser compare: a string whose
+        # text already exists under another context (e.g. a second panel
+        # gaining its own "Background" label) shows up only in that note, not
+        # as a failure — the price of not going red on parser noise the seed
+        # cannot fix. Kartend-6gig9 still applies: name the actual strings,
+        # not counts — the offender list is what makes the log actionable.
+        if ! python3 - "$RUNNER_TEMP/kartend_fresh.ts" translations/kartend_en.ts <<'PYEOF'
         import sys, xml.etree.ElementTree as ET
 
-        def messages(path):
-            root, out = ET.parse(path).getroot(), {}
+        def messages(path, skip_stale=False):
+            # source string -> {contexts it appears under, first location}.
+            # vanished/obsolete seed entries are kept for translators but
+            # correspond to no current source string — excluded (counted).
+            root, out, stale = ET.parse(path).getroot(), {}, 0
             for ctx in root.findall('context'):
                 name = ctx.findtext('name') or ''
                 for m in ctx.findall('message'):
+                    if skip_stale:
+                        tr = m.find('translation')
+                        if tr is not None and tr.get('type') in ('vanished', 'obsolete'):
+                            stale += 1
+                            continue
                     loc = m.find('location')
                     where = f"{loc.get('filename')}:{loc.get('line')}" if loc is not None else '?'
-                    out[(name, m.findtext('source') or '')] = where
-            return out
+                    entry = out.setdefault(m.findtext('source') or '', {'contexts': set(), 'where': where})
+                    entry['contexts'].add(name)
+            return out, stale
 
-        fresh, seed = messages(sys.argv[1]), messages(sys.argv[2])
-        for label, delta, hint in (
-            ("in source but MISSING from the seed", {k: v for k, v in fresh.items() if k not in seed},
+        fresh, _ = messages(sys.argv[1])
+        seed, stale = messages(sys.argv[2], skip_stale=True)
+        print(f"Fresh lupdate extract: {len(fresh)} unique source strings; "
+              f"committed kartend_en.ts: {len(seed)} live ({stale} vanished/obsolete messages excluded).")
+
+        ctx_diffs = {s for s in fresh.keys() & seed.keys() if fresh[s]['contexts'] != seed[s]['contexts']}
+        if ctx_diffs:
+            print(f"\nNote: {len(ctx_diffs)} string(s) filed under different contexts by this lupdate "
+                  "than in the seed — a cross-Qt-version parse artifact, NOT drift (Kartend-376w7):")
+            for s in sorted(ctx_diffs):
+                print(f"  {s!r}: extract {sorted(fresh[s]['contexts'])} vs seed {sorted(seed[s]['contexts'])}")
+
+        failed = False
+        for label, side, delta, hint in (
+            ("in source but MISSING from the seed", fresh, sorted(fresh.keys() - seed.keys()),
              "these strings cannot be translated at all today"),
-            ("in the seed but NO LONGER in source", {k: v for k, v in seed.items() if k not in fresh},
+            ("in the seed but NO LONGER in source", seed, sorted(seed.keys() - fresh.keys()),
              "these are leftovers a refresh would drop"),
         ):
             if not delta:
                 continue
-            print(f"\n{len(delta)} message(s) {label} ({hint}):")
-            for (ctx, src), where in sorted(delta.items()):
-                print(f"  [{ctx}] {src!r}\n      {where}")
+            failed = True
+            print(f"\n{len(delta)} string(s) {label} ({hint}):")
+            for s in delta:
+                print(f"  [{'/'.join(sorted(side[s]['contexts']))}] {s!r}\n      {side[s]['where']}")
+        sys.exit(1 if failed else 0)
         PYEOF
-          echo "::error file=translations/kartend_en.ts::Translation seed is stale: a fresh lupdate extract over src/ finds $fresh messages but the committed kartend_en.ts carries $live. See the message list above."
+        then
+          echo "::error file=translations/kartend_en.ts::Translation seed is stale: a fresh lupdate extract over src/ disagrees with the committed kartend_en.ts. See the string list above."
           echo "Two things cause this, and they need different fixes:"
           echo "  1. The seed was not refreshed after tr()/translate() strings changed."
           echo "     Fix: cmake --build <builddir> --target update_translations, then commit translations/kartend_en.ts (docs/dev/i18n.md)."
