@@ -31,7 +31,10 @@ name: Winget Submission
 #        - Contents: Read and write
 #        - Pull requests: Read and write
 #        - Workflows: Read and write
-#      (legacy classic PAT with `public_repo` also works).
+#      (a legacy classic PAT works too — use `public_repo` plus `workflow`:
+#      the fork-sync step below fast-forwards the fork across upstream's
+#      .github/workflows changes, which the API refuses for a token
+#      without the workflow scope).
 #   3. Add the PAT as a repository secret named `WINGET_PAT`.
 #
 # Until WINGET_PAT is set, this workflow is a no-op — the gating step
@@ -210,6 +213,93 @@ jobs:
               ;;
           esac
 
+      - name: Sync winget-pkgs fork with upstream
+        # winget-releaser's komac creates its submission branch from the
+        # UPSTREAM default-branch head but pushes it to the token owner's
+        # fork — and GitHub refuses to create a ref for an object the fork
+        # has never fetched. A fork left alone since the previous release is
+        # thousands of commits behind within days (upstream merges
+        # continuously), and komac then dies with the opaque 'Ref cannot be
+        # created / failed to create branch <id>-<version>-<hex>' — exactly
+        # how run 31060382905 failed, with the fork 6,574 commits behind
+        # (Kartend-zsv14). Fast-forward the fork's master from upstream
+        # before every submission so staleness can never reach komac.
+        #
+        # Runs under dry-run too, deliberately: the sync touches only the
+        # PAT owner's own fork (never microsoft/winget-pkgs), so the
+        # dispatch-time promise "do not submit to winget-pkgs" holds — and
+        # exercising it preflights both ways it can break: a diverged fork
+        # (409) and a token the API rejects for carrying upstream workflow-
+        # file changes without the workflow scope (422).
+        id: forksync
+        if: >-
+          steps.check.outputs.configured == 'true' &&
+          steps.bootstrap.outputs.exists == 'true'
+        shell: bash
+        env:
+          WINGET_PAT: ${{ secrets.WINGET_PAT }}
+        run: |
+          set -euo pipefail
+
+          # The fork lives under the PAT owner's account (winget-releaser's
+          # fork-user default is the token owner). Resolve the login from the
+          # token instead of hardcoding it so the sync and the submission can
+          # never target different forks. Body files are relative paths, not
+          # /dev/null — Git Bash + native curl.exe on windows-latest, same
+          # MSYS path-translation trap as the bootstrap probe above.
+          set +e
+          status=$(curl -sS --max-time 30 -o winget-sync-user.json -w '%{http_code}' \
+            -H "Authorization: Bearer $WINGET_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/user)
+          curl_rc=$?
+          set -e
+          if [ "$curl_rc" -ne 0 ] || [ "$status" != "200" ]; then
+            echo "::error::Could not resolve the WINGET_PAT owner (curl rc=$curl_rc, HTTP $status) — cannot locate the winget-pkgs fork to sync."
+            exit 1
+          fi
+          login=$(jq -r .login winget-sync-user.json)
+
+          set +e
+          status=$(curl -sS --max-time 60 -o winget-sync-body.json -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer $WINGET_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$login/winget-pkgs/merge-upstream" \
+            -d '{"branch":"master"}')
+          curl_rc=$?
+          set -e
+          if [ "$curl_rc" -ne 0 ]; then
+            echo "::error::curl exited $curl_rc syncing $login/winget-pkgs from upstream — network/TLS failure. komac would die on a stale fork, so failing here with the real cause."
+            exit 1
+          fi
+
+          case "$status" in
+            200)
+              merge_type=$(jq -r .merge_type winget-sync-body.json)
+              echo "synced=$merge_type" >> "$GITHUB_OUTPUT"
+              echo "Fork $login/winget-pkgs master synced with upstream ($merge_type)."
+              ;;
+            404)
+              echo "::error::No winget-pkgs fork found under $login — fork microsoft/winget-pkgs first (workflow header, setup step 1)."
+              exit 1
+              ;;
+            409)
+              echo "::error::$login/winget-pkgs master has DIVERGED from upstream and cannot be fast-forwarded. Reset the fork's master to upstream (or delete and re-fork), then re-run."
+              exit 1
+              ;;
+            422)
+              echo "::error::GitHub refused to sync $login/winget-pkgs from upstream (HTTP 422). Most common cause: the sync carries upstream .github/workflows changes and WINGET_PAT lacks the workflow scope — add it (classic PAT: workflow; fine-grained: Workflows read/write). Manual fallback: the 'Sync fork' button on the fork. Response: $(cat winget-sync-body.json)"
+              exit 1
+              ;;
+            *)
+              echo "::error::Unexpected HTTP $status syncing $login/winget-pkgs from upstream. Response: $(cat winget-sync-body.json)"
+              exit 1
+              ;;
+          esac
+
       - name: Report gate outcomes
         # The whole failure mode this workflow keeps hitting is "went green,
         # did nothing, nobody noticed". Write the decision to the run summary
@@ -221,6 +311,8 @@ jobs:
           CONFIGURED: ${{ steps.check.outputs.configured }}
           BOOTSTRAPPED: ${{ steps.bootstrap.outputs.exists }}
           BOOTSTRAP_OUTCOME: ${{ steps.bootstrap.outcome }}
+          SYNCED: ${{ steps.forksync.outputs.synced }}
+          SYNC_OUTCOME: ${{ steps.forksync.outcome }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
           TAG: ${{ steps.tag.outputs.tag }}
           TRIGGER: ${{ github.event_name }}
@@ -237,6 +329,8 @@ jobs:
             verdict='**Failed** — could not determine whether the package is bootstrapped upstream (API or network error). This is not a "not published yet" result; see the step log.'
           elif [ "$BOOTSTRAPPED" != "true" ]; then
             verdict='**Skipped** — package has no merged manifest upstream yet (winget-releaser is update-only).'
+          elif [ "$SYNC_OUTCOME" = "failure" ]; then
+            verdict='**Failed** — could not fast-forward the winget-pkgs fork from upstream; komac would have died on the stale fork (Kartend-zsv14). See the sync step log for the cause.'
           elif [ "$DRY_RUN" = "true" ]; then
             verdict='**Dry run** — all gates passed; submission was intentionally not attempted.'
           else
@@ -253,6 +347,7 @@ jobs:
             echo "| Trigger | \`$TRIGGER\` |"
             echo "| \`WINGET_PAT\` configured | \`${CONFIGURED:-false}\` |"
             echo "| Bootstrapped upstream | \`${BOOTSTRAPPED:-unknown}\` |"
+            echo "| Fork sync | \`${SYNCED:-not run}\` |"
             echo
             echo "$verdict"
           } >> "$GITHUB_STEP_SUMMARY"
