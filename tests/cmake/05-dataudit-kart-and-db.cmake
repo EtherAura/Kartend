@@ -169,6 +169,18 @@ kartend_add_test(NAME SystemThemeWatcher
           ${SRC_DIR}/utils/view/systemthemewatcher.cpp
   LINK Qt6::Core
 )
+
+# Kartend-q40q0: WCAG contrast arithmetic + the lightness repair applied to
+# the audit's text-bearing absolute-lightness derivations (breadcrumb link,
+# opt-in title tint, validation-error red). Pure colour math over QColor.
+kartend_add_test(NAME ColorContrast
+  SOURCES utils/view/test_colorcontrast.cpp
+          ${SRC_DIR}/utils/view/colorcontrast.cpp
+  LINK Qt6::Core Qt6::Gui
+)
+target_include_directories(test_colorcontrast PRIVATE
+  ${SRC_DIR}/utils/view
+)
 target_include_directories(test_kdecolorscheme PRIVATE
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db

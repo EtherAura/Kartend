@@ -91,6 +91,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   none of the requested media now stay in the queue until the provider has
   been asked, and only genuinely media-less titles settle down as skipped
   (Kartend-1wfi2).
+- **Breadcrumb links and error messages now stay readable on both light and
+  dark themes.** The clickable collection links in the window title were
+  drawn in a fixed light shade derived from the accent colour — tuned for
+  dark backgrounds, nearly invisible on a light theme (measured 1.95:1
+  contrast where the accessibility guideline asks 4.5:1). The red used for
+  validation and error text sat just under the guideline on both themes.
+  Both are now adjusted against the actual window background at the moment
+  they are used, keeping their hue but guaranteeing readable contrast — and
+  the optional item-title accent tint gets the same guarantee when enabled
+  (Kartend-q40q0).
 - **`kartend --version` and `kartend --help` now work on a machine with no
   desktop running.** They crashed instead of printing, because the application
   window system was started before the command line was read — so the two

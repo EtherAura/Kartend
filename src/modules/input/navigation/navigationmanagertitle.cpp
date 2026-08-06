@@ -6,6 +6,7 @@
 #include "applicationcontext.h"
 #include "collection/collectioncontext.h"
 #include "collection/hierarchyhelpers.h"
+#include "colorcontrast.h"
 #include "emptystatewidget.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -68,7 +69,14 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   QColor highlightColor = pal.color(QPalette::Highlight);
   int h, s, l;
   highlightColor.getHsl(&h, &s, &l);
-  QColor linkColor = QColor::fromHsl(h, s / 2, 170); // Tinted, slightly saturated
+  // The half-saturated highlight tint at absolute L=170 is tuned for dark
+  // backgrounds — against Breeze Light's window it measured 1.95:1, below
+  // even the 3:1 large-text floor (Kartend-q40q0, same class as bbcu6).
+  // Repair against the actual window background so the link hue survives on
+  // both polarities; on dark themes the colour is already compliant (6.15:1)
+  // and passes through unchanged.
+  const QColor linkColor =
+      ColorContrast::ensureContrast(QColor::fromHsl(h, s / 2, 170), pal.color(QPalette::Window));
   QString linkColorHex = linkColor.name();
 
   // Breadcrumb assembly (ancestor "collection:<idx>" links, the "root:"

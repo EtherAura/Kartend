@@ -1,6 +1,7 @@
 target_sources(kartend_utils PRIVATE
   artworkcandidates.cpp
   artworkutils.cpp
+  colorcontrast.cpp
   imagedecodeutils.cpp
   kdecolorscheme.cpp
   placeholderwarmer.cpp
@@ -9,6 +10,7 @@ target_sources(kartend_utils PRIVATE
   videoutils.cpp
   artworkcandidates.h
   artworkutils.h
+  colorcontrast.h
   detailsformat.h
   durationformat.h
   gridutils.h

@@ -2,6 +2,7 @@
 // animation.
 #include "itemwidget.h"
 #include "artworkutils.h"
+#include "colorcontrast.h"
 #include "propertyutils.h"
 #include "uiconstants/animation.h"
 #include "uiconstants/collectionicon.h"
@@ -181,7 +182,15 @@ ItemWidget::~ItemWidget() {
 // achromatic and stopped following accent changes.
 auto ItemWidget::titleTextColor() -> QColor {
   if (s_titleTintEnabled) {
-    return titleTint();
+    // Kartend-q40q0: even as an explicit opt-in, the tint is still TITLE
+    // TEXT — the shipped saturation/lightness pair measures 1.85:1 against
+    // Breeze Dark's window. Repair the lightness (hue/saturation intent
+    // preserved) against the actual background so a user who turns tinting
+    // on cannot land on an unreadable pair. Only this text path is
+    // repaired: the placeholder hatch keeps the raw titleTint() below,
+    // where low contrast is legitimate and accent-tracking is the point.
+    return ColorContrast::ensureContrast(titleTint(),
+                                         QApplication::palette().color(QPalette::Window));
   }
   // Default: the palette's text colour, like every other label in the app.
   // WindowText rather than Text because these captions sit on the window

@@ -1,7 +1,12 @@
 #ifndef UICONSTANTS_COLOR_H
 #define UICONSTANTS_COLOR_H
 
+#include <QColor>
+#include <QGuiApplication>
+#include <QPalette>
 #include <QString>
+
+#include "colorcontrast.h"
 
 namespace UIConstants {
 
@@ -26,9 +31,17 @@ inline constexpr const char *VALIDATION_ERROR_FG = "#d05050";
 
 /// Stylesheet for an error/validation text label. `bold` adds font-weight:bold
 /// to match the warning labels; the plain form is the inline validation line.
+/// The literal is repaired against the live window background at call time:
+/// #d05050 measures 3.72:1 / 3.22:1 against Breeze Light / Dark — under the
+/// 4.5:1 normal-text AA floor on both — and Kartend-c43nl centralised it here
+/// precisely so theme-awareness could land in one place (Kartend-q40q0). The
+/// repair preserves the red hue and only moves lightness, so on any sane
+/// theme this stays recognisably "the error colour".
 [[nodiscard]] inline QString errorLabelStyleSheet(bool bold = false) {
-  const QString hex = QString::fromLatin1(VALIDATION_ERROR_FG);
-  const QString style = QStringLiteral("color: %1;").arg(hex);
+  const QColor fg =
+      ColorContrast::ensureContrast(QColor(QString::fromLatin1(VALIDATION_ERROR_FG)),
+                                    QGuiApplication::palette().color(QPalette::Window));
+  const QString style = QStringLiteral("color: %1;").arg(fg.name());
   return bold ? style + QStringLiteral(" font-weight: bold;") : style;
 }
 
