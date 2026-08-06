@@ -215,6 +215,13 @@ kartend_add_test(NAME OpenLibraryParser
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Steam storefront parser (Kartend-ksjx0): storesearch/appdetails JSON →
+# candidates/ScrapedItem, success:false → not-found, media type mapping.
+kartend_add_test(NAME SteamStoreParser
+  SOURCES modules/scraper/test_steamstoreparser.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # Provider request-construction tests (searchUrl building + metadata) for
 # the API-backed providers and the generic WebSearchProvider. Qt6::Network
 # arrives transitively via kartend_utils — the provider ctors touch

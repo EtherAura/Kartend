@@ -161,6 +161,7 @@ target_include_directories(kartend_data PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/database
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/dat
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/dataudit
+  ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/import
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/kart
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/playlist
   ${CMAKE_CURRENT_SOURCE_DIR}/modules/data/query

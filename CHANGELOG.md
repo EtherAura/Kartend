@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Collections can now be built straight from Steam, Flatpak, and Lutris
+  libraries.** File → Import → "Import from Launcher…" detects what's
+  installed through each launcher and creates a ready-made collection per
+  source, nested wherever you choose in your hierarchy — every installed
+  game appears as a launchable item, using the
+  cover art the launcher already has on disk, with no shortcuts to create
+  by hand and no network involved. Launcher collections re-sync themselves
+  at startup and on demand (File → Import → "Sync Launcher Collections"),
+  so installs and uninstalls follow through automatically; art you scrape
+  or place by hand is never overwritten by a sync. Under the hood each game
+  is a small `.kartlink` shortcut file, so search, playlists, statistics,
+  and artwork behave exactly as they do for file-based collections. Steam
+  games also arrive with their metadata — developer, publisher, release
+  date, genres, player modes, review scores — read straight from the Steam
+  client's local cache; hand-edited and scraped fields are never
+  overwritten. The parts only the store has — descriptions, screenshots,
+  store backgrounds, and trailers — are fetched **automatically right after
+  the import**, in the background, with no scrape to run by hand and no
+  account or key needed; because every imported game knows its exact Steam
+  app id, it never mismatches a title the way name-based scraping can. Both
+  passes are fill-missing, so re-importing costs nothing and never
+  overwrites art or fields you already have.
+
 ### Changed
 
 - **Uses roughly half the memory during long sessions.** Three things were

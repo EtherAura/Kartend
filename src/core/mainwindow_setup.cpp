@@ -50,6 +50,7 @@
 #include "itemwidget.h"
 #include "kartmanager.h"
 #include "keyboardmanager.h"
+#include "launcherimportcontroller.h"
 #include "launchmanager.h"
 #include "layoutprofilesdialog.h"
 #include "libraryonboardingwizard.h"
@@ -557,6 +558,12 @@ void MainWindow::createMenuBar() {
   };
   ctx.onImportTheme = [this]() { importThemeInteractive(); };
   ctx.onExportTheme = [this]() { exportThemeInteractive(); };
+  ctx.onImportFromLauncher = [this]() {
+    if (m_launcherImportController) m_launcherImportController->runImportDialog();
+  };
+  ctx.onSyncLauncherCollections = [this]() {
+    if (m_launcherImportController) m_launcherImportController->syncLauncherCollections();
+  };
   ctx.onManageLayoutProfiles = [this]() { manageLayoutProfilesInteractive(); };
   ctx.onShowCollectionHealth = [this]() { showCollectionHealthInteractive(); };
   ctx.onShowVariantGrouping = [this]() { showVariantGroupingInteractive(); };

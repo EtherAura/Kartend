@@ -48,6 +48,7 @@
 #include "isettingsmanager.h"
 #include "itemwidget.h"
 #include "keyboardmanager.h"
+#include "launcherimportcontroller.h"
 #include "launchmanager.h"
 #include "librarytoolscontroller.h"
 #include "loadingoverlay.h"
@@ -105,6 +106,7 @@ MainWindow::MainWindow(QWidget *parent)
   m_scraperController = std::make_unique<ScraperController>(nullptr);
   m_datAuditController = std::make_unique<DatAuditController>(nullptr);
   m_libraryToolsController = std::make_unique<LibraryToolsController>(nullptr);
+  m_launcherImportController = std::make_unique<LauncherImportController>(nullptr);
   m_dialogController = std::make_unique<DialogController>(this);
   // Constructed before setupUI() so each overlay's setLayerManager() call
   // inside setupUI() / setupArtworkManager() / setupSidebar() can register
@@ -300,6 +302,16 @@ void MainWindow::showStartupSplash() {
   QTimer::singleShot(5000, this, [this]() {
     if (m_datAuditController) {
       m_datAuditController->startupLibraryScan();
+    }
+  });
+  // Launcher-import startup sync (Kartend-wuq2c): re-read the Steam /
+  // Flatpak / Lutris libraries off-thread and refresh every importSource
+  // collection's stub folder, rescanning the changed ones. Deferred for the
+  // same disk-contention reason as the DAT scan above, and 3s later still so
+  // the two startup passes don't overlap on the same spindle.
+  QTimer::singleShot(8000, this, [this]() {
+    if (m_launcherImportController) {
+      m_launcherImportController->startupSync();
     }
   });
   // startup video plays first when enabled. The splash is

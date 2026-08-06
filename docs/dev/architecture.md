@@ -27,6 +27,8 @@ src/
 │   │   ├── dat/         # Offline DAT-file identification + on-disk parse cache
 │   │   ├── dataudit/    # DAT-based collection audit (scan vs DAT catalogue,
 │   │   │                # missing/unknown report, fix-list export)
+│   │   ├── import/      # Launcher import: sync Steam/Flatpak/Lutris
+│   │   │                # libraries into .kartlink stub collections
 │   │   ├── kart/        # Kart (collection bundle) import/export
 │   │   ├── playlist/    # Playlist storage and export (JSON / M3U)
 │   │   ├── query/       # Worker thread SQL queries
@@ -91,6 +93,7 @@ src/
 | `dbeventscontroller` | Owns MainWindow's reactions to DatabaseManager scan/count signals plus the scan-counter / startup-overlay-suppression state those slots read and write. |
 | `scrapercontroller` | Owns the scraper-flow entry points (open scraper dialog, resume pending scrape at startup) and the long-lived ScrapeResultDialog + ScraperService they cache. |
 | `datauditcontroller` | Owns the DAT Audit sub-window — lazily constructed on first open, hidden (not destroyed) on close — mirroring ScraperController's dialog-cache role. |
+| `launcherimportcontroller` | Owns the launcher-import flows (Kartend-wuq2c): the "Import from Launcher…" dialog, the deferred startup re-sync of `importSource` collections (QtConcurrent, snapshot-in/results-out), and the manual sync action. The sync work itself is `LauncherImportService` in `modules/data/import/`. |
 | `librarytoolscontroller` | Owns the five per-collection library tools (collection health, duplicates/variants, bulk edit, missing-metadata review, artwork wizard) sharing the validate-collection → resolve-uuid → run-dialog skeleton. |
 | `gridwidthdebouncer` | Three-stage debounced pipeline (save / rebuild / preview) behind the menu-driven grid-width adjustment shortcuts. |
 | `titlecountshelpers` | Stateless helpers rendering the window title for the active collection (subfolder / hierarchy-root / leaf formats plus child-part counts). |
@@ -217,10 +220,15 @@ Utilities are grouped by concern in six subfolders.
 |---------|-------------|
 | `configvalidation` | Schema validation of `CollectionConfig` plus `isCommandInPath()`. |
 | `extensionutils` | File extension categorization by media type. |
+| `flatpaklibrary` | Read-only discovery of installed Flatpak games from the exports tree (.desktop entries + exported icons). |
+| `kartlink` | `.kartlink` shortcut-stub format (JSON: source + launch target) standing in for launcher-installed games. |
 | `launcherprobe` | PATH-probe for well-known launcher binaries. |
+| `lutrislibrary` | Read-only discovery of a Lutris install's games from its SQLite `pga.db` + banner/coverart lookup. |
 | `pathutils` | Path validation with `Result<T>` support, expansion, `syncDirectory()` for crash-safe writes. |
 | `retroarchutils` | Discovery of a RetroArch install's libretro cores. |
 | `romhasher` | Stream-hashing of media files for hash-based scraper lookups. |
+| `steamappinfo` | Binary parser for Steam's local appinfo.vdf metadata cache (V28/V29): developer/publisher, release date, genre/category taxonomy, review scores. |
+| `steamlibrary` | Read-only discovery of a local Steam install's installed games: VDF/ACF parsing, multi-drive library folders, cached librarycache artwork. |
 
 ### `src/utils/text/` — Search modes, string formatting, title filtering
 

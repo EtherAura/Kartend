@@ -134,6 +134,7 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   o["manual_directory"] = c.manualDirectory;
   o["placeholder_artwork"] = c.placeholderArtwork;
   o["collection_icon"] = c.collectionIcon;
+  o["import_source"] = c.importSource;
   o["extensions"] = stringListToJson(c.extensions);
   o["custom_artwork_types"] = stringListToJson(c.customArtworkTypes);
 
@@ -251,6 +252,7 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.manualDirectory = o["manual_directory"].toString();
   c.placeholderArtwork = o["placeholder_artwork"].toString();
   c.collectionIcon = o["collection_icon"].toString();
+  c.importSource = o["import_source"].toString();
   // Older .kart files carry the pre-Kartend-693zb glob form ("*.mp4");
   // normalize on import so the in-memory canonical stays bare.
   c.extensions = ExtensionUtils::normalizeStoredExtensions(jsonToStringList(o["extensions"]));

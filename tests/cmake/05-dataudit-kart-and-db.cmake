@@ -124,6 +124,33 @@ kartend_add_test(NAME RetroArchUtils
   LINK kartend_utils
 )
 
+# Launcher-import discovery utilities (Kartend-wuq2c): the .kartlink stub
+# format plus the three read-only launcher-library readers.
+kartend_add_test(NAME KartLink
+  SOURCES utils/fs/test_kartlink.cpp
+  LINK kartend_utils
+)
+
+kartend_add_test(NAME SteamLibrary
+  SOURCES utils/fs/test_steamlibrary.cpp
+  LINK kartend_utils
+)
+
+kartend_add_test(NAME SteamAppInfo
+  SOURCES utils/fs/test_steamappinfo.cpp
+  LINK kartend_utils
+)
+
+kartend_add_test(NAME FlatpakLibrary
+  SOURCES utils/fs/test_flatpaklibrary.cpp
+  LINK kartend_utils
+)
+
+kartend_add_test(NAME LutrisLibrary
+  SOURCES utils/fs/test_lutrislibrary.cpp
+  LINK kartend_utils
+)
+
 # KdeColorScheme tests
 # Includes resources.qrc so the test binary's `:/themes/` lookups
 # resolve to the same bundled .colors files the production app sees;

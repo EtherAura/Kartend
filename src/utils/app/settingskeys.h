@@ -92,6 +92,7 @@ inline constexpr auto kHorizontalGridHeight = "horizontalGridHeight";
 inline constexpr auto kHorizontalGridHeightSidebarHidden = "horizontalGridHeightSidebarHidden";
 inline constexpr auto kHorizontalSpacing = "horizontalSpacing";
 inline constexpr auto kId = "id";
+inline constexpr auto kImportSource = "importSource";
 inline constexpr auto kIncludeArtworkSubfolders = "includeArtworkSubfolders";
 inline constexpr auto kIncludeContentSubfolders = "includeContentSubfolders";
 inline constexpr auto kItemHeight = "itemHeight";

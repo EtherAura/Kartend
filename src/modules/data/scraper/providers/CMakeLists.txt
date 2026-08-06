@@ -12,6 +12,7 @@ target_sources(kartend_data PRIVATE
   screenscrapersystemcache.cpp
   screenscrapersystems.cpp
   screenscraperurls.cpp
+  steamstoreprovider.cpp
   tmdbprovider.cpp
   websearchprovider.cpp
   metadatalookupprovider.h
@@ -29,6 +30,7 @@ target_sources(kartend_data PRIVATE
   screenscrapersystemcache.h
   screenscrapersystems.h
   screenscraperurls.h
+  steamstoreprovider.h
   tmdbprovider.h
   websearchprovider.h
 )

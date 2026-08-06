@@ -6,6 +6,7 @@
 // would execute.
 #include "launchcommandbuilder.h"
 #include "collection/launcherconfig.h"
+#include "kartlink.h"
 #include "launchmanager.h"
 #include "pathutils.h"
 
@@ -41,9 +42,26 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
         .withDetails(QString("Collection '%1'").arg(collectionName));
   }
 
-  // Validate media file path for security.
-  // Existence is not checked here; only character-level security checks.
-  auto fileValidation = PathUtils::validatePathSecurity(filePath);
+  // Launcher-import stubs (Kartend-wuq2c): a .kartlink file is a shortcut
+  // written by LauncherImportService for a game installed through an external
+  // launcher; the launcher must receive the stub's TARGET (a steam:// URI, a
+  // Flatpak app id, …), never the stub's own path. Resolving here — the one
+  // seam both the real launch and the preview dry-run flow through — makes
+  // the %1/%f substitution and append-at-end fallback below operate on the
+  // target transparently, and keeps the preview honest about what executes.
+  QString mediaArgument = filePath;
+  if (KartLink::isKartLinkPath(filePath)) {
+    auto link = KartLink::read(filePath);
+    if (link.isError()) {
+      return link.error();
+    }
+    mediaArgument = link.value().target;
+  }
+
+  // Validate the media argument (file path, or resolved shortcut target) for
+  // security. Existence is not checked here; only character-level checks —
+  // URI targets like steam://rungameid/220 pass by design.
+  auto fileValidation = PathUtils::validatePathSecurity(mediaArgument);
   if (fileValidation.isError()) {
     return fileValidation.error();
   }
@@ -55,10 +73,11 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
   // flipped by an oddly/maliciously named file). Reject it, mirroring the
   // corePath leading-dash guard below. Absolute paths (the normal case) start
   // with '/', so this never triggers for them.
-  if (filePath.startsWith('-')) {
+  if (mediaArgument.startsWith('-')) {
     return ErrorContext::error(ErrorCode::InvalidFilePath, "Media path cannot start with a dash",
                                "LaunchCommandBuilder::buildLaunchCommand")
-        .withDetails(QString("File path '%1' would be parsed as a launcher option").arg(filePath));
+        .withDetails(
+            QString("File path '%1' would be parsed as a launcher option").arg(mediaArgument));
   }
 
   LaunchCommand cmd;
@@ -109,7 +128,7 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
       arg.replace("%collection%", collectionName, Qt::CaseInsensitive);
       if (arg.contains(kFileTokenRe)) {
         sawFilePlaceholder = true;
-        arg.replace(kFileTokenRe, filePath);
+        arg.replace(kFileTokenRe, mediaArgument);
       }
       arg.replace(kCoreTokenRe, expandedCorePath);
     }
@@ -145,7 +164,7 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
     if (paramResult.isError()) {
       return paramResult.error();
     }
-    cmd.arguments << "-L" << expandedCorePath << filePath;
+    cmd.arguments << "-L" << expandedCorePath << mediaArgument;
     return cmd;
   }
 
@@ -158,7 +177,7 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
   // its position explicitly — this preserves the historical append-at-end
   // behavior for the common templates that carry no media placeholder.
   if (!sawFilePlaceholder) {
-    cmd.arguments << filePath;
+    cmd.arguments << mediaArgument;
   }
   return cmd;
 }

@@ -66,6 +66,7 @@ struct SettingsDialogContext;
 struct DialogRunners;
 class ScraperController;
 class DatAuditController;
+class LauncherImportController;
 class LibraryToolsController;
 class ScrollEventsController;
 class TextZoomHud;
@@ -448,6 +449,11 @@ private:
   /// mainwindow_dialogs.cpp; the *Interactive methods below are one-line
   /// delegations into it. Context wired in connectDatabaseManager().
   std::unique_ptr<LibraryToolsController> m_libraryToolsController;
+  /// Owns the launcher-import flows (Kartend-wuq2c): the "Import from
+  /// Launcher…" dialog, the deferred startup re-sync of importSource
+  /// collections, and the manual sync action. Context wired in
+  /// connectDatabaseManager() beside the other controller contexts.
+  std::unique_ptr<LauncherImportController> m_launcherImportController;
   /// Owns dialog construction so MainWindow doesn't need to #include every
   /// dialog header. See dialogcontroller.{h,cpp}.
   std::unique_ptr<DialogController> m_dialogController;

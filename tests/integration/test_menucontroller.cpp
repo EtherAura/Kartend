@@ -293,7 +293,9 @@ void TestMenuController::setupMenuBar_groupsImportAndExportIntoSubmenus() {
   QVERIFY(ui.menuImport);
   QVERIFY(ui.menuExport);
   QCOMPARE(visibleEntries(ui.menuImport),
-           QStringList({QStringLiteral("Import Kart..."), QStringLiteral("Import Theme...")}));
+           QStringList({QStringLiteral("Import Kart..."), QStringLiteral("Import Theme..."),
+                        QStringLiteral("Import from Launcher..."),
+                        QStringLiteral("Sync Launcher Collections")}));
   QCOMPARE(visibleEntries(ui.menuExport),
            QStringList({QStringLiteral("Export Collection as Kart..."),
                         QStringLiteral("Export Current Theme...")}));

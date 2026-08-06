@@ -5905,6 +5905,134 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
 </context>
 <context>
+    <name>LauncherImportController</name>
+    <message numerus="yes">
+        <location filename="../src/core/launcherimportcontroller.cpp" line="+129"/>
+        <source>%1: re-synced — %2 added or updated, %3 removed, %n game(s) total.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+6"/>
+        <location line="+47"/>
+        <source>%1: Steam metadata filled for %n item(s).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="-3"/>
+        <source>%1: %n game(s) imported.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Import from Launcher</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+73"/>
+        <source>%1: fetching descriptions and artwork from Steam…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+5"/>
+        <source>%1: Steam store details fetched for %n item(s).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+37"/>
+        <source>Launcher sync is already running.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>No launcher collections to sync — use File → Import → Import from Launcher first.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+80"/>
+        <source>Launcher collections are up to date.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Launcher sync: %1 added or updated, %2 removed, %3 artwork files copied.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+6"/>
+        <source>Steam metadata filled for %n item(s).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+4"/>
+        <source>%n error(s) logged.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>LauncherImportDialog</name>
+    <message>
+        <location filename="../src/ui/dialogs/collection/launcherimportdialog.cpp" line="+12"/>
+        <source>Import from Launcher</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Create collections for games installed through these launchers. Each collection keeps itself in sync with the launcher&apos;s library and launches games through it — no shortcuts to maintain by hand.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Create in:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Top level</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Import</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+18"/>
+        <source>%1 — not detected</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%1 — %n game(s) found</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source> (already imported — selecting re-syncs it)</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>LauncherPresetsPanel</name>
     <message>
         <location filename="../src/ui/dialogs/settings/launchers/launcherpresetspanel.ui" line="+13"/>
@@ -6949,7 +7077,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow.cpp" line="+486"/>
+        <location filename="../src/core/mainwindow.cpp" line="+498"/>
         <source>Import Kart</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7163,7 +7291,7 @@ Will change:
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow_setup.cpp" line="+115"/>
+        <location filename="../src/core/mainwindow_setup.cpp" line="+116"/>
         <source>Collection configuration problem</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7301,7 +7429,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>MenuController</name>
     <message>
-        <location filename="../src/core/menucontroller.cpp" line="+378"/>
+        <location filename="../src/core/menucontroller.cpp" line="+380"/>
         <source>Fullscreen</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7363,6 +7491,16 @@ The app will still load, but please fix these — collections that share an iden
     <message>
         <location line="+16"/>
         <source>Import Theme...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>Import from Launcher...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>Sync Launcher Collections</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -7478,11 +7616,13 @@ The app will still load, but please fix these — collections that share an iden
         <location line="+10"/>
         <location line="+3"/>
         <location line="+3"/>
+        <location line="+3"/>
+        <location line="+4"/>
         <source>Tools</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-18"/>
+        <location line="-25"/>
         <source>Open settings</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7504,6 +7644,16 @@ The app will still load, but please fix these — collections that share an iden
     <message>
         <location line="+3"/>
         <source>Layout profiles…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Import from launcher…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Sync launcher collections</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -7969,7 +8119,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/input/launch/launchcommandbuilder.cpp" line="+202"/>
+        <location filename="../src/modules/input/launch/launchcommandbuilder.cpp" line="+221"/>
         <source>Launcher executable not found: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11708,7 +11858,7 @@ Continue?</source>
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/core/main.cpp" line="+164"/>
+        <location filename="../src/core/main.cpp" line="+295"/>
         <source>Kartend - Qt6/KDE multimedia collection launcher.</source>
         <translation type="unfinished"></translation>
     </message>

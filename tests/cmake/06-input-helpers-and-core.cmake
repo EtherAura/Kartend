@@ -100,6 +100,15 @@ kartend_add_test(NAME CollectionHierarchyBuilder
   LINK kartend_data kartend_api kartend_utils
 )
 
+# LauncherImportService — stub diff-sync semantics (write/update/removal,
+# ownership contract, collision numbering, fill-missing artwork) against
+# temp dirs with a synthetic entry list (Kartend-wuq2c). Provider I/O is
+# covered by the utils/fs reader tests.
+kartend_add_test(NAME LauncherImportService
+  SOURCES modules/import/test_launcherimportservice.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # CollectionConfig::operator== field-coverage test (Kartend-bztw8). Pure value
 # type lives in kartend_utils; guards against a future field being added to the
 # struct but forgotten in operator== (breaks settings-dialog dirty-tracking).

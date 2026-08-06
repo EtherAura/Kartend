@@ -66,6 +66,8 @@ struct MenuControllerContext {
   std::function<void()> onExportKart;
   std::function<void()> onImportTheme;
   std::function<void()> onExportTheme;
+  std::function<void()> onImportFromLauncher;
+  std::function<void()> onSyncLauncherCollections;
   std::function<void()> onManageLayoutProfiles;
   std::function<void()> onShowCollectionHealth;
   std::function<void()> onShowVariantGrouping;
@@ -151,6 +153,8 @@ private:
   QAction *m_exportKartAction = nullptr;
   QAction *m_importThemeAction = nullptr;
   QAction *m_exportThemeAction = nullptr;
+  QAction *m_importFromLauncherAction = nullptr;
+  QAction *m_syncLauncherCollectionsAction = nullptr;
   QAction *m_layoutProfilesAction = nullptr;
   QAction *m_collectionHealthAction = nullptr;
   QAction *m_variantGroupingAction = nullptr;
@@ -222,6 +226,8 @@ private:
   void setupActionExportKart();
   void setupActionImportTheme();
   void setupActionExportTheme();
+  void setupActionImportFromLauncher();
+  void setupActionSyncLauncherCollections();
   void setupActionLayoutProfiles();
   void setupActionCollectionHealth();
   void setupActionVariantGrouping();

@@ -131,6 +131,8 @@ void MenuController::setupMenuBar() {
   // Import/Export pairs land in the File → Import ▸ / Export ▸ submenus.
   setupActionImportKart();
   setupActionImportTheme();
+  setupActionImportFromLauncher();
+  setupActionSyncLauncherCollections();
   setupActionExportKart();
   setupActionExportTheme();
   setupActionExit();

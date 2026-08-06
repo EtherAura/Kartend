@@ -114,6 +114,36 @@ void MenuController::setupActionImportTheme() {
   });
 }
 
+// File → Import entry for creating stub collections from installed-launcher
+// libraries (Steam / Flatpak / Lutris) — Kartend-wuq2c.
+void MenuController::setupActionImportFromLauncher() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_importFromLauncherAction = new QAction(tr("Import from Launcher..."), this);
+  m_ctx.mainWindow->addAction(m_importFromLauncherAction);
+  if (m_ctx.ui->menuImport) {
+    m_ctx.ui->menuImport->addAction(m_importFromLauncherAction);
+  }
+  connect(m_importFromLauncherAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onImportFromLauncher) m_ctx.onImportFromLauncher();
+  });
+}
+
+// File → Import entry that re-syncs every launcher-import collection with
+// its launcher's current library — the on-demand half of Kartend-wuq2c's
+// refresh model (a launcher library can change without the watched stub
+// folder changing, so the filesystem watcher alone can't see installs).
+void MenuController::setupActionSyncLauncherCollections() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  m_syncLauncherCollectionsAction = new QAction(tr("Sync Launcher Collections"), this);
+  m_ctx.mainWindow->addAction(m_syncLauncherCollectionsAction);
+  if (m_ctx.ui->menuImport) {
+    m_ctx.ui->menuImport->addAction(m_syncLauncherCollectionsAction);
+  }
+  connect(m_syncLauncherCollectionsAction, &QAction::triggered, this, [this]() {
+    if (m_ctx.onSyncLauncherCollections) m_ctx.onSyncLauncherCollections();
+  });
+}
+
 void MenuController::setupActionExportTheme() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_exportThemeAction = new QAction(tr("Export Current Theme..."), this);

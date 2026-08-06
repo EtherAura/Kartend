@@ -3,16 +3,26 @@ target_sources(kartend_utils PRIVATE
   archivesafety.cpp
   configvalidation.cpp
   extensionutils.cpp
+  flatpaklibrary.cpp
+  kartlink.cpp
   launcherprobe.cpp
+  lutrislibrary.cpp
   pathutils.cpp
   retroarchutils.cpp
   romhasher.cpp
+  steamappinfo.cpp
+  steamlibrary.cpp
   archiverepack.h
   archivesafety.h
   configvalidation.h
   extensionutils.h
+  flatpaklibrary.h
+  kartlink.h
   launcherprobe.h
+  lutrislibrary.h
   pathutils.h
   retroarchutils.h
   romhasher.h
+  steamappinfo.h
+  steamlibrary.h
 )

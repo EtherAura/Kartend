@@ -96,7 +96,7 @@ Menus, in order: **File**, **View**, **Sort**, **Tools**, **Settings**,
 | **Most Launched ▶** | (submenu) | Top 10 items by play count. Click to launch directly. |
 | **Open Random Item** | `Ctrl+Shift+R` | Pick and launch a random item from the current collection. |
 | (separator) |
-| **Import ▶** | (submenu) | *Import Kart…* — file picker → import a `.kart` backup; a preflight dialog reviews the bundle before any disk writes (see [Backup & Migration](Backup-and-Migration.md)). *Import Theme…* — apply a `*.kartend-theme.json` preset to the active collection, with a per-field change preview (see [Themes & Appearance → Theme presets](Themes-and-Appearance.md#theme-presets)). |
+| **Import ▶** | (submenu) | *Import Kart…* — file picker → import a `.kart` backup; a preflight dialog reviews the bundle before any disk writes (see [Backup & Migration](Backup-and-Migration.md)). *Import Theme…* — apply a `*.kartend-theme.json` preset to the active collection, with a per-field change preview (see [Themes & Appearance → Theme presets](Themes-and-Appearance.md#theme-presets)). *Import from Launcher…* — build collections from games installed through Steam, Flatpak, or Lutris. *Sync Launcher Collections* — re-read those launchers' libraries now (see [Launcher Import](Launcher-Import.md)). |
 | **Export ▶** | (submenu) | *Export Collection as Kart…* — export the active collection as `.kart`, bundling its config, items, per-item metadata, and playlists. *Export Current Theme…* — save the active collection's appearance as a `*.kartend-theme.json` preset. |
 | (separator) |
 | **Exit** | `Ctrl+Q` | Quit. |

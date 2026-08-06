@@ -152,6 +152,15 @@ struct CollectionConfig {
   /// the user opts in per collection.
   bool watchFilesystem = false;
 
+  /// Launcher-import marker — non-empty for collections whose mediaDirectory
+  /// is a Kartend-managed folder of .kartlink shortcut stubs synthesised from
+  /// an external launcher's library (value is the source id: "steam",
+  /// "flatpak", "lutris"). The startup sync and the manual "Sync Launcher
+  /// Collections" action re-run LauncherImportService for every collection
+  /// carrying a non-empty value. Persisted to INI (kImportSource); empty for
+  /// ordinary folder collections.
+  QString importSource;
+
   /// Virtual-folder browsing cluster — the persisted "treat subfolders as
   /// virtual navigable folders" toggles plus the runtime currentSubfolder
   /// cursor. Access as `cfg.folderBrowsing.includeContentSubfolders` /
@@ -241,9 +250,10 @@ struct CollectionConfig {
            viewType == other.viewType && hideMissingArtwork == other.hideMissingArtwork &&
            background == other.background && archive == other.archive &&
            expandMode == other.expandMode && watchFilesystem == other.watchFilesystem &&
-           folderBrowsing == other.folderBrowsing && listView == other.listView &&
-           customFontFamily == other.customFontFamily && isPlaylist == other.isPlaylist &&
-           playlistId == other.playlistId && isSmartPlaylist == other.isSmartPlaylist &&
+           importSource == other.importSource && folderBrowsing == other.folderBrowsing &&
+           listView == other.listView && customFontFamily == other.customFontFamily &&
+           isPlaylist == other.isPlaylist && playlistId == other.playlistId &&
+           isSmartPlaylist == other.isSmartPlaylist &&
            playlistReservedKind == other.playlistReservedKind &&
            scraperOverrides == other.scraperOverrides &&
            additionalParentNames == other.additionalParentNames;

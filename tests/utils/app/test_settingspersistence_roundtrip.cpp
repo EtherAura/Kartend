@@ -276,6 +276,7 @@ void TestSettingsPersistenceRoundtrip::collectionScalars() {
   in.expandMode = !in.expandMode;
   in.watchFilesystem = !in.watchFilesystem;
   in.collectionIcon = QStringLiteral("/tmp/icon.png");
+  in.importSource = QStringLiteral("steam");
   // Already-normalized (bare, lowercase, deduped) so load's normalization
   // pass is the identity and needsRewrite stays false.
   in.extensions = QStringList{QStringLiteral("mkv"), QStringLiteral("mp4")};

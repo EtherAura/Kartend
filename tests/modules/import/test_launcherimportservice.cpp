@@ -1,0 +1,351 @@
+// LauncherImportService::syncEntries diff semantics against temp dirs: stub
+// write/update/removal, the only-delete-what-we-own contract, deterministic
+// collision numbering, fill-missing artwork, and the stub-name sanitizer.
+// Provider I/O (Steam/Flatpak/Lutris readers) is covered by the utils tests;
+// here the entry list is synthetic so every branch is reachable.
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QObject>
+#include <QSqlDatabase>
+#include <QTemporaryDir>
+#include <QTest>
+
+#include "../../support/appinfofixture.h"
+#include "../../support/migrateddb.h"
+#include "itemmetadata.h"
+#include "kartlink.h"
+#include "launcherimportservice.h"
+
+using LauncherImportService::GameEntry;
+using LauncherImportService::SyncedStub;
+using LauncherImportService::SyncResult;
+
+class TestLauncherImportService : public QObject {
+  Q_OBJECT
+
+private slots:
+  void sanitizeStubBaseName_data();
+  void sanitizeStubBaseName();
+  void initialSyncWritesStubs();
+  void resyncIsIdempotent();
+  void removesOnlyOwnedStaleStubs();
+  void collisionNumberingIsStable();
+  void artworkFillMissingNeverOverwrites();
+  void makeCollectionConfigShape();
+  void steamMetadataFillsEmptyRows();
+  void steamMetadataNeverOverwritesExistingFields();
+  void steamMetadataMissingAppInfoReportsError();
+
+private:
+  QTemporaryDir m_dir;
+  int m_caseCounter = 0;
+
+  /// Fresh stub/artwork dir pair per case so slots can't see each other's
+  /// files.
+  void freshDirs(QString &stubDir, QString &artworkDir) {
+    const QString base = m_dir.filePath(QStringLiteral("case%1").arg(m_caseCounter++));
+    stubDir = base + QStringLiteral("/games");
+    artworkDir = base + QStringLiteral("/artwork");
+  }
+
+  static GameEntry entry(const QString &title, const QString &target) {
+    GameEntry e;
+    e.title = title;
+    e.target = target;
+    return e;
+  }
+
+  /// Writes a one-game (appid 620) V29 appinfo fixture and returns its path.
+  QString stageAppInfo() {
+    KartendTest::AppInfoFixture fixture(/*v29=*/true);
+    fixture.addGame(620, QStringLiteral("Portal 2"), QStringLiteral("Valve"),
+                    QStringLiteral("Valve Publishing"), 1303171200);
+    const QString path = m_dir.filePath(QStringLiteral("appinfo%1.vdf").arg(m_caseCounter++));
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
+      return {};
+    }
+    file.write(fixture.build());
+    return path;
+  }
+};
+
+void TestLauncherImportService::sanitizeStubBaseName_data() {
+  QTest::addColumn<QString>("title");
+  QTest::addColumn<QString>("expected");
+  QTest::newRow("plain") << "Half-Life 2" << "Half-Life 2";
+  QTest::newRow("colon kept") << "Half-Life 2: Episode Two" << "Half-Life 2: Episode Two";
+  QTest::newRow("path separators") << "A/B\\C" << "A B C";
+  QTest::newRow("security chars") << "X;|`$<>\"*?Y" << "X Y";
+  QTest::newRow("collapse whitespace") << "  Too   Many\tSpaces  " << "Too Many Spaces";
+  QTest::newRow("trailing dots") << "S.T.A.L.K.E.R." << "S.T.A.L.K.E.R";
+  QTest::newRow("leading dash") << "--force" << "force";
+  QTest::newRow("empty") << "" << "Untitled";
+  QTest::newRow("only forbidden") << "///" << "Untitled";
+}
+
+void TestLauncherImportService::sanitizeStubBaseName() {
+  QFETCH(QString, title);
+  QFETCH(QString, expected);
+  QCOMPARE(LauncherImportService::sanitizeStubBaseName(title), expected);
+}
+
+void TestLauncherImportService::initialSyncWritesStubs() {
+  QString stubDir;
+  QString artworkDir;
+  freshDirs(stubDir, artworkDir);
+
+  const QList<GameEntry> entries = {
+      entry(QStringLiteral("Half-Life 2"), QStringLiteral("steam://rungameid/220")),
+      entry(QStringLiteral("Portal"), QStringLiteral("steam://rungameid/400")),
+  };
+  const SyncResult result =
+      LauncherImportService::syncEntries(entries, QStringLiteral("steam"), stubDir, artworkDir);
+  QCOMPARE(result.written, 2);
+  QCOMPARE(result.removed, 0);
+  QCOMPARE(result.unchanged, 0);
+  QCOMPARE(result.totalPresent(), 2);
+  QVERIFY(result.errors.isEmpty());
+
+  const auto loaded = KartLink::read(stubDir + QStringLiteral("/Half-Life 2.kartlink"));
+  QVERIFY(!loaded.isError());
+  QCOMPARE(loaded.value().target, QStringLiteral("steam://rungameid/220"));
+  QCOMPARE(loaded.value().source, QStringLiteral("steam"));
+  QCOMPARE(loaded.value().title, QStringLiteral("Half-Life 2"));
+}
+
+void TestLauncherImportService::resyncIsIdempotent() {
+  QString stubDir;
+  QString artworkDir;
+  freshDirs(stubDir, artworkDir);
+
+  const QList<GameEntry> entries = {
+      entry(QStringLiteral("Celeste"), QStringLiteral("lutris:rungame/celeste"))};
+  SyncResult first =
+      LauncherImportService::syncEntries(entries, QStringLiteral("lutris"), stubDir, artworkDir);
+  QCOMPARE(first.written, 1);
+
+  SyncResult second =
+      LauncherImportService::syncEntries(entries, QStringLiteral("lutris"), stubDir, artworkDir);
+  QCOMPARE(second.written, 0);
+  QCOMPARE(second.unchanged, 1);
+  QCOMPARE(second.removed, 0);
+  QVERIFY(!second.changed());
+  // The user-facing count: nothing was (re)written, yet the game IS there —
+  // an import summary built from this result must say 1, not 0.
+  QCOMPARE(second.totalPresent(), 1);
+}
+
+void TestLauncherImportService::removesOnlyOwnedStaleStubs() {
+  QString stubDir;
+  QString artworkDir;
+  freshDirs(stubDir, artworkDir);
+
+  // Seed: one game that will disappear, one foreign-source stub, one
+  // hand-made (unparseable) file with the stub extension.
+  const QList<GameEntry> seed = {
+      entry(QStringLiteral("Uninstalled Soon"), QStringLiteral("steam://rungameid/1"))};
+  QVERIFY(LauncherImportService::syncEntries(seed, QStringLiteral("steam"), stubDir, artworkDir)
+              .written == 1);
+  KartLink::LinkData foreign;
+  foreign.source = QStringLiteral("flatpak");
+  foreign.target = QStringLiteral("org.example.Game");
+  QVERIFY(KartLink::write(stubDir + QStringLiteral("/Foreign.kartlink"), foreign));
+  {
+    QFile handMade(stubDir + QStringLiteral("/handmade.kartlink"));
+    QVERIFY(handMade.open(QIODevice::WriteOnly));
+    handMade.write("not json");
+  }
+
+  // Next steam sync: the steam library is now empty.
+  const SyncResult result =
+      LauncherImportService::syncEntries({}, QStringLiteral("steam"), stubDir, artworkDir);
+  QCOMPARE(result.removed, 1);
+  QVERIFY(!QFileInfo::exists(stubDir + QStringLiteral("/Uninstalled Soon.kartlink")));
+  // The ownership contract: foreign and unparseable files survive.
+  QVERIFY(QFileInfo::exists(stubDir + QStringLiteral("/Foreign.kartlink")));
+  QVERIFY(QFileInfo::exists(stubDir + QStringLiteral("/handmade.kartlink")));
+}
+
+void TestLauncherImportService::collisionNumberingIsStable() {
+  QString stubDir;
+  QString artworkDir;
+  freshDirs(stubDir, artworkDir);
+
+  // Two distinct games whose titles sanitize to the same basename. Input
+  // order deliberately differs from the sorted (title, target) order the
+  // numbering promises.
+  const QList<GameEntry> entries = {
+      entry(QStringLiteral("Same/Name"), QStringLiteral("steam://rungameid/2")),
+      entry(QStringLiteral("Same Name"), QStringLiteral("steam://rungameid/1")),
+  };
+  const SyncResult first =
+      LauncherImportService::syncEntries(entries, QStringLiteral("steam"), stubDir, artworkDir);
+  QCOMPARE(first.written, 2);
+  QVERIFY(QFileInfo::exists(stubDir + QStringLiteral("/Same Name.kartlink")));
+  QVERIFY(QFileInfo::exists(stubDir + QStringLiteral("/Same Name (2).kartlink")));
+
+  // Same input again (any order) — same assignment, nothing rewritten.
+  const QList<GameEntry> reversed = {entries.at(1), entries.at(0)};
+  const SyncResult second =
+      LauncherImportService::syncEntries(reversed, QStringLiteral("steam"), stubDir, artworkDir);
+  QCOMPARE(second.written, 0);
+  QCOMPARE(second.unchanged, 2);
+}
+
+void TestLauncherImportService::artworkFillMissingNeverOverwrites() {
+  QString stubDir;
+  QString artworkDir;
+  freshDirs(stubDir, artworkDir);
+
+  // Launcher-side artwork files to copy.
+  const QString sourceArt = m_dir.filePath(QStringLiteral("srcart"));
+  QDir().mkpath(sourceArt);
+  const auto stage = [](const QString &path, const QByteArray &content) {
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(content);
+  };
+  stage(sourceArt + QStringLiteral("/cover.jpg"), QByteArrayLiteral("launcher-cover"));
+  stage(sourceArt + QStringLiteral("/logo.png"), QByteArrayLiteral("launcher-logo"));
+
+  GameEntry game = entry(QStringLiteral("Covered"), QStringLiteral("steam://rungameid/7"));
+  game.coverPath = sourceArt + QStringLiteral("/cover.jpg");
+  game.logoPath = sourceArt + QStringLiteral("/logo.png");
+
+  // Pre-existing scraped cover (different extension on purpose — any raster
+  // file with the basename claims the slot).
+  QDir().mkpath(artworkDir + QStringLiteral("/front"));
+  stage(artworkDir + QStringLiteral("/front/Covered.png"), QByteArrayLiteral("scraped-cover"));
+
+  const SyncResult result =
+      LauncherImportService::syncEntries({game}, QStringLiteral("steam"), stubDir, artworkDir);
+  // Only the logo slot was empty.
+  QCOMPARE(result.artworkCopied, 1);
+  QVERIFY(QFileInfo::exists(artworkDir + QStringLiteral("/logo/Covered.png")));
+  QVERIFY(!QFileInfo::exists(artworkDir + QStringLiteral("/front/Covered.jpg")));
+  QFile scraped(artworkDir + QStringLiteral("/front/Covered.png"));
+  QVERIFY(scraped.open(QIODevice::ReadOnly));
+  QCOMPARE(scraped.readAll(), QByteArrayLiteral("scraped-cover"));
+
+  // A second sync copies nothing further.
+  const SyncResult second =
+      LauncherImportService::syncEntries({game}, QStringLiteral("steam"), stubDir, artworkDir);
+  QCOMPARE(second.artworkCopied, 0);
+}
+
+void TestLauncherImportService::makeCollectionConfigShape() {
+  const CollectionConfig steam =
+      LauncherImportService::makeCollectionConfig(QStringLiteral("steam"));
+  QCOMPARE(steam.name, QStringLiteral("Steam"));
+  QCOMPARE(steam.importSource, QStringLiteral("steam"));
+  // Steam collections pin the store scraper so a scrape resolves exact
+  // appids instead of name-matching (Kartend-ksjx0).
+  QCOMPARE(steam.scraperOverrides.scraperProviderId, QStringLiteral("steam"));
+  QCOMPARE(steam.extensions, QStringList{QStringLiteral("kartlink")});
+  QCOMPARE(steam.launcher.launcherPath, QStringLiteral("xdg-open"));
+  QCOMPARE(steam.launcher.launchParameters, QStringLiteral("%1"));
+  QVERIFY(steam.mediaDirectory.endsWith(QStringLiteral("launcher-imports/steam/games")));
+  QVERIFY(steam.artworkDirectory.endsWith(QStringLiteral("launcher-imports/steam/artwork")));
+
+  const CollectionConfig flatpak =
+      LauncherImportService::makeCollectionConfig(QStringLiteral("flatpak"));
+  QCOMPARE(flatpak.launcher.launcherPath, QStringLiteral("flatpak"));
+  QCOMPARE(flatpak.launcher.launchParameters, QStringLiteral("run %1"));
+  QCOMPARE(flatpak.importSource, QStringLiteral("flatpak"));
+}
+
+void TestLauncherImportService::steamMetadataFillsEmptyRows() {
+  KartendTest::MigratedDb db;
+  const QString dbPath = db.database().databaseName();
+  const QString appInfo = stageAppInfo();
+  QVERIFY(!appInfo.isEmpty());
+
+  const QString uuid = QStringLiteral("test-uuid-fill");
+  const QString stubPath = QStringLiteral("/imports/steam/games/Portal 2.kartlink");
+  const QList<SyncedStub> stubs = {
+      {stubPath, QStringLiteral("steam://rungameid/620"), QStringLiteral("Portal 2")},
+      // Non-Steam target: ignored without error.
+      {QStringLiteral("/imports/flatpak/games/Game.kartlink"), QStringLiteral("org.example.Game"),
+       QStringLiteral("Game")},
+  };
+  const auto result = LauncherImportService::applySteamMetadata(dbPath, uuid, stubs, appInfo);
+  QVERIFY(result.errors.isEmpty());
+  QCOMPARE(result.rowsWritten, 1);
+  QCOMPARE(result.writtenPaths, QStringList{stubPath});
+
+  QSqlDatabase handle = db.database();
+  auto loaded = ItemMetadataStore::load(handle, uuid, stubPath);
+  QVERIFY(!loaded.isError());
+  const ItemMetadataStore::ItemMetadata row = loaded.value();
+  QCOMPARE(row.title, QStringLiteral("Portal 2"));
+  QCOMPARE(row.developer, QStringLiteral("Valve"));
+  QCOMPARE(row.publisher, QStringLiteral("Valve Publishing"));
+  QCOMPARE(row.releaseDate, QStringLiteral("2011-04-19"));
+  QCOMPARE(row.genre, QStringLiteral("Action, Adventure"));
+  QCOMPARE(row.players, QStringLiteral("Single-player, Online Co-op"));
+  QCOMPARE(row.source, QStringLiteral("steam"));
+  const auto fields = ItemMetadataStore::parseCustomFields(row.customFields);
+  bool sawMetacritic = false;
+  for (const auto &field : fields) {
+    if (field.first == QStringLiteral("Metacritic")) {
+      sawMetacritic = true;
+      QCOMPARE(field.second, QStringLiteral("95"));
+    }
+  }
+  QVERIFY(sawMetacritic);
+
+  // Idempotent: nothing left to fill on a second pass.
+  const auto again = LauncherImportService::applySteamMetadata(dbPath, uuid, stubs, appInfo);
+  QCOMPARE(again.rowsWritten, 0);
+}
+
+void TestLauncherImportService::steamMetadataNeverOverwritesExistingFields() {
+  KartendTest::MigratedDb db;
+  const QString dbPath = db.database().databaseName();
+  const QString appInfo = stageAppInfo();
+  QVERIFY(!appInfo.isEmpty());
+
+  const QString uuid = QStringLiteral("test-uuid-merge");
+  const QString stubPath = QStringLiteral("/imports/steam/games/Portal 2.kartlink");
+  // Pre-existing user edits: custom title + developer + user attribution.
+  ItemMetadataStore::ItemMetadata existing;
+  existing.collectionUuid = uuid;
+  existing.path = stubPath;
+  existing.title = QStringLiteral("My Custom Title");
+  existing.developer = QStringLiteral("Hand-edited Dev");
+  existing.source = QStringLiteral("user");
+  QSqlDatabase handle = db.database();
+  QVERIFY(!ItemMetadataStore::save(handle, existing).isError());
+
+  const QList<SyncedStub> stubs = {
+      {stubPath, QStringLiteral("steam://rungameid/620"), QStringLiteral("Portal 2")}};
+  const auto result = LauncherImportService::applySteamMetadata(dbPath, uuid, stubs, appInfo);
+  QCOMPARE(result.rowsWritten, 1); // publisher/genre/... were still empty
+
+  auto loaded = ItemMetadataStore::load(handle, uuid, stubPath);
+  QVERIFY(!loaded.isError());
+  const ItemMetadataStore::ItemMetadata row = loaded.value();
+  // User values and attribution survive; only gaps were filled.
+  QCOMPARE(row.title, QStringLiteral("My Custom Title"));
+  QCOMPARE(row.developer, QStringLiteral("Hand-edited Dev"));
+  QCOMPARE(row.source, QStringLiteral("user"));
+  QCOMPARE(row.publisher, QStringLiteral("Valve Publishing"));
+  QCOMPARE(row.genre, QStringLiteral("Action, Adventure"));
+}
+
+void TestLauncherImportService::steamMetadataMissingAppInfoReportsError() {
+  KartendTest::MigratedDb db;
+  const QList<SyncedStub> stubs = {{QStringLiteral("/x/Game.kartlink"),
+                                    QStringLiteral("steam://rungameid/620"),
+                                    QStringLiteral("Game")}};
+  const auto result = LauncherImportService::applySteamMetadata(
+      db.database().databaseName(), QStringLiteral("u"), stubs,
+      m_dir.filePath(QStringLiteral("missing-appinfo.vdf")));
+  QCOMPARE(result.rowsWritten, 0);
+  QVERIFY(!result.errors.isEmpty());
+}
+
+QTEST_MAIN(TestLauncherImportService)
+#include "test_launcherimportservice.moc"

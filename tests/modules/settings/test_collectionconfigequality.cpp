@@ -55,6 +55,7 @@ void TestCollectionConfigEquality::mutatingAnyComparedFieldBreaksEquality() {
   detects("placeholderArtwork",
           [](CollectionConfig &c) { c.placeholderArtwork = QStringLiteral("x"); });
   detects("collectionIcon", [](CollectionConfig &c) { c.collectionIcon = QStringLiteral("x"); });
+  detects("importSource", [](CollectionConfig &c) { c.importSource = QStringLiteral("steam"); });
   detects("customFontFamily",
           [](CollectionConfig &c) { c.customFontFamily = QStringLiteral("x"); });
   detects("playlistId", [](CollectionConfig &c) { c.playlistId = QStringLiteral("x"); });

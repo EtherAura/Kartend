@@ -14,6 +14,7 @@
 #include "musicbrainzprovider.h"
 #include "openlibraryprovider.h"
 #include "screenscraperprovider.h"
+#include "steamstoreprovider.h"
 #include "tmdbprovider.h"
 #include "websearchprovider.h"
 
@@ -129,6 +130,20 @@ const std::vector<ProviderSpec> &providerSpecs() {
                     .lookupCapable = false,
                     .urlTemplate = "https://www.igdb.com/search?type=1&q=%1",
                     .makeApi = nullptr});
+    // Steam storefront (Kartend-ksjx0): key-less; descriptions, screenshots,
+    // backgrounds, trailers. Placed AFTER screenscraper so category
+    // auto-selection keeps ScreenScraper the games default — launcher-import
+    // Steam collections pin scraperProviderId="steam" explicitly, and the
+    // provider resolves .kartlink stubs to exact appids (no name matching).
+    list.push_back({.id = "steam",
+                    .displayName = nullptr,
+                    .categories = {CAT_GAMES},
+                    .lookupCapable = true,
+                    .urlTemplate = nullptr,
+                    .makeApi = [](const GeneralSettingsAccessor &,
+                                  const CollectionAccessor &) -> std::unique_ptr<MetadataProvider> {
+                      return std::make_unique<SteamStoreProvider>();
+                    }});
 
     // ── Video (2) ────────────────────────────────────────────────────
     // TMDB uses the API-backed provider when a settings accessor is

@@ -1,0 +1,577 @@
+#include "launcherimportservice.h"
+
+#include <algorithm>
+#include <atomic>
+
+#include <QDateTime>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QRegularExpression>
+#include <QSqlDatabase>
+#include <QSqlError>
+#include <QSqlQuery>
+#include <QStandardPaths>
+
+#include "dbtxn.h"
+#include "flatpaklibrary.h"
+#include "itemmetadata.h"
+#include "kartlink.h"
+#include "lutrislibrary.h"
+#include "steamappinfo.h"
+#include "steamlibrary.h"
+#include <uiconstants/grid.h>
+#include <uiconstants/item.h>
+
+namespace LauncherImportService {
+
+namespace {
+
+/// The raster extensions ArtworkUtils::findArtworkForFile probes; a file
+/// with any of these under the typed subdir means the slot is taken.
+/// Function-local static (not namespace scope) so the QStringList
+/// construction can't throw during static initialization.
+const QStringList &artworkExtensions() {
+  static const QStringList kExtensions = {
+      QStringLiteral("png"),  QStringLiteral("jpg"), QStringLiteral("jpeg"),
+      QStringLiteral("webp"), QStringLiteral("gif"), QStringLiteral("bmp"),
+  };
+  return kExtensions;
+}
+
+bool artworkSlotTaken(const QString &typedDir, const QString &baseName) {
+  return std::ranges::any_of(artworkExtensions(), [&typedDir, &baseName](const QString &ext) {
+    return QFileInfo::exists(typedDir + QLatin1Char('/') + baseName + QLatin1Char('.') + ext);
+  });
+}
+
+void copyArtworkIfMissing(const QString &sourcePath, const QString &typedDir,
+                          const QString &baseName, SyncResult &result) {
+  if (sourcePath.isEmpty() || artworkSlotTaken(typedDir, baseName)) {
+    return;
+  }
+  QString suffix = QFileInfo(sourcePath).suffix().toLower();
+  if (!artworkExtensions().contains(suffix)) {
+    return;
+  }
+  if (!QDir().mkpath(typedDir)) {
+    result.errors.append(QStringLiteral("Cannot create artwork directory %1").arg(typedDir));
+    return;
+  }
+  const QString destPath = typedDir + QLatin1Char('/') + baseName + QLatin1Char('.') + suffix;
+  if (QFile::copy(sourcePath, destPath)) {
+    ++result.artworkCopied;
+  } else {
+    result.errors.append(QStringLiteral("Cannot copy artwork %1 -> %2").arg(sourcePath, destPath));
+  }
+}
+
+QList<GameEntry> steamEntries() {
+  QList<GameEntry> entries;
+  const QString root = SteamLibrary::defaultRoot();
+  if (root.isEmpty()) {
+    return entries;
+  }
+  const QList<SteamLibrary::Game> games = SteamLibrary::installedGames(root);
+
+  // One appinfo pass for every installed app: exact librarycache asset
+  // paths (newer Steam hash-names some assets, which filename guessing
+  // misses — Kartend-40i6h) and the type field as a sturdier non-game
+  // filter than the manifest-name regex. Absence of appinfo (or of one
+  // app's record) degrades gracefully to the guessed filenames.
+  QSet<QString> appIds;
+  for (const SteamLibrary::Game &game : games) {
+    appIds.insert(game.appId);
+  }
+  QHash<QString, SteamAppInfo::AppMetadata> apps;
+  if (const auto parsed = SteamAppInfo::read(SteamAppInfo::defaultAppInfoPath(root), appIds);
+      !parsed.isError()) {
+    apps = parsed.value();
+  }
+
+  entries.reserve(games.size());
+  for (const SteamLibrary::Game &game : games) {
+    const auto appIt = apps.constFind(game.appId);
+    if (appIt != apps.constEnd() && !appIt->type.isEmpty() && !appIt->isGameType()) {
+      continue; // Steam itself says this isn't a game (Tool/Application/…)
+    }
+    SteamLibrary::Artwork art = SteamLibrary::artworkFor(root, game.appId);
+    if (appIt != apps.constEnd()) {
+      const QString cacheDir =
+          root + QStringLiteral("/appcache/librarycache/") + game.appId + QLatin1Char('/');
+      const auto preferExact = [&cacheDir](const QString &relative, QString &slot) {
+        if (!relative.isEmpty() && QFileInfo::exists(cacheDir + relative)) {
+          slot = cacheDir + relative;
+        }
+      };
+      preferExact(appIt->libraryCoverPath, art.cover);
+      preferExact(appIt->libraryHeroPath, art.hero);
+      preferExact(appIt->libraryLogoPath, art.logo);
+    }
+    GameEntry entry;
+    entry.title = game.name;
+    entry.target = QStringLiteral("steam://rungameid/") + game.appId;
+    entry.coverPath = art.cover;
+    entry.logoPath = art.logo;
+    entry.heroPath = art.hero;
+    entries.append(entry);
+  }
+  return entries;
+}
+
+QList<GameEntry> flatpakEntries() {
+  QList<GameEntry> entries;
+  const QList<FlatpakLibrary::App> apps =
+      FlatpakLibrary::installedGames(FlatpakLibrary::defaultExportRoots());
+  entries.reserve(apps.size());
+  // Launcher/store apps that export a Game-category desktop entry but are
+  // covered by their own import source — importing them as Flatpak "games"
+  // would just duplicate the Steam/Lutris integrations.
+  static const QStringList kFlatpakLauncherApps = {
+      QStringLiteral("com.valvesoftware.Steam"),
+      QStringLiteral("net.lutris.Lutris"),
+  };
+  for (const FlatpakLibrary::App &app : apps) {
+    if (kFlatpakLauncherApps.contains(app.appId)) {
+      continue;
+    }
+    GameEntry entry;
+    entry.title = app.name;
+    entry.target = app.appId;
+    entry.coverPath = app.iconPath; // square icon; best cover Flatpak exports
+    entries.append(entry);
+  }
+  return entries;
+}
+
+QList<GameEntry> lutrisEntries() {
+  QList<GameEntry> entries;
+  const QString dataDir = LutrisLibrary::defaultDataDir();
+  if (dataDir.isEmpty()) {
+    return entries;
+  }
+  const auto games = LutrisLibrary::installedGames(dataDir);
+  if (games.isError()) {
+    return entries;
+  }
+  entries.reserve(games.value().size());
+  for (const LutrisLibrary::Game &game : games.value()) {
+    const LutrisLibrary::Artwork art = LutrisLibrary::artworkFor(dataDir, game.slug);
+    GameEntry entry;
+    entry.title = game.name;
+    entry.target = QStringLiteral("lutris:rungame/") + game.slug;
+    // No portrait cover before Lutris 0.5.8 — the wide banner is still a
+    // better tile face than a blank placeholder.
+    entry.coverPath = art.cover.isEmpty() ? art.banner : art.cover;
+    entry.heroPath = art.banner;
+    entries.append(entry);
+  }
+  return entries;
+}
+
+} // namespace
+
+auto detectSources() -> QList<SourceInfo> {
+  QList<SourceInfo> sources;
+
+  SourceInfo steam{QString::fromLatin1(kSourceSteam), QStringLiteral("Steam")};
+  const QString steamRoot = SteamLibrary::defaultRoot();
+  steam.available = !steamRoot.isEmpty();
+  if (steam.available) {
+    steam.gameCount = static_cast<int>(SteamLibrary::installedGames(steamRoot).size());
+  }
+  sources.append(steam);
+
+  SourceInfo flatpak{QString::fromLatin1(kSourceFlatpak), QStringLiteral("Flatpak")};
+  flatpak.available = !FlatpakLibrary::defaultExportRoots().isEmpty();
+  if (flatpak.available) {
+    flatpak.gameCount = static_cast<int>(flatpakEntries().size());
+  }
+  sources.append(flatpak);
+
+  SourceInfo lutris{QString::fromLatin1(kSourceLutris), QStringLiteral("Lutris")};
+  const QString lutrisDir = LutrisLibrary::defaultDataDir();
+  lutris.available = !lutrisDir.isEmpty();
+  if (lutris.available) {
+    const auto games = LutrisLibrary::installedGames(lutrisDir);
+    lutris.gameCount = games.isError() ? 0 : static_cast<int>(games.value().size());
+  }
+  sources.append(lutris);
+
+  return sources;
+}
+
+auto listGames(const QString &sourceId) -> QList<GameEntry> {
+  if (sourceId == QLatin1String(kSourceSteam)) {
+    return steamEntries();
+  }
+  if (sourceId == QLatin1String(kSourceFlatpak)) {
+    return flatpakEntries();
+  }
+  if (sourceId == QLatin1String(kSourceLutris)) {
+    return lutrisEntries();
+  }
+  return {};
+}
+
+auto syncSource(const QString &sourceId, const QString &stubDir, const QString &artworkDir)
+    -> SyncResult {
+  return syncEntries(listGames(sourceId), sourceId, stubDir, artworkDir);
+}
+
+auto syncEntries(const QList<GameEntry> &entries, const QString &sourceId, const QString &stubDir,
+                 const QString &artworkDir) -> SyncResult {
+  SyncResult result;
+  if (!QDir().mkpath(stubDir)) {
+    result.errors.append(QStringLiteral("Cannot create stub directory %1").arg(stubDir));
+    return result;
+  }
+  // Create the artwork root even when there is no local art to copy. Several
+  // consumers resolve it through PathUtils::validateAndExpandPath, which
+  // returns EMPTY for a non-existent directory — and an empty artwork dir
+  // makes Scraper::writeMediaFiles silently write nothing. Without this a
+  // machine whose librarycache is cold imports fine, scrapes "successfully",
+  // and lands zero media files (Kartend-ksjx0 review finding).
+  if (!artworkDir.isEmpty() && !QDir().mkpath(artworkDir)) {
+    result.errors.append(QStringLiteral("Cannot create artwork directory %1").arg(artworkDir));
+  }
+
+  // Deterministic collision numbering: two titles that sanitize to the same
+  // basename get " (2)", " (3)" suffixes in a stable (title, target) order,
+  // so re-syncs assign the same names and don't churn the stubs.
+  QList<GameEntry> sorted = entries;
+  std::sort(sorted.begin(), sorted.end(), [](const GameEntry &a, const GameEntry &b) {
+    if (const int byTitle = a.title.compare(b.title); byTitle != 0) {
+      return byTitle < 0;
+    }
+    return a.target < b.target;
+  });
+
+  const QString dotExtension = QStringLiteral(".") + QLatin1String(KartLink::kExtension);
+  QHash<QString, GameEntry> desired; // stub file name → entry
+  for (const GameEntry &entry : sorted) {
+    const QString base = sanitizeStubBaseName(entry.title);
+    QString fileName = base + dotExtension;
+    for (int n = 2; desired.contains(fileName); ++n) {
+      fileName = base + QStringLiteral(" (%1)").arg(n) + dotExtension;
+    }
+    desired.insert(fileName, entry);
+  }
+
+  for (auto it = desired.constBegin(); it != desired.constEnd(); ++it) {
+    const QString stubPath = stubDir + QLatin1Char('/') + it.key();
+    KartLink::LinkData data;
+    data.source = sourceId;
+    data.target = it.value().target;
+    data.title = it.value().title;
+    if (QFileInfo::exists(stubPath)) {
+      const auto existing = KartLink::read(stubPath);
+      if (!existing.isError() && existing.value() == data) {
+        ++result.unchanged;
+        result.syncedStubs.append({stubPath, data.target, data.title});
+        continue;
+      }
+    }
+    if (KartLink::write(stubPath, data)) {
+      ++result.written;
+      result.syncedStubs.append({stubPath, data.target, data.title});
+    } else {
+      result.errors.append(QStringLiteral("Cannot write stub %1").arg(stubPath));
+    }
+  }
+
+  // Remove stale stubs — but only ones this source wrote (see the ownership
+  // contract in the header): a hand-made stub or another source's stubs
+  // sharing the folder must survive a sync.
+  QDirIterator stale(stubDir, {QStringLiteral("*.") + QLatin1String(KartLink::kExtension)},
+                     QDir::Files);
+  while (stale.hasNext()) {
+    const QString stubPath = stale.next();
+    if (desired.contains(QFileInfo(stubPath).fileName())) {
+      continue;
+    }
+    const auto parsed = KartLink::read(stubPath);
+    if (parsed.isError() || parsed.value().source != sourceId) {
+      continue;
+    }
+    if (QFile::remove(stubPath)) {
+      ++result.removed;
+    } else {
+      result.errors.append(QStringLiteral("Cannot remove stale stub %1").arg(stubPath));
+    }
+  }
+
+  // Artwork is optional: a collection configured without an artwork
+  // directory simply gets no covers (matching the rest of the app's
+  // "empty artworkDirectory means no artwork" behaviour).
+  if (!artworkDir.isEmpty()) {
+    for (auto it = desired.constBegin(); it != desired.constEnd(); ++it) {
+      const QString base = QFileInfo(it.key()).completeBaseName();
+      copyArtworkIfMissing(it.value().coverPath, artworkDir + QStringLiteral("/front"), base,
+                           result);
+      copyArtworkIfMissing(it.value().logoPath, artworkDir + QStringLiteral("/logo"), base, result);
+      copyArtworkIfMissing(it.value().heroPath, artworkDir + QStringLiteral("/fanart"), base,
+                           result);
+    }
+  }
+  return result;
+}
+
+auto defaultBaseDir(const QString &sourceId) -> QString {
+  return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
+         QStringLiteral("/launcher-imports/") + sourceId;
+}
+
+auto stubDirFor(const QString &baseDir) -> QString {
+  return baseDir + QStringLiteral("/games");
+}
+
+auto artworkDirFor(const QString &baseDir) -> QString {
+  return baseDir + QStringLiteral("/artwork");
+}
+
+auto sanitizeStubBaseName(const QString &title) -> QString {
+  QString base = title;
+  // Path separators and the characters PathUtils::validatePathSecurity
+  // rejects (plus Windows-reserved ones for tidiness) can't appear in a
+  // filename that later flows through the launch pipeline.
+  static const QRegularExpression kForbidden(QStringLiteral("[/\\\\;|`$<>\"*?\\x00-\\x1f]"));
+  base.replace(kForbidden, QStringLiteral(" "));
+  base = base.simplified();
+  while (base.endsWith(QLatin1Char('.'))) {
+    base.chop(1);
+  }
+  base = base.trimmed();
+  // A leading dash would read as a launcher option if the stub path were
+  // ever passed through verbatim; mirror buildLaunchCommand's guard.
+  while (base.startsWith(QLatin1Char('-'))) {
+    base.remove(0, 1);
+  }
+  base = base.trimmed();
+  constexpr int kMaxLength = 120;
+  if (base.size() > kMaxLength) {
+    base.truncate(kMaxLength);
+    base = base.trimmed();
+  }
+  if (base.isEmpty()) {
+    base = QStringLiteral("Untitled");
+  }
+  return base;
+}
+
+namespace {
+
+/// Strict fill-missing merge of appinfo metadata into an item_metadata row:
+/// only empty fields gain values, so user edits and scraped rows survive
+/// (the scraper's own merge is scrape-wins; this one is deliberately
+/// meeker). Returns true when anything changed. `source` is stamped
+/// "steam" only when the row was empty before the merge — a filled-in
+/// corner of a scraped row keeps its scraper attribution.
+bool fillMissingFromSteam(ItemMetadataStore::ItemMetadata &row,
+                          const SteamAppInfo::AppMetadata &info) {
+  const bool wasEmpty = row.isEmpty();
+  bool changed = false;
+  const auto fill = [&changed](QString &field, const QString &value) {
+    if (field.isEmpty() && !value.isEmpty()) {
+      field = value;
+      changed = true;
+    }
+  };
+  fill(row.title, info.name);
+  fill(row.developer, info.developer);
+  fill(row.publisher, info.publisher);
+  if (info.releaseDateUtc > 0) {
+    fill(row.releaseDate,
+         QDateTime::fromSecsSinceEpoch(info.releaseDateUtc).toUTC().date().toString(Qt::ISODate));
+  }
+  fill(row.genre, SteamAppInfo::genreNames(info.genreIds).join(QStringLiteral(", ")));
+  fill(row.players, SteamAppInfo::playersDescription(info.categoryIds));
+  fill(row.contentRating,
+       SteamAppInfo::contentDescriptorNames(info.contentDescriptorIds).join(QStringLiteral(", ")));
+
+  // Ratings/controller data have no dedicated columns — carried as custom
+  // fields, added only when the key doesn't exist yet. Values are data, not
+  // UI strings, so they are deliberately untranslated (same as scraped
+  // values).
+  ItemMetadataStore::CustomFieldList fields =
+      ItemMetadataStore::parseCustomFields(row.customFields);
+  const auto hasKey = [&fields](const QString &key) {
+    return std::ranges::any_of(fields,
+                               [&key](const QPair<QString, QString> &f) { return f.first == key; });
+  };
+  bool customChanged = false;
+  const auto addCustom = [&fields, &hasKey, &customChanged](const QString &key,
+                                                            const QString &value) {
+    if (!value.isEmpty() && !hasKey(key)) {
+      fields.append({key, value});
+      customChanged = true;
+    }
+  };
+  if (info.metacriticScore >= 0) {
+    addCustom(QStringLiteral("Metacritic"), QString::number(info.metacriticScore));
+  }
+  if (info.reviewPercentage >= 0) {
+    addCustom(QStringLiteral("Steam reviews"),
+              QStringLiteral("%1% positive").arg(info.reviewPercentage));
+  }
+  if (!info.controllerSupport.isEmpty()) {
+    QString support = info.controllerSupport;
+    support[0] = support[0].toUpper();
+    addCustom(QStringLiteral("Controller support"), support);
+  }
+  if (customChanged) {
+    row.customFields = ItemMetadataStore::serializeCustomFields(fields);
+    changed = true;
+  }
+
+  if (changed && wasEmpty) {
+    row.source = QStringLiteral("steam");
+  }
+  return changed;
+}
+
+} // namespace
+
+auto applySteamMetadata(const QString &dbPath, const QString &collectionUuid,
+                        const QList<SyncedStub> &stubs, const QString &appInfoPath)
+    -> MetadataApplyResult {
+  MetadataApplyResult result;
+  if (dbPath.isEmpty() || collectionUuid.isEmpty() || stubs.isEmpty()) {
+    return result;
+  }
+
+  const QLatin1String kSteamPrefix("steam://rungameid/");
+  QList<QPair<QString, QString>> pathAndAppId; // stub path → appid
+  QSet<QString> wantedAppIds;
+  for (const SyncedStub &stub : stubs) {
+    if (!stub.target.startsWith(kSteamPrefix)) {
+      continue;
+    }
+    const QString appId = stub.target.mid(kSteamPrefix.size());
+    if (appId.isEmpty()) {
+      continue;
+    }
+    pathAndAppId.append({stub.path, appId});
+    wantedAppIds.insert(appId);
+  }
+  if (wantedAppIds.isEmpty()) {
+    return result;
+  }
+
+  QString infoPath = appInfoPath;
+  if (infoPath.isEmpty()) {
+    const QString steamRoot = SteamLibrary::defaultRoot();
+    if (steamRoot.isEmpty()) {
+      return result; // no Steam install — nothing to fill, not an error
+    }
+    infoPath = SteamAppInfo::defaultAppInfoPath(steamRoot);
+  }
+  const auto parsed = SteamAppInfo::read(infoPath, wantedAppIds);
+  if (parsed.isError()) {
+    result.errors.append(
+        QStringLiteral("Cannot read Steam metadata: %1").arg(parsed.error().message));
+    return result;
+  }
+  if (parsed.value().isEmpty()) {
+    return result;
+  }
+
+  // Throwaway connection, BulkEditService's shape: unique name, busy
+  // timeout, one transaction, inner scope so the handles die before
+  // removeDatabase. Safe on any thread — which is why this bypasses
+  // DatabaseManager and the (main-thread-only) metadata LRU; callers
+  // invalidate writtenPaths on the GUI thread afterwards.
+  static std::atomic<quint64> connectionCounter{0};
+  const QString connectionName =
+      QStringLiteral("kartend_launcherimport_%1").arg(connectionCounter.fetch_add(1));
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+    db.setDatabaseName(dbPath);
+    if (!db.open()) {
+      result.errors.append(QStringLiteral("Cannot open %1: %2").arg(dbPath, db.lastError().text()));
+    } else {
+      QSqlQuery pragma(db);
+      pragma.exec(QStringLiteral("PRAGMA busy_timeout = 5000"));
+      KartendDb::DbTransaction txn(db, "LauncherImportService::applySteamMetadata");
+      if (!txn.active()) {
+        result.errors.append(QStringLiteral("Cannot begin metadata transaction"));
+      } else {
+        for (const auto &entry : pathAndAppId) {
+          const auto appIt = parsed.value().constFind(entry.second);
+          if (appIt == parsed.value().constEnd()) {
+            continue;
+          }
+          auto loaded = ItemMetadataStore::load(db, collectionUuid, entry.first);
+          if (loaded.isError()) {
+            result.errors.append(QStringLiteral("Cannot load metadata for %1").arg(entry.first));
+            continue;
+          }
+          ItemMetadataStore::ItemMetadata row = loaded.value();
+          if (!fillMissingFromSteam(row, appIt.value())) {
+            continue;
+          }
+          const auto saved = ItemMetadataStore::save(db, row);
+          if (saved.isError()) {
+            result.errors.append(QStringLiteral("Cannot save metadata for %1").arg(entry.first));
+            continue;
+          }
+          ++result.rowsWritten;
+          result.writtenPaths.append(entry.first);
+        }
+        if (!txn.commit()) {
+          result.errors.append(QStringLiteral("Metadata transaction commit failed"));
+          result.rowsWritten = 0;
+          result.writtenPaths.clear();
+        }
+      }
+      db.close();
+    }
+  }
+  QSqlDatabase::removeDatabase(connectionName);
+  return result;
+}
+
+auto makeCollectionConfig(const QString &sourceId) -> CollectionConfig {
+  const QString baseDir = defaultBaseDir(sourceId);
+
+  // Mirror SettingsDialog::addCollection's defaulted field set (see
+  // createCollectionForDat's provenance comment) so an imported collection
+  // is indistinguishable from a hand-made one.
+  CollectionConfig c;
+  c.type = QStringLiteral("Games");
+  c.mediaDirectory = stubDirFor(baseDir);
+  c.artworkDirectory = artworkDirFor(baseDir);
+  c.extensions = QStringList{QLatin1String(KartLink::kExtension)};
+  c.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
+  c.gridLayout.fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
+  c.importSource = sourceId;
+
+  if (sourceId == QLatin1String(kSourceSteam)) {
+    // Pin the Steam store scraper (Kartend-ksjx0): it resolves each stub's
+    // exact appid, so a scrape adds descriptions/screenshots/trailers with
+    // no name-matching risk. Category auto-selection would otherwise pick
+    // ScreenScraper for games.
+    c.scraperOverrides.scraperProviderId = QLatin1String(kSourceSteam);
+  }
+
+  if (sourceId == QLatin1String(kSourceFlatpak)) {
+    c.name = QStringLiteral("Flatpak Games");
+    // argv-style target: `flatpak run <app-id>`.
+    c.launcher.launcherPath = QStringLiteral("flatpak");
+    c.launcher.launchParameters = QStringLiteral("run %1");
+    c.launcher.launcherName = QStringLiteral("Flatpak");
+  } else {
+    // URI-style targets (steam:// and lutris:) go through the desktop
+    // URL-handler registry — that works for native AND Flatpak installs of
+    // the launcher, where invoking a `steam`/`lutris` binary would not.
+    c.name = sourceId == QLatin1String(kSourceSteam) ? QStringLiteral("Steam")
+                                                     : QStringLiteral("Lutris");
+    c.launcher.launcherPath = QStringLiteral("xdg-open");
+    c.launcher.launchParameters = QStringLiteral("%1");
+    c.launcher.launcherName = c.name;
+  }
+  return c;
+}
+
+} // namespace LauncherImportService

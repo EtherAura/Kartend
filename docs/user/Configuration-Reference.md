@@ -326,6 +326,7 @@ display name; renaming a collection rewrites the section header.
 | `extensions` | csv | empty | File extensions to scan. Empty = all. |
 | `collectionIcon` | path | empty | Subcollection tile icon. |
 | `placeholderArtwork` | path | empty | Custom placeholder image. |
+| `importSource` | string | empty | [Launcher-import](Launcher-Import.md) marker (`steam` / `flatpak` / `lutris`). Non-empty = this collection's media folder holds `.kartlink` stubs Kartend re-syncs from that launcher at startup and on demand. Set by the import flow; not normally hand-edited. |
 
 ### Hierarchy
 

@@ -70,6 +70,7 @@ void TestCollectionConfig::scalarFieldDifferencesDetected() {
       {"hideMissingArtwork", [](CollectionConfig &c) { c.hideMissingArtwork = true; }},
       {"expandMode", [](CollectionConfig &c) { c.expandMode = true; }},
       {"watchFilesystem", [](CollectionConfig &c) { c.watchFilesystem = true; }},
+      {"importSource", [](CollectionConfig &c) { c.importSource = QStringLiteral("steam"); }},
       {"customFontFamily", [](CollectionConfig &c) { c.customFontFamily = QStringLiteral("x"); }},
       {"isPlaylist", [](CollectionConfig &c) { c.isPlaylist = true; }},
       {"playlistId", [](CollectionConfig &c) { c.playlistId = QStringLiteral("x"); }},

@@ -208,6 +208,7 @@ void TestKartManifest::testCollectionConfigAllFieldsRoundTrip() {
   c.archive.extractArchives = true;
   c.archive.extractedExtension = "iso";
   c.expandMode = true;
+  c.importSource = "steam";
   c.folderBrowsing.includeContentSubfolders = true;
   c.folderBrowsing.includeArtworkSubfolders = true;
   c.folderBrowsing.showAllSubfolderItems = true;

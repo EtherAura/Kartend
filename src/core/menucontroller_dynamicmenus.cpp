@@ -369,6 +369,13 @@ QList<CommandPaletteDialog::Command> MenuController::buildPaletteCommands() {
   if (m_ctx.onManageLayoutProfiles) {
     commands.append({tr("Tools"), tr("Layout profiles…"), m_ctx.onManageLayoutProfiles});
   }
+  if (m_ctx.onImportFromLauncher) {
+    commands.append({tr("Tools"), tr("Import from launcher…"), m_ctx.onImportFromLauncher});
+  }
+  if (m_ctx.onSyncLauncherCollections) {
+    commands.append(
+        {tr("Tools"), tr("Sync launcher collections"), m_ctx.onSyncLauncherCollections});
+  }
 
   return commands;
 }

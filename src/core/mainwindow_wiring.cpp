@@ -192,6 +192,7 @@
 #include "gridwidthdebouncer.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
+#include "launcherimportcontroller.h"
 #include "librarytoolscontroller.h"
 #include "mainwindow.h"
 #include "marqueecontroller.h"
@@ -528,6 +529,30 @@ void MainWindow::connectDatabaseManager() {
     // prompts; headless tests stub these instead of fighting a modal.
     lt.dialogs = makeDialogRunners();
     m_libraryToolsController->setContext(lt);
+  }
+
+  // LauncherImportController (Kartend-wuq2c) — same closure-context shape as
+  // the controllers above.
+  if (m_launcherImportController) {
+    LauncherImportControllerContext lic;
+    lic.getParentWindow = [this]() -> QWidget * { return this; };
+    lic.getCollections = [this]() { return &m_collections; };
+    lic.appendCollectionAndPersist = [this](const CollectionConfig &config, bool navigate) {
+      appendCollectionAndPersist(config, navigate);
+    };
+    lic.refreshCollection = [this](int collectionIndex) {
+      if (auto *navManager = m_appManager->getNavigationManager()) {
+        navManager->safeReloadCollection(collectionIndex);
+      }
+    };
+    lic.showStatusMessage = [this](const QString &message) {
+      statusBar()->showMessage(message, 10000);
+    };
+    lic.getDatabaseManager = [this]() -> IDatabaseManager * {
+      return m_appManager->getDatabaseManager();
+    };
+    lic.getApplicationContext = [this]() -> const ApplicationContext * { return &m_appContext; };
+    m_launcherImportController->setContext(lic);
   }
 }
 

@@ -11,10 +11,12 @@
 
 #include "collection/launcherconfig.h"
 #include "collection/launcherpreset.h"
+#include "kartlink.h"
 #include "launchcommandbuilder.h"
 
 #include <QString>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QTest>
 
 namespace {
@@ -59,6 +61,13 @@ private slots:
   // parseParameters entry point
   void testParseParametersUnclosedQuoteFails();
   void testParseParametersKeepsQuotedEmptyArgument();
+
+  // .kartlink launcher-import stubs (Kartend-wuq2c): the stub's target — not
+  // the stub's own path — is what substitutes into the command.
+  void testKartLinkStubResolvesToTarget();
+  void testKartLinkStubAppendFallbackUsesTarget();
+  void testKartLinkBrokenStubFailsToBuild();
+  void testKartLinkTargetIsSecurityChecked();
 };
 
 void TestLaunchCommandBuilder::testFilePlaceholder_data() {
@@ -275,6 +284,64 @@ void TestLaunchCommandBuilder::testParseParametersKeepsQuotedEmptyArgument() {
   result = LaunchCommandBuilder::parseParameters(QStringLiteral("--profile \"\""));
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value(), (QStringList{"--profile", ""}));
+}
+
+void TestLaunchCommandBuilder::testKartLinkStubResolvesToTarget() {
+  QTemporaryDir dir;
+  KartLink::LinkData data;
+  data.source = QStringLiteral("steam");
+  data.target = QStringLiteral("steam://rungameid/220");
+  const QString stub = dir.filePath(QStringLiteral("Half-Life 2.kartlink"));
+  QVERIFY(KartLink::write(stub, data));
+
+  const auto cmd = LaunchCommandBuilder::buildLaunchCommand(plainLauncher(QStringLiteral("%1")),
+                                                            QStringLiteral("Steam"), stub);
+  QVERIFY(!cmd.isError());
+  // The stub's own path never reaches the argv — only the target does.
+  QCOMPARE(cmd.value().arguments, QStringList{QStringLiteral("steam://rungameid/220")});
+}
+
+void TestLaunchCommandBuilder::testKartLinkStubAppendFallbackUsesTarget() {
+  QTemporaryDir dir;
+  KartLink::LinkData data;
+  data.source = QStringLiteral("flatpak");
+  data.target = QStringLiteral("net.supertuxkart.SuperTuxKart");
+  const QString stub = dir.filePath(QStringLiteral("SuperTuxKart.kartlink"));
+  QVERIFY(KartLink::write(stub, data));
+
+  // Template carries no %1/%f — the append-at-end fallback must append the
+  // resolved target, mirroring `flatpak run <app-id>`.
+  const auto cmd = LaunchCommandBuilder::buildLaunchCommand(plainLauncher(QStringLiteral("run")),
+                                                            QStringLiteral("Flatpak Games"), stub);
+  QVERIFY(!cmd.isError());
+  const QStringList expected = {QStringLiteral("run"),
+                                QStringLiteral("net.supertuxkart.SuperTuxKart")};
+  QCOMPARE(cmd.value().arguments, expected);
+}
+
+void TestLaunchCommandBuilder::testKartLinkBrokenStubFailsToBuild() {
+  QTemporaryDir dir;
+  // Stub file doesn't exist — the build must fail with the stub's read
+  // error, not silently pass the stub path through to the launcher.
+  const auto cmd = LaunchCommandBuilder::buildLaunchCommand(
+      plainLauncher(QStringLiteral("%1")), QStringLiteral("Steam"),
+      dir.filePath(QStringLiteral("gone.kartlink")));
+  QVERIFY(cmd.isError());
+}
+
+void TestLaunchCommandBuilder::testKartLinkTargetIsSecurityChecked() {
+  QTemporaryDir dir;
+  KartLink::LinkData data;
+  data.source = QStringLiteral("steam");
+  data.target = QStringLiteral("steam://rungameid/220;rm -rf /");
+  const QString stub = dir.filePath(QStringLiteral("evil.kartlink"));
+  QVERIFY(KartLink::write(stub, data));
+
+  // The resolved target goes through the same validatePathSecurity gate a
+  // plain media path does — a hostile stub can't smuggle metacharacters.
+  const auto cmd = LaunchCommandBuilder::buildLaunchCommand(plainLauncher(QStringLiteral("%1")),
+                                                            QStringLiteral("Steam"), stub);
+  QVERIFY(cmd.isError());
 }
 
 QTEST_APPLESS_MAIN(TestLaunchCommandBuilder)
