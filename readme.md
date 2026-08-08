@@ -100,16 +100,14 @@ https://github.com/user-attachments/assets/f2a36b7d-4eca-4e97-94b3-2f08472b1c5c
 
 ## Features
 
-- **Virtual scrolling** — handles thousands of items via widget pooling
-- **Async artwork** — parallel `QtConcurrent` pipeline with intelligent caching
-- **Hierarchical collections** — parents, alias parents, shell groupings, subcollection navigation
-- **Persistent sessions** — selection, scroll position, and view state restored across restarts
-- **Configurable launchers** — per-collection or per-item, with archive extraction and presets
-- **Keyboard, mouse &amp; gamepad** — fully rebindable; alphabetic jump; search-as-you-type
-- **Theming** — image / video backgrounds, vignette, parallax, backdrop blur, fonts, tints
-- **Smooth animations** — glide selection and scroll with configurable easing
-
-The full feature tour lives in the [user guide](https://github.com/EtherAura/Kartend/wiki).
+- [**Collections**](https://github.com/EtherAura/Kartend/wiki/Collections) — nest them, alias them across parents, or aggregate them
+- [**Artwork**](https://github.com/EtherAura/Kartend/wiki/Artwork) — async, cached, scraped or hand-linked
+- [**Four layouts**](https://github.com/EtherAura/Kartend/wiki/View-Modes) — grid, list, cover flow, horizontal
+- [**Launchers**](https://github.com/EtherAura/Kartend/wiki/Launchers) — per-collection or per-item, with archive extraction
+- [**Import**](https://github.com/EtherAura/Kartend/wiki/Launcher-Import) — pull an existing Steam or Flatpak library straight in
+- [**Theming**](https://github.com/EtherAura/Kartend/wiki/Themes-and-Appearance) — backgrounds, vignette, parallax, blur, fonts, tints
+- [**Input**](https://github.com/EtherAura/Kartend/wiki/Input-and-Controls) — keyboard, mouse and gamepad, fully rebindable
+- [**Scale**](https://github.com/EtherAura/Kartend/wiki/Search-Sort-Filter) — virtual scrolling and search-as-you-type over thousands of items
 
 ## Install
 
@@ -124,71 +122,33 @@ ships a binary `.deb` plus the canonical Arch and Gentoo recipes:
 | Windows (installer) | `Kartend-<version>-windows-x64-setup.exe` | Run the installer; Apps & Features-managed uninstall |
 | Windows (portable) | `Kartend-<version>-windows-x64.zip` | Unzip anywhere, run `kartend.exe` |
 
-The `.deb` is built on Ubuntu 24.04 with the same flags this project's
-[`packaging/PKGBUILD`](packaging/PKGBUILD) uses; runtime deps are
-resolved against the stock Qt6 stack in Debian Trixie and
-Ubuntu 24.04+. Older distros — or anyone who wants PGO, sanitizers,
-or a `9999` Gentoo live build — should build from source via the
-[quick start](#quick-start-from-source) below.
+The Windows builds are unsigned, so SmartScreen warns on first launch —
+**More info → Run anyway**. Older distros, PGO, sanitizers and a `9999`
+Gentoo live build all mean building from source.
 
-Both Windows artifacts are built on `windows-latest` with MSVC 2022 +
-Qt 6.7 LTS and ship Qt's DLLs alongside `kartend.exe` (windeployqt-
-bundled). The installer puts Kartend under `%ProgramFiles%\Kartend`
-with a Start Menu entry and registers with Apps & Features for normal
-uninstall; the portable `.zip` unzips anywhere and needs no admin.
-Windows SmartScreen may warn on first launch since the artifacts are
-unsigned — click **More info → Run anyway**. Code signing is on the
-roadmap.
-
-The release page also carries the source tarball
-(`Kartend-<version>.tar.gz`) and a `.sha256` for each asset.
-
-## Quick start (from source)
+## Build from source
 
 ```bash
-# Debian / Ubuntu (build deps only — the --maintenance lint gate needs extra
-# tooling: clang-format-19, clang-tidy, cppcheck, iwyu — see docs/dev/building.md)
-sudo apt install clang cmake lld ninja-build ccache \
-  qt6-base-dev qt6-multimedia-dev libqt6sql6-sqlite \
-  qt6-tools-dev qt6-l10n-tools qtkeychain-qt6-dev
-
 git clone https://github.com/EtherAura/Kartend.git
 cd Kartend
-.scripts/build.sh                # optimized release build
-.scripts/build.sh --install      # build + install (auto-elevates)
+.scripts/build.sh            # release build; --install to install
 ```
 
-The [`.scripts/build.sh`](.scripts/build.sh) wrapper auto-detects
-Ninja, lld, and ccache, and keeps each flavor in its own tree
-(`build/ninja-release`, `build/ninja-debug`, …). Run
-`.scripts/build.sh --help` for the full flag list, or see
-[docs/dev/building.md](docs/dev/building.md) for PGO, sanitizers, custom
-toolchains, manual CMake, packaging, and uninstall.
-
-### Dependencies
-
-CMake 3.20+, a C++23 compiler (Clang or GCC), and **Qt 6.4 LTS or
-later** (Core, Gui, Widgets, Sql, Concurrent, Multimedia,
-MultimediaWidgets, Network, LinguistTools). Optional: **Qt6 Gamepad**
-*or* **SDL2** (gamepad backend, auto-detected) and **zstd**
-(auto-detected; falls back to zlib via `qCompress`).
-
-A cold release build takes roughly **5–10 minutes** on modern hardware
-the first time through; subsequent ccache-hit incremental builds finish
-in ~30 seconds. See [`docs/dev/building.md`](docs/dev/building.md) for distro
-package lists, debug/sanitizer/PGO modes, and CI reproduction.
+Needs CMake 3.20+, a C++23 compiler and Qt 6.4 LTS or later. Per-distro
+package lists, debug/sanitizer/PGO modes, manual CMake and CI reproduction
+are all in [docs/dev/building.md](docs/dev/building.md).
 
 ## Documentation
 
-- **User guide / wiki** — [github.com/EtherAura/Kartend/wiki](https://github.com/EtherAura/Kartend/wiki)
-- **Build &amp; packaging** — [docs/dev/building.md](docs/dev/building.md)
-- **Architecture** — [docs/dev/architecture.md](docs/dev/architecture.md)
-- **Testing** — [docs/dev/testing.md](docs/dev/testing.md)
-- **Contributing** — [CONTRIBUTING.md](CONTRIBUTING.md)
-- **Security policy** — [SECURITY.md](SECURITY.md)
+[User guide](https://github.com/EtherAura/Kartend/wiki) ·
+[Architecture](docs/dev/architecture.md) ·
+[Building](docs/dev/building.md) ·
+[Testing](docs/dev/testing.md) ·
+[Contributing](CONTRIBUTING.md) ·
+[Security](SECURITY.md) ·
+[Changelog](CHANGELOG.md)
 
-Configuration is stored as INI at `~/.config/kartend/kartend.cfg`,
-editable from the **Settings** dialog or by hand.
+<sub>Config lives at <code>~/.config/kartend/kartend.cfg</code> — editable in Settings, or by hand.</sub>
 
 ## License
 
