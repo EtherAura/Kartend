@@ -515,6 +515,34 @@ race:DirectoryScanTask::run*lambda*
 # The locker is scope-correct (RAII pair in the same lambda body,
 # artworkutils.cpp processQueuedDirectories).
 mutex:*processQueuedDirectories*
+# Kartend-h6zl1: the same shape from the OTHER caller. prewarmDirectories
+# (artworkutils.cpp) and processQueuedDirectories have byte-identical
+# blockingMap lambda bodies — ensureDirectoryCached(dir), then a
+# QWriteLocker to update the queue set — but only the latter was anchored,
+# so the prewarm path stayed live and fired on nightly-tsan run
+# 31146701826 (Integration.TestFilterManager). The previous night passed on
+# the SAME sha ee6b63ec, confirming this needs real contention on m_lock to
+# surface rather than being a regression.
+#
+# Two anchors, because the two lockers sit in different frames:
+#   * ensureDirectoryCached owns the QWriteLocker at artworkutils.cpp:164
+#     whose unlock TSan misreports — anchoring on the owner covers it from
+#     EVERY caller, so a third prewarm-style call site cannot reopen this.
+#   * prewarmDirectories owns the lambda's own QWriteLocker, the exact
+#     mirror of the processQueuedDirectories entry above.
+# Both are scope-local RAII pairs with no manual unlock and no cross-thread
+# release, so `mutex:` here can only mask the futex-fast-path artefact.
+mutex:*ensureDirectoryCached*
+mutex:*prewarmDirectories*
+# Deliberately NOT paired with a `mutex:test_integration` module twin. The
+# unsymbolized-runner caveat that motivates the twins below applies to
+# frames inside the Qt shared libs (no debug info, raw offsets); Kartend's
+# own frames carry full symbols on the GitHub runner — run 31146701826
+# rendered this very report as "ensureDirectoryCached … artworkutils.cpp:
+# 164:3" — so the symbol anchors match there. A module twin would blanket
+# every mutex report in the whole integration binary, unlike the narrow
+# single-purpose binaries named below. If this shape somehow survives the
+# next nightly, that twin is the fallback — but scope it then, not now.
 # Module-scoped twin of the entry above for the GitHub runner, where no
 # llvm-symbolizer is installed: frames render as raw offsets, so the
 # symbol pattern above cannot match there (it does match in the
