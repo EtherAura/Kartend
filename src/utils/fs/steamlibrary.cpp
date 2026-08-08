@@ -148,6 +148,27 @@ QVariantMap parseBody(VdfLexer &lexer, int depth) {
   }
 }
 
+/// Child map under `key`, matched case-insensitively — VDF key casing drifts
+/// between Steam vintages (the same reason libraryFolders scans for its own
+/// key rather than indexing it). Empty map when absent or not a map.
+QVariantMap childInsensitive(const QVariantMap &node, QLatin1String key) {
+  for (auto it = node.constBegin(); it != node.constEnd(); ++it) {
+    if (it.key().compare(key, Qt::CaseInsensitive) == 0) {
+      return it.value().toMap();
+    }
+  }
+  return {};
+}
+
+bool hasKeyInsensitive(const QVariantMap &node, QLatin1String key) {
+  for (auto it = node.constBegin(); it != node.constEnd(); ++it) {
+    if (it.key().compare(key, Qt::CaseInsensitive) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 QString firstExistingFile(const QStringList &candidates) {
   for (const QString &path : candidates) {
     if (QFileInfo::exists(path)) {
@@ -258,6 +279,46 @@ auto installedGames(const QString &steamRoot) -> QList<Game> {
   std::sort(games.begin(), games.end(),
             [](const Game &a, const Game &b) { return a.name.localeAwareCompare(b.name) < 0; });
   return games;
+}
+
+auto playedAppIds(const QString &steamRoot) -> QSet<QString> {
+  QSet<QString> ids;
+  QDirIterator accounts(steamRoot + QStringLiteral("/userdata"), QDir::Dirs | QDir::NoDotAndDotDot);
+  while (accounts.hasNext()) {
+    QFile config(accounts.next() + QStringLiteral("/config/localconfig.vdf"));
+    if (!config.open(QIODevice::ReadOnly)) {
+      continue;
+    }
+    QVariantMap node = parseVdf(QString::fromUtf8(config.readAll()));
+    // The store root is normally "UserLocalConfigStore". If a vintage spells
+    // it differently, fall through to the sole top-level map rather than
+    // giving up — the Software/Valve/Steam/apps tail is the stable part.
+    const QVariantMap store = childInsensitive(node, QLatin1String("UserLocalConfigStore"));
+    if (!store.isEmpty()) {
+      node = store;
+    } else if (node.size() == 1) {
+      node = node.constBegin().value().toMap();
+    }
+    for (const auto key : {QLatin1String("Software"), QLatin1String("Valve"),
+                           QLatin1String("Steam"), QLatin1String("apps")}) {
+      node = childInsensitive(node, key);
+    }
+    for (auto it = node.constBegin(); it != node.constEnd(); ++it) {
+      bool numeric = false;
+      it.key().toULongLong(&numeric);
+      if (!numeric) {
+        continue; // the map also carries non-app bookkeeping keys
+      }
+      const QVariantMap app = it.value().toMap();
+      // Either key alone proves the app ran here; "cloud"-only entries (a
+      // sync record for something never launched) deliberately do not count.
+      if (hasKeyInsensitive(app, QLatin1String("LastPlayed")) ||
+          hasKeyInsensitive(app, QLatin1String("Playtime"))) {
+        ids.insert(it.key());
+      }
+    }
+  }
+  return ids;
 }
 
 auto artworkFor(const QString &steamRoot, const QString &appId) -> Artwork {

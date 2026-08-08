@@ -33,6 +33,12 @@ private slots:
   void collisionNumberingIsStable();
   void artworkFillMissingNeverOverwrites();
   void makeCollectionConfigShape();
+  void importScopeRoundTrips();
+  void importScopeUnknownNeverWidens();
+  void makeCollectionConfigRecordsScope();
+  void stubsMissingDescriptionSelectsUnenrichedOnly();
+  void stubsMissingDescriptionFailsOpen();
+  void steamMetadataPreservesScrapedDescription();
   void steamMetadataFillsEmptyRows();
   void steamMetadataNeverOverwritesExistingFields();
   void steamMetadataMissingAppInfoReportsError();
@@ -254,6 +260,143 @@ void TestLauncherImportService::makeCollectionConfigShape() {
   QCOMPARE(flatpak.launcher.launcherPath, QStringLiteral("flatpak"));
   QCOMPARE(flatpak.launcher.launchParameters, QStringLiteral("run %1"));
   QCOMPARE(flatpak.importSource, QStringLiteral("flatpak"));
+}
+
+void TestLauncherImportService::importScopeRoundTrips() {
+  using LauncherImportService::ImportScope;
+  for (const ImportScope scope :
+       {ImportScope::Installed, ImportScope::Owned, ImportScope::AllRecognized}) {
+    QCOMPARE(LauncherImportService::scopeFromString(LauncherImportService::scopeToString(scope)),
+             scope);
+  }
+  // The persisted spelling is a file format — pin it so a rename can't
+  // silently re-tier every existing collection on the next sync.
+  QCOMPARE(LauncherImportService::scopeToString(ImportScope::Installed),
+           QStringLiteral("installed"));
+  QCOMPARE(LauncherImportService::scopeToString(ImportScope::Owned), QStringLiteral("owned"));
+  QCOMPARE(LauncherImportService::scopeToString(ImportScope::AllRecognized),
+           QStringLiteral("allRecognized"));
+}
+
+void TestLauncherImportService::importScopeUnknownNeverWidens() {
+  using LauncherImportService::ImportScope;
+  // Empty is what every collection imported before Kartend-el5st persists,
+  // and a garbled value must not be treated as "wider" either: a sync at too
+  // wide a tier silently adds games, and at too narrow a tier deletes them.
+  QCOMPARE(LauncherImportService::scopeFromString(QString()), ImportScope::Installed);
+  QCOMPARE(LauncherImportService::scopeFromString(QStringLiteral("   ")), ImportScope::Installed);
+  QCOMPARE(LauncherImportService::scopeFromString(QStringLiteral("everything")),
+           ImportScope::Installed);
+  // Casing drift in a hand-edited INI still resolves to the intended tier.
+  QCOMPARE(LauncherImportService::scopeFromString(QStringLiteral(" OWNED ")), ImportScope::Owned);
+  QCOMPARE(LauncherImportService::scopeFromString(QStringLiteral("allrecognized")),
+           ImportScope::AllRecognized);
+}
+
+void TestLauncherImportService::makeCollectionConfigRecordsScope() {
+  // The scope has to land on the config, because the startup re-sync reads it
+  // back from there; an unstamped collection would re-list at Installed and
+  // prune every not-installed stub it holds.
+  const CollectionConfig owned = LauncherImportService::makeCollectionConfig(
+      QStringLiteral("steam"), LauncherImportService::ImportScope::Owned);
+  QCOMPARE(owned.importScope, QStringLiteral("owned"));
+
+  const CollectionConfig wide = LauncherImportService::makeCollectionConfig(
+      QStringLiteral("steam"), LauncherImportService::ImportScope::AllRecognized);
+  QCOMPARE(wide.importScope, QStringLiteral("allRecognized"));
+
+  // Default argument keeps the pre-existing callers on the narrow tier.
+  const CollectionConfig defaulted =
+      LauncherImportService::makeCollectionConfig(QStringLiteral("steam"));
+  QCOMPARE(defaulted.importScope, QStringLiteral("installed"));
+}
+
+// The store pass is a fire-and-forget network batch, so a sync has to be able
+// to tell which games it never reached and resume just those.
+void TestLauncherImportService::stubsMissingDescriptionSelectsUnenrichedOnly() {
+  KartendTest::MigratedDb db;
+  const QString dbPath = db.database().databaseName();
+  const QString uuid = QStringLiteral("test-uuid-enrich");
+
+  const QString enriched = QStringLiteral("/imports/steam/games/Enriched.kartlink");
+  const QString blank = QStringLiteral("/imports/steam/games/Blank.kartlink");
+  const QString whitespace = QStringLiteral("/imports/steam/games/Whitespace.kartlink");
+  const QString absent = QStringLiteral("/imports/steam/games/NoRowYet.kartlink");
+
+  QSqlDatabase handle = db.database();
+  const auto writeRow = [&](const QString &path, const QString &description) {
+    ItemMetadataStore::ItemMetadata row;
+    row.collectionUuid = uuid;
+    row.path = path;
+    row.description = description;
+    QVERIFY(!ItemMetadataStore::save(handle, row).isError());
+  };
+  writeRow(enriched, QStringLiteral("A real store description."));
+  writeRow(blank, QString());
+  // A description of only whitespace is as useless as none — the store pass
+  // never landed for it either.
+  writeRow(whitespace, QStringLiteral("   \n  "));
+
+  const QList<SyncedStub> stubs = {
+      {enriched, QStringLiteral("steam://rungameid/1"), QStringLiteral("Enriched")},
+      {blank, QStringLiteral("steam://rungameid/2"), QStringLiteral("Blank")},
+      {whitespace, QStringLiteral("steam://rungameid/3"), QStringLiteral("Whitespace")},
+      // Never had a metadata row written at all.
+      {absent, QStringLiteral("steam://rungameid/4"), QStringLiteral("NoRowYet")},
+  };
+
+  QStringList missing = LauncherImportService::stubsMissingDescription(dbPath, uuid, stubs);
+  missing.sort();
+  QStringList expected{blank, whitespace, absent};
+  expected.sort();
+  QCOMPARE(missing, expected);
+  QVERIFY2(!missing.contains(enriched), "re-requested a page whose text was already stored");
+}
+
+void TestLauncherImportService::stubsMissingDescriptionFailsOpen() {
+  const QList<SyncedStub> stubs = {{QStringLiteral("/imports/steam/games/A.kartlink"),
+                                    QStringLiteral("steam://rungameid/1"), QStringLiteral("A")}};
+  // Unusable inputs must return everything, not nothing: an extra request is
+  // cheap, a permanently missing description is not.
+  QCOMPARE(LauncherImportService::stubsMissingDescription(QString(), QStringLiteral("uuid"), stubs),
+           QStringList{stubs.first().path});
+  QCOMPARE(LauncherImportService::stubsMissingDescription(QStringLiteral("/nonexistent/x.db"),
+                                                          QStringLiteral("uuid"), stubs),
+           QStringList{stubs.first().path});
+  QVERIFY(LauncherImportService::stubsMissingDescription(QStringLiteral("/tmp/x.db"),
+                                                         QStringLiteral("uuid"), {})
+              .isEmpty());
+}
+
+// The appinfo pass runs on every sync, long after the store pass has written
+// descriptions. appinfo carries no descriptions at all, so a load/fill/save
+// round-trip that dropped the field would silently wipe every one of them on
+// the next launch — invisible until a user restarts. Pin it.
+void TestLauncherImportService::steamMetadataPreservesScrapedDescription() {
+  KartendTest::MigratedDb db;
+  const QString dbPath = db.database().databaseName();
+  const QString appInfo = stageAppInfo();
+  QVERIFY(!appInfo.isEmpty());
+  const QString uuid = QStringLiteral("test-uuid-preserve-desc");
+  const QString stubPath = QStringLiteral("/imports/steam/games/Portal 2.kartlink");
+
+  QSqlDatabase handle = db.database();
+  ItemMetadataStore::ItemMetadata seeded;
+  seeded.collectionUuid = uuid;
+  seeded.path = stubPath;
+  seeded.description = QStringLiteral("Store text the appinfo pass must not touch.");
+  QVERIFY(!ItemMetadataStore::save(handle, seeded).isError());
+
+  const QList<SyncedStub> stubs = {
+      {stubPath, QStringLiteral("steam://rungameid/620"), QStringLiteral("Portal 2")}};
+  const auto result = LauncherImportService::applySteamMetadata(dbPath, uuid, stubs, appInfo);
+  QVERIFY(result.errors.isEmpty());
+
+  const auto after = ItemMetadataStore::load(handle, uuid, stubPath);
+  QVERIFY(!after.isError());
+  QCOMPARE(after.value().description, seeded.description);
+  // …and the pass still did its own job on the fields appinfo owns.
+  QCOMPARE(after.value().developer, QStringLiteral("Valve"));
 }
 
 void TestLauncherImportService::steamMetadataFillsEmptyRows() {

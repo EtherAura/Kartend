@@ -2,16 +2,22 @@
 #define KARTEND_UTILS_FS_STEAMLIBRARY_H
 
 #include <QList>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QVariantMap>
 
-/// Read-only discovery of a local Steam install's *installed* game library.
-/// Everything works from on-disk files — appmanifest_*.acf keyvalues,
-/// libraryfolders.vdf, and the appcache/librarycache artwork Steam already
+/// Read-only discovery of a local Steam install's game library. Everything
+/// works from on-disk files — appmanifest_*.acf keyvalues, libraryfolders.vdf,
+/// localconfig.vdf, and the appcache/librarycache artwork Steam already
 /// downloaded — so no network, no API key, and no credentials are involved.
-/// Owned-but-not-installed titles are invisible by design (they only exist
-/// in the web API; explicitly out of scope for launcher import v1).
+///
+/// Installed titles come from appmanifest files (installedGames). Titles the
+/// user owns but has *not* installed have no manifest, so they are reached
+/// through playedAppIds: Steam keeps no plaintext list of owned apps locally
+/// (licensecache is encrypted and ownership otherwise lives behind the web
+/// API), but a per-app playtime record is proof enough — you cannot accrue
+/// playtime on a game you do not own. Kartend-el5st.
 ///
 /// Every function takes an explicit Steam root so tests can stage a fake
 /// install tree; production callers get the root from defaultRoot().
@@ -54,6 +60,18 @@ struct Artwork {
 /// tooling (Proton builds, Steam Linux Runtime, Steamworks redistributables)
 /// is filtered out via isRuntimeTool. Sorted by name.
 [[nodiscard]] QList<Game> installedGames(const QString &steamRoot);
+
+/// App ids carrying a play record (`LastPlayed` or `Playtime`) in any local
+/// account's `userdata/<accountId>/config/localconfig.vdf`, under
+/// `UserLocalConfigStore/Software/Valve/Steam/apps` (every level matched
+/// case-insensitively — the spelling varies by Steam vintage). Ids from all
+/// accounts on the machine are merged.
+///
+/// This is an *ownership* signal, not a game list: it includes DLC, tools and
+/// soundtracks, and it misses anything owned but never launched here. Callers
+/// wanting games must filter by SteamAppInfo type == "game" — which is what
+/// LauncherImportService::ImportScope::Owned does.
+[[nodiscard]] QSet<QString> playedAppIds(const QString &steamRoot);
 
 /// Locally-cached artwork for an app id, probing both librarycache layouts:
 /// the post-2023 per-app subdirectory (librarycache/<appid>/library_600x900.jpg)

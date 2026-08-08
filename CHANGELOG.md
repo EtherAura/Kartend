@@ -30,7 +30,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   account or key needed; because every imported game knows its exact Steam
   app id, it never mismatches a title the way name-based scraping can. Both
   passes are fill-missing, so re-importing costs nothing and never
-  overwrites art or fields you already have.
+  overwrites art or fields you already have. For Steam you can also choose
+  how much of the library to bring in: just what is installed, everything
+  you have played on this computer (the default — starting one of those
+  asks Steam to install it first), or every game Steam has heard of. The
+  picker shows the count for each choice before you commit, and the middle
+  option is the default because the widest one reads Steam's metadata cache,
+  which also describes games you do not own — including the free Valve
+  titles every Steam install carries. Whichever you pick is remembered per
+  collection, so later syncs keep the same breadth instead of quietly
+  dropping the games that are not installed; re-running the import over an
+  existing collection is how you change your mind. The status bar now counts
+  the store fetch as it runs ("47 of 123") and says up front how many games
+  it is about to fetch and that it can take a few minutes — Steam paces the
+  requests, so a large collection fills in gradually rather than all at once,
+  and an import that is still working no longer looks like one that quietly
+  dropped half your descriptions. If it is interrupted, the next sync picks
+  up exactly where it stopped instead of leaving those games bare.
 
 ### Changed
 

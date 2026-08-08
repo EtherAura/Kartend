@@ -67,7 +67,35 @@ void copyArtworkIfMissing(const QString &sourcePath, const QString &typedDir,
   }
 }
 
-QList<GameEntry> steamEntries() {
+/// One entry from an appid + the title to show. `info` may be null (no
+/// appinfo record): artwork then falls back to the guessed librarycache
+/// filenames, which is the pre-appinfo behaviour.
+GameEntry makeSteamEntry(const QString &root, const QString &appId, const QString &title,
+                         const SteamAppInfo::AppMetadata *info) {
+  SteamLibrary::Artwork art = SteamLibrary::artworkFor(root, appId);
+  if (info != nullptr) {
+    const QString cacheDir =
+        root + QStringLiteral("/appcache/librarycache/") + appId + QLatin1Char('/');
+    const auto preferExact = [&cacheDir](const QString &relative, QString &slot) {
+      if (!relative.isEmpty() && QFileInfo::exists(cacheDir + relative)) {
+        slot = cacheDir + relative;
+      }
+    };
+    preferExact(info->libraryCoverPath, art.cover);
+    preferExact(info->libraryHeroPath, art.hero);
+    preferExact(info->libraryLogoPath, art.logo);
+  }
+  GameEntry entry;
+  entry.title = title;
+  // Valid for uninstalled games too — Steam offers to install on launch.
+  entry.target = QStringLiteral("steam://rungameid/") + appId;
+  entry.coverPath = art.cover;
+  entry.logoPath = art.logo;
+  entry.heroPath = art.hero;
+  return entry;
+}
+
+QList<GameEntry> steamEntries(ImportScope scope) {
   QList<GameEntry> entries;
   const QString root = SteamLibrary::defaultRoot();
   if (root.isEmpty()) {
@@ -75,48 +103,72 @@ QList<GameEntry> steamEntries() {
   }
   const QList<SteamLibrary::Game> games = SteamLibrary::installedGames(root);
 
-  // One appinfo pass for every installed app: exact librarycache asset
+  // Installed apps always need their appinfo record: exact librarycache asset
   // paths (newer Steam hash-names some assets, which filename guessing
   // misses — Kartend-40i6h) and the type field as a sturdier non-game
   // filter than the manifest-name regex. Absence of appinfo (or of one
   // app's record) degrades gracefully to the guessed filenames.
-  QSet<QString> appIds;
+  QSet<QString> installedIds;
   for (const SteamLibrary::Game &game : games) {
-    appIds.insert(game.appId);
+    installedIds.insert(game.appId);
   }
+
+  // Candidates beyond the installed set, per tier. Owned asks appinfo about a
+  // known id list (records outside it are skipped wholesale, which is cheap);
+  // AllRecognized has no list to ask about and must read every record.
+  QSet<QString> wanted = installedIds;
+  QSet<QString> extra;
+  const bool allRecognized = scope == ImportScope::AllRecognized;
+  if (scope == ImportScope::Owned) {
+    extra = SteamLibrary::playedAppIds(root);
+    extra.subtract(installedIds);
+    wanted.unite(extra);
+  }
+
   QHash<QString, SteamAppInfo::AppMetadata> apps;
-  if (const auto parsed = SteamAppInfo::read(SteamAppInfo::defaultAppInfoPath(root), appIds);
+  if (const auto parsed = SteamAppInfo::read(SteamAppInfo::defaultAppInfoPath(root),
+                                             allRecognized ? QSet<QString>() : wanted);
       !parsed.isError()) {
     apps = parsed.value();
   }
 
-  entries.reserve(games.size());
+  if (allRecognized) {
+    for (auto it = apps.constBegin(); it != apps.constEnd(); ++it) {
+      if (it->isGameType() && !installedIds.contains(it.key())) {
+        extra.insert(it.key());
+      }
+    }
+  }
+
+  entries.reserve(games.size() + extra.size());
   for (const SteamLibrary::Game &game : games) {
     const auto appIt = apps.constFind(game.appId);
     if (appIt != apps.constEnd() && !appIt->type.isEmpty() && !appIt->isGameType()) {
       continue; // Steam itself says this isn't a game (Tool/Application/…)
     }
-    SteamLibrary::Artwork art = SteamLibrary::artworkFor(root, game.appId);
-    if (appIt != apps.constEnd()) {
-      const QString cacheDir =
-          root + QStringLiteral("/appcache/librarycache/") + game.appId + QLatin1Char('/');
-      const auto preferExact = [&cacheDir](const QString &relative, QString &slot) {
-        if (!relative.isEmpty() && QFileInfo::exists(cacheDir + relative)) {
-          slot = cacheDir + relative;
-        }
-      };
-      preferExact(appIt->libraryCoverPath, art.cover);
-      preferExact(appIt->libraryHeroPath, art.hero);
-      preferExact(appIt->libraryLogoPath, art.logo);
-    }
-    GameEntry entry;
-    entry.title = game.name;
-    entry.target = QStringLiteral("steam://rungameid/") + game.appId;
-    entry.coverPath = art.cover;
-    entry.logoPath = art.logo;
-    entry.heroPath = art.hero;
-    entries.append(entry);
+    // The manifest name is authoritative for an installed game.
+    entries.append(
+        makeSteamEntry(root, game.appId, game.name, appIt == apps.constEnd() ? nullptr : &*appIt));
   }
+
+  // Not-installed candidates. These have no manifest, so appinfo is the only
+  // source of a title — an app with no record (or no name) is unnameable and
+  // dropped rather than imported as a bare appid. The type gate also keeps
+  // DLC, soundtracks and tools out of the played-app list.
+  QList<QString> extraIds(extra.constBegin(), extra.constEnd());
+  std::sort(extraIds.begin(), extraIds.end());
+  for (const QString &appId : extraIds) {
+    const auto appIt = apps.constFind(appId);
+    if (appIt == apps.constEnd() || !appIt->isGameType() || appIt->name.isEmpty() ||
+        SteamLibrary::isRuntimeTool(appIt->name)) {
+      continue;
+    }
+    entries.append(makeSteamEntry(root, appId, appIt->name, &*appIt));
+  }
+
+  std::sort(entries.begin(), entries.end(), [](const GameEntry &a, const GameEntry &b) {
+    return a.title.localeAwareCompare(b.title) < 0;
+  });
   return entries;
 }
 
@@ -179,7 +231,13 @@ auto detectSources() -> QList<SourceInfo> {
   const QString steamRoot = SteamLibrary::defaultRoot();
   steam.available = !steamRoot.isEmpty();
   if (steam.available) {
-    steam.gameCount = static_cast<int>(SteamLibrary::installedGames(steamRoot).size());
+    // One pass per tier so the picker can show real numbers. Only the widest
+    // reads every appinfo record; on a typical install that is ~500 records
+    // and sub-millisecond, and this runs when the import dialog opens, not
+    // on the startup sync path.
+    steam.gameCount = static_cast<int>(steamEntries(ImportScope::Installed).size());
+    steam.ownedGameCount = static_cast<int>(steamEntries(ImportScope::Owned).size());
+    steam.recognizedGameCount = static_cast<int>(steamEntries(ImportScope::AllRecognized).size());
   }
   sources.append(steam);
 
@@ -199,12 +257,47 @@ auto detectSources() -> QList<SourceInfo> {
   }
   sources.append(lutris);
 
+  // Flatpak and Lutris enumerate installed applications by definition — the
+  // wider tiers have no meaning there, so every tier reports the same count
+  // and the picker can read the fields uniformly.
+  for (SourceInfo &source : sources) {
+    if (source.id != QLatin1String(kSourceSteam)) {
+      source.ownedGameCount = source.gameCount;
+      source.recognizedGameCount = source.gameCount;
+    }
+  }
   return sources;
 }
 
-auto listGames(const QString &sourceId) -> QList<GameEntry> {
+auto scopeToString(ImportScope scope) -> QString {
+  switch (scope) {
+  case ImportScope::Owned:
+    return QStringLiteral("owned");
+  case ImportScope::AllRecognized:
+    return QStringLiteral("allRecognized");
+  case ImportScope::Installed:
+    break;
+  }
+  return QStringLiteral("installed");
+}
+
+auto scopeFromString(const QString &text) -> ImportScope {
+  const QString value = text.trimmed();
+  if (value.compare(QLatin1String("owned"), Qt::CaseInsensitive) == 0) {
+    return ImportScope::Owned;
+  }
+  if (value.compare(QLatin1String("allRecognized"), Qt::CaseInsensitive) == 0) {
+    return ImportScope::AllRecognized;
+  }
+  // Empty (pre-Kartend-el5st collections) and anything unrecognised fall back
+  // to the narrowest tier — never widen a collection because a value did not
+  // parse, since that would silently add games on the next sync.
+  return ImportScope::Installed;
+}
+
+auto listGames(const QString &sourceId, ImportScope scope) -> QList<GameEntry> {
   if (sourceId == QLatin1String(kSourceSteam)) {
-    return steamEntries();
+    return steamEntries(scope);
   }
   if (sourceId == QLatin1String(kSourceFlatpak)) {
     return flatpakEntries();
@@ -215,9 +308,9 @@ auto listGames(const QString &sourceId) -> QList<GameEntry> {
   return {};
 }
 
-auto syncSource(const QString &sourceId, const QString &stubDir, const QString &artworkDir)
-    -> SyncResult {
-  return syncEntries(listGames(sourceId), sourceId, stubDir, artworkDir);
+auto syncSource(const QString &sourceId, const QString &stubDir, const QString &artworkDir,
+                ImportScope scope) -> SyncResult {
+  return syncEntries(listGames(sourceId, scope), sourceId, stubDir, artworkDir);
 }
 
 auto syncEntries(const QList<GameEntry> &entries, const QString &sourceId, const QString &stubDir,
@@ -532,7 +625,45 @@ auto applySteamMetadata(const QString &dbPath, const QString &collectionUuid,
   return result;
 }
 
-auto makeCollectionConfig(const QString &sourceId) -> CollectionConfig {
+auto stubsMissingDescription(const QString &dbPath, const QString &collectionUuid,
+                             const QList<SyncedStub> &stubs) -> QStringList {
+  QStringList all;
+  all.reserve(stubs.size());
+  for (const SyncedStub &stub : stubs) {
+    all.append(stub.path);
+  }
+  if (dbPath.isEmpty() || collectionUuid.isEmpty() || all.isEmpty()) {
+    return all;
+  }
+
+  QStringList missing;
+  static std::atomic<quint64> connectionCounter{0};
+  const QString connectionName =
+      QStringLiteral("kartend_launcherenrich_%1").arg(connectionCounter.fetch_add(1));
+  bool failed = false;
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), connectionName);
+    db.setDatabaseName(dbPath);
+    if (!db.open()) {
+      failed = true;
+    } else {
+      QSqlQuery pragma(db);
+      pragma.exec(QStringLiteral("PRAGMA busy_timeout = 5000"));
+      for (const QString &path : all) {
+        const auto loaded = ItemMetadataStore::load(db, collectionUuid, path);
+        // An unreadable row is treated as missing: enriching again is
+        // harmless (FillMissing), losing the description is not.
+        if (loaded.isError() || loaded.value().description.trimmed().isEmpty()) {
+          missing.append(path);
+        }
+      }
+    }
+  }
+  QSqlDatabase::removeDatabase(connectionName);
+  return failed ? all : missing;
+}
+
+auto makeCollectionConfig(const QString &sourceId, ImportScope scope) -> CollectionConfig {
   const QString baseDir = defaultBaseDir(sourceId);
 
   // Mirror SettingsDialog::addCollection's defaulted field set (see
@@ -546,6 +677,10 @@ auto makeCollectionConfig(const QString &sourceId) -> CollectionConfig {
   c.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
   c.gridLayout.fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
   c.importSource = sourceId;
+  // Persisted so every later re-sync reproduces this tier; without it the
+  // startup sync would re-list at Installed and delete the not-installed
+  // stubs as "no longer present".
+  c.importScope = scopeToString(scope);
 
   if (sourceId == QLatin1String(kSourceSteam)) {
     // Pin the Steam store scraper (Kartend-ksjx0): it resolves each stub's

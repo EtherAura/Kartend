@@ -5907,7 +5907,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 <context>
     <name>LauncherImportController</name>
     <message numerus="yes">
-        <location filename="../src/core/launcherimportcontroller.cpp" line="+129"/>
+        <location filename="../src/core/launcherimportcontroller.cpp" line="+156"/>
         <source>%1: re-synced — %2 added or updated, %3 removed, %n game(s) total.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5936,13 +5936,21 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <source>Import from Launcher</source>
         <translation type="unfinished"></translation>
     </message>
+    <message numerus="yes">
+        <location line="+86"/>
+        <source>%1: fetching descriptions and artwork for %n game(s) from Steam — this can take a few minutes…</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
-        <location line="+73"/>
-        <source>%1: fetching descriptions and artwork from Steam…</source>
+        <location line="+18"/>
+        <source>%1: fetching Steam details… %2 of %3</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location line="+5"/>
+        <location line="+7"/>
         <source>%1: Steam store details fetched for %n item(s).</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5950,7 +5958,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         </translation>
     </message>
     <message>
-        <location line="+37"/>
+        <location line="+36"/>
         <source>Launcher sync is already running.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5960,7 +5968,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+80"/>
+        <location line="+93"/>
         <source>Launcher collections are up to date.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5989,17 +5997,37 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 <context>
     <name>LauncherImportDialog</name>
     <message>
-        <location filename="../src/ui/dialogs/collection/launcherimportdialog.cpp" line="+12"/>
+        <location filename="../src/ui/dialogs/collection/launcherimportdialog.cpp" line="+13"/>
         <source>Import from Launcher</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+4"/>
-        <source>Create collections for games installed through these launchers. Each collection keeps itself in sync with the launcher&apos;s library and launches games through it — no shortcuts to maintain by hand.</source>
+        <source>Create collections for games from these launchers. Each collection keeps itself in sync with the launcher&apos;s library and launches games through it — no shortcuts to maintain by hand.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+14"/>
+        <source>Steam library:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Installed games only</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Games you own (played on this computer)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Every game Steam recognises</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+18"/>
         <source>Create in:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6014,7 +6042,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+18"/>
+        <location line="+51"/>
         <source>%1 — not detected</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6029,6 +6057,21 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     <message>
         <location line="+2"/>
         <source> (already imported — selecting re-syncs it)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>Only games currently installed on this computer.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Installed games, plus games you have played on this computer but no longer have installed. Starting one asks Steam to install it. A game you own but have never launched here will not be listed.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Every game in Steam&apos;s local metadata cache. This reaches the widest, but the cache also describes games you do not own — including the free Valve titles every Steam install carries — so expect entries you cannot play.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -8404,7 +8447,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>ScrapeResultDialog</name>
     <message>
-        <location filename="../src/ui/dialogs/scraper/mediatypecheckboxbuilder.cpp" line="+31"/>
+        <location filename="../src/ui/dialogs/scraper/mediatypecheckboxbuilder.cpp" line="+32"/>
         <source>Metadata (title, description, …)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8564,7 +8607,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="+16"/>
         <source>What to scrape</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8627,7 +8670,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>ScrapeResultDialogUnified</name>
     <message>
-        <location filename="../src/ui/dialogs/scraper/result/scraperesultdialogunified.cpp" line="+207"/>
+        <location filename="../src/ui/dialogs/scraper/result/scraperesultdialogunified.cpp" line="+210"/>
         <source>Collections</source>
         <translation type="unfinished"></translation>
     </message>

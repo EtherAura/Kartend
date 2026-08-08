@@ -161,6 +161,17 @@ struct CollectionConfig {
   /// ordinary folder collections.
   QString importSource;
 
+  /// How much of the launcher's library this collection was imported with —
+  /// LauncherImportService::scopeToString of the chosen ImportScope
+  /// ("installed" / "owned" / "allRecognized"). Persisted to INI
+  /// (kImportScope) and read back by every re-sync: a sync deletes this
+  /// source's stubs for games the fresh listing no longer carries, so
+  /// re-listing a wide-tier collection at the default narrow tier would
+  /// delete each not-installed game it holds (Kartend-el5st). Empty means
+  /// "installed" — the only tier that existed before, and the safe parse for
+  /// an unrecognised value.
+  QString importScope;
+
   /// Virtual-folder browsing cluster — the persisted "treat subfolders as
   /// virtual navigable folders" toggles plus the runtime currentSubfolder
   /// cursor. Access as `cfg.folderBrowsing.includeContentSubfolders` /
@@ -250,10 +261,10 @@ struct CollectionConfig {
            viewType == other.viewType && hideMissingArtwork == other.hideMissingArtwork &&
            background == other.background && archive == other.archive &&
            expandMode == other.expandMode && watchFilesystem == other.watchFilesystem &&
-           importSource == other.importSource && folderBrowsing == other.folderBrowsing &&
-           listView == other.listView && customFontFamily == other.customFontFamily &&
-           isPlaylist == other.isPlaylist && playlistId == other.playlistId &&
-           isSmartPlaylist == other.isSmartPlaylist &&
+           importSource == other.importSource && importScope == other.importScope &&
+           folderBrowsing == other.folderBrowsing && listView == other.listView &&
+           customFontFamily == other.customFontFamily && isPlaylist == other.isPlaylist &&
+           playlistId == other.playlistId && isSmartPlaylist == other.isSmartPlaylist &&
            playlistReservedKind == other.playlistReservedKind &&
            scraperOverrides == other.scraperOverrides &&
            additionalParentNames == other.additionalParentNames;

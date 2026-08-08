@@ -66,6 +66,8 @@ void LauncherImportController::runImportDialog() {
     row.displayName = source.displayName;
     row.available = source.available;
     row.gameCount = source.gameCount;
+    row.ownedGameCount = source.ownedGameCount;
+    row.recognizedGameCount = source.recognizedGameCount;
     row.alreadyImported = indexForSource(source.id) >= 0;
     rows.append(row);
   }
@@ -97,6 +99,19 @@ void LauncherImportController::runImportDialog() {
     return;
   }
   const int parentIndex = uuidToIndex.value(dialog.parentCollectionUuid(), -1);
+  // ui-local choice → data-layer scope. Only Steam varies with it; the other
+  // sources ignore the argument.
+  const auto scope = [&dialog]() {
+    switch (dialog.selectedScope()) {
+    case LauncherImportScopeChoice::Owned:
+      return LauncherImportService::ImportScope::Owned;
+    case LauncherImportScopeChoice::AllRecognized:
+      return LauncherImportService::ImportScope::AllRecognized;
+    case LauncherImportScopeChoice::InstalledOnly:
+      break;
+    }
+    return LauncherImportService::ImportScope::Installed;
+  }();
 
   const auto nameTaken = [collections](const QString &name) {
     return std::ranges::any_of(*collections, [&name](const CollectionConfig &c) {
@@ -113,12 +128,24 @@ void LauncherImportController::runImportDialog() {
   for (const QString &sourceId : selected) {
     const int existingIndex = indexForSource(sourceId);
     if (existingIndex >= 0) {
-      // Source already has a collection — selecting it means "re-sync now".
+      // Source already has a collection — selecting it means "re-sync now",
+      // at the scope just chosen. Record the scope on the collection before
+      // syncing: the sync prunes stubs the new listing doesn't carry, so the
+      // persisted value has to agree with what is now on disk or the next
+      // startup sync would widen or prune it right back (Kartend-el5st).
+      const QString scopeText = LauncherImportService::scopeToString(scope);
+      if ((*collections)[existingIndex].importScope != scopeText) {
+        (*collections)[existingIndex].importScope = scopeText;
+        if (m_ctx.persistCollections) {
+          m_ctx.persistCollections();
+        }
+      }
       const CollectionConfig &existing = collections->at(existingIndex);
       const LauncherImportService::SyncResult result = LauncherImportService::syncSource(
           sourceId,
           PathUtils::expandPathWithoutExistenceCheck(existing.mediaDirectory, existing.name),
-          PathUtils::expandPathWithoutExistenceCheck(existing.artworkDirectory, existing.name));
+          PathUtils::expandPathWithoutExistenceCheck(existing.artworkDirectory, existing.name),
+          scope);
       logSyncErrors(sourceId, result);
       artworkTouched = artworkTouched || result.artworkCopied > 0;
       const int metadataRows = applyMetadataForCollection(existing, result.syncedStubs);
@@ -138,7 +165,7 @@ void LauncherImportController::runImportDialog() {
       continue;
     }
 
-    CollectionConfig config = LauncherImportService::makeCollectionConfig(sourceId);
+    CollectionConfig config = LauncherImportService::makeCollectionConfig(sourceId, scope);
     // Unique display name: several hierarchy paths key collections by name,
     // and the uuid itself hashes name + media dir.
     const QString baseName = config.name;
@@ -163,8 +190,8 @@ void LauncherImportController::runImportDialog() {
     }
     // Sync before persisting so the collection's very first scan already
     // sees the stubs (and the fill-missing artwork).
-    const LauncherImportService::SyncResult result =
-        LauncherImportService::syncSource(sourceId, config.mediaDirectory, config.artworkDirectory);
+    const LauncherImportService::SyncResult result = LauncherImportService::syncSource(
+        sourceId, config.mediaDirectory, config.artworkDirectory, scope);
     logSyncErrors(sourceId, result);
     artworkTouched = artworkTouched || result.artworkCopied > 0;
     m_ctx.appendCollectionAndPersist(config, /*navigate=*/false);
@@ -224,8 +251,17 @@ void LauncherImportController::enrichFromStore(
   // expander resolves it (an empty artwork dir would make every media write
   // a silent no-op).
   pending.artworkDir = PathUtils::validateAndExpandPath(config.artworkDirectory, config.name);
-  for (const LauncherImportService::SyncedStub &stub : stubs) {
-    pending.paths.append(stub.path);
+  // Only items the store pass hasn't landed yet. Two reasons: a re-sync must
+  // be able to resume an enrichment that was cut short (the whole point of
+  // calling this from the sync path), and re-importing a large collection
+  // shouldn't re-request hundreds of pages whose text is already stored.
+  // FillMissing would discard the duplicate writes anyway — this saves the
+  // requests, which is what the runner is actually rate-limited on.
+  IDatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+  pending.paths = LauncherImportService::stubsMissingDescription(
+      db != nullptr ? db->databaseFilePath() : QString(), pending.collectionUuid, stubs);
+  if (pending.paths.isEmpty()) {
+    return; // every game already has its store text
   }
   if (pending.artworkDir.isEmpty() || pending.collectionUuid.isEmpty()) {
     qCWarning(lcLauncherImport) << "skipping store enrichment: unresolved artwork dir for"
@@ -260,10 +296,37 @@ void LauncherImportController::startNextEnrichment() {
   m_enrichRunner->setMediaTypeFilter({QStringLiteral("front"), QStringLiteral("screenshot"),
                                       QStringLiteral("background"), QStringLiteral("video")});
 
+  // Say the size up front. Steam's store API is paced at roughly a request
+  // and a half per second, so a wide-scope collection takes minutes — without
+  // a number the user cannot tell a working fetch from a broken one, and the
+  // honest reading of a silent status bar is "the import lost my data".
+  // Seeded to 0, not -1: the first items start before any finishes, so
+  // progress fires with done == 0 straight away. Treating 0 as "already
+  // reported" lets the sentence below stand until something genuinely
+  // completes, instead of being replaced by "0 of 123" within milliseconds.
+  m_enrichReportedDone = 0;
   if (m_ctx.showStatusMessage) {
-    m_ctx.showStatusMessage(
-        tr("%1: fetching descriptions and artwork from Steam…").arg(job.collectionName));
+    m_ctx.showStatusMessage(tr("%1: fetching descriptions and artwork for %n game(s) from Steam — "
+                               "this can take a few minutes…",
+                               nullptr, static_cast<int>(job.paths.size()))
+                                .arg(job.collectionName));
   }
+  // Per-item ticks. These do double duty: they show progress, and because the
+  // status bar clears a message after ten seconds they are what keeps any
+  // message on screen at all for the length of the run.
+  connect(m_enrichRunner, &Scraper::BatchScrapeRunner::progress, this,
+          [this, name = job.collectionName](int done, int total, const QString &) {
+            // itemConcurrency > 1 means the same `done` arrives once per item
+            // that starts; only speak when the number actually moves.
+            if (done == m_enrichReportedDone) {
+              return;
+            }
+            m_enrichReportedDone = done;
+            if (m_ctx.showStatusMessage) {
+              m_ctx.showStatusMessage(
+                  tr("%1: fetching Steam details… %2 of %3").arg(name).arg(done).arg(total));
+            }
+          });
   connect(m_enrichRunner, &Scraper::BatchScrapeRunner::finished, this,
           [this, name = job.collectionName](const Scraper::BatchScrapeRunner::Summary &summary) {
             if (m_ctx.showStatusMessage) {
@@ -330,7 +393,8 @@ void LauncherImportController::startBackgroundSync(bool announce) {
       outcome.collectionIndex = job.collectionIndex;
       outcome.sourceId = job.sourceId;
       outcome.collectionUuid = job.collectionUuid;
-      outcome.result = LauncherImportService::syncSource(job.sourceId, job.stubDir, job.artworkDir);
+      outcome.result =
+          LauncherImportService::syncSource(job.sourceId, job.stubDir, job.artworkDir, job.scope);
       // No-op for non-Steam sources (their targets carry no appid).
       outcome.metadata = LauncherImportService::applySteamMetadata(job.dbPath, job.collectionUuid,
                                                                    outcome.result.syncedStubs);
@@ -367,6 +431,18 @@ void LauncherImportController::onSyncFinished() {
       for (const QString &path : outcome.metadata.writtenPaths) {
         db->invalidateMetadataCacheItem(outcome.collectionUuid, path);
       }
+    }
+    // Resume store enrichment for anything still lacking its description.
+    // Deliberately ahead of the changed() guard: a sync that writes no stubs
+    // is exactly the case where an earlier enrichment was cut short, and
+    // enrichFromStore is a no-op once every game has its text. Without this
+    // the import dialog was the only thing that ever ran the network pass, so
+    // whatever it did not finish stayed empty forever (Kartend-el5st
+    // follow-up: a wide-scope import is hundreds of items, not a handful).
+    if (collections && outcome.collectionIndex >= 0 &&
+        outcome.collectionIndex < collections->size() &&
+        collections->at(outcome.collectionIndex).importSource == outcome.sourceId) {
+      enrichFromStore(collections->at(outcome.collectionIndex), outcome.result.syncedStubs);
     }
     if (!outcome.result.changed()) {
       continue;
@@ -423,6 +499,7 @@ auto LauncherImportController::snapshotJobs() const -> QList<SyncJob> {
     SyncJob job;
     job.collectionIndex = i;
     job.sourceId = config.importSource;
+    job.scope = LauncherImportService::scopeFromString(config.importScope);
     job.stubDir = PathUtils::expandPathWithoutExistenceCheck(config.mediaDirectory, config.name);
     job.artworkDir =
         PathUtils::expandPathWithoutExistenceCheck(config.artworkDirectory, config.name);

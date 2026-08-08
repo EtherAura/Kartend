@@ -540,6 +540,13 @@ void MainWindow::connectDatabaseManager() {
     lic.appendCollectionAndPersist = [this](const CollectionConfig &config, bool navigate) {
       appendCollectionAndPersist(config, navigate);
     };
+    lic.persistCollections = [this]() {
+      if (m_appManager->getSettingsManager()) {
+        ErrorPresentation::reportSaveResult(
+            m_appManager->getSettingsManager()->saveCollections(m_collections), "collections",
+            true);
+      }
+    };
     lic.refreshCollection = [this](int collectionIndex) {
       if (auto *navManager = m_appManager->getNavigationManager()) {
         navManager->safeReloadCollection(collectionIndex);

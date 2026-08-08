@@ -41,6 +41,12 @@ struct LauncherImportControllerContext {
   /// rebuildHierarchyCache (+ optional navigate).
   std::function<void(const CollectionConfig &config, bool navigate)> appendCollectionAndPersist;
 
+  /// Save half of the above, for collections already in the list: re-syncing
+  /// an existing source at a different ImportScope edits that collection's
+  /// importScope in place, and without a save the next startup would re-sync
+  /// at the old tier and undo it (Kartend-el5st).
+  std::function<void()> persistCollections;
+
   /// NavigationManager::safeReloadCollection — refresh the grid after a sync
   /// changed a collection's stub folder. Deliberately NOT
   /// forceRescanCollection: that path clears the collection's item rows
@@ -100,6 +106,9 @@ private:
     QString artworkDir;
     QString collectionUuid;
     QString dbPath;
+    /// The tier the collection was imported with, carried so a re-sync
+    /// re-lists the same breadth — see CollectionConfig::importScope.
+    LauncherImportService::ImportScope scope = LauncherImportService::ImportScope::Installed;
   };
   struct SyncOutcome {
     int collectionIndex = -1;
@@ -144,6 +153,12 @@ private:
   QList<PendingEnrichment> m_enrichQueue;
   /// Owned by `this` via Qt parent; null when idle.
   Scraper::BatchScrapeRunner *m_enrichRunner = nullptr;
+  /// Last `done` count pushed to the status bar for the running enrichment,
+  /// so the repeated ticks a concurrent batch emits for one completed item
+  /// don't rewrite the bar with an identical string. Seeded to 0 per job so
+  /// the opening "this can take a few minutes" line is not immediately
+  /// overwritten by the done == 0 ticks the first items emit on starting.
+  int m_enrichReportedDone = 0;
 
   LauncherImportControllerContext m_ctx;
   QFutureWatcher<QList<SyncOutcome>> m_syncWatcher;

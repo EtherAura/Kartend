@@ -299,6 +299,14 @@ kartend_add_test(NAME LauncherChooserDialog
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# LauncherImportDialog: the Steam scope selector (Kartend-el5st) — per-scope
+# counts on each row, default tick following the selected scope, and an
+# explicit user tick surviving a scope change.
+kartend_add_test(NAME LauncherImportDialog
+  SOURCES ui/dialogs/test_launcherimportdialog.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # LauncherEditorDialog: launcher() trim mapping, preset fill-and-lock /
 # Inline unlock, retroarch-gated core-row visibility, detected-core combo
 # from a temp override dir (keeps the host RetroArch install out).
