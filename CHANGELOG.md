@@ -30,23 +30,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   account or key needed; because every imported game knows its exact Steam
   app id, it never mismatches a title the way name-based scraping can. Both
   passes are fill-missing, so re-importing costs nothing and never
-  overwrites art or fields you already have. For Steam you can also choose
-  how much of the library to bring in: just what is installed, everything
-  you have played on this computer (the default — starting one of those
-  asks Steam to install it first), or every game Steam has heard of. The
-  picker shows the count for each choice before you commit, and the middle
-  option is the default because the widest one reads Steam's metadata cache,
-  which also describes games you do not own — including the free Valve
-  titles every Steam install carries. Whichever you pick is remembered per
+  overwrites art or fields you already have.
+
+- **Steam imports can reach past the games you have installed.** A new
+  choice in the import dialog decides how much of the library to bring in:
+  just what is installed, everything you have played on this computer, or
+  every game Steam has heard of. The picker shows how many games each
+  choice would add before you commit. "Games you own" is the default — it
+  is the widest setting that cannot list something you do not have, since
+  it goes by what you have actually played here; the widest setting reads
+  Steam's own metadata cache, which also describes games you do not own,
+  including the free Valve titles every Steam install carries. A game you
+  own but have never launched on this computer will not appear, because
+  nothing on disk records it. Games that are not installed still launch —
+  Steam offers to install them first — and they arrive with the cover art
+  and details Steam already cached. Your choice is remembered per
   collection, so later syncs keep the same breadth instead of quietly
-  dropping the games that are not installed; re-running the import over an
-  existing collection is how you change your mind. The status bar now counts
-  the store fetch as it runs ("47 of 123") and says up front how many games
-  it is about to fetch and that it can take a few minutes — Steam paces the
-  requests, so a large collection fills in gradually rather than all at once,
-  and an import that is still working no longer looks like one that quietly
-  dropped half your descriptions. If it is interrupted, the next sync picks
-  up exactly where it stopped instead of leaving those games bare.
+  dropping everything that is not installed; re-running the import over an
+  existing collection is how you change your mind.
+
+- **The Steam details fetch now tells you it is working.** Descriptions,
+  screenshots, and trailers come from the store, and Steam paces those
+  requests, so a large collection fills in over minutes rather than all at
+  once. The status bar now says how many games it is about to fetch and
+  that it can take a while, then counts them off ("47 of 123") — an import
+  still working no longer looks like one that quietly dropped half your
+  descriptions. If it is interrupted, the next sync resumes exactly where
+  it stopped instead of leaving those games bare forever.
 
 ### Changed
 
