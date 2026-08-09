@@ -270,9 +270,18 @@ private:
   /// accept()'s unconditional general-settings save persists the baseline
   /// instead of the edits the user just chose to throw away.
   void revertGeneralSettingsEdits();
-  /// Resolves unsaved changes prior to executing an action.
+  /// Resolves unsaved changes prior to executing an action, ASKING the user
+  /// first (Save / Discard / Cancel). For actions where the answer is still
+  /// open — Cancel, closing, switching or deselecting a collection.
   auto resolveUnsavedChanges(const QString &actionDescription, bool refreshTreeAfterSave)
       -> bool override;
+  /// Persists pending edits without asking — the Save arm of
+  /// resolveUnsavedChanges, shared with accept() (Kartend-1g46b). OK already
+  /// means "save and close", so it must not raise a prompt that offers
+  /// Discard. No-op (and marks the collection saved) when nothing is pending.
+  /// Returns false only when persistence failed and the dialog should stay
+  /// open; the error has already been shown.
+  [[nodiscard]] auto commitUnsavedChanges(bool refreshTreeAfterSave) -> bool;
 
   /// Rolls back the live-save panels (base color / fonts / splash) on Cancel.
   /// Those panels persist + apply immediately, bypassing the deferred-save path

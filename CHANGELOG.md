@@ -259,6 +259,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registering an overlay could leave the stacking table out of order, so a
   later restack put the wrong overlay on top.
 - The About box and the parent-collection *None* entry are translatable.
+- **OK in the Settings dialog now saves and closes instead of asking whether
+  you want to save.** With an edit pending, OK raised the "Save changes before
+  closing the dialog?" prompt — the one that belongs to Cancel. Pressing OK
+  already says to save, so the question was redundant, and one of its answers
+  was Discard, which throws away the edits the button was meant to keep.
+  Cancel still asks, which is where the question is genuinely open
+  (Kartend-1g46b).
 
 ## [0.0.18] - 2026-07-29
 
