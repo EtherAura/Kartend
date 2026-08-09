@@ -127,20 +127,24 @@ ItemWidget *ItemWidgetFactory::createSubcollectionWidget(int subcollectionIndex)
     widget->setCollectionName(m_collections->at(m_context.currentIndex).name);
   }
 
-  // Try to find artwork for the subcollection using the folder name
-  // Artwork is searched in the current collection's artwork directory
+  // Tile artwork, in the order the docs promise (Kartend-kb2vx):
+  //  1. the CHILD's own collectionIcon — an explicit, per-collection choice;
+  //  2. otherwise an image named after the child in the PARENT's artwork
+  //     directory, the convention that predates the key.
+  // Only (2) used to exist here, so setting collectionIcon on a subcollection
+  // left its Grid/List tile on the procedural placeholder while Cover Flow and
+  // the marquee honoured it — the two most-used layouts silently ignoring a
+  // field the settings dialog offers for every collection.
   if (auto *art = artworkMgr(); art && !subcollectionName.isEmpty()) {
-    QString artworkDir = m_context.config.artworkDirectory;
     const QString placeholderArtwork =
         resolvePlaceholderArtworkForCollection(subcollectionIndex).trimmed();
-    if (!artworkDir.isEmpty()) {
-      QString artworkPath = ArtworkUtils::findArtworkForFile(subcollectionName, artworkDir);
-      if (!artworkPath.isEmpty()) {
-        art->addPendingArtwork(widget, artworkPath);
-        // Set hasArtwork for list mode button
-        if (m_context.config.viewType == ViewType::List) {
-          widget->setHasArtwork(true);
-        }
+    const QString artworkPath = ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
+        m_collections, subcollectionIndex, subcollectionName, m_context.config.artworkDirectory);
+    if (!artworkPath.isEmpty()) {
+      art->addPendingArtwork(widget, artworkPath);
+      // Set hasArtwork for list mode button
+      if (m_context.config.viewType == ViewType::List) {
+        widget->setHasArtwork(true);
       }
     }
     applyPlaceholderArtwork(widget, placeholderArtwork);
