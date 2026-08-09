@@ -114,6 +114,31 @@ public:
   [[nodiscard]] bool isDirectoryCached(const QString &directory) const;
 
   /**
+   * @brief True only when EVERY directory in @p directories has a cached
+   * listing (Kartend-t4rjw).
+   *
+   * The single-directory isDirectoryCached() answers a narrower question than
+   * most artwork callers actually mean. An item's cover is resolved through a
+   * CASCADE — the flat artwork root, then each typed cover subdir (see
+   * ArtworkUtils::artworkLookupDirectories) — and warming is not atomic across
+   * it: schedulePrewarm walks the roots first and only then drains the subdirs
+   * findInDirectory queued. So `isDirectoryCached(root)` can be true while
+   * `{root}/front` is still cold, and a caller reading that as "the lookup has
+   * settled, an empty result means genuinely artless" concludes the opposite
+   * of the truth. Ask about the whole cascade instead.
+   *
+   * Returns false for an empty list — "nothing is known to be warm" is the
+   * safe answer for every caller, all of which use this to decide whether it
+   * is still worth retrying.
+   *
+   * One read-lock acquisition covers the whole list. Unlike collectPositiveKeys
+   * this does NOT queue the uncached directories: callers here are polling for
+   * a warm-up someone else scheduled, and queueing on every poll would churn
+   * the write lock.
+   */
+  [[nodiscard]] bool areDirectoriesCached(const QStringList &directories) const;
+
+  /**
    * @brief Monotonic generation counter for the cached listings.
    *
    * Incremented under the write lock on every listing mutation — a full
@@ -231,6 +256,24 @@ private:
  */
 [[nodiscard]] QString findArtworkForBaseNameCached(const QString &completeBaseName,
                                                    const QString &artworkDirectory);
+
+/**
+ * @brief The directory cascade a cached artwork lookup probes for one item:
+ * @p artworkDirectory itself, then each typed cover subdir (`front/`, `box/`,
+ * …) in coverSubdirPriority order.
+ *
+ * This is the authoritative spelling of "where a cover for this item could
+ * live" — findArtworkForFileCached walks exactly these, in this order, and
+ * buildArtworkKeySet enumerates exactly these. Callers that need to reason
+ * about the lookup as a whole (is it warm? which directories should be
+ * prewarmed?) should build the list from here rather than assuming the flat
+ * root stands for the cascade — it does not (Kartend-t4rjw).
+ *
+ * Returns an empty list for an empty @p artworkDirectory. Pure string work, no
+ * filesystem or cache access; the result is stable for a given input, so hot
+ * callers should hoist it out of per-item loops.
+ */
+[[nodiscard]] QStringList artworkLookupDirectories(const QString &artworkDirectory);
 
 /**
  * @brief Build the set of artwork-backed basename keys for @p artworkDirectory.

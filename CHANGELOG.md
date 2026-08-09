@@ -259,6 +259,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registering an overlay could leave the stacking table out of order, so a
   later restack put the wrong overlay on top.
 - The About box and the parent-collection *None* entry are translatable.
+- **Cover Flow no longer leaves covers blank until you click the item.** Cover
+  art is looked for in the artwork folder and then in each of its typed
+  sub-folders — `front`, `box`, `screenshot` and the rest, which is where
+  scraped covers actually land. Cover Flow decided an item simply had no
+  artwork as soon as the top-level folder had been read, but those
+  sub-folders are indexed separately and moments later, so a cover sitting in
+  `front` was written off before the folder holding it had been looked at.
+  The card then kept its placeholder until something else forced it to
+  re-check, which is why clicking around brought the art back. Cover Flow now
+  waits for every folder it would search, and asks for all of them to be
+  indexed up front instead of just the top level (Kartend-t4rjw).
 
 ## [0.0.18] - 2026-07-29
 

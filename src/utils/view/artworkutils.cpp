@@ -424,6 +424,19 @@ bool DirectoryCache::isDirectoryCached(const QString &directory) const {
   return m_cache.contains(directory);
 }
 
+bool DirectoryCache::areDirectoriesCached(const QStringList &directories) const {
+  if (directories.isEmpty()) {
+    return false;
+  }
+  QReadLocker locker(&m_lock);
+  for (const QString &dir : directories) {
+    if (dir.isEmpty() || !m_cache.contains(dir)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 quint64 DirectoryCache::contentsGeneration() const {
   QReadLocker locker(&m_lock);
   return m_contentsGeneration;
@@ -607,6 +620,20 @@ QString findCachedWithKeys(const QString &baseName, const QString &fullName,
 }
 } // namespace
 
+QStringList artworkLookupDirectories(const QString &artworkDirectory) {
+  if (artworkDirectory.isEmpty()) {
+    return {};
+  }
+  QStringList directories;
+  directories.reserve(1 + coverSubdirPriority().size());
+  directories.append(artworkDirectory);
+  const QDir artRoot(artworkDirectory);
+  for (const QString &subdir : coverSubdirPriority()) {
+    directories.append(artRoot.absoluteFilePath(subdir));
+  }
+  return directories;
+}
+
 QSet<QString> buildArtworkKeySet(const QString &artworkDirectory) {
   if (artworkDirectory.isEmpty()) {
     return {};
@@ -615,14 +642,7 @@ QSet<QString> buildArtworkKeySet(const QString &artworkDirectory) {
   // first, then every typed cover subdir. Nonexistent subdirs cost one queued
   // background scan that caches an empty listing — identical to the per-item
   // path, which probes them through findInDirectory regardless.
-  QStringList directories;
-  directories.reserve(1 + coverSubdirPriority().size());
-  directories.append(artworkDirectory);
-  const QDir artRoot(artworkDirectory);
-  for (const QString &subdir : coverSubdirPriority()) {
-    directories.append(artRoot.absoluteFilePath(subdir));
-  }
-  return DirectoryCache::instance().collectPositiveKeys(directories);
+  return DirectoryCache::instance().collectPositiveKeys(artworkLookupDirectories(artworkDirectory));
 }
 
 void clearDirectoryCache() {

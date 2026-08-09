@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFile>
 #include <QObject>
+#include <QSet>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -37,6 +38,8 @@ private slots:
   void nonexistentDirectory_cachedAsEmpty();
   void baseNameLookup_doesNotDoubleStripDottedStems();
   void schedulePrewarm_queuesEvenWhenAWalkIsAlreadyInFlight();
+  void artworkLookupDirectories_listsRootThenTypedCoverSubdirs();
+  void areDirectoriesCached_falseWhileAnyCascadeEntryIsCold();
 };
 
 void TestDirectoryCache::init() {
@@ -198,6 +201,69 @@ void TestDirectoryCache::schedulePrewarm_queuesEvenWhenAWalkIsAlreadyInFlight() 
   // outlive the test and keep touching the singleton the next slot's init()
   // clears, which segfaults at teardown under `ctest -j`.
   QTRY_VERIFY_WITH_TIMEOUT(cache.isDirectoryCached(wanted.path()), 15000);
+}
+
+// Kartend-t4rjw: a cover lookup is a CASCADE, not a single directory — the
+// flat artwork root followed by each typed cover subdir, which is where the
+// scrape pipeline actually writes covers. artworkLookupDirectories is the one
+// place that spelling lives, so callers reasoning about the lookup as a whole
+// (is it warm? what should be prewarmed?) agree with what findCachedWithKeys
+// really probes.
+void TestDirectoryCache::artworkLookupDirectories_listsRootThenTypedCoverSubdirs() {
+  QCOMPARE(ArtworkUtils::artworkLookupDirectories(QString()), QStringList());
+
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QStringList dirs = ArtworkUtils::artworkLookupDirectories(root.path());
+
+  // The flat root leads — it is probed first — and every entry after it is a
+  // distinct subdirectory of it.
+  QVERIFY(dirs.size() > 1);
+  QCOMPARE(dirs.first(), root.path());
+  QVERIFY(dirs.contains(QDir(root.path()).absoluteFilePath(QStringLiteral("front"))));
+  QCOMPARE(QSet<QString>(dirs.cbegin(), dirs.cend()).size(), dirs.size());
+  for (const QString &dir : dirs.mid(1)) {
+    QVERIFY(dir.startsWith(root.path()));
+  }
+}
+
+// The predicate CoverFlow's retry hangs its "genuinely artless" verdict on.
+// isDirectoryCached(root) answers a narrower question than callers mean:
+// warming is not atomic across the cascade, so a warm root says nothing about
+// {root}/front. Reading it as "the lookup settled" is what left cover-flow
+// cards on the placeholder until the user clicked them.
+void TestDirectoryCache::areDirectoriesCached_falseWhileAnyCascadeEntryIsCold() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+
+  auto &cache = DirectoryCache::instance();
+  const QStringList cascade = ArtworkUtils::artworkLookupDirectories(root.path());
+
+  // An empty list is "nothing known to be warm" — never a free pass.
+  QVERIFY(!cache.areDirectoriesCached({}));
+
+  // Nothing warm yet.
+  QVERIFY(!cache.areDirectoriesCached(cascade));
+
+  // Warm ONLY the flat root. prewarmDirectories expands a root with the cover
+  // subdirs that exist when it runs, so creating front/ afterwards leaves it
+  // cold — the same split the parallel walk produces transiently when the
+  // near-empty root caches long before a front/ holding thousands of files.
+  cache.prewarmDirectories({root.path()});
+  QVERIFY(cache.isDirectoryCached(root.path()));
+
+  QVERIFY(QDir(root.path()).mkpath(QStringLiteral("front")));
+  writeFile(root.filePath(QStringLiteral("front/Game.png")));
+  QVERIFY(!cache.isDirectoryCached(QDir(root.path()).absoluteFilePath(QStringLiteral("front"))));
+  QVERIFY2(!cache.areDirectoriesCached(cascade),
+           "a warm flat root was reported as a warm cascade, so an unresolved cover would be "
+           "misread as 'this item has no artwork'");
+
+  // Warming the rest settles it — including the subdirs that do not exist,
+  // which ensureDirectoryCached caches as empty listings. Without that this
+  // predicate could never go true for a normal collection.
+  cache.prewarmDirectories(cascade);
+  QVERIFY(cache.areDirectoriesCached(cascade));
 }
 
 QTEST_GUILESS_MAIN(TestDirectoryCache)

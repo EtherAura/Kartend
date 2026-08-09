@@ -6,6 +6,7 @@
 // designed to no-op cleanly when they are unwired (headless smoke / early
 // shutdown), so most of its public surface is exercisable without standing
 // up the GUI stack.
+#include <QDir>
 #include <QFile>
 #include <QObject>
 #include <QScrollArea>
@@ -82,6 +83,8 @@ private slots:
   void retry_cachedNegativeDropsPendingWithoutRearm();
   void retry_rebuildClearsPendingAndTimer();
   void retry_deactivationClearsPendingAndTimer();
+  // Kartend-t4rjw
+  void retry_warmRootWithColdCoverSubdirIsNotTreatedAsArtless();
 
   // Activation must translate the carousel's filtered-visual index into the
   // store's actual-index space before classifying (subcollection / virtual
@@ -245,6 +248,61 @@ void TestCoverFlowController::retry_deactivationClearsPendingAndTimer() {
   h.controller.applyVisibility();
   QCOMPARE(h.controller.pendingArtworkCount(), 0);
   QVERIFY(!h.controller.artworkRetryActive());
+}
+
+// Kartend-t4rjw: the reported symptom was cover-flow art missing until the
+// user clicked the item. A cover lookup cascades from the flat artwork root
+// into the typed cover subdirs (`front/` — where the scrape pipeline writes
+// covers), and those are separate cache entries warmed in a later phase than
+// the root. The pending-artwork gate used to test the ROOT alone and read a
+// warm root plus an empty result as "cached negative, genuinely artless", so a
+// card whose cover sat in front/ was never registered for the retry and kept
+// its placeholder until some unrelated rebuild re-resolved it.
+void TestCoverFlowController::retry_warmRootWithColdCoverSubdirIsNotTreatedAsArtless() {
+  QTemporaryDir artDir;
+  QTemporaryDir mediaDir;
+  QVERIFY(artDir.isValid() && mediaDir.isValid());
+
+  CoverFlowHarness h(artDir.path(), mediaDir.path());
+  h.store.filePaths() << mediaDir.filePath(QStringLiteral("clip0.mp4"));
+  h.controller.ensureWidget();
+  QVERIFY(h.controller.widget() != nullptr);
+
+  // Put the cache in the state the bug needs: flat root warm, cover subdir
+  // cold. Warming the root BEFORE front/ exists is the deterministic way to
+  // get there — prewarmDirectories expands a root with the cover subdirs that
+  // exist AT THAT MOMENT, so a subdir created afterwards is not covered.
+  //
+  // In production the same observable state arises from the walk itself:
+  // prewarmDirectories hands root and front/ to one blockingMap, and their
+  // listings land independently. The root of a scraped collection is usually
+  // near-empty (covers go into the typed subdirs) so it caches almost
+  // instantly, while front/ can hold thousands of files — leaving a window,
+  // comfortably wider than the 400ms retry tick, where exactly this holds.
+  auto &cache = ArtworkUtils::DirectoryCache::instance();
+  cache.prewarmDirectories({artDir.path()});
+  QVERIFY(cache.isDirectoryCached(artDir.path()));
+
+  QVERIFY(QDir(artDir.path()).mkpath(QStringLiteral("front")));
+  const QString artwork = touchFile(artDir.filePath(QStringLiteral("front/clip0.png")));
+  QVERIFY(!artwork.isEmpty());
+  QVERIFY(!cache.isDirectoryCached(QDir(artDir.path()).absoluteFilePath(QStringLiteral("front"))));
+
+  h.controller.rebuildCards();
+  QCOMPARE(h.controller.widget()->cardCount(), 1);
+  QVERIFY(h.controller.widget()->cardAt(0).artworkPath.isEmpty());
+  // The card MUST be registered: the lookup has not settled, because the one
+  // directory actually holding the cover has never been scanned. Pre-fix this
+  // was 0 and the retry timer never armed.
+  QCOMPARE(h.controller.pendingArtworkCount(), 1);
+  QVERIFY(h.controller.artworkRetryActive());
+
+  // The retry warms the whole cascade itself, so the card resolves with no
+  // further help — and reaching a non-empty path also proves the retry pass
+  // did not erase the slot on the strength of the warm root alone.
+  QTRY_COMPARE_WITH_TIMEOUT(h.controller.widget()->cardAt(0).artworkPath, artwork, 5000);
+  QCOMPARE(h.controller.pendingArtworkCount(), 0);
+  QTRY_VERIFY_WITH_TIMEOUT(!h.controller.artworkRetryActive(), 5000);
 }
 
 void TestCoverFlowController::itemActivated_mapsFilteredVisualToActual() {
