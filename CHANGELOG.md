@@ -270,6 +270,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-check, which is why clicking around brought the art back. Cover Flow now
   waits for every folder it would search, and asks for all of them to be
   indexed up front instead of just the top level (Kartend-t4rjw).
+- **Double-clicking a thumbnail in Cover Flow's artwork strip now opens it full
+  size.** The double click was passed to the covers behind the strip, which
+  matched nothing there, so it did nothing at all. It now opens that exact
+  image or video in the same full-screen preview the sidebar gallery uses.
+  Single-clicking a thumbnail still just swaps the centre cover, as before
+  (Kartend-5jtyw).
 
 ## [0.0.18] - 2026-07-29
 

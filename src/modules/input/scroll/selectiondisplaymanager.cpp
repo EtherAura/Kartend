@@ -257,6 +257,23 @@ bool SelectionDisplayManager::showMediaPreview(const QString &filePath, const QS
   return m_artworkPreviewOverlay->showMediaForFile(filePath, artworkDir, videoDir);
 }
 
+bool SelectionDisplayManager::showPreviewAtPath(const QString &path, bool isVideo) {
+  if (!m_mediaScrollArea || path.isEmpty()) {
+    return false;
+  }
+  ensureArtworkPreviewOverlay();
+  // Path-based, unlike showArtworkPreview / showMediaPreview: the caller
+  // (cover flow's gallery strip) already holds the resolved path for the
+  // exact variant the user picked, so re-running a directory lookup here
+  // would at best rediscover it and at worst pick a different one.
+  if (isVideo) {
+    m_artworkPreviewOverlay->showVideoAtPath(path);
+  } else {
+    m_artworkPreviewOverlay->showArtworkAtPath(path);
+  }
+  return true;
+}
+
 void SelectionDisplayManager::setArtworkPreviewGallery(
     const QList<ArtworkPreviewOverlay::GalleryEntry> &entries) {
   if (!m_artworkPreviewOverlay) {

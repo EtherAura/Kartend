@@ -176,6 +176,17 @@ void CoverFlowController::ensureWidget() {
     // the same filter-aware visual-index pipeline the grid uses.
     emit itemActivated(idx);
   });
+
+  // Double-click on a gallery-strip thumbnail: show that exact variant full
+  // size (Kartend-5jtyw). The widget is a chrome/ dumb widget and cannot own
+  // an overlay itself, so the path comes out as a signal. We forward it rather
+  // than calling ctx->scrollPreview() here: ScrollManager both owns this
+  // controller and IS the preview role, so letting it connect the signal to
+  // itself keeps this file off a third sibling manager (the ctx fan-out
+  // ratchet in check-layering.py is what makes that concrete). Single click
+  // keeps swapping the centred card's artwork, which the widget does itself.
+  connect(m_widget, &CoverFlowWidget::galleryPreviewRequested, this,
+          &CoverFlowController::galleryPreviewRequested);
 }
 
 void CoverFlowController::applyConfig() {

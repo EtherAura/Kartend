@@ -100,6 +100,21 @@ void CoverFlowWidget::mouseDoubleClickEvent(QMouseEvent *event) {
     QWidget::mouseDoubleClickEvent(event);
     return;
   }
+  // Gallery toolbar first, exactly as mousePressEvent orders it
+  // (Kartend-5jtyw). Without this the double click went straight to
+  // hitTestCard, which misses because the strip is laid out below every card
+  // rect — so double-clicking a thumbnail did nothing at all. Claiming the
+  // event here also keeps it that way by construction rather than by
+  // geometry: whatever the layout, the strip never activates an item.
+  const int galleryHit = m_galleryStrip ? m_galleryStrip->hitTest(event->pos()) : -1;
+  if (galleryHit >= 0 && galleryHit < m_gallery.size()) {
+    const auto &entry = m_gallery[galleryHit];
+    if (!entry.path.isEmpty()) {
+      emit galleryPreviewRequested(entry.path, entry.isVideo);
+    }
+    event->accept();
+    return;
+  }
   int hit = hitTestCard(event->pos());
   if (hit >= 0) {
     if (hit != m_selectedIndex) {

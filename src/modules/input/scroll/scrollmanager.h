@@ -169,6 +169,10 @@ public:
   /// neither a video nor artwork (the overlay stays hidden).
   bool showMediaPreview(const QString &filePath, const QString &artworkDir,
                         const QString &videoDir) override;
+  /// Show the already-resolved media at @p path in the preview overlay.
+  /// Used by cover flow's gallery strip, where the double-clicked thumbnail
+  /// names the exact file to show.
+  bool showPreviewAtPath(const QString &path, bool isVideo) override;
   /// Forwarder for SelectionDisplayManager::setArtworkPreviewGallery.
   /// Populates the expand-mode overlay's bottom thumb strip so Left/Right
   /// + thumb clicks can cycle between the item's scraped artwork types.

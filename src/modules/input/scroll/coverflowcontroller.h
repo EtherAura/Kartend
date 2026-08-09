@@ -111,6 +111,11 @@ signals:
   void virtualFolderEntered(const QString &folderPath);
   void itemActivated(int visualIndex);
   void activeChanged(bool active);
+  /// Forwarded from CoverFlowWidget: the user double-clicked a gallery-strip
+  /// thumbnail and wants @p path shown full size (Kartend-5jtyw). ScrollManager
+  /// connects this to its own preview role — see the connect site for why the
+  /// controller forwards instead of reaching for ctx->scrollPreview().
+  void galleryPreviewRequested(const QString &path, bool isVideo);
 
 private:
   void resolveAndPushVideo(int visualIndex);

@@ -32,6 +32,13 @@ public:
   /// when the item has neither a video nor artwork.
   virtual bool showMediaPreview(const QString &filePath, const QString &artworkDir,
                                 const QString &videoDir) = 0;
+  /// Show the media at @p path — artwork, or video when @p isVideo — in the
+  /// preview overlay. Distinct from showMediaPreview(): that one RESOLVES a
+  /// path by searching an item's directories, whereas callers here already
+  /// hold the exact file the user picked (cover flow's gallery strip). Returns
+  /// true when a preview was shown, false when there is no viewport to host
+  /// the overlay or @p path is empty.
+  virtual bool showPreviewAtPath(const QString &path, bool isVideo) = 0;
 };
 
 #endif // IARTWORKPREVIEWSCROLL_H

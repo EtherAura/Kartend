@@ -139,6 +139,14 @@ signals:
   /// User activated the currently centered card (single click on center /
   /// double click anywhere). The caller handles launch / preview.
   void itemActivated(int visualIndex);
+  /// User double-clicked a thumbnail in the bottom gallery strip and wants
+  /// that exact image / video shown full size (Kartend-5jtyw). @p path is
+  /// already resolved — the receiver should display it directly rather than
+  /// re-running an artwork lookup. Single-clicking the same thumbnail keeps
+  /// its existing meaning (swap the centered card's displayed artwork), so
+  /// the two gestures are additive. Never emitted together with
+  /// itemActivated: the strip claims the double click outright.
+  void galleryPreviewRequested(const QString &path, bool isVideo);
 
 protected:
   void paintEvent(QPaintEvent *e) override;

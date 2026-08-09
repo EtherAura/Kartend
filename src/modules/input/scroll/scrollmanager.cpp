@@ -251,6 +251,12 @@ ScrollManager::ScrollManager(QObject *parent) : IScrollManager(parent) {
           &ScrollManager::coverFlowItemActivated);
   connect(m_coverFlow.get(), &CoverFlowController::activeChanged, this,
           &ScrollManager::coverFlowActiveChanged);
+  // Gallery-strip double click → full-size preview (Kartend-5jtyw). Handled
+  // here rather than forwarded onward: this manager already IS the preview
+  // role (IArtworkPreviewScroll), so the shortest correct route is a direct
+  // call on ourselves.
+  connect(m_coverFlow.get(), &CoverFlowController::galleryPreviewRequested, this,
+          [this](const QString &path, bool isVideo) { showPreviewAtPath(path, isVideo); });
 }
 
 FilterManager *ScrollManager::filterManager() const {
@@ -695,6 +701,12 @@ void ScrollManager::showArtworkPreview(const QString &filePath, const QString &a
 bool ScrollManager::showMediaPreview(const QString &filePath, const QString &artworkDir,
                                      const QString &videoDir) {
   return m_selectionDisplay && m_selectionDisplay->showMediaPreview(filePath, artworkDir, videoDir);
+}
+
+// Exact-path preview entry point. Used by cover flow's gallery strip, which
+// already holds the resolved path for the variant the user double-clicked.
+bool ScrollManager::showPreviewAtPath(const QString &path, bool isVideo) {
+  return m_selectionDisplay && m_selectionDisplay->showPreviewAtPath(path, isVideo);
 }
 
 void ScrollManager::setArtworkPreviewGallery(
