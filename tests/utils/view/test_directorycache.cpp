@@ -36,6 +36,7 @@ private slots:
   void negativeResult_cachedUntilClear();
   void nonexistentDirectory_cachedAsEmpty();
   void baseNameLookup_doesNotDoubleStripDottedStems();
+  void schedulePrewarm_queuesEvenWhenAWalkIsAlreadyInFlight();
 };
 
 void TestDirectoryCache::init() {
@@ -152,6 +153,51 @@ void TestDirectoryCache::nonexistentDirectory_cachedAsEmpty() {
   QCOMPARE(DirectoryCache::instance().findInDirectory(QStringLiteral("x"), missing), QString());
   QCOMPARE(DirectoryCache::instance().findInDirectory(QStringLiteral("x"), missing), QString());
   QVERIFY(!DirectoryCache::instance().isDirectoryQueued(missing));
+}
+
+// Kartend-hrgf5: schedulePrewarm caps at one in-flight walk. It used to return
+// outright when it lost that race, on the assumption that the running walk
+// would cover the caller's directories anyway. That is false for a caller
+// asking about directories nothing else will touch — CoverFlow's pending
+// artwork retry polls isDirectoryCached() on exactly those, so a dropped
+// request left its cards on the placeholder forever.
+//
+// The contract now: losing the race may drop the WALK, but never the REQUEST —
+// the directory must at least be QUEUED, because every walk drains the queue
+// before it finishes.
+void TestDirectoryCache::schedulePrewarm_queuesEvenWhenAWalkIsAlreadyInFlight() {
+  QTemporaryDir busy;   // what the in-flight walk is working on
+  QTemporaryDir wanted; // what the displaced caller asks for
+  QVERIFY(busy.isValid() && wanted.isValid());
+  writeFile(wanted.filePath("Game.png"));
+
+  auto &cache = DirectoryCache::instance();
+
+  // Occupy the single in-flight slot with a walk over a large synthetic tree,
+  // so the call below is the one that loses the race.
+  QStringList busyDirs;
+  for (int i = 0; i < 150; ++i) {
+    const QString sub = QStringLiteral("d%1").arg(i);
+    QDir(busy.path()).mkpath(sub);
+    busyDirs << busy.filePath(sub);
+  }
+  cache.schedulePrewarm(busyDirs);
+
+  // The displaced request. Whether it wins or loses the guard is timing, but
+  // either outcome must leave `wanted` reachable: cached if it ran, queued if
+  // it was displaced. Silently forgetting it is the bug.
+  cache.schedulePrewarm({wanted.path()});
+
+  const bool reachable =
+      cache.isDirectoryCached(wanted.path()) || cache.isDirectoryQueued(wanted.path());
+  QVERIFY2(reachable, "schedulePrewarm dropped the request when it lost the in-flight race; "
+                      "the directory is neither cached nor queued, so nothing will ever scan it");
+
+  // Being queued is only half the contract — a walk must actually drain it.
+  // This also stops the test leaving a walk IN FLIGHT: the pool thread would
+  // outlive the test and keep touching the singleton the next slot's init()
+  // clears, which segfaults at teardown under `ctest -j`.
+  QTRY_VERIFY_WITH_TIMEOUT(cache.isDirectoryCached(wanted.path()), 15000);
 }
 
 QTEST_GUILESS_MAIN(TestDirectoryCache)

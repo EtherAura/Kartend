@@ -333,16 +333,50 @@ void DirectoryCache::schedulePrewarm(const QStringList &directories) {
   if (directories.isEmpty()) {
     return;
   }
-  // Kartend-uzs42: cap at one in-flight prewarm. If a walk is already running,
-  // drop this request (best-effort — the running walk warms its dirs and the
-  // newly-selected collection's own enumeration warms the rest). This stops a
-  // burst of collection switches from piling up redundant walks.
+  // Queue FIRST, before the in-flight guard below can drop this request.
+  //
+  // Kartend-hrgf5: the guard used to return outright, on the assumption that
+  // "the running walk warms its dirs and the newly-selected collection's own
+  // enumeration warms the rest". That holds only when the caller wants the
+  // same directories the running walk already covers. It is false for a caller
+  // asking about directories nothing else is going to touch — CoverFlow's
+  // pending-artwork retry (coverflowcontroller.cpp) is exactly that: it waits
+  // on isDirectoryCached() for the dirs it just asked to be warmed, so a
+  // dropped request left those cards showing the placeholder permanently while
+  // the retry budget drained against a directory nobody would ever scan.
+  //
+  // Queueing is enough to make the drop lossless: the in-flight walk ends with
+  // processQueuedDirectories(), so whatever lands here still gets scanned by
+  // the walk that displaced us.
+  {
+    QWriteLocker locker(&m_lock);
+    for (const QString &dir : directories) {
+      if (!dir.isEmpty() && !m_cache.contains(dir)) {
+        m_queuedDirectories.insert(dir);
+      }
+    }
+  }
+
+  // Kartend-uzs42: cap at one in-flight prewarm, so a burst of collection
+  // switches cannot pile up redundant walks. Dropping the WALK is still right;
+  // dropping the REQUEST was the bug.
   if (!m_prewarmInFlight.testAndSetOrdered(0, 1)) {
     return;
   }
   prewarmWalkPool().start([this, directories]() {
     prewarmDirectories(directories);
-    processQueuedDirectories();
+    // Drain more than once: a caller that lost the in-flight guard queues its
+    // directories at any moment, including just after the first drain read the
+    // queue. Without a second pass those sit until some later prewarm happens
+    // to run, which for CoverFlow's retry means never. Bounded so a caller
+    // queueing continuously cannot pin this thread.
+    for (int pass = 0; pass < 3; ++pass) {
+      processQueuedDirectories();
+      QReadLocker locker(&m_lock);
+      if (m_queuedDirectories.isEmpty()) {
+        break;
+      }
+    }
     m_prewarmInFlight.storeRelaxed(0);
     qCDebug(lcPerfTrace) << "Background dentry prewarm complete: dirs=" << directories.size();
   });
