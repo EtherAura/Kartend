@@ -109,6 +109,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Collections with "hide items without artwork" enabled no longer open
+  empty.** With the per-collection toggle on, opening the app on such a
+  collection — or switching into one — showed a permanent "No items" even
+  though the title bar counted them correctly, in every view. The filter
+  passed judgement before the item list (or the artwork folder's freshly
+  started scan) had produced any data, hid every row as "missing artwork",
+  and hiding everything also stopped the loading those rows would have
+  triggered. Rows now stay visible while their data or the artwork scan is
+  still pending, and genuinely artwork-less items are hidden as the answers
+  arrive; the "N / M items" readout tracks each step. In Cover Flow this
+  also avoids rebuilding the carousel — and discarding its already-decoded
+  covers — once per arriving batch while such a collection loads
+  (Kartend-l66sn).
+- **Translations of the first-run wizard's media-folder page can now be
+  found at runtime.** The page's nine strings were catalogued for
+  translators under one name but looked up under another, so any future
+  translation of them would have silently fallen back to English. The two
+  names now agree, translation tooling runs warning-clean, and the build
+  gate fails if a mismatch of this kind is ever reintroduced
+  (Kartend-r4tno).
 - **Scraped images, videos, and manuals are now saved with a file extension
   that matches what is actually inside the file.** When a provider's download
   link carries no usable file extension, the scraper used to fall back to a
