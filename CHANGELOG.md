@@ -114,6 +114,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Custom placeholder artwork now actually renders.** The per-collection
+  "Placeholder Artwork" image — the picture shown in place of the
+  procedural cross-hatch for items with no artwork — never appeared: the
+  path check it went through only accepted folders, so pointing the
+  setting at a real image file silently resolved to nothing and every
+  layout kept the cross-hatch. Configured placeholder images now show up,
+  and `~` and `%collection%` in the path work as the documentation always
+  said (Kartend-80h8o).
 - **Collection icons written with `~` or `%collection%` now resolve.** The
   `collectionIcon` path was used exactly as stored by all three places that
   render it — the Cover Flow card, the marquee banner, and the Grid/List

@@ -10,7 +10,7 @@
 #include "itemartwork.h"
 #include "itemwidget.h"
 #include "loggingcategories.h"
-#include "settingsutils.h"
+#include "pathutils.h"
 #include "widgetpoolmanager.h"
 
 #include <QDir>
@@ -195,7 +195,10 @@ QString ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(
   if (!placeholderArtwork.isEmpty()) {
     const QString collectionName =
         validIndex ? collections->at(collectionIndex).name : contextCollectionName;
-    placeholderArtwork = SettingsUtils::expandConfigVariables(placeholderArtwork, collectionName);
+    // File-shaped validation (Kartend-80h8o): expandConfigVariables gates on
+    // QDir::exists, which is false for every FILE, so it resolved a real
+    // placeholder image to empty and the feature silently no-opped.
+    placeholderArtwork = PathUtils::validateAndExpandFilePath(placeholderArtwork, collectionName);
   }
   return placeholderArtwork;
 }

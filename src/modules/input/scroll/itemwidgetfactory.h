@@ -26,10 +26,13 @@ namespace ItemWidgetFactoryHelpers {
 //   2. Otherwise the active context's configured placeholder is the
 //      fallback.
 //   3. A non-empty result is expanded through
-//      SettingsUtils::expandConfigVariables using the collection's name
+//      PathUtils::validateAndExpandFilePath using the collection's name
 //      when @p collectionIndex is valid, else @p contextCollectionName —
-//      the expansion validates existence, so a dangling path resolves to
-//      an empty string.
+//      the expansion validates existence AS A FILE, so a dangling path
+//      resolves to an empty string. (It was expandConfigVariables until
+//      Kartend-80h8o: that gate is QDir::exists, true only for
+//      directories, so a placeholder configured as a real image FILE
+//      silently resolved to empty in every layout.)
 //
 // The per-index memo lives in ItemWidgetFactory (cleared by the
 // setCollections / setCollectionContext setters); this function is the

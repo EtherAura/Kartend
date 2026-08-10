@@ -35,6 +35,7 @@ private slots:
   void placeholder_expandsCollectionVariableWithCollectionName();
   void placeholder_contextFallbackExpandsWithContextName();
   void placeholder_danglingPathResolvesEmpty();
+  void placeholder_directoryValueResolvesEmpty();
   void placeholder_allEmptyReturnsEmpty();
 
   // resolveSubcollectionTileArtwork precedence (Kartend-kb2vx)
@@ -71,6 +72,17 @@ void writeImage(const QString &path) {
   f.write("px");
 }
 
+/// Creates a FILE named @p name under @p root and returns its absolute path.
+/// Placeholder policy inputs must be files, not directories: the resolver
+/// validates with QFileInfo::isFile (Kartend-80h8o — the old QDir::exists
+/// gate was true only for directories, which is why these tests passing
+/// directories never caught real image files resolving to empty).
+QString makeImageFile(QTemporaryDir &root, const QString &name) {
+  const QString path = QDir(root.path()).absoluteFilePath(name);
+  writeImage(path);
+  return path;
+}
+
 /// Factory wired to @p filePaths / @p fileNames only — enough for the
 /// range-request surface, which never touches widgets.
 struct RangeHarness {
@@ -96,8 +108,11 @@ struct RangeHarness {
 void TestItemWidgetFactory::placeholder_ownCollectionValueWins() {
   QTemporaryDir root;
   QVERIFY(root.isValid());
-  const QString own = makeDir(root, QStringLiteral("own"));
-  const QString fallback = makeDir(root, QStringLiteral("fallback"));
+  // Real image FILES — the exact shape the feature ships (Kartend-80h8o):
+  // until that fix an existing file resolved to empty and the configured
+  // placeholder silently never rendered anywhere.
+  const QString own = makeImageFile(root, QStringLiteral("own.png"));
+  const QString fallback = makeImageFile(root, QStringLiteral("fallback.png"));
 
   QList<CollectionConfig> collections(1);
   collections[0].name = QStringLiteral("CollA");
@@ -111,7 +126,7 @@ void TestItemWidgetFactory::placeholder_ownCollectionValueWins() {
 void TestItemWidgetFactory::placeholder_inheritedFromParentWhenOwnEmpty() {
   QTemporaryDir root;
   QVERIFY(root.isValid());
-  const QString parentPlaceholder = makeDir(root, QStringLiteral("parent"));
+  const QString parentPlaceholder = makeImageFile(root, QStringLiteral("parent.png"));
 
   // Child (index 1) has no placeholder of its own; the parent-chain walk
   // must surface the parent's value.
@@ -130,7 +145,7 @@ void TestItemWidgetFactory::placeholder_inheritedFromParentWhenOwnEmpty() {
 void TestItemWidgetFactory::placeholder_contextFallbackWhenChainEmpty() {
   QTemporaryDir root;
   QVERIFY(root.isValid());
-  const QString fallback = makeDir(root, QStringLiteral("fallback"));
+  const QString fallback = makeImageFile(root, QStringLiteral("fallback.png"));
 
   QList<CollectionConfig> collections(1);
   collections[0].name = QStringLiteral("CollA"); // no placeholder anywhere
@@ -143,14 +158,14 @@ void TestItemWidgetFactory::placeholder_contextFallbackWhenChainEmpty() {
 void TestItemWidgetFactory::placeholder_expandsCollectionVariableWithCollectionName() {
   QTemporaryDir root;
   QVERIFY(root.isValid());
-  const QString expanded = makeDir(root, QStringLiteral("CollA"));
+  const QString expanded = makeImageFile(root, QStringLiteral("CollA.png"));
 
   // %collection% must expand with the INDEXED collection's name — not the
   // context's — when the index is valid.
   QList<CollectionConfig> collections(1);
   collections[0].name = QStringLiteral("CollA");
   collections[0].placeholderArtwork =
-      QDir(root.path()).absoluteFilePath(QStringLiteral("%collection%"));
+      QDir(root.path()).absoluteFilePath(QStringLiteral("%collection%.png"));
 
   QCOMPARE(ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(&collections, 0, QString(),
                                                                QStringLiteral("Ctx")),
@@ -160,12 +175,12 @@ void TestItemWidgetFactory::placeholder_expandsCollectionVariableWithCollectionN
 void TestItemWidgetFactory::placeholder_contextFallbackExpandsWithContextName() {
   QTemporaryDir root;
   QVERIFY(root.isValid());
-  const QString expanded = makeDir(root, QStringLiteral("CtxColl"));
+  const QString expanded = makeImageFile(root, QStringLiteral("CtxColl.png"));
 
   // Invalid index → the context placeholder is used AND its variables
   // expand with the context collection's name.
   const QString contextPlaceholder =
-      QDir(root.path()).absoluteFilePath(QStringLiteral("%collection%"));
+      QDir(root.path()).absoluteFilePath(QStringLiteral("%collection%.png"));
   QCOMPARE(ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(nullptr, -1, contextPlaceholder,
                                                                QStringLiteral("CtxColl")),
            expanded);
@@ -182,6 +197,21 @@ void TestItemWidgetFactory::placeholder_danglingPathResolvesEmpty() {
   collections[0].name = QStringLiteral("CollA");
   collections[0].placeholderArtwork =
       QDir(root.path()).absoluteFilePath(QStringLiteral("does-not-exist"));
+
+  QCOMPARE(ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(&collections, 0, QString(),
+                                                               QStringLiteral("Ctx")),
+           QString());
+}
+
+void TestItemWidgetFactory::placeholder_directoryValueResolvesEmpty() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+
+  // A directory is as unusable as a missing file for the QPixmap load this
+  // value feeds — it must resolve empty, not propagate (Kartend-80h8o).
+  QList<CollectionConfig> collections(1);
+  collections[0].name = QStringLiteral("CollA");
+  collections[0].placeholderArtwork = makeDir(root, QStringLiteral("a-directory"));
 
   QCOMPARE(ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(&collections, 0, QString(),
                                                                QStringLiteral("Ctx")),

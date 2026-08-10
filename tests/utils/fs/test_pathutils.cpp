@@ -7,6 +7,7 @@
 
 #include "pathutils.h"
 #include <QDir>
+#include <QFile>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
@@ -30,6 +31,12 @@ private slots:
   void testValidateAndExpandPath_withPlaceholder();
   void testValidateAndExpandPath_tildeExpansion();
   void testValidateAndExpandPath_tildeOnly();
+
+  // validateAndExpandFilePath tests (file-shaped counterpart, Kartend-80h8o)
+  void testValidateAndExpandFilePath_existingFile();
+  void testValidateAndExpandFilePath_directoryRejected();
+  void testValidateAndExpandFilePath_missingRelativeAndEmptyRejected();
+  void testValidateAndExpandFilePath_expandsPlaceholder();
 
   // %collection% substitution seam guard (Kartend-2ml9)
   void testExpandPathSeam_collectionNameGuard_data();
@@ -155,6 +162,53 @@ void TestPathUtils::testValidateAndExpandPath_tildeOnly() {
 
   QVERIFY2(result.isOk(), "~ alone should expand to home directory");
   QCOMPARE(result.value(), QDir::homePath());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// validateAndExpandFilePath (Kartend-80h8o) — same expansion as the directory
+// variant, but the existence gate is QFileInfo::isFile. The directory
+// variant's QDir::exists gate is FALSE for every file, which silently emptied
+// single-asset keys like placeholderArtwork.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestPathUtils::testValidateAndExpandFilePath_existingFile() {
+  const QString filePath = m_tempDir.path() + QStringLiteral("/asset.png");
+  QFile file(filePath);
+  QVERIFY(file.open(QIODevice::WriteOnly));
+  file.write("px");
+  file.close();
+
+  QCOMPARE(PathUtils::validateAndExpandFilePath(filePath), filePath);
+  // The exact case the directory variant gets wrong — pin the contrast so
+  // the two gates can never quietly converge.
+  QCOMPARE(PathUtils::validateAndExpandPath(filePath), QString());
+}
+
+void TestPathUtils::testValidateAndExpandFilePath_directoryRejected() {
+  const auto result = PathUtils::tryValidateAndExpandFilePath(m_tempDir.path());
+  QVERIFY2(result.isError(), "a directory is not a usable single-asset file");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::FileNotFound);
+}
+
+void TestPathUtils::testValidateAndExpandFilePath_missingRelativeAndEmptyRejected() {
+  QVERIFY(PathUtils::validateAndExpandFilePath(m_tempDir.path() + "/does-not-exist.png").isEmpty());
+  QVERIFY(PathUtils::validateAndExpandFilePath(QStringLiteral("relative/asset.png")).isEmpty());
+  QVERIFY(PathUtils::validateAndExpandFilePath(QString()).isEmpty());
+}
+
+void TestPathUtils::testValidateAndExpandFilePath_expandsPlaceholder() {
+  QDir tempDir(m_tempDir.path());
+  QVERIFY(tempDir.mkdir(QStringLiteral("FileColl")) || tempDir.exists(QStringLiteral("FileColl")));
+  const QString filePath = m_tempDir.path() + QStringLiteral("/FileColl/cover.png");
+  QFile file(filePath);
+  QVERIFY(file.open(QIODevice::WriteOnly));
+  file.write("px");
+  file.close();
+
+  QCOMPARE(PathUtils::validateAndExpandFilePath(m_tempDir.path() +
+                                                    QStringLiteral("/%collection%/cover.png"),
+                                                QStringLiteral("FileColl")),
+           filePath);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

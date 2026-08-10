@@ -93,6 +93,38 @@ QString expandPathWithoutExistenceCheck(const QString &path, const QString &coll
   return expandPath(path, collectionName);
 }
 
+Result<QString> tryValidateAndExpandFilePath(const QString &path, const QString &collectionName) {
+  const QString result = expandPath(path, collectionName);
+
+  if (result.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath, "Path is empty after expansion",
+                               "PathUtils::tryValidateAndExpandFilePath")
+        .withDetails(QString("Original: '%1', Collection: '%2'").arg(path, collectionName));
+  }
+
+  const QFileInfo info(result);
+  if (!info.isAbsolute()) {
+    return ErrorContext::error(ErrorCode::InvalidFilePath, "Path is not absolute",
+                               "PathUtils::tryValidateAndExpandFilePath")
+        .withDetails(QString("Path: '%1'").arg(result));
+  }
+
+  // isFile, not exists: a directory is as unusable as a missing file for a
+  // caller about to hand this to a file reader / image decoder.
+  if (!info.isFile()) {
+    return ErrorContext::error(ErrorCode::FileNotFound, "File does not exist",
+                               "PathUtils::tryValidateAndExpandFilePath")
+        .withDetails(QString("Path: '%1'").arg(result));
+  }
+
+  return info.absoluteFilePath();
+}
+
+QString validateAndExpandFilePath(const QString &path, const QString &collectionName) {
+  auto result = tryValidateAndExpandFilePath(path, collectionName);
+  return result.isOk() ? result.value() : QString();
+}
+
 Result<void> validatePathSecurity(const QString &path) {
   if (path.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidFilePath, "Path is empty",

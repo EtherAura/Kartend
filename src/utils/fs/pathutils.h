@@ -23,6 +23,18 @@ tryValidateAndExpandPath(const QString &path, const QString &collectionName = QS
 [[nodiscard]] QString expandPathWithoutExistenceCheck(const QString &path,
                                                       const QString &collectionName = QString());
 
+/// FILE-shaped counterparts of validateAndExpandPath (Kartend-80h8o): same
+/// `~` / `%collection%` expansion and absolute-path requirement, but the
+/// existence gate is QFileInfo::isFile. validateAndExpandPath's gate is
+/// QDir::exists — true only for DIRECTORIES — so routing a single-asset
+/// file key (placeholderArtwork, a background image…) through it silently
+/// resolves every real file to empty. Use these for config keys that name
+/// one file; keep validateAndExpandPath for directory keys.
+[[nodiscard]] QString validateAndExpandFilePath(const QString &path,
+                                                const QString &collectionName = QString());
+[[nodiscard]] ErrorUtils::Result<QString>
+tryValidateAndExpandFilePath(const QString &path, const QString &collectionName = QString());
+
 /// Validates that a path doesn't contain unsupported shell metacharacters, null
 /// bytes, newlines, backslashes, or a `..` traversal segment — characters that
 /// could enable command injection or let the path escape its intended directory
