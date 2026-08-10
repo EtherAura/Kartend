@@ -58,6 +58,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   descriptions. If it is interrupted, the next sync resumes exactly where
   it stopped instead of leaving those games bare forever.
 
+- **Two hard-to-describe glitches can now be traced instead of guessed at.**
+  Running with `KARTEND_PERF_TRACE=1` reports when Cover Flow rebuilds its
+  card list — including how much already-decoded artwork each rebuild throws
+  away — and which of the two automatic paths moved the selection, a restore
+  finishing late or attract mode advancing on its timer. Both are silent
+  unless asked for and cost nothing when off. They exist because "the covers
+  load in and out" and "the selection reverted" are almost impossible to
+  attribute by watching the screen: the trace names the culprit in a single
+  run (Kartend-i3mmq, Kartend-ic4h6).
+
 ### Changed
 
 - **Uses roughly half the memory during long sessions.** Three things were
