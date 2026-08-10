@@ -160,6 +160,9 @@ private slots:
   void mousePressOnEmptyCardsIgnored();
   void mouseDoubleClickEmptyCardsIgnored();
   void mouseDoubleClickRightButtonIgnored();
+
+  // Decoded artwork must reach the screen without a resize (Kartend-ce0b4)
+  void decodedArtworkReplacesThePlaceholderWithoutResizing();
 };
 
 void TestCoverFlowWidget::initTestCase() {
@@ -957,6 +960,58 @@ void TestCoverFlowWidget::mouseDoubleClickRightButtonIgnored() {
                 Qt::RightButton, Qt::RightButton, Qt::NoModifier);
   w.mouseDoubleClickEvent(&e);
   QCOMPARE(spy.count(), 0);
+}
+
+// Kartend-ce0b4: the scaled-pixmap cache was keyed on the card's artworkPath
+// while the pixmap being scaled was whatever pixmapForIndex returned — which
+// is the PLACEHOLDER until the async decode lands. The placeholder therefore
+// got cached under the real artwork's key, and every later paint hit that
+// entry and redrew it, discarding the decoded artwork. The art only appeared
+// once the card changed size (a selection move resizes it) and the key missed.
+//
+// Rendered end-to-end rather than asserted on internal state, because the
+// defect is precisely that the internal state (m_pixmapCache) was CORRECT
+// while the pixels were wrong — instrumenting the layer above is what led an
+// earlier investigation to blame the GPU (Kartend-hrgf5).
+void TestCoverFlowWidget::decodedArtworkReplacesThePlaceholderWithoutResizing() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString artPath = QDir(dir.path()).absoluteFilePath(QStringLiteral("cover.png"));
+  // A saturated, unmistakable source: no placeholder shade is pure red.
+  QImage art(120, 180, QImage::Format_ARGB32);
+  art.fill(QColor(255, 0, 0));
+  QVERIFY(art.save(artPath));
+
+  TestableCoverFlow w;
+  w.resize(800, 600);
+  CoverFlowCardData card;
+  card.title = QStringLiteral("Only");
+  card.artworkPath = artPath;
+  w.setCards({card});
+  w.setSelectedIndex(0, false);
+
+  const QPoint centre(w.width() / 2, w.height() / 2);
+
+  // First paint: the decode has not landed, so this draws the placeholder and
+  // (pre-fix) poisoned the cache entry for artPath.
+  QImage frame(w.size(), QImage::Format_ARGB32);
+  frame.fill(Qt::black);
+  w.render(&frame);
+
+  // Let the decode land. Nothing resizes the card in between — that is the
+  // whole point: no selection change, no resize, no setCards.
+  QTRY_VERIFY_WITH_TIMEOUT(w.pixmapCacheSize() >= 1, 5000);
+
+  // Repaint exactly as update() would. The centre of the widget sits inside
+  // the centred card, which carries no shear at offset 0.
+  frame.fill(Qt::black);
+  w.render(&frame);
+  const QColor drawn = frame.pixelColor(centre);
+
+  QVERIFY2(drawn.red() > 200 && drawn.green() < 80 && drawn.blue() < 80,
+           qPrintable(QStringLiteral("centre card drew %1 instead of the decoded artwork — the "
+                                     "scaled-pixmap cache is still serving a stale placeholder")
+                          .arg(drawn.name())));
 }
 
 QTEST_MAIN(TestCoverFlowWidget)
