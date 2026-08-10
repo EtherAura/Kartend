@@ -30,6 +30,11 @@ private slots:
   void tildeExpandsToHome();
   void collectionVariableExpandsWithCollectionName();
   void traversalUnsafeNameLeavesVariableLiteral();
+
+  // resolvedAssetPath — the generalised seam (Kartend-4wa6i) the icon
+  // resolver delegates to; background image/video and header logo route
+  // their raw config values through it.
+  void assetPathSharesTheIconSeamSemantics();
 };
 
 void TestCollectionUtilsIcon::emptyAndWhitespaceYieldEmpty() {
@@ -73,6 +78,22 @@ void TestCollectionUtilsIcon::traversalUnsafeNameLeavesVariableLiteral() {
   QCOMPARE(CollectionUtils::resolvedCollectionIcon(
                makeCollection("../../etc", "/srv/icons/%collection%.png")),
            QStringLiteral("/srv/icons/%collection%.png"));
+}
+
+void TestCollectionUtilsIcon::assetPathSharesTheIconSeamSemantics() {
+  // Same trim/expansion rules as the icon overload — pinned so the two can
+  // never drift apart (resolvedCollectionIcon is a delegate).
+  QCOMPARE(CollectionUtils::resolvedAssetPath(QString(), QStringLiteral("Films")), QString());
+  QCOMPARE(CollectionUtils::resolvedAssetPath(QStringLiteral("   "), QStringLiteral("Films")),
+           QString());
+  QCOMPARE(CollectionUtils::resolvedAssetPath(QStringLiteral("~/bg/wall.mp4"), QString()),
+           QDir::homePath() + QStringLiteral("/bg/wall.mp4"));
+  QCOMPARE(CollectionUtils::resolvedAssetPath(QStringLiteral("/srv/bg/%collection%.png"),
+                                              QStringLiteral("Films")),
+           QStringLiteral("/srv/bg/Films.png"));
+  QCOMPARE(CollectionUtils::resolvedCollectionIcon(makeCollection("Films", "~/icons/films.png")),
+           CollectionUtils::resolvedAssetPath(QStringLiteral("~/icons/films.png"),
+                                              QStringLiteral("Films")));
 }
 
 QTEST_MAIN(TestCollectionUtilsIcon)

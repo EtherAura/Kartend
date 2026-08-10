@@ -336,7 +336,10 @@ void MainWindow::showStartupSplash() {
     } else {
       videoOverlay->raise();
     }
-    if (videoOverlay->playVideo(m_generalSettings.startup.startupVideoPath)) {
+    // ~-expanded like every other single-asset path (Kartend-4wa6i); no
+    // %collection% here — this is a global setting with no collection scope.
+    if (videoOverlay->playVideo(PathUtils::expandPathWithoutExistenceCheck(
+            m_generalSettings.startup.startupVideoPath))) {
       videoOverlay->show();
       connect(videoOverlay, &StartupVideoOverlay::dismissed, this, [this]() {
         // The video can be dismissed while the window is tearing down; don't

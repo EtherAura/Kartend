@@ -3,6 +3,7 @@
 #include "collectionbackgroundcontroller.h"
 #include "backdropbluroverlay.h"
 #include "backgroundvideowidget.h"
+#include "collection/typehelpers.h"
 #include "headerlogooverlay.h"
 #include "itemwidget.h"
 #include "vignetteoverlay.h"
@@ -54,7 +55,10 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
     if (!m_backgroundVideo) {
       m_backgroundVideo = new BackgroundVideoWidget(viewport);
     }
-    m_backgroundVideo->setVideoPath(collection.background.backgroundVideo);
+    // Resolved through the shared single-asset seam so ~ / %collection%
+    // work here like every other configured path (Kartend-4wa6i).
+    m_backgroundVideo->setVideoPath(
+        CollectionUtils::resolvedAssetPath(collection.background.backgroundVideo, collection.name));
     // Lower so the scroll widget (and item grid) renders on top. show()
     // before lower() avoids a one-frame flash where it'd come up raised.
     m_backgroundVideo->show();
@@ -105,8 +109,9 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
     }
     }
     toolbarLayout->insertWidget(insertIndex, m_headerLogo);
-    m_headerLogo->setLogo(collection.background.headerLogoImage,
-                          collection.background.headerLogoPosition);
+    m_headerLogo->setLogo(
+        CollectionUtils::resolvedAssetPath(collection.background.headerLogoImage, collection.name),
+        collection.background.headerLogoPosition);
     m_headerLogo->show();
   } else if (m_headerLogo) {
     if (toolbarLayout) {
@@ -153,7 +158,8 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
     if (!m_toolbarBlur) {
       m_toolbarBlur = new BackdropBlurOverlay(m_itemsTopBar);
     }
-    QPixmap source(collection.background.backgroundImage);
+    QPixmap source(
+        CollectionUtils::resolvedAssetPath(collection.background.backgroundImage, collection.name));
     if (!source.isNull()) {
       m_toolbarBlur->setSource(source, collection.background.backdropBlurRadius);
       m_toolbarBlur->show();
@@ -189,7 +195,8 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
     // Background image mode. Parallax adjusts the vertical
     // position by `scrollValue * strength / 100` — strength 0 keeps the bg
     // locked (fully static), strength 100 makes it move at content speed.
-    QString imagePath = collection.background.backgroundImage;
+    QString imagePath =
+        CollectionUtils::resolvedAssetPath(collection.background.backgroundImage, collection.name);
     imagePath.replace("\\", "/");
     int parallaxOffset = 0;
     if (collection.background.wallpaperParallax && collection.background.parallaxStrength > 0 &&
@@ -337,7 +344,7 @@ void CollectionBackgroundController::applyParallaxOffset() {
   const int v = m_itemScrollArea->verticalScrollBar()->value();
   const int offset = (v * strength) / 100;
 
-  QString imagePath = c.background.backgroundImage;
+  QString imagePath = CollectionUtils::resolvedAssetPath(c.background.backgroundImage, c.name);
   imagePath.replace("\\", "/");
   const QString styleSheet = QString("QWidget { "
                                      "background-image: url(\"%1\"); "

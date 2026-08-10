@@ -83,19 +83,28 @@ namespace CollectionUtils {
                                                  const QString &uuid);
 
 /**
- * @brief Resolves @p collection's collectionIcon to a loadable image path:
- * trimmed, with `~` and `%collection%` expanded (Kartend-dkh90).
+ * @brief Resolves a user-typed single-asset path (an image or video FILE the
+ * config names directly) to a loadable path: trimmed, with `~` and
+ * `%collection%` expanded (Kartend-dkh90 / Kartend-4wa6i).
  *
- * The single shared seam for every collectionIcon consumer (Cover Flow card,
- * marquee banner, Grid/List subcollection tile) so a hand-edited INI or an
- * imported .kart manifest carrying `~/icons/foo.png` resolves the same
- * everywhere instead of silently rendering as no artwork in all three.
+ * The shared seam for every single-asset key — collectionIcon,
+ * background.backgroundImage / backgroundVideo / headerLogoImage — so a
+ * hand-edited INI, a theme preset, or an imported .kart manifest carrying
+ * `~/art/foo.png` resolves the same everywhere instead of silently rendering
+ * as nothing.
  *
  * Deliberately PathUtils::expandPathWithoutExistenceCheck, NOT
  * expandConfigVariables/validateAndExpandPath: those gate on QDir::exists(),
  * which is true only for DIRECTORIES, so they return empty for every real
- * image file (Kartend-80h8o). Missing files stay the consumers' problem —
- * each already tolerates a path that fails to load.
+ * file (Kartend-80h8o). Missing files stay the consumers' problem — each
+ * already tolerates a path that fails to load.
+ */
+[[nodiscard]] QString resolvedAssetPath(const QString &raw, const QString &collectionName);
+
+/**
+ * @brief resolvedAssetPath over @p collection's collectionIcon
+ * (Kartend-dkh90) — the seam Cover Flow cards, the marquee banner, and
+ * Grid/List subcollection tiles all resolve the icon through.
  */
 [[nodiscard]] QString resolvedCollectionIcon(const CollectionConfig &collection);
 

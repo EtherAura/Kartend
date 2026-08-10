@@ -122,6 +122,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layout kept the cross-hatch. Configured placeholder images now show up,
   and `~` and `%collection%` in the path work as the documentation always
   said (Kartend-80h8o).
+- **Background images, background videos, header logos, and the startup
+  video accept `~` paths now too.** The same class of problem as the two
+  fixes below: these four "single asset path" settings were used exactly
+  as typed, so a value written as `~/wallpapers/space.png` in a
+  hand-edited config or a theme preset silently showed nothing. All now
+  resolve `~` (and `%collection%`, for the per-collection three) through
+  the same shared rule as the collection icon (Kartend-4wa6i).
 - **Collection icons written with `~` or `%collection%` now resolve.** The
   `collectionIcon` path was used exactly as stored by all three places that
   render it — the Cover Flow card, the marquee banner, and the Grid/List

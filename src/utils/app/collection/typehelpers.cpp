@@ -44,12 +44,16 @@ const CollectionConfig *findByUuid(const QList<CollectionConfig> &collections,
   return idx < 0 ? nullptr : &collections[idx];
 }
 
-QString resolvedCollectionIcon(const CollectionConfig &collection) {
-  const QString raw = collection.collectionIcon.trimmed();
-  if (raw.isEmpty()) {
+QString resolvedAssetPath(const QString &raw, const QString &collectionName) {
+  const QString trimmed = raw.trimmed();
+  if (trimmed.isEmpty()) {
     return {};
   }
-  return PathUtils::expandPathWithoutExistenceCheck(raw, collection.name);
+  return PathUtils::expandPathWithoutExistenceCheck(trimmed, collectionName);
+}
+
+QString resolvedCollectionIcon(const CollectionConfig &collection) {
+  return resolvedAssetPath(collection.collectionIcon, collection.name);
 }
 
 QString effectiveCollectionType(int collectionIndex, const QList<CollectionConfig> &collections) {

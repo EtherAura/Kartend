@@ -158,7 +158,8 @@ void MarqueeController::updateMarqueeArtwork() {
       }
     }
     if (videoPath.isEmpty()) {
-      videoPath = (*m_collections)[collectionIndex].background.backgroundVideo;
+      const CollectionConfig &cfg = (*m_collections)[collectionIndex];
+      videoPath = CollectionUtils::resolvedAssetPath(cfg.background.backgroundVideo, cfg.name);
     }
     // Switching to video clears any image we were showing; drop the cached
     // path + in-flight decode so a later return to image mode re-pushes even
