@@ -5,6 +5,7 @@
 // would cost more than it saves.
 #include "firstrunwizard.h"
 
+#include <QCoreApplication> // Q_DECLARE_TR_FUNCTIONS
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGridLayout>
@@ -84,6 +85,16 @@ namespace {
 // plumbing only checks non-empty, not "is a real directory." Page-local
 // rather than at file scope because nothing else in the codebase needs it.
 class MediaFolderPage : public QWizardPage {
+  // Without this the page's nine strings are extracted under
+  // [MediaFolderPage] — the name lupdate sees — but looked up at runtime
+  // under [QWizardPage], the nearest Q_OBJECT ancestor, so a translation
+  // filed against the seed would never be found (Kartend-r4tno). Declaring
+  // the tr functions here pins the runtime context to the extracted one.
+  // Q_DECLARE_TR_FUNCTIONS rather than Q_OBJECT because the class declares
+  // no signals or slots of its own: completeChanged() is inherited, and the
+  // connect() calls below only use `this` as a context object.
+  Q_DECLARE_TR_FUNCTIONS(MediaFolderPage)
+
 public:
   explicit MediaFolderPage(QWidget *parent) : QWizardPage(parent) {
     setTitle(tr("Pick a media folder"));

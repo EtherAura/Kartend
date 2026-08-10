@@ -148,7 +148,28 @@ runs:
           echo "::warning::lupdate not found (qt6-l10n-tools missing from the lint dependencies?) — translation drift check skipped."
           exit 0
         fi
-        "$LUPDATE" -silent -recursive src -ts "$RUNNER_TEMP/kartend_fresh.ts"
+        # stderr to a file, then replayed: process substitution would race the
+        # grep below, and the warnings still belong in the job log.
+        "$LUPDATE" -silent -recursive src -ts "$RUNNER_TEMP/kartend_fresh.ts" \
+          2>"$RUNNER_TEMP/lupdate_stderr.txt"
+        cat "$RUNNER_TEMP/lupdate_stderr.txt" >&2
+
+        # Kartend-r4tno: "Class X lacks Q_OBJECT macro" is not cosmetic. lupdate
+        # files a class's strings under the name it sees, but a Q_OBJECT-less
+        # tr() resolves at runtime against the nearest Q_OBJECT ancestor, so the
+        # two disagree and a translator's work is never looked up. That is
+        # exactly what happened to MediaFolderPage, whose nine strings sat under
+        # [MediaFolderPage] while runtime asked [QWizardPage] — and it stayed
+        # hidden because four benign instances of the same warning were already
+        # scrolling past. Zero is the only count at which the next real one is
+        # visible, so hold the line here rather than trusting anyone to read it.
+        # Fix by declaring the context: Q_DECLARE_TR_FUNCTIONS(<name lupdate
+        # emits>) on the class, or Q_OBJECT when the class needs moc anyway.
+        if grep -q 'lacks Q_OBJECT macro' "$RUNNER_TEMP/lupdate_stderr.txt"; then
+          echo "::error::lupdate reports tr() in a class with no translation context — extracted and runtime contexts will disagree, so translations for these strings can never be found."
+          grep 'lacks Q_OBJECT macro' "$RUNNER_TEMP/lupdate_stderr.txt"
+          exit 1
+        fi
         # Kartend-376w7: the gate compares SOURCE STRINGS, not raw message
         # counts or (context, source) pairs. Different lupdate generations can
         # file the same string under different contexts — the runner's older

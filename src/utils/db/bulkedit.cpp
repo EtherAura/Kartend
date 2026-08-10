@@ -7,9 +7,15 @@ namespace BulkEdit {
 
 namespace {
 
-QString tr(const char *s) {
-  return QCoreApplication::translate("BulkEdit", s);
-}
+/// lupdate attributes a bare Tr::tr() in a namespace to a class it cannot find a
+/// Q_OBJECT on and warns; those warnings then mask a real context mismatch
+/// elsewhere (Kartend-r4tno — that is how MediaFolderPage stayed latent).
+/// Declaring the context on a struct keeps extraction and runtime agreeing on
+/// "BulkEdit" — exactly what the hand-written wrapper did — while giving lupdate
+/// something it recognises. Call sites read Tr::tr("…").
+struct Tr {
+  Q_DECLARE_TR_FUNCTIONS(BulkEdit)
+};
 
 /// Adds `tag` to the metadata's tag list, dedup case-insensitively.
 /// Returns true when the list actually changed.
@@ -121,25 +127,25 @@ QList<PendingChange> applyAction(Action action, const QString &parameter,
 QString actionLabel(Action action) {
   switch (action) {
   case Action::AddTag:
-    return tr("Add tag");
+    return Tr::tr("Add tag");
   case Action::RemoveTag:
-    return tr("Remove tag");
+    return Tr::tr("Remove tag");
   case Action::MarkPinned:
-    return tr("Pin to top");
+    return Tr::tr("Pin to top");
   case Action::UnmarkPinned:
-    return tr("Unpin");
+    return Tr::tr("Unpin");
   case Action::MarkHidden:
-    return tr("Hide");
+    return Tr::tr("Hide");
   case Action::UnmarkHidden:
-    return tr("Unhide");
+    return Tr::tr("Unhide");
   case Action::MarkContinueLater:
-    return tr("Mark continue later");
+    return Tr::tr("Mark continue later");
   case Action::UnmarkContinueLater:
-    return tr("Clear continue-later marker");
+    return Tr::tr("Clear continue-later marker");
   case Action::ClearRating:
-    return tr("Clear rating");
+    return Tr::tr("Clear rating");
   }
-  return tr("Unknown action");
+  return Tr::tr("Unknown action");
 }
 
 bool actionRequiresParameter(Action action) {

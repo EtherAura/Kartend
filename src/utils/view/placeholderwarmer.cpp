@@ -30,9 +30,15 @@ namespace {
 
 constexpr int MAX_REPORTED_FAILURES = 10;
 
-QString tr(const char *src) {
-  return QCoreApplication::translate("PlaceholderWarmer", src);
-}
+/// lupdate attributes a bare Tr::tr() in a namespace to a class it cannot find a
+/// Q_OBJECT on and warns; those warnings then mask a real context mismatch
+/// elsewhere (Kartend-r4tno — that is how MediaFolderPage stayed latent).
+/// Declaring the context on a struct keeps extraction and runtime agreeing on
+/// "PlaceholderWarmer" — exactly what the hand-written wrapper did — while giving lupdate
+/// something it recognises. Call sites read Tr::tr("…").
+struct Tr {
+  Q_DECLARE_TR_FUNCTIONS(PlaceholderWarmer)
+};
 
 /// Returns the artwork directory the warmer should target. The Artwork-tab
 /// panel passes the live line-edit value so unsaved edits still drive the
@@ -76,15 +82,15 @@ PreflightResult preflight(const CollectionConfig &collection,
 
   if (collection.mediaDirectory.isEmpty()) {
     out.error = PreflightError::EmptyMediaDirectory;
-    out.humanMessage = tr("This collection has no media folder configured. Set "
-                          "Configuration → Media Directory first.");
+    out.humanMessage = Tr::tr("This collection has no media folder configured. Set "
+                              "Configuration → Media Directory first.");
     return out;
   }
   const QString artworkPath = resolveArtworkDir(collection, artworkDirectoryOverride);
   if (artworkPath.isEmpty()) {
     out.error = PreflightError::EmptyArtworkDirectory;
-    out.humanMessage = tr("This collection has no artwork folder configured. Set "
-                          "Artwork → Artwork (or pick a folder via Browse) first.");
+    out.humanMessage = Tr::tr("This collection has no artwork folder configured. Set "
+                              "Artwork → Artwork (or pick a folder via Browse) first.");
     return out;
   }
 
@@ -92,8 +98,8 @@ PreflightResult preflight(const CollectionConfig &collection,
       PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
   if (out.resolvedMediaDirectory.isEmpty() || !QFileInfo(out.resolvedMediaDirectory).isDir()) {
     out.error = PreflightError::MediaDirectoryMissing;
-    out.humanMessage =
-        tr("Media folder does not exist or is not a directory:\n%1").arg(collection.mediaDirectory);
+    out.humanMessage = Tr::tr("Media folder does not exist or is not a directory:\n%1")
+                           .arg(collection.mediaDirectory);
     return out;
   }
 
@@ -104,24 +110,26 @@ PreflightResult preflight(const CollectionConfig &collection,
       PathUtils::expandPathWithoutExistenceCheck(artworkPath, collection.name);
   if (out.resolvedArtworkDirectory.isEmpty() || !QDir(out.resolvedArtworkDirectory).isAbsolute()) {
     out.error = PreflightError::ArtworkDirectoryNotWritable;
-    out.humanMessage = tr("Artwork folder is not a valid absolute path:\n%1").arg(artworkPath);
+    out.humanMessage = Tr::tr("Artwork folder is not a valid absolute path:\n%1").arg(artworkPath);
     return out;
   }
   if (!QDir().mkpath(out.resolvedArtworkDirectory)) {
     out.error = PreflightError::ArtworkDirectoryNotWritable;
-    out.humanMessage = tr("Could not create artwork folder:\n%1").arg(out.resolvedArtworkDirectory);
+    out.humanMessage =
+        Tr::tr("Could not create artwork folder:\n%1").arg(out.resolvedArtworkDirectory);
     return out;
   }
   if (!isDirectoryWritable(out.resolvedArtworkDirectory)) {
     out.error = PreflightError::ArtworkDirectoryNotWritable;
-    out.humanMessage = tr("Artwork folder is not writable:\n%1").arg(out.resolvedArtworkDirectory);
+    out.humanMessage =
+        Tr::tr("Artwork folder is not writable:\n%1").arg(out.resolvedArtworkDirectory);
     return out;
   }
 
   if (collection.extensions.isEmpty()) {
     out.error = PreflightError::NoExtensionsConfigured;
-    out.humanMessage = tr("This collection has no media file extensions configured. Set "
-                          "Configuration → Allowed Extensions first.");
+    out.humanMessage = Tr::tr("This collection has no media file extensions configured. Set "
+                              "Configuration → Allowed Extensions first.");
     return out;
   }
 
@@ -220,7 +228,8 @@ Result exportMissingPlaceholders(const CollectionConfig &collection,
     if (tilePngBytes.isEmpty()) {
       ++result.itemsFailed;
       if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
-        result.firstFailures.append(tr("%1: placeholder render returned null image").arg(fullPath));
+        result.firstFailures.append(
+            Tr::tr("%1: placeholder render returned null image").arg(fullPath));
       }
       continue;
     }
@@ -234,7 +243,7 @@ Result exportMissingPlaceholders(const CollectionConfig &collection,
     if (!written) {
       ++result.itemsFailed;
       if (result.firstFailures.size() < MAX_REPORTED_FAILURES) {
-        result.firstFailures.append(tr("%1: failed to write %2").arg(fullPath, outPath));
+        result.firstFailures.append(Tr::tr("%1: failed to write %2").arg(fullPath, outPath));
       }
       continue;
     }

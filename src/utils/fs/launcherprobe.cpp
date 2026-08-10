@@ -12,9 +12,15 @@ namespace LauncherProbe {
 
 namespace {
 
-QString tr(const char *s) {
-  return QCoreApplication::translate("LauncherProbe", s);
-}
+/// lupdate attributes a bare Tr::tr() in a namespace to a class it cannot find a
+/// Q_OBJECT on and warns; those warnings then mask a real context mismatch
+/// elsewhere (Kartend-r4tno — that is how MediaFolderPage stayed latent).
+/// Declaring the context on a struct keeps extraction and runtime agreeing on
+/// "LauncherProbe" — exactly what the hand-written wrapper did — while giving lupdate
+/// something it recognises. Call sites read Tr::tr("…").
+struct Tr {
+  Q_DECLARE_TR_FUNCTIONS(LauncherProbe)
+};
 
 KnownLauncher make(const char *binary, const char *displayName, Category category,
                    const char *params = "%1") {
@@ -98,17 +104,17 @@ QList<KnownLauncher> probeInstalled() {
 QString categoryLabel(Category category) {
   switch (category) {
   case Category::Video:
-    return tr("Video");
+    return Tr::tr("Video");
   case Category::Audio:
-    return tr("Audio");
+    return Tr::tr("Audio");
   case Category::Reader:
-    return tr("Reader");
+    return Tr::tr("Reader");
   case Category::Image:
-    return tr("Image viewer");
+    return Tr::tr("Image viewer");
   case Category::Emulator:
-    return tr("Emulator");
+    return Tr::tr("Emulator");
   }
-  return tr("Other");
+  return Tr::tr("Other");
 }
 
 } // namespace LauncherProbe
