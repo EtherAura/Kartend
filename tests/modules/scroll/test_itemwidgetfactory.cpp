@@ -42,6 +42,7 @@ private slots:
   void subTile_fallsBackToNamedImageInParentArtworkDir();
   void subTile_collectionIconWinsOverAPresentNamedImage();
   void subTile_whitespaceOnlyIconFallsThrough();
+  void subTile_iconExpandsCollectionVariable();
   void subTile_emptyWhenNeitherSourceResolves();
   void subTile_guardsOutOfRangeAndMissingInputs();
 
@@ -276,6 +277,25 @@ void TestItemWidgetFactory::subTile_whitespaceOnlyIconFallsThrough() {
   QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
                &collections, 0, QStringLiteral("Documentaries"), parentArt),
            named);
+}
+
+void TestItemWidgetFactory::subTile_iconExpandsCollectionVariable() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString icon = QDir(root.path()).absoluteFilePath(QStringLiteral("Documentaries.png"));
+  writeImage(icon);
+
+  QList<CollectionConfig> collections(1);
+  collections[0].name = QStringLiteral("Documentaries");
+  // A hand-edited INI or an imported .kart manifest can carry variables the
+  // Browse button never produces; the tile must resolve them like Cover Flow
+  // and the marquee now do (Kartend-dkh90).
+  collections[0].collectionIcon =
+      QDir(root.path()).absoluteFilePath(QStringLiteral("%collection%.png"));
+
+  QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
+               &collections, 0, QStringLiteral("Documentaries"), QString()),
+           icon);
 }
 
 void TestItemWidgetFactory::subTile_emptyWhenNeitherSourceResolves() {

@@ -82,6 +82,23 @@ namespace CollectionUtils {
 [[nodiscard]] const CollectionConfig *findByUuid(const QList<CollectionConfig> &collections,
                                                  const QString &uuid);
 
+/**
+ * @brief Resolves @p collection's collectionIcon to a loadable image path:
+ * trimmed, with `~` and `%collection%` expanded (Kartend-dkh90).
+ *
+ * The single shared seam for every collectionIcon consumer (Cover Flow card,
+ * marquee banner, Grid/List subcollection tile) so a hand-edited INI or an
+ * imported .kart manifest carrying `~/icons/foo.png` resolves the same
+ * everywhere instead of silently rendering as no artwork in all three.
+ *
+ * Deliberately PathUtils::expandPathWithoutExistenceCheck, NOT
+ * expandConfigVariables/validateAndExpandPath: those gate on QDir::exists(),
+ * which is true only for DIRECTORIES, so they return empty for every real
+ * image file (Kartend-80h8o). Missing files stay the consumers' problem —
+ * each already tolerates a path that fails to load.
+ */
+[[nodiscard]] QString resolvedCollectionIcon(const CollectionConfig &collection);
+
 } // namespace CollectionUtils
 
 #endif // KARTEND_COLLECTION_TYPEHELPERS_H

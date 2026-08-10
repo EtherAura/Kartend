@@ -44,8 +44,9 @@ namespace ItemWidgetFactoryHelpers {
 // decision, not a widget operation, and deserves testing without a widget
 // graph. Two sources, in order:
 //
-//   1. The CHILD's own `collectionIcon`, trimmed. An explicit per-collection
-//      choice, so it always wins.
+//   1. The CHILD's own `collectionIcon`, resolved through
+//      CollectionUtils::resolvedCollectionIcon (trim + `~` / `%collection%`
+//      expansion). An explicit per-collection choice, so it always wins.
 //   2. Otherwise an image named after the child in the PARENT's artwork
 //      directory (@p parentArtworkDirectory) — the convention that predates
 //      the collectionIcon key, resolved with the same name matching per-item
@@ -55,9 +56,9 @@ namespace ItemWidgetFactoryHelpers {
 // artwork. Grid and List were doing (2) only, which is why setting
 // collectionIcon on a subcollection appeared to do nothing there.
 //
-// The icon is used exactly as stored, with no path expansion, to match the
-// other two consumers of the key (CoverFlowController::buildCard and
-// MarqueeController). Unifying that is Kartend-dkh90.
+// All three consumers of the key (this, CoverFlowController::buildCard,
+// MarqueeController) resolve through the same shared seam, so an icon written
+// as `~/icons/films.png` renders in every layout or none (Kartend-dkh90).
 //
 // @p subcollectionName is the child's display name; empty input yields an
 // empty result rather than probing the directory for "".

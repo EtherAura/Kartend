@@ -109,6 +109,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Collection icons written with `~` or `%collection%` now resolve.** The
+  `collectionIcon` path was used exactly as stored by all three places that
+  render it — the Cover Flow card, the marquee banner, and the Grid/List
+  subcollection tile — so an icon configured in a hand-edited INI or an
+  imported `.kart` collection as `~/icons/films.png` silently rendered as no
+  artwork everywhere, even though the documentation promises `~` works for
+  asset paths. All three now resolve the icon through one shared rule:
+  trimmed, `~` expanded to your home folder, and `%collection%` replaced
+  with the collection's name — the same treatment other configured paths
+  get (Kartend-dkh90).
 - **A launcher collection's background metadata fetch no longer rebuilds
   the view you are looking at.** When the automatic Steam store-details
   fetch finished for an imported collection, the app refreshed whatever

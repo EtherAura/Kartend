@@ -566,7 +566,7 @@ CoverFlowCardData CoverFlowController::buildCard(int actualIndex, IDatabaseManag
       // artwork directory. Only the icon was read here, so a subcollection
       // following the naming convention — the mechanism that predates the
       // key — showed a placeholder in cover flow alone.
-      card.artworkPath = subCfg.collectionIcon.trimmed();
+      card.artworkPath = CollectionUtils::resolvedCollectionIcon(subCfg);
       if (card.artworkPath.isEmpty()) {
         // Cache-only, like every other lookup in this function: a cold miss
         // is picked up by the trailing retry rather than paid for with a

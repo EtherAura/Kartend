@@ -406,3 +406,13 @@ target_include_directories(test_collectionutils_cycles PRIVATE
   ${_kartend_collectionutils_test_includes}
 )
 
+# resolvedCollectionIcon — the shared collectionIcon seam (Kartend-dkh90)
+kartend_add_test(NAME CollectionUtilsIcon
+  SOURCES utils/app/test_collectionutils_icon.cpp
+          ${_kartend_collectionutils_test_sources}
+  LINK Qt6::Core Qt6::Widgets
+)
+target_include_directories(test_collectionutils_icon PRIVATE
+  ${_kartend_collectionutils_test_includes}
+)
+

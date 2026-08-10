@@ -1,6 +1,7 @@
 // Widget creation + media path resolution + artwork configuration cluster
 // split out from itemwidgetfactory.cpp.
 #include "collection/hierarchyhelpers.h"
+#include "collection/typehelpers.h"
 #include "itemwidgetfactory.h"
 
 #include "artworkutils.h"
@@ -202,10 +203,11 @@ QString ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(
 QString ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
     const QList<CollectionConfig> *collections, int subcollectionIndex,
     const QString &subcollectionName, const QString &parentArtworkDirectory) {
-  // 1. The child's own collectionIcon. Used as stored — see the header for
-  //    why no path expansion happens here (Kartend-dkh90).
+  // 1. The child's own collectionIcon, resolved through the shared seam all
+  //    three consumers use (Kartend-dkh90).
   if (collections && subcollectionIndex >= 0 && subcollectionIndex < collections->size()) {
-    const QString icon = collections->at(subcollectionIndex).collectionIcon.trimmed();
+    const QString icon =
+        CollectionUtils::resolvedCollectionIcon(collections->at(subcollectionIndex));
     if (!icon.isEmpty()) {
       return icon;
     }

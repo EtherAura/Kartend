@@ -328,7 +328,7 @@ Every collection key, grouped by purpose:
 | `videoDirectory` | path | empty | Folder of preview videos. |
 | `manualDirectory` | path | empty | Folder of per-item manuals. |
 | `extensions` | csv | empty | File extensions to scan. Empty = all. |
-| `collectionIcon` | path | empty | Tile icon when this collection is a subcollection. Absolute path; takes priority over the artwork-directory convention below. |
+| `collectionIcon` | path | empty | Tile icon when this collection is a subcollection. Absolute or `~`-prefixed, `%collection%` expands; takes priority over the artwork-directory convention below. |
 | `placeholderArtwork` | path | empty | Image for missing-artwork tiles. |
 
 ### Hierarchy

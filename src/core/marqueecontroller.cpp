@@ -4,6 +4,7 @@
 #include "applicationcontext.h"
 #include "artworkmanager.h"
 #include "collection/collectionconfig.h"
+#include "collection/typehelpers.h"
 #include "collection/validationhelpers.h"
 #include "extensionutils.h"
 #include "interactionmanager.h"
@@ -183,7 +184,7 @@ void MarqueeController::updateMarqueeArtwork() {
     // Collection Icon mode — the active collection's icon. Stable
     // even as the user scrolls so the marquee acts as a banner.
     if (!CollectionUtils::isValidIndex(collectionIndex, m_collections)) return;
-    artworkPath = (*m_collections)[collectionIndex].collectionIcon;
+    artworkPath = CollectionUtils::resolvedCollectionIcon((*m_collections)[collectionIndex]);
   }
 
   if (artworkPath.isEmpty()) {
