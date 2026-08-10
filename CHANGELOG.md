@@ -259,17 +259,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registering an overlay could leave the stacking table out of order, so a
   later restack put the wrong overlay on top.
 - The About box and the parent-collection *None* entry are translatable.
-- **Cover Flow no longer leaves covers blank until you click the item.** Cover
-  art is looked for in the artwork folder and then in each of its typed
-  sub-folders — `front`, `box`, `screenshot` and the rest, which is where
-  scraped covers actually land. Cover Flow decided an item simply had no
-  artwork as soon as the top-level folder had been read, but those
-  sub-folders are indexed separately and moments later, so a cover sitting in
-  `front` was written off before the folder holding it had been looked at.
-  The card then kept its placeholder until something else forced it to
-  re-check, which is why clicking around brought the art back. Cover Flow now
-  waits for every folder it would search, and asks for all of them to be
-  indexed up front instead of just the top level (Kartend-t4rjw).
+- **Cover Flow no longer writes an item off as artless before it has looked
+  everywhere.** Cover art is searched for in the artwork folder and then in
+  each of its typed sub-folders — `front`, `box`, `screenshot` and the rest,
+  which is where scraped covers actually land. Those sub-folders are indexed
+  separately from the top-level one and moments later, but Cover Flow decided
+  an item simply had no artwork as soon as the top-level folder was done, so a
+  cover sitting in `front` could be given up on before the folder holding it
+  had been read — after which nothing retried it. Cover Flow now waits for
+  every folder it would search, and asks for all of them to be indexed up
+  front instead of just the top level (Kartend-t4rjw).
 - **Double-clicking a thumbnail in Cover Flow's artwork strip now opens it full
   size.** The double click was passed to the covers behind the strip, which
   matched nothing there, so it did nothing at all. It now opens that exact
