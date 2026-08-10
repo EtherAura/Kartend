@@ -410,6 +410,17 @@ void VirtualScrollEngine::primeLayoutFor(const CollectionConfig &config) {
     m_owner->m_totalItems = m_owner->m_filterManager->isFiltered()
                                 ? m_owner->m_filterManager->filteredCount()
                                 : m_owner->m_dataManager->totalItemCount();
+    // Kartend-l66sn: if that clearFilter established (or refreshed) the
+    // artwork-only baseline, the pass may have run fail-open — over empty
+    // pre-sized rows, or against a cold artwork cascade. Arm the debounced
+    // refresh HERE, at the one place the baseline reliably comes into being:
+    // the data-arrival triggers cannot cover a store served entirely from
+    // the warm cache, and the refresh's own settled-retry loop takes it from
+    // this arming to the authoritative prune.
+    if (m_owner->m_filterManager->isFiltered() &&
+        m_owner->m_filterManager->currentFilter().isEmpty() && m_owner->m_baselineRefilterTimer) {
+      m_owner->m_baselineRefilterTimer->trigger();
+    }
   }
   int savedTotal = m_owner->m_totalItems;
   m_owner->m_totalItems = 0;

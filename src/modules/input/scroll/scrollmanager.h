@@ -297,6 +297,11 @@ private:
   void positionVirtualContainer();
   void cleanupVirtualContainer();
   void calculateVirtualMetrics();
+  // Re-runs the hideMissingArtwork artwork-only baseline against the
+  // now-loaded file paths and relayouts. Fired (debounced) from
+  // receiveItemsRange; no-op unless the baseline is the active filter
+  // (Kartend-l66sn).
+  void refreshHideMissingArtworkBaseline();
   void connectScrollEvents();
   void disconnectScrollEvents();
   void ensureWidgetForIndex(int visualIndex);
@@ -442,6 +447,13 @@ private:
   bool m_processingScrollChange = false; // Reentrancy guard for onScrollChanged
   TimerUtils::DebouncedTimer *m_userScrollIdleTimer = nullptr;
   TimerUtils::DebouncedTimer *m_prewarmIdleTimer = nullptr;
+  // Trailing-edge coalescer for refreshHideMissingArtworkBaseline(): a
+  // chunked load re-filters once per burst, not once per arrival
+  // (Kartend-l66sn).
+  TimerUtils::DebouncedTimer *m_baselineRefilterTimer = nullptr;
+  // Consecutive cold-cascade retries of the baseline refresh; reset when the
+  // cascade settles, capped by HIDE_MISSING_REFILTER_MAX_RETRIES.
+  int m_baselineRefilterRetries = 0;
   qint64 m_lastArtworkPrewarmTime = 0; // Debounce artwork directory prewarm
 
   // Initial scroll index for pre-positioning before widget creation

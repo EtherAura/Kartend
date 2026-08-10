@@ -30,6 +30,8 @@ private slots:
   void testSearchWithVirtualFoldersOffsetsMediaIndices();
   void testSearchMatchesVirtualFolderByDisplayName();
   void testHideMissingArtworkBaselineKeepsPrefixBands();
+  void testHideMissingArtworkKeepsUnloadedRowsVisible();
+  void testHideMissingArtworkColdCascadeFailsOpen();
   void testActualIndexRoundTripAcrossPrefixBands();
   void testUnifiedSortMapRemapsFilteredIndices();
 

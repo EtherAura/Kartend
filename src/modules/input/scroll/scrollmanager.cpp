@@ -221,6 +221,15 @@ ScrollManager::ScrollManager(QObject *parent) : IScrollManager(parent) {
     }
   });
 
+  // hideMissingArtwork baseline refresh — unloaded rows pass the filter as
+  // "artwork unknown" (Kartend-l66sn), so once their real paths stream in the
+  // baseline must be re-evaluated to hide the genuinely artless ones.
+  // Trailing-edge debounced: one refresh per chunk burst.
+  m_baselineRefilterTimer =
+      new TimerUtils::DebouncedTimer(UIConstants::Scroll::HIDE_MISSING_REFILTER_DEBOUNCE_MS, this);
+  connect(m_baselineRefilterTimer, &TimerUtils::DebouncedTimer::triggered, this,
+          &ScrollManager::refreshHideMissingArtworkBaseline);
+
   // Prewarm timer - replenishes widget pool after scroll activity settles
   m_prewarmIdleTimer =
       new TimerUtils::DebouncedTimer(UIConstants::Widget::Pool::PREWARM_IDLE_MS, this);

@@ -19,6 +19,7 @@
 #include "scrollmanager.h"
 #include "selectionoverlaymanager.h"
 #include "selectionstatetracker.h"
+#include "timerutils.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/scroll.h"
 #include "virtualcontainermanager.h"
@@ -210,7 +211,22 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
   // cards on every chunk — O(N) work × O(N/chunk) arrivals on the GUI
   // thread. updateCardsIfActive falls back to the full rebuild itself when
   // a filter is active or the card count changed.
-  m_coverFlow->updateCardsIfActive(updatedIndices);
+  // Kartend-l66sn: when the hideMissingArtwork baseline is the active filter,
+  // it was computed while these rows were still empty pre-sized entries,
+  // which pass it as "artwork unknown". Re-evaluate now that real paths
+  // landed — debounced to the trailing edge so a chunk burst re-filters
+  // once, not per arrival. The refresh ends in rebuildCardsIfActive(), so
+  // the per-arrival cover-flow update is skipped here: with a filter active
+  // it can only fall back to a full rebuildCards() anyway, and doing that
+  // per chunk wipes the widget's pixmap caches over and over — the visible
+  // "cards load in and out until the load settles" failure Kartend-i3mmq
+  // documents.
+  if (m_filterManager && m_filterManager->isFiltered() &&
+      m_filterManager->currentFilter().isEmpty() && m_baselineRefilterTimer) {
+    m_baselineRefilterTimer->trigger();
+  } else {
+    m_coverFlow->updateCardsIfActive(updatedIndices);
+  }
 }
 
 void ScrollManager::injectCachedItems(int startIndex, const QStringList &filePaths,
@@ -265,6 +281,14 @@ void ScrollManager::injectCachedItems(int startIndex, const QStringList &filePat
 
   // Trigger immediate update of visible widgets
   updateVirtualView();
+
+  // Kartend-l66sn: cached injection fills real paths without going through
+  // receiveItemsRange, so it needs the same baseline re-arm — rows that just
+  // gained a path may now be provably artless.
+  if (m_filterManager && m_filterManager->isFiltered() &&
+      m_filterManager->currentFilter().isEmpty() && m_baselineRefilterTimer) {
+    m_baselineRefilterTimer->trigger();
+  }
 }
 
 bool ScrollManager::getCurrentViewportForCache(int &startIndex, int &totalItems,
@@ -457,6 +481,19 @@ void ScrollManager::setupNormalVirtualScrolling() {
   positionVirtualContainer();
   if (m_virtualContainer) {
     m_virtualContainer->setVisible(true);
+  }
+
+  // Kartend-l66sn (second leg of the startup deadlock): the artwork-only
+  // baseline is typically computed BEFORE the store pre-sizes its rows, over
+  // a zero-length path list — leaving filteredIndices empty, which
+  // materializes zero widgets, which requests zero ranges, so the
+  // arrival-driven refresh below never gets its first arrival. Now that the
+  // store is sized, re-evaluate the baseline (no-op unless it is the active
+  // filter); under the empty-path-is-unknown rule every pre-sized row
+  // becomes visible, widgets materialize, and the load can start.
+  if (m_filterManager && m_filterManager->isFiltered() &&
+      m_filterManager->currentFilter().isEmpty() && m_baselineRefilterTimer) {
+    m_baselineRefilterTimer->trigger();
   }
 
   // Pre-warm widget pool during initial setup for smoother scrolling

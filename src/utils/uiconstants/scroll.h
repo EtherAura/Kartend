@@ -33,6 +33,20 @@ inline constexpr int COVER_FLOW_ARTWORK_RETRY_MS = 400;
 /// wedged or starved prewarm from re-arming the retry timer forever; the
 /// next rebuild / range-chunk arrival restores a fresh budget.
 inline constexpr int COVER_FLOW_ARTWORK_RETRY_MAX_ATTEMPTS = 10;
+/// Trailing-edge debounce for re-running the hideMissingArtwork baseline
+/// filter after item ranges stream in (Kartend-l66sn). Unloaded rows pass
+/// the filter as "artwork unknown", so the baseline computed at startup is
+/// too permissive until paths land; one re-evaluation per chunk burst hides
+/// the genuinely artless items without rebuilding the view (and, when cover
+/// flow is active, wiping its pixmap caches) once per arrival.
+inline constexpr int HIDE_MISSING_REFILTER_DEBOUNCE_MS = 300;
+/// Upper bound on consecutive baseline-refresh retries while the artwork
+/// lookup cascade is still cold (each retry is one debounce interval apart
+/// and schedules a prewarm). On a healthy system the cascade settles within
+/// one or two retries; the cap keeps a wedged prewarm from polling forever.
+/// Hitting it fails open — items stay visible, which is the same stance
+/// mediaItemHasArtwork takes for an unsettled cascade.
+inline constexpr int HIDE_MISSING_REFILTER_MAX_RETRIES = 20;
 /// Default user-configurable scroll velocity multiplier. 1.0 = unmodified.
 inline constexpr double DEFAULT_VELOCITY_MULTIPLIER = 1.0;
 /// Minimum configurable scroll velocity multiplier. Bounded so the

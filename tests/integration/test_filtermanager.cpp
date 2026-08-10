@@ -195,8 +195,13 @@ void TestFilterManager::testHideMissingArtworkBaselineKeepsPrefixBands() {
   }
   // mediaItemHasArtwork resolves through the DirectoryCache; warm it
   // synchronously so the lookup takes the cached-hit path the app sees after
-  // its prewarm pass instead of the queue-and-return-empty cold path.
-  ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artDir.path()});
+  // its prewarm pass instead of the queue-and-return-empty cold path. The
+  // FULL cascade, not just the root: since Kartend-l66sn an artless verdict
+  // is only authoritative once every directory the lookup would probe is
+  // warm — a root-only prewarm leaves the cascade unsettled and the filter
+  // fails open.
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
 
   FilterManager mgr;
   mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(), &seedOneSubcollection(),
@@ -216,6 +221,86 @@ void TestFilterManager::testHideMissingArtworkBaselineKeepsPrefixBands() {
 
   // Drop the temp directory's cached listing so later tests (and other
   // suites in this binary) don't see stale entries for a deleted path.
+  ArtworkUtils::DirectoryCache::instance().clear();
+}
+
+void TestFilterManager::testHideMissingArtworkKeepsUnloadedRowsVisible() {
+  QTemporaryDir artDir;
+  QVERIFY(artDir.isValid());
+  QFile art(artDir.filePath(QStringLiteral("Alpha.png")));
+  QVERIFY(art.open(QIODevice::WriteOnly));
+  art.write("x");
+  art.close();
+  // The FULL lookup cascade, not just the root: the artless verdict for Beta
+  // below is only authoritative once artworkKeySetSettled() holds, and that
+  // requires every directory the lookup would probe to be warm.
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+
+  // The store pre-sizes m_filePaths with EMPTY entries for rows whose chunk
+  // has not arrived yet. The baseline must treat those as "artwork unknown"
+  // and keep them visible: item ranges are only requested by widget
+  // creation, so hiding every unloaded row leaves zero widgets to request
+  // them and the collection deadlocks on "No items" (Kartend-l66sn).
+  // Static for the same setSourceData-lifetime reason as the file's seeds.
+  static const QStringList paths = {
+      QString(),                          // unloaded
+      QStringLiteral("/items/Alpha.bin"), // loaded, has artwork
+      QStringLiteral("/items/Beta.bin"),  // loaded, artless -> pruned
+      QString(),                          // unloaded
+  };
+  FilterManager mgr;
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  mgr.setHideMissingArtworkFilter(true, artDir.path());
+  QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+  mgr.clearFilter();
+
+  QVERIFY(mgr.isFiltered());
+  // Only the loaded-and-provably-artless row disappears.
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 1, 3}));
+  QCOMPARE(spy.count(), 1);
+  QCOMPARE(spy.at(0).at(0).toInt(), 3); // visible: 2 unknown + Alpha
+  QCOMPARE(spy.at(0).at(1).toInt(), 4); // total media
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+}
+
+void TestFilterManager::testHideMissingArtworkColdCascadeFailsOpen() {
+  QTemporaryDir artDir;
+  QVERIFY(artDir.isValid());
+  QFile art(artDir.filePath(QStringLiteral("Alpha.png")));
+  QVERIFY(art.open(QIODevice::WriteOnly));
+  art.write("x");
+  art.close();
+  // Deliberately NO prewarm: a freshly-opened collection filters before the
+  // DirectoryCache has scanned its artwork directory.
+  ArtworkUtils::DirectoryCache::instance().clear();
+
+  static const QStringList paths = {
+      QStringLiteral("/items/Alpha.bin"),
+      QStringLiteral("/items/Beta.bin"),
+  };
+  FilterManager mgr;
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  mgr.setHideMissingArtworkFilter(true, artDir.path());
+
+  // Cold cascade: an empty key set means "not scanned yet", not "artless" —
+  // condemning on it blanked whole collections at startup (Kartend-l66sn).
+  // Everything stays visible and the manager reports the cascade unsettled
+  // so the caller knows this pass was not authoritative.
+  mgr.clearFilter();
+  QVERIFY(!mgr.artworkKeySetSettled());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 1}));
+
+  // Once the cascade is warm the same call prunes authoritatively.
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+  mgr.clearFilter();
+  QVERIFY(mgr.artworkKeySetSettled());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
+
   ArtworkUtils::DirectoryCache::instance().clear();
 }
 
@@ -271,7 +356,11 @@ void TestFilterManager::testHideMissingArtworkResolvesSubdirAndFullNameKeys() {
     art.write("x");
     art.close();
   }
-  ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artDir.path()});
+  // Full cascade — Delta's pruning is only authoritative once every probed
+  // directory is warm (Kartend-l66sn); root-only leaves it unsettled and
+  // the filter fails open.
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
 
   static const QStringList paths = {
       QStringLiteral("/items/Alpha.bin"),

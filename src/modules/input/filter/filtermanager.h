@@ -111,6 +111,14 @@ public:
   void setHideMissingArtworkFilter(bool enabled, const QString &artworkDirectory);
 
   [[nodiscard]] bool hideMissingArtworkEnabled() const { return m_hideMissingArtwork; }
+  [[nodiscard]] QString hideMissingArtworkDirectory() const {
+    return m_hideMissingArtworkDirectory;
+  }
+  /// True when every directory in the artwork lookup cascade behind the
+  /// hideMissingArtwork key set is warm — i.e. a miss is a real "artless"
+  /// verdict, not a cold cache. While false, mediaItemHasArtwork fails open
+  /// (visible) and the caller should prewarm + retry (Kartend-l66sn).
+  [[nodiscard]] bool artworkKeySetSettled() const;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Filter operations
@@ -245,6 +253,9 @@ private:
   mutable quint64 m_artworkKeySetGeneration = 0;
   mutable QString m_artworkKeySetDirectory;
   mutable bool m_artworkKeySetValid = false;
+  // Whether the cascade backing m_artworkKeySet was fully cached when the
+  // set was built; stamped by ensureArtworkKeySet per generation.
+  mutable bool m_artworkKeySetSettled = false;
 };
 
 #endif

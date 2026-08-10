@@ -314,7 +314,15 @@ auto FilterManager::mediaItemHasArtwork(int mediaIndex) const -> bool {
   }
   const QString rawEntry = (*m_filePaths)[mediaIndex];
   if (rawEntry.isEmpty()) {
-    return false;
+    // An empty entry is a NOT-YET-LOADED row (the store pre-sizes with empty
+    // strings), not an artless item — and the distinction is load-bearing:
+    // item ranges are only ever requested by widget creation, so a baseline
+    // filter that hides every unloaded row leaves zero widgets to request
+    // them and the collection deadlocks on "No items" at startup
+    // (Kartend-l66sn). Keep the row visible as "unknown"; the debounced
+    // baseline refresh in ScrollManager::receiveItemsRange re-evaluates it
+    // once its real path has landed.
+    return true;
   }
   // Membership test against the precomputed artwork key set instead of the
   // per-item findArtworkForFileCached cascade (20 lock-guarded probes plus
@@ -323,6 +331,15 @@ auto FilterManager::mediaItemHasArtwork(int mediaIndex) const -> bool {
   // stripped stem and the full filename (an artwork file "Title.iso.png"
   // backs item "Title.iso" through the second key).
   ensureArtworkKeySet();
+  if (!m_artworkKeySetSettled) {
+    // The lookup cascade behind the key set has cold directories, so an
+    // empty result means "the cache has not caught up", not "artless" —
+    // condemning items on it hid entire freshly-opened collections
+    // (Kartend-l66sn), the same premature negative Kartend-t4rjw fixed for
+    // cover-flow tiles. Fail open; the baseline refresh re-runs once the
+    // prewarm settles and prunes authoritatively then.
+    return true;
+  }
   const QString fileName = QFileInfo(rawEntry).fileName();
   const QString baseName = QFileInfo(fileName).completeBaseName();
   if (m_artworkKeySet.contains(ArtworkUtils::baseMatchKey(baseName))) {
@@ -341,9 +358,19 @@ void FilterManager::ensureArtworkKeySet() const {
     return;
   }
   m_artworkKeySet = ArtworkUtils::buildArtworkKeySet(m_hideMissingArtworkDirectory);
+  // Settledness is stamped per generation alongside the set: any prewarm
+  // that warms the cascade bumps the generation, so the flag can only go
+  // stale in the direction that re-runs this rebuild (Kartend-l66sn).
+  m_artworkKeySetSettled = ArtworkUtils::DirectoryCache::instance().areDirectoriesCached(
+      ArtworkUtils::artworkLookupDirectories(m_hideMissingArtworkDirectory));
   m_artworkKeySetGeneration = generation;
   m_artworkKeySetDirectory = m_hideMissingArtworkDirectory;
   m_artworkKeySetValid = true;
+}
+
+auto FilterManager::artworkKeySetSettled() const -> bool {
+  ensureArtworkKeySet();
+  return m_artworkKeySetSettled;
 }
 
 void FilterManager::determineTargetCollections(int subcollectionIndex,

@@ -2,11 +2,16 @@
 // Operate on raw aliases (m_filterManager, m_dataManager,
 // m_preSearchStateManager) into m_dataSource.
 #include "applicationcontext.h"
+#include "artworkutils.h"
+#include "coverflowcontroller.h"
 #include "datasourcemanager.h"
 #include "filtermanager.h"
+#include "loggingcategories.h"
 #include "presearchstatemanager.h"
 #include "scrolldatamanager.h"
 #include "scrollmanager.h"
+#include "timerutils.h"
+#include "uiconstants/scroll.h"
 #include "widgetpoolmanager.h"
 #include <QScrollArea>
 #include <QScrollBar>
@@ -45,6 +50,81 @@ void ScrollManager::applyFilter(const QString &searchText) {
   }
 
   updateVirtualView();
+}
+
+void ScrollManager::refreshHideMissingArtworkBaseline() {
+  if (m_destroying || !m_filterManager || !m_dataManager) {
+    return;
+  }
+  // Only the artwork-only baseline (isFiltered with no filter text): an
+  // explicit search / subcollection filter owns m_filteredIndices and
+  // re-applies through its own entry points.
+  if (!m_filterManager->isFiltered() || !m_filterManager->currentFilter().isEmpty()) {
+    return;
+  }
+  if (m_isMutating) {
+    // A collection mutation is mid-flight — relayouting under it would race
+    // the mutation's own rebuild. The refresh isn't lost, just re-queued.
+    m_baselineRefilterTimer->trigger();
+    return;
+  }
+  // Re-push source pointers + context so the recompute sees the current
+  // store, then rebuild the artwork-only baseline against the now-loaded
+  // paths (unloaded rows passed as "unknown" — Kartend-l66sn).
+  m_filterManager->setSourceData(&m_dataManager->filePaths(), &m_dataManager->fileNames(),
+                                 &m_dataManager->filePathToDisplayName(),
+                                 &m_dataManager->subcollections(), &m_dataManager->virtualFolders(),
+                                 m_dataManager->unifiedConcatToActualMap());
+  m_filterManager->setContext(m_context);
+  // Sample settledness BEFORE the pass. The prewarm runs concurrently, so a
+  // post-pass sample can say "settled" for a pass that actually ran cold —
+  // which read as authoritative and left every fail-open row visible for
+  // good. Sampling first is race-safe in the direction that matters: the
+  // cascade only ever gets warmer, so a pre-pass "settled" can't be
+  // invalidated mid-pass (Kartend-l66sn).
+  const bool passIsAuthoritative = m_filterManager->artworkKeySetSettled();
+  m_filterManager->clearFilter();
+
+  qCDebug(lcPerfTrace) << "HideMissing baseline refresh: authoritative=" << passIsAuthoritative
+                       << "filteredCount=" << m_filterManager->filteredCount()
+                       << "storeCount=" << m_dataManager->totalItemCount()
+                       << "retries=" << m_baselineRefilterRetries;
+
+  // While the artwork lookup cascade is cold, the pass ran fail-open (every
+  // row visible — mediaItemHasArtwork's unsettled stance), so it is not the
+  // authoritative prune yet. Warm the cascade and re-arm; the settled pass
+  // then hides the genuinely artless items. Bounded so a wedged prewarm
+  // degrades to "filter off" instead of polling forever.
+  if (!passIsAuthoritative) {
+    ArtworkUtils::DirectoryCache::instance().schedulePrewarm(
+        ArtworkUtils::artworkLookupDirectories(m_filterManager->hideMissingArtworkDirectory()));
+    if (++m_baselineRefilterRetries <= UIConstants::Scroll::HIDE_MISSING_REFILTER_MAX_RETRIES) {
+      m_baselineRefilterTimer->trigger();
+    }
+  } else {
+    m_baselineRefilterRetries = 0;
+  }
+
+  m_totalItems = m_filterManager->isFiltered() ? m_filterManager->filteredCount()
+                                               : m_dataManager->totalItemCount();
+  calculateVirtualMetrics();
+  positionVirtualContainer();
+  // A newly-hidden row shifts every visual index after it, and active
+  // widgets are keyed by visual index — rebind wholesale rather than patch.
+  // Deliberately NO scrollbar reset: this fires mid-load, not on a user
+  // action, and yanking the viewport to the top would be visible.
+  for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
+    if (ItemWidget *widget = it.value()) {
+      releaseWidget(widget);
+    }
+  }
+  clearActiveWidgets();
+  updateVirtualView();
+  // The filtered index space changed wholesale; cover flow's incremental
+  // patch path cannot map it (no actual→visual reverse map when filtered).
+  if (m_coverFlow) {
+    m_coverFlow->rebuildCardsIfActive();
+  }
 }
 
 void ScrollManager::cleanupActiveWidgets() {
