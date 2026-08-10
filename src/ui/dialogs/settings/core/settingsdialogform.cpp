@@ -126,22 +126,7 @@ auto SettingsDialog::resolveUnsavedChanges(const QString &actionDescription,
     return false;
   }
   if (decision == QMessageBox::Save) {
-    if (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size()) {
-      handleSaveCollection(currentCollectionIndex, refreshTreeAfterSave);
-    } else if (checkGeneralSettingsChanges()) {
-      // No collection is selected, so handleSaveCollection (which persists
-      // general settings as part of its flow) can't run — but the prompt may
-      // have been raised by general-settings edits alone. Persist them here;
-      // otherwise choosing Save on the reject path silently dropped them.
-      // On failure keep the dialog open (same outcome as Cancel) so the user
-      // can retry instead of closing over unwritten settings.
-      if (auto result = saveGeneralSettingsFromUI(); result.isError()) {
-        ErrorDialog::showError(this, result.error());
-        return false;
-      }
-      updateSaveButtonStyle();
-    }
-    return true;
+    return commitUnsavedChanges(refreshTreeAfterSave);
   }
 
   // Discard covers everything the prompt asked about: the current collection
@@ -150,6 +135,31 @@ auto SettingsDialog::resolveUnsavedChanges(const QString &actionDescription,
   // persist the exact edits the user just chose to throw away.
   revertCurrentCollectionEdits();
   revertGeneralSettingsEdits();
+  return true;
+}
+
+auto SettingsDialog::commitUnsavedChanges(bool refreshTreeAfterSave) -> bool {
+  if (!hasUnsavedChanges()) {
+    m_collectionSaved = true;
+    return true;
+  }
+  if (currentCollectionIndex >= 0 && currentCollectionIndex < m_workingCollections.size()) {
+    handleSaveCollection(currentCollectionIndex, refreshTreeAfterSave);
+    return true;
+  }
+  if (checkGeneralSettingsChanges()) {
+    // No collection is selected, so handleSaveCollection (which persists
+    // general settings as part of its flow) can't run — but the edits may be
+    // general-settings ones alone. Persist them here; otherwise a Save on the
+    // reject path silently dropped them.
+    // On failure keep the dialog open (same outcome as Cancel) so the user
+    // can retry instead of closing over unwritten settings.
+    if (auto result = saveGeneralSettingsFromUI(); result.isError()) {
+      ErrorDialog::showError(this, result.error());
+      return false;
+    }
+    updateSaveButtonStyle();
+  }
   return true;
 }
 

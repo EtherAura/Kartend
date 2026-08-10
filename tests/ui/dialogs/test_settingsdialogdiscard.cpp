@@ -1,12 +1,18 @@
-// SettingsDialog unsaved-changes resolution for GENERAL settings: the
-// Save/Discard/Cancel prompt fires on the whole-struct general-settings
-// compare, but the Discard branch used to revert only the current collection
+// SettingsDialog unsaved-changes resolution for GENERAL settings.
+//
+// The Save/Discard/Cancel prompt fires on the whole-struct general-settings
+// compare, and its Discard branch used to revert only the current collection
 // row — accept() then unconditionally persisted the general-settings edits
 // the user had just chosen to throw away. Discard must reset the dialog's
-// working GeneralSettings to the dialog-open baseline (and refresh the
-// panels) so OK persists the baseline; Save must persist the edits on both
-// close paths, including when no collection is selected (where
-// handleSaveCollection can't run). Driven through a real SettingsDialog with
+// working GeneralSettings to the dialog-open baseline and refresh the panels.
+//
+// The prompt now belongs to the REJECT path only (Kartend-1g46b): OK means
+// "save and close", so it commits outright rather than asking a question it
+// has already been answered — and therefore can no longer end in Discard.
+// Save must still persist the edits on both close paths, including when no
+// collection is selected (where handleSaveCollection can't run).
+//
+// Driven through a real SettingsDialog with
 // a minimal QWidget+IMainWindow host and a counting ISettingsManager
 // injected via ApplicationContext; the prompts are answered by a
 // zero-interval modal driver. The dialog itself is never shown.
@@ -126,15 +132,15 @@ class TestSettingsDialogDiscard : public QObject {
   Q_OBJECT
 
 private slots:
-  void acceptDiscardPersistsBaselineNotTheDiscardedEdits();
-  void acceptSavePersistsDeferredGeneralEdits();
+  void acceptNoLongerOffersDiscard();
+  void acceptPersistsDeferredGeneralEditsWithoutPrompting();
   void rejectDiscardRevertsWithoutAnyDiskWrite();
   void rejectSaveWithNoCollectionSelectedPersistsGeneralEdits();
   void formerStubFieldsNowFlipUnsavedChanges();
   void renamingStartupTargetRemapsStoredNameAndCombo();
 };
 
-void TestSettingsDialogDiscard::acceptDiscardPersistsBaselineNotTheDiscardedEdits() {
+void TestSettingsDialogDiscard::acceptNoLongerOffersDiscard() {
   Harness h;
   auto *toggle = h.attractToggle();
   QVERIFY(toggle);
@@ -146,21 +152,25 @@ void TestSettingsDialogDiscard::acceptDiscardPersistsBaselineNotTheDiscardedEdit
   QCOMPARE(h.sm.saveCount, 0);
   QCOMPARE(h.host.settings.attract.attractModeEnabled, original);
 
-  // OK with unsaved changes → prompt → Discard. accept() still persists
-  // general settings, but it must now persist the BASELINE, not the edit.
+  // OK used to raise the unsaved-changes prompt, which meant it could end in
+  // Discard — throwing away edits from a button that says "save and close"
+  // (Kartend-1g46b). A driver armed for Discard now finds nothing to answer,
+  // and the edit is PERSISTED rather than reverted. Discarding is still
+  // available, on Cancel, where the question is genuinely open
+  // (rejectDiscardRevertsWithoutAnyDiskWrite covers that).
   ModalDriver driver(QMessageBox::Discard);
   h.dialog->accept();
-  QVERIFY(driver.triggered);
+  QVERIFY2(!driver.triggered, "OK offered Discard; it must commit, not ask");
   QCOMPARE(h.dialog->result(), static_cast<int>(QDialog::Accepted));
 
   QVERIFY(h.sm.saveCount >= 1);
-  QCOMPARE(h.sm.lastSaved.attract.attractModeEnabled, original);
-  QCOMPARE(h.host.settings.attract.attractModeEnabled, original);
-  // The panel widget was refreshed from the restored baseline too.
-  QCOMPARE(toggle->isChecked(), original);
+  QCOMPARE(h.sm.lastSaved.attract.attractModeEnabled, !original);
+  QCOMPARE(h.host.settings.attract.attractModeEnabled, !original);
+  // The edit stands in the panel too — nothing was reverted underneath it.
+  QCOMPARE(toggle->isChecked(), !original);
 }
 
-void TestSettingsDialogDiscard::acceptSavePersistsDeferredGeneralEdits() {
+void TestSettingsDialogDiscard::acceptPersistsDeferredGeneralEditsWithoutPrompting() {
   Harness h;
   auto *toggle = h.attractToggle();
   QVERIFY(toggle);
@@ -168,9 +178,10 @@ void TestSettingsDialogDiscard::acceptSavePersistsDeferredGeneralEdits() {
 
   toggle->setChecked(!original);
 
+  // The documented contract, now actually implemented: "OK saves and closes".
   ModalDriver driver(QMessageBox::Save);
   h.dialog->accept();
-  QVERIFY(driver.triggered);
+  QVERIFY2(!driver.triggered, "OK raised the unsaved-changes prompt; it should save and close");
   QCOMPARE(h.dialog->result(), static_cast<int>(QDialog::Accepted));
 
   QVERIFY(h.sm.saveCount >= 1);

@@ -300,6 +300,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   use it first, falling back as before to an image named after the
   subcollection sitting in the parent's artwork folder. That older convention
   is unchanged, and is now written down too (Kartend-kb2vx).
+- **OK in the Settings dialog now saves and closes instead of asking whether
+  you want to save.** With an edit pending, OK raised the "Save changes before
+  closing the dialog?" prompt — the one that belongs to Cancel. Pressing OK
+  already says to save, so the question was redundant, and one of its answers
+  was Discard, which throws away the edits the button was meant to keep.
+  Cancel still asks, which is where the question is genuinely open
+  (Kartend-1g46b).
 
 ## [0.0.18] - 2026-07-29
 
