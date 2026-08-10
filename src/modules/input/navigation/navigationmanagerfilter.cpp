@@ -143,10 +143,19 @@ void NavigationManager::forceRescanCollection(int collectionIndex) {
     QObject::disconnect(m_cacheInvalidatedConnection);
   }
 
-  // Connect one-shot handler to proceed after cache invalidation completes
+  // Connect one-shot handler to proceed after cache invalidation completes.
+  // One-shot for OUR uuid, not for the first invalidation of anything: the
+  // signal is shared, and a background launcher-enrichment refresh
+  // invalidates OTHER collections' caches (Kartend-xkdxn's fix made that a
+  // routine occurrence). Firing on one of those would reload before this
+  // rescan's cache is actually cleared — the rescan would silently serve
+  // stale rows (Kartend-1fhgz).
   m_cacheInvalidatedConnection =
       QObject::connect(databaseMgr(), &DatabaseManager::cacheInvalidated, this,
-                       [this](const QString & /*invalidatedUuid*/) {
+                       [this, uuid](const QString &invalidatedUuid) {
+                         if (invalidatedUuid != uuid) {
+                           return; // someone else's invalidation — keep waiting
+                         }
                          // Disconnect immediately to ensure one-shot behavior
                          QObject::disconnect(m_cacheInvalidatedConnection);
                          m_cacheInvalidatedConnection = {};

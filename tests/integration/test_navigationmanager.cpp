@@ -3,8 +3,10 @@
 #include "applicationmanager.h"
 #include "collection/collectionconfig.h"
 #include "collection/hierarchyhelpers.h"
+#include "collection/typehelpers.h"
 #include "emptystatewidget.h"
 #include "errorutils.h"
+#include "idatabasemanager.h"
 #include "interactionmanager.h"
 #include "isettingsmanager.h"
 #include "mainwindow.h"
@@ -16,6 +18,7 @@
 #include "navigationstackmanager.h"
 #include "selectionmanager.h"
 #include "sessionmanager.h"
+#include "settingsutils.h"
 
 #include <QCoreApplication>
 #include <QEvent>
@@ -471,4 +474,42 @@ void TestNavigationManager::testBoundaryPersistWritesSessionStoreForRestore() {
   const QString key =
       CollectionUtils::selectionSessionKeyFor(win->m_collections[0], win->m_collections);
   QCOMPARE(session->getLastSelectedIndex(key), 42);
+}
+
+// Kartend-1fhgz: the rescan's cacheInvalidated wait was one-shot for the
+// FIRST invalidation of anything — but the signal is shared, and since
+// Kartend-xkdxn a background launcher enrichment routinely invalidates
+// OTHER collections' caches. Firing on one of those ran the reload before
+// this rescan's cache was actually cleared, silently serving stale rows.
+// The handler must hold until ITS uuid echoes back.
+void TestNavigationManager::testForceRescanWaitsForItsOwnCacheInvalidation() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  auto *appMgr = win->getApplicationManager();
+  NavigationManager *nav = appMgr->getNavigationManager();
+  auto *db = appMgr->getDatabaseManager();
+  QVERIFY(nav);
+  QVERIFY(db);
+
+  win->m_collections.append(makeCollectionStub(QStringLiteral("Films")));
+  win->m_currentCollectionIndex = 0;
+  win->rebuildHierarchyCache();
+
+  // The mock's invalidateCollectionCache is a no-op, so nothing echoes on
+  // its own — the test controls exactly which invalidation arrives when.
+  nav->forceRescanCollection(0);
+  QCOMPARE(nav->pendingRescanCollectionIndexForTesting(), 0);
+
+  // A DIFFERENT collection's invalidation lands first (the Kartend-xkdxn
+  // background-enrichment case). The pending rescan must survive it.
+  emit db->cacheInvalidated(QStringLiteral("not-our-uuid"));
+  QCOMPARE(nav->pendingRescanCollectionIndexForTesting(), 0);
+
+  // Our own uuid — derived exactly as forceRescanCollection derives it —
+  // consumes the wait and hands off to the reload.
+  const CollectionConfig &cfg = win->m_collections[0];
+  const QString uuid = CollectionUtils::computeCollectionUuid(
+      cfg.name, SettingsUtils::expandConfigVariables(cfg.mediaDirectory, cfg.name));
+  emit db->cacheInvalidated(uuid);
+  QCOMPARE(nav->pendingRescanCollectionIndexForTesting(), -1);
 }

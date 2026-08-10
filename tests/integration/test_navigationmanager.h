@@ -50,6 +50,11 @@ private slots:
   void testBreadcrumbLinksDriveSubfolderNavigation();
   // Kartend-ic4h6
   void testBoundaryPersistWritesSessionStoreForRestore();
+
+  // Kartend-1fhgz: forceRescanCollection's one-shot cacheInvalidated wait
+  // must ignore OTHER collections' invalidations (routine background noise
+  // since Kartend-xkdxn) and fire only on its own uuid's echo.
+  void testForceRescanWaitsForItsOwnCacheInvalidation();
 };
 
 #endif // KARTEND_TESTS_TEST_NAVIGATIONMANAGER_H

@@ -122,6 +122,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layout kept the cross-hatch. Configured placeholder images now show up,
   and `~` and `%collection%` in the path work as the documentation always
   said (Kartend-80h8o).
+- **A manual rescan can no longer be short-circuited by background
+  activity.** "Rescan collection" waits for its cache to actually clear
+  before reloading; it used to proceed on the first cache-clear
+  notification from *any* collection — such as a launcher collection's
+  background metadata refresh finishing at that moment — and could then
+  quietly reload the old, uncleared data instead of rescanning. It now
+  waits for its own collection's clear specifically (Kartend-1fhgz).
 - **Background images, background videos, header logos, and the startup
   video accept `~` paths now too.** The same class of problem as the two
   fixes below: these four "single asset path" settings were used exactly

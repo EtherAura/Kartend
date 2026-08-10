@@ -131,6 +131,16 @@ public:
   void restoreSelectionForCurrentCollection();
   void setupReferences(const NavigationManagerSetup &setup);
 
+  /// Kartend-1fhgz test seam (same precedent as CacheManager's *ForTesting
+  /// accessors): the collection index a forceRescanCollection() is still
+  /// holding while it waits for ITS uuid's cacheInvalidated echo, -1 when
+  /// none. Lets a test pin that a foreign collection's invalidation (routine
+  /// since Kartend-xkdxn's background enrichment) does not consume the
+  /// pending rescan.
+  [[nodiscard]] int pendingRescanCollectionIndexForTesting() const {
+    return m_pendingRescanCollectionIndex;
+  }
+
 public slots:
   bool showCollectionItems(int collectionIndex) override;
   void navigateWithSharedItems(int collectionIndex);
