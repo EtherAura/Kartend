@@ -283,6 +283,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the only one that worked in Grid until recently — showed the generated
   placeholder there. Both layouts now do both steps, in the same order
   (Kartend-5dhlv).
+- **Cover Flow covers now appear as soon as they load, instead of staying
+  blank until you move the selection.** Covers are decoded in the background,
+  and a card shows a placeholder while that happens. The resized copy of that
+  placeholder was being filed under the cover's own name, so once the real
+  cover arrived the card kept finding — and drawing — the placeholder instead.
+  Moving the selection resizes the card, which asked for a differently-sized
+  copy and finally showed the artwork; that is why it looked like the covers
+  were waiting for a click. The same mix-up applied to the artwork variants in
+  the strip along the bottom (Kartend-ce0b4).
 
 ## [0.0.18] - 2026-07-29
 

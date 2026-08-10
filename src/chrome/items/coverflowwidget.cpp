@@ -550,7 +550,8 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
     if (videoCovering && c.index == m_selectedIndex && std::abs(c.offset) < 0.5) {
       continue;
     }
-    QPixmap pm = const_cast<CoverFlowWidget *>(this)->pixmapForIndex(c.index);
+    QString pmSourcePath;
+    QPixmap pm = const_cast<CoverFlowWidget *>(this)->pixmapForIndex(c.index, &pmSourcePath);
     if (pm.isNull()) {
       continue;
     }
@@ -572,7 +573,7 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
     QPixmap scaled;
     QSize scaledDrawSize;
     bool useFastTransform = false;
-    renderCardPixmap(painter, c, pm, scaled, scaledDrawSize, useFastTransform);
+    renderCardPixmap(painter, c, pm, pmSourcePath, scaled, scaledDrawSize, useFastTransform);
 
     // Reflection underneath (a flipped, faded copy) for the iTunes look —
     // only for the center-ish band to keep paint cost low.
@@ -609,8 +610,8 @@ void CoverFlowWidget::paintEvent(QPaintEvent * /*event*/) {
 }
 
 void CoverFlowWidget::renderCardPixmap(QPainter &painter, const CardLayout &c, const QPixmap &pm,
-                                       QPixmap &scaled, QSize &scaledDrawSize,
-                                       bool &useFastTransform) {
+                                       const QString &sourcePath, QPixmap &scaled,
+                                       QSize &scaledDrawSize, bool &useFastTransform) {
   const qreal absDelta = std::abs(c.offset);
   qreal opacity = 1.0;
   if (absDelta > 0.001) {
@@ -644,28 +645,41 @@ void CoverFlowWidget::renderCardPixmap(QPainter &painter, const CardLayout &c, c
   // lookup + drawPixmap; only the first paint after a size change scales
   // the source on the main thread, and the worker delivers the cached
   // entry before the next paint (Kartend-g6ft).
-  const QString &cardPath = m_cards[c.index].artworkPath;
   const QSize cardSize = c.rect.size();
-  // Kartend-el0fr: struct key — no per-frame string concatenation per card.
-  const CoverFlowScaledKey scaledKey{cardPath, cardSize.width(), cardSize.height()};
   useFastTransform = false;
-  if (auto it = m_scaledPixmapCache.constFind(scaledKey); it != m_scaledPixmapCache.constEnd()) {
-    scaled = it.value();
+  // Kartend-ce0b4: key on what @p pm ACTUALLY is, not on the card's
+  // artworkPath. Those differ whenever pixmapForIndex handed back a
+  // placeholder because the decode had not landed yet — and they also differ
+  // for the gallery override. Keying on artworkPath cached the placeholder
+  // under the real artwork's key; the decode then completed, update() fired,
+  // and every subsequent paint HIT that entry and redrew the placeholder,
+  // discarding the real pixmap. The art only appeared once the card changed
+  // SIZE (a selection move resizes it), which changed the key and forced a
+  // miss — exactly the reported "not visible until the selection changes".
+  //
+  // A placeholder is never cached at all: it carries no path to key on, it is
+  // cheap to draw, and buildPlaceholderPixmap already memoizes the unscaled
+  // one. Skipping it also keeps pruneScaledPixmapCache's keep-set (built from
+  // card artwork paths) from evicting entries it cannot account for.
+  //
+  // KeepAspectRatio on the miss path: the on-disk source pm may be wider or
+  // taller than the card slot, so compute what its target size would be and
+  // let the painter scale at draw time with FastTransformation (cheap
+  // nearest-neighbour) while a worker delivers the Smooth entry for the next
+  // paint (Kartend-g6ft). Briefly slightly pixelated; sub-frame in practice.
+  const CoverFlowScaledKey scaledKey{sourcePath, cardSize.width(), cardSize.height()};
+  const auto cacheIt = sourcePath.isEmpty() ? m_scaledPixmapCache.constEnd()
+                                            : m_scaledPixmapCache.constFind(scaledKey);
+  if (cacheIt != m_scaledPixmapCache.constEnd()) {
+    scaled = cacheIt.value();
     scaledDrawSize = scaled.size();
   } else {
     scaled = pm;
-    // KeepAspectRatio: the on-disk source pm may be wider or taller than
-    // the card slot. Compute what its target size would be so target
-    // rects line up the same way pm.scaled() would have produced.
     scaledDrawSize = pm.size().scaled(cardSize, Qt::KeepAspectRatio);
-    // On miss, the painter would scale the source pm at draw time using
-    // SmoothPixmapTransform — that's the slow path we're trying to defer.
-    // Render this frame with FastTransformation (cheap nearest-neighbour)
-    // and let the worker deliver a Smooth-scaled cache entry for the next
-    // paint (Kartend-g6ft). The cards briefly look slightly pixelated
-    // until the worker finishes; sub-frame perceptible in practice.
     useFastTransform = true;
-    requestScaledPixmap(scaledKey, pm, cardSize);
+    if (!sourcePath.isEmpty()) {
+      requestScaledPixmap(scaledKey, pm, cardSize);
+    }
   }
 
   // The outer painter.save() at the top of this card iteration captures
