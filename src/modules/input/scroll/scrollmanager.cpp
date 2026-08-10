@@ -576,6 +576,20 @@ void ScrollManager::onVisualIndexForPathLoaded(int visualIndex, const QString &f
         return;
       }
     }
+    // Kartend-ic4h6: this is an ASYNC database callback. Its only guard is
+    // that the resolved path still matches the one requested — nothing checks
+    // whether the user (or attract mode) has moved the selection while the
+    // query was in flight, so a late restore silently overrides a newer
+    // selection. Log what it is overriding so a "selection reverted" sighting
+    // can be attributed rather than guessed at.
+    if (lcPerfTrace().isDebugEnabled()) {
+      const int current = m_selectionState ? m_selectionState->lastSelectedIndex() : -1;
+      qCDebug(lcPerfTrace) << "Selection RESTORE-BY-PATH applying index=" << adjustedIndex
+                           << "path=" << filePath << "| selection at this moment=" << current
+                           << (current >= 0 && current != adjustedIndex
+                                   ? "<-- OVERRIDING A DIFFERENT SELECTION"
+                                   : "");
+    }
     emit selectItemByIndex(adjustedIndex);
   }
 }

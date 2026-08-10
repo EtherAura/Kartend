@@ -3,6 +3,7 @@
 // scrolls through the collection, reversing at top/bottom boundaries.
 // Any user interaction immediately stops the autoscroll.
 #include "attractmanager.h"
+#include "loggingcategories.h"
 
 #include <QApplication>
 
@@ -394,6 +395,13 @@ void AttractManager::onAdvanceSelectionTick() {
   // already cleared m_drivingSelection, the guard reads false, and attract mode
   // stops itself on its first tick.
   const auto guard = qScopeGuard([this]() { m_drivingSelection = false; });
+  // Kartend-ic4h6: attract mode moving the selection is indistinguishable from
+  // a spurious revert when you are looking at the screen rather than the code.
+  // Say so explicitly, so one instrumented run separates "attract advanced" from
+  // "something put the old selection back".
+  if (lcPerfTrace().isDebugEnabled()) {
+    qCDebug(lcPerfTrace) << "Selection ATTRACT-DRIVEN advance to index=" << next;
+  }
   emit requestSelectIndex(next);
 
   // Enforce the b93at invariant in debug builds: if the selection actually moved
