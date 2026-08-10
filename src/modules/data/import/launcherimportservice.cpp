@@ -692,6 +692,11 @@ auto makeCollectionConfig(const QString &sourceId, ImportScope scope) -> Collect
 
   if (sourceId == QLatin1String(kSourceFlatpak)) {
     c.name = QStringLiteral("Flatpak Games");
+    // Pin the Flathub scraper (Kartend-2bzbu), mirroring the Steam pin
+    // above: it resolves each stub's exact app id, so a scrape fills
+    // descriptions with no name-matching risk — these apps are on neither
+    // ScreenScraper nor the Steam store.
+    c.scraperOverrides.scraperProviderId = QStringLiteral("flathub");
     // argv-style target: `flatpak run <app-id>`.
     c.launcher.launcherPath = QStringLiteral("flatpak");
     c.launcher.launchParameters = QStringLiteral("run %1");

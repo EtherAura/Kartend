@@ -1,4 +1,5 @@
 target_sources(kartend_data PRIVATE
+  flathubprovider.cpp
   metadataproviderregistry.cpp
   musicbrainzprovider.cpp
   openlibraryprovider.cpp
@@ -15,6 +16,7 @@ target_sources(kartend_data PRIVATE
   steamstoreprovider.cpp
   tmdbprovider.cpp
   websearchprovider.cpp
+  flathubprovider.h
   metadatalookupprovider.h
   metadataprovider.h
   metadataproviderregistry.h

@@ -222,6 +222,15 @@ kartend_add_test(NAME SteamStoreParser
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Flathub appstream parser + provider identity (Kartend-2bzbu): appstream
+# JSON → ScrapedItem (string timestamps, summary fallback, "Game" genre
+# noise), null/{} → not-found, and the synchronous no-network lookup paths
+# (app-id-shaped query, .kartlink stub target).
+kartend_add_test(NAME FlathubParser
+  SOURCES modules/scraper/test_flathubparser.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # Provider request-construction tests (searchUrl building + metadata) for
 # the API-backed providers and the generic WebSearchProvider. Qt6::Network
 # arrives transitively via kartend_utils — the provider ctors touch

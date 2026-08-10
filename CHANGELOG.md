@@ -30,7 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   account or key needed; because every imported game knows its exact Steam
   app id, it never mismatches a title the way name-based scraping can. Both
   passes are fill-missing, so re-importing costs nothing and never
-  overwrites art or fields you already have.
+  overwrites art or fields you already have. Flatpak games get the same
+  automatic background pass from **Flathub** — description, developer,
+  genre, release date, and licence, resolved by exact app id — so apps that
+  no game database has ever heard of still arrive with a filled-in details
+  pane, and a Flatpak collection stays pinned to the Flathub scraper for
+  later manual scrapes.
 
 - **Steam imports can reach past the games you have installed.** A new
   choice in the import dialog decides how much of the library to bring in:

@@ -96,6 +96,19 @@ launcher collection, the "What to scrape" boxes come pre-ticked with what
 the store actually supplies — cover, screenshot, background, and video —
 rather than the disc-and-box set used for file collections.
 
+## Metadata (Flatpak)
+
+Flatpak games get the same treatment from **Flathub**, the store that
+published them. Right after an import or sync, Kartend fetches each app's
+description, developer, genre, latest-release date, and licence from
+Flathub's public catalogue in the background — no account, no API key, and
+no name-guessing, because every stub carries its exact Flatpak app id.
+It's the same fill-missing rule as Steam: hand-edited fields keep their
+values and their attribution. The collection stays pinned to the
+**Flathub** scraper for later manual scrapes. Flathub supplies text only;
+covers come from the app's own exported icon, which the import already
+copies.
+
 ## Artwork
 
 Imported artwork lands in the collection's artwork folder using the same

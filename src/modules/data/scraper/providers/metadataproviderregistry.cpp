@@ -9,6 +9,7 @@
 #include <QHash>
 
 #include "collection/collectionconfig.h"
+#include "flathubprovider.h"
 #include "metadatalookupprovider.h"
 #include "metadataprovider.h"
 #include "musicbrainzprovider.h"
@@ -155,6 +156,23 @@ const std::vector<ProviderSpec> &providerSpecs() {
                     // hand-run scrape look like a no-op (Kartend-6e90v).
                     .defaultMediaTypes = {QStringLiteral("front"), QStringLiteral("screenshot"),
                                           QStringLiteral("background"), QStringLiteral("video")}});
+    // Flathub AppStream (Kartend-2bzbu): key-less; text metadata for
+    // Flatpak apps, which no other provider carries. Placed after steam
+    // for the same reason steam sits after screenscraper — launcher-import
+    // Flatpak collections pin scraperProviderId="flathub" explicitly, and
+    // the provider resolves .kartlink stubs to exact app ids. Metadata
+    // only (the import copies the app's exported icon as the cover), so
+    // the curated tick set is empty and the grid keeps its global
+    // metadata + front default.
+    list.push_back({.id = "flathub",
+                    .displayName = nullptr,
+                    .categories = {CAT_GAMES},
+                    .lookupCapable = true,
+                    .urlTemplate = nullptr,
+                    .makeApi = [](const GeneralSettingsAccessor &,
+                                  const CollectionAccessor &) -> std::unique_ptr<MetadataProvider> {
+                      return std::make_unique<FlathubProvider>();
+                    }});
 
     // ── Video (2) ────────────────────────────────────────────────────
     // TMDB uses the API-backed provider when a settings accessor is

@@ -147,6 +147,10 @@ private:
     QString collectionUuid;
     QString artworkDir;
     QStringList paths;
+    /// LauncherImportService::kSourceSteam or kSourceFlatpak — selects the
+    /// store provider (Steam storefront vs Flathub) and, with it, whether
+    /// the run fetches media or is metadata-only (Kartend-2bzbu).
+    QString sourceId;
   };
   void startNextEnrichment();
 

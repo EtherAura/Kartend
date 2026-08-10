@@ -11,6 +11,7 @@
 #include "batchscraperunner.h"
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
+#include "flathubprovider.h"
 #include "idatabasemanager.h"
 #include "launcherimportdialog.h"
 #include "pathutils.h"
@@ -240,11 +241,18 @@ auto LauncherImportController::applyMetadataForCollection(
 
 void LauncherImportController::enrichFromStore(
     const CollectionConfig &config, const QList<LauncherImportService::SyncedStub> &stubs) {
-  if (config.importSource != QLatin1String(LauncherImportService::kSourceSteam) ||
-      stubs.isEmpty()) {
+  // Steam stubs enrich from the storefront API; Flatpak stubs from Flathub's
+  // AppStream API (Kartend-2bzbu) — these apps are on neither ScreenScraper
+  // nor the Steam store, so without this pass their details pane shows File
+  // Information and nothing else. Lutris has no equivalent store endpoint.
+  const bool storeBacked =
+      config.importSource == QLatin1String(LauncherImportService::kSourceSteam) ||
+      config.importSource == QLatin1String(LauncherImportService::kSourceFlatpak);
+  if (!storeBacked || stubs.isEmpty()) {
     return;
   }
   PendingEnrichment pending;
+  pending.sourceId = config.importSource;
   pending.collectionName = config.name;
   pending.collectionUuid = CollectionUtils::computeCollectionUuid(config);
   // The sync just created this directory, so the existence-checking
@@ -283,21 +291,34 @@ void LauncherImportController::startNextEnrichment() {
     return;
   }
   const PendingEnrichment job = m_enrichQueue.takeFirst();
+  const bool isSteam = job.sourceId == QLatin1String(LauncherImportService::kSourceSteam);
+  const QString storeName = isSteam ? QStringLiteral("Steam") : QStringLiteral("Flathub");
 
   // FillMissing so a re-import or re-sync only fetches what isn't already
   // there — the local appinfo pass has usually filled the text fields, and
   // this run adds the description plus the media the local caches lack.
+  // Flathub is metadata-only (Kartend-2bzbu): the import copies each app's
+  // exported icon as the cover, and the provider declares no MediaFetch,
+  // so the runner is told not to chase a primary cover either.
+  std::shared_ptr<MetadataLookupProvider> provider;
+  if (isSteam) {
+    provider = std::make_shared<SteamStoreProvider>();
+  } else {
+    provider = std::make_shared<FlathubProvider>();
+  }
   m_enrichRunner = new Scraper::BatchScrapeRunner(
-      ctx, std::make_shared<SteamStoreProvider>(), job.collectionUuid, job.paths, job.artworkDir,
-      /*fetchPrimaryCover=*/true, Scraper::RescrapeMode::FillMissing, /*itemConcurrency=*/2,
+      ctx, std::move(provider), job.collectionUuid, job.paths, job.artworkDir,
+      /*fetchPrimaryCover=*/isSteam, Scraper::RescrapeMode::FillMissing, /*itemConcurrency=*/2,
       /*skipRecentDays=*/0, this);
-  // The media set an imported Steam collection actually wants; the dialog's
-  // defaults (cover + metadata only) are aimed at ROM scraping.
-  m_enrichRunner->setMediaTypeFilter({QStringLiteral("front"), QStringLiteral("screenshot"),
-                                      QStringLiteral("background"), QStringLiteral("video")});
+  if (isSteam) {
+    // The media set an imported Steam collection actually wants; the dialog's
+    // defaults (cover + metadata only) are aimed at ROM scraping.
+    m_enrichRunner->setMediaTypeFilter({QStringLiteral("front"), QStringLiteral("screenshot"),
+                                        QStringLiteral("background"), QStringLiteral("video")});
+  }
 
-  // Say the size up front. Steam's store API is paced at roughly a request
-  // and a half per second, so a wide-scope collection takes minutes — without
+  // Say the size up front. The store APIs are paced at roughly a request or
+  // two per second, so a wide-scope collection takes minutes — without
   // a number the user cannot tell a working fetch from a broken one, and the
   // honest reading of a silent status bar is "the import lost my data".
   // Seeded to 0, not -1: the first items start before any finishes, so
@@ -306,33 +327,35 @@ void LauncherImportController::startNextEnrichment() {
   // completes, instead of being replaced by "0 of 123" within milliseconds.
   m_enrichReportedDone = 0;
   if (m_ctx.showStatusMessage) {
-    m_ctx.showStatusMessage(tr("%1: fetching descriptions and artwork for %n game(s) from Steam — "
+    m_ctx.showStatusMessage(tr("%1: fetching details for %n game(s) from %2 — "
                                "this can take a few minutes…",
                                nullptr, static_cast<int>(job.paths.size()))
-                                .arg(job.collectionName));
+                                .arg(job.collectionName, storeName));
   }
   // Per-item ticks. These do double duty: they show progress, and because the
   // status bar clears a message after ten seconds they are what keeps any
   // message on screen at all for the length of the run.
-  connect(m_enrichRunner, &Scraper::BatchScrapeRunner::progress, this,
-          [this, name = job.collectionName](int done, int total, const QString &) {
-            // itemConcurrency > 1 means the same `done` arrives once per item
-            // that starts; only speak when the number actually moves.
-            if (done == m_enrichReportedDone) {
-              return;
-            }
-            m_enrichReportedDone = done;
-            if (m_ctx.showStatusMessage) {
-              m_ctx.showStatusMessage(
-                  tr("%1: fetching Steam details… %2 of %3").arg(name).arg(done).arg(total));
-            }
-          });
+  connect(
+      m_enrichRunner, &Scraper::BatchScrapeRunner::progress, this,
+      [this, name = job.collectionName, storeName](int done, int total, const QString &) {
+        // itemConcurrency > 1 means the same `done` arrives once per item
+        // that starts; only speak when the number actually moves.
+        if (done == m_enrichReportedDone) {
+          return;
+        }
+        m_enrichReportedDone = done;
+        if (m_ctx.showStatusMessage) {
+          m_ctx.showStatusMessage(
+              tr("%1: fetching %2 details… %3 of %4").arg(name, storeName).arg(done).arg(total));
+        }
+      });
   connect(m_enrichRunner, &Scraper::BatchScrapeRunner::finished, this,
-          [this, name = job.collectionName](const Scraper::BatchScrapeRunner::Summary &summary) {
+          [this, name = job.collectionName,
+           storeName](const Scraper::BatchScrapeRunner::Summary &summary) {
             if (m_ctx.showStatusMessage) {
               m_ctx.showStatusMessage(
-                  tr("%1: Steam store details fetched for %n item(s).", nullptr, summary.scraped)
-                      .arg(name));
+                  tr("%1: %2 details fetched for %n item(s).", nullptr, summary.scraped)
+                      .arg(name, storeName));
             }
             // Fresh media on disk — drop the negative directory-listing
             // entries so the grid/sidebar pick the files up.
