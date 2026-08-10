@@ -275,6 +275,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   image or video in the same full-screen preview the sidebar gallery uses.
   Single-clicking a thumbnail still just swaps the centre cover, as before
   (Kartend-5jtyw).
+- **Cover Flow shows a subcollection's tile picture the same way Grid does.**
+  A subcollection tile takes its picture from the collection's own Collection
+  Icon, or failing that from an image named after the subcollection sitting in
+  the parent's artwork folder. Cover Flow only ever read the first, so a
+  subcollection relying on the naming convention — the older of the two, and
+  the only one that worked in Grid until recently — showed the generated
+  placeholder there. Both layouts now do both steps, in the same order
+  (Kartend-5dhlv).
 
 ## [0.0.18] - 2026-07-29
 

@@ -85,6 +85,9 @@ private slots:
   void retry_deactivationClearsPendingAndTimer();
   // Kartend-t4rjw
   void retry_warmRootWithColdCoverSubdirIsNotTreatedAsArtless();
+  // Kartend-5dhlv
+  void subcollectionCard_fallsBackToNamedImageInParentArtworkDir();
+  void subcollectionCard_collectionIconStillWins();
 
   // Activation must translate the carousel's filtered-visual index into the
   // store's actual-index space before classifying (subcollection / virtual
@@ -303,6 +306,98 @@ void TestCoverFlowController::retry_warmRootWithColdCoverSubdirIsNotTreatedAsArt
   QTRY_COMPARE_WITH_TIMEOUT(h.controller.widget()->cardAt(0).artworkPath, artwork, 5000);
   QCOMPARE(h.controller.pendingArtworkCount(), 0);
   QTRY_VERIFY_WITH_TIMEOUT(!h.controller.artworkRetryActive(), 5000);
+}
+
+// Kartend-5dhlv: a subcollection TILE has two artwork sources, in this order —
+// the child's own collectionIcon, then an image named after the child in the
+// PARENT's artwork directory. buildCard read the icon and stopped, so a
+// subcollection following the naming convention (the mechanism that predates
+// the key, and the only one Grid honoured before Kartend-kb2vx) showed the
+// placeholder in cover flow alone.
+void TestCoverFlowController::subcollectionCard_fallsBackToNamedImageInParentArtworkDir() {
+  QTemporaryDir artDir;
+  QTemporaryDir mediaDir;
+  QVERIFY(artDir.isValid() && mediaDir.isValid());
+  // Named after the CHILD, sitting in the PARENT's artwork directory.
+  const QString tileArt = touchFile(artDir.filePath(QStringLiteral("Shelf.png")));
+  QVERIFY(!tileArt.isEmpty());
+
+  static const QList<CollectionConfig> collections = [] {
+    QList<CollectionConfig> out;
+    CollectionConfig shelf;
+    shelf.name = QStringLiteral("Shelf");
+    // collectionIcon deliberately unset — the convention must answer alone.
+    out.append(shelf);
+    return out;
+  }();
+  static const QList<int> subs = {0};
+
+  CoverFlowHarness h(artDir.path(), mediaDir.path());
+  h.context.currentIndex = 0;
+  h.context.hasSubcollectionOverride = true;
+  h.context.subcollectionOverride = subs;
+  h.store.initializeSubcollections(h.context, &collections, nullptr);
+
+  CoverFlowControllerSetup setup;
+  setup.mediaScrollArea = h.scrollArea;
+  setup.context = &h.context;
+  setup.collections = &collections;
+  setup.dataManager = &h.store;
+  h.controller.setupReferences(setup);
+  h.controller.ensureWidget();
+  QVERIFY(h.controller.widget() != nullptr);
+
+  h.controller.rebuildCards();
+  QCOMPARE(h.controller.widget()->cardCount(), 1);
+  // Cold cache on the first build, so the tile resolves through the same
+  // trailing retry media cards use — which could not even register a
+  // subcollection slot before this fix (artworkDirForActual bailed on
+  // anything failing isMediaIndex).
+  QTRY_COMPARE_WITH_TIMEOUT(h.controller.widget()->cardAt(0).artworkPath, tileArt, 5000);
+}
+
+void TestCoverFlowController::subcollectionCard_collectionIconStillWins() {
+  QTemporaryDir artDir;
+  QTemporaryDir mediaDir;
+  QTemporaryDir iconDir;
+  QVERIFY(artDir.isValid() && mediaDir.isValid() && iconDir.isValid());
+  // Both sources present: the explicit per-collection choice must win, or
+  // setting collectionIcon on a collection that already follows the naming
+  // convention would appear to do nothing.
+  QVERIFY(!touchFile(artDir.filePath(QStringLiteral("Shelf.png"))).isEmpty());
+  const QString icon = touchFile(iconDir.filePath(QStringLiteral("explicit.png")));
+  QVERIFY(!icon.isEmpty());
+
+  static const QString iconPath = icon;
+  static const QList<CollectionConfig> collections = [] {
+    QList<CollectionConfig> out;
+    CollectionConfig shelf;
+    shelf.name = QStringLiteral("Shelf");
+    shelf.collectionIcon = iconPath;
+    out.append(shelf);
+    return out;
+  }();
+  static const QList<int> subs = {0};
+
+  CoverFlowHarness h(artDir.path(), mediaDir.path());
+  h.context.currentIndex = 0;
+  h.context.hasSubcollectionOverride = true;
+  h.context.subcollectionOverride = subs;
+  h.store.initializeSubcollections(h.context, &collections, nullptr);
+
+  CoverFlowControllerSetup setup;
+  setup.mediaScrollArea = h.scrollArea;
+  setup.context = &h.context;
+  setup.collections = &collections;
+  setup.dataManager = &h.store;
+  h.controller.setupReferences(setup);
+  h.controller.ensureWidget();
+
+  h.controller.rebuildCards();
+  QCOMPARE(h.controller.widget()->cardCount(), 1);
+  // Resolved synchronously from the config — no cache, no retry involved.
+  QCOMPARE(h.controller.widget()->cardAt(0).artworkPath, icon);
+  QCOMPARE(h.controller.pendingArtworkCount(), 0);
 }
 
 void TestCoverFlowController::itemActivated_mapsFilteredVisualToActual() {

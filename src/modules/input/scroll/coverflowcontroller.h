@@ -152,8 +152,14 @@ private:
   void retryPendingArtwork();
   /// Drop all pending slots, reset the attempt budget, stop the timer.
   void clearArtworkRetry();
-  /// The directory resolveCardArtworkPath would search for @p actualIndex
-  /// — empty for non-media indices.
+  /// The directory a subcollection TILE's cover is looked up in: the active
+  /// (parent) collection's artworkDirectory, where an image named after the
+  /// child lives (Kartend-5dhlv). Not the child's own artworkDirectory —
+  /// that holds the child's item covers.
+  [[nodiscard]] QString subcollectionArtworkDirectory() const;
+  /// The directory buildCard would search for @p actualIndex — the parent's
+  /// artwork directory for a subcollection slot, the item's own for a media
+  /// slot, empty for anything else (virtual folders carry no artwork).
   [[nodiscard]] QString artworkDirForActual(int actualIndex, IDatabaseManager *db) const;
 
   /// Kartend-yeik: ctx-routed FilterManager accessor. Replaces the old

@@ -559,7 +559,20 @@ CoverFlowCardData CoverFlowController::buildCard(int actualIndex, IDatabaseManag
     if (m_collections && sub >= 0 && sub < m_collections->size()) {
       const auto &subCfg = m_collections->at(sub);
       card.title = subCfg.name;
-      card.artworkPath = subCfg.collectionIcon;
+      // Same two sources, in the same order, that Grid/List resolve a
+      // subcollection tile from (Kartend-5dhlv): the child's own
+      // collectionIcon, then an image named after the child in the PARENT's
+      // artwork directory. Only the icon was read here, so a subcollection
+      // following the naming convention — the mechanism that predates the
+      // key — showed a placeholder in cover flow alone.
+      card.artworkPath = subCfg.collectionIcon.trimmed();
+      if (card.artworkPath.isEmpty()) {
+        // Cache-only, like every other lookup in this function: a cold miss
+        // is picked up by the trailing retry rather than paid for with a
+        // synchronous stat on the GUI thread (see resolveCardArtworkPath).
+        card.artworkPath =
+            ArtworkUtils::findArtworkForFileCached(subCfg.name, subcollectionArtworkDirectory());
+      }
     }
   } else if (m_dataManager->isVirtualFolderIndex(actualIndex)) {
     const QString folder = m_dataManager->virtualFolderFromActual(actualIndex);
@@ -704,8 +717,25 @@ bool CoverFlowController::artworkRetryActive() const {
   return m_artworkRetryTimer && m_artworkRetryTimer->isActive();
 }
 
+QString CoverFlowController::subcollectionArtworkDirectory() const {
+  // The PARENT's artwork directory — a subcollection tile's cover is looked
+  // up there, named after the child. Deliberately not the child's own
+  // artworkDirectory: that holds the child's ITEM covers, not its tile.
+  return m_context ? m_context->config.artworkDirectory : QString();
+}
+
 QString CoverFlowController::artworkDirForActual(int actualIndex, IDatabaseManager *db) const {
-  if (!m_dataManager || !m_context || !m_dataManager->isMediaIndex(actualIndex)) {
+  if (!m_dataManager || !m_context) {
+    return {};
+  }
+  // Kartend-5dhlv: subcollection slots resolve their tile through the naming
+  // convention too, so they need the same cold-cache retry as media items.
+  // Registering them was previously impossible — this returned empty for
+  // anything failing isMediaIndex, so notePendingArtwork dropped them.
+  if (m_dataManager->isSubcollectionIndex(actualIndex)) {
+    return subcollectionArtworkDirectory();
+  }
+  if (!m_dataManager->isMediaIndex(actualIndex)) {
     return {};
   }
   const int mediaIdx = m_dataManager->mediaIndexFromActual(actualIndex);
