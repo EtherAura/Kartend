@@ -28,6 +28,7 @@ public:
   int notifyCalls = 0;
   int lastHoverIndex = -1;
   int selectItemByHoverCalls = 0;
+  int cancelPendingRestoreCalls = 0;
 
   [[nodiscard]] int currentSelectedIndex() const override { return index; }
   void setSelectedIndex(int idx) override {
@@ -46,7 +47,7 @@ public:
   [[nodiscard]] bool isRestoringSelection() const override { return restoring; }
 
   // --- inert stubs below ---
-  void cancelPendingSelectionRestore() override {}
+  void cancelPendingSelectionRestore() override { ++cancelPendingRestoreCalls; }
   [[nodiscard]] int targetRestoreIndex() const override { return -1; }
   void setRestoringSelection(bool) override {}
   void setTargetRestoreIndex(int) override {}

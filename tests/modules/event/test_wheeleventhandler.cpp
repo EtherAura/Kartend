@@ -79,6 +79,7 @@ private slots:
   void deltaWrapEnabledWrapsForwardAtUpperBoundary();
   void deltaWrapDisabledClampsToValidRange();
   void deltaNoMovementReturnsWrapFlagOnly();
+  void deltaUserStepCancelsPendingSelectionRestore();
   void deltaZeroTotalItemsBailsSafely();
   void deltaNoScrollManagerBails();
   void onAnimationFinishedClearsFlagsAndEmitsScrollEnded();
@@ -268,6 +269,37 @@ void TestWheelEventHandler::deltaNoMovementReturnsWrapFlagOnly() {
 
   QVERIFY(!wrapped);
   QCOMPARE(m_sel.setSelectedIndexCalls, 0);
+  // No movement -> the pending automatic restore must NOT be stood down
+  // either: an idle wheel notch at a boundary is not an expression of a new
+  // selection intent (Kartend-ic4h6).
+  QCOMPARE(m_sel.cancelPendingRestoreCalls, 0);
+}
+
+// Kartend-ic4h6: a wheel step that MOVES the selection is user input, and must
+// stand down any pending automatic selection restore before moving — parity
+// with ArrowNavigationHandler and the grid click path. This step moves the
+// selection through the bare ISelectionCore setter, which sets no flags, so
+// without the explicit cancel the SelectionRestoreCoordinator's staggered
+// verification timers read the move as "the restore has not landed yet" and
+// snap the selection back to the restored index seconds later — the reported
+// symptom was cover-flow wheel moves reverting to item 0. CoverFlow is the
+// single-step view exercised here for exactly that reason.
+void TestWheelEventHandler::deltaUserStepCancelsPendingSelectionRestore() {
+  CollectionConfig coverFlowConfig;
+  coverFlowConfig.viewType = ViewType::CoverFlow;
+  m_collections = {coverFlowConfig};
+  wire(/*viewIndex=*/0);
+  m_scroll.totalItems = 100;
+  m_sel.index = 10;
+  m_settings.input.mouseWheelRows = 1;
+
+  m_handler.applySelectionDelta(-1);
+
+  QCOMPARE(m_sel.setSelectedIndexCalls, 1);
+  QCOMPARE(m_sel.lastSetIndex, 11);
+  QVERIFY2(m_sel.cancelPendingRestoreCalls >= 1,
+           "wheel selection step moved the selection without standing down the pending "
+           "restore — a verification timer would revert this move");
 }
 
 void TestWheelEventHandler::deltaZeroTotalItemsBailsSafely() {

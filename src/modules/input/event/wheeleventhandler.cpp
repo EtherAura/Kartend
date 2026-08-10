@@ -27,6 +27,7 @@
 #include "interactionstateholder.h"
 #include "iscrolldatasource.h"
 #include "iselectioncore.h"
+#include "iselectionmanager.h"
 #include "iselectionoverlayscroll.h"
 #include "iviewportpositioner.h"
 #include "iviewportscrollstate.h"
@@ -397,6 +398,16 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
     }
   }
 
+  // User-initiated selection step — stand down any pending automatic restore
+  // before moving, exactly as ArrowNavigationHandler and the grid click path
+  // do (Kartend-ic4h6). This handler moves the selection through the bare
+  // ISelectionCore setter, which sets no flags of its own, so without this
+  // the SelectionRestoreCoordinator's staggered verification timers read the
+  // wheel move as "the restore has not landed yet" and snap the selection
+  // back to the restored index seconds later.
+  if (selectionMgr()) {
+    selectionMgr()->cancelPendingSelectionRestore();
+  }
   if (selectionCore()) {
     selectionCore()->setSelectedIndex(newSelection);
     QList<int> subs = getSubcollections(*m_currentCollectionIndex);

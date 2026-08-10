@@ -21,6 +21,7 @@ class IMouseWheelState;
 class InteractionStateHolder;
 class IScrollDataSource;
 class ISelectionCore;
+class ISelectionManager;
 class ISelectionOverlayScroll;
 class IViewportPositioner;
 class IViewportScrollState;
@@ -106,6 +107,14 @@ private:
   }
   [[nodiscard]] ISelectionCore *selectionCore() const {
     return m_ctx ? m_ctx->selectionCore() : nullptr;
+  }
+  /// Full ISelectionManager reach, beyond the ISelectionCore step surface:
+  /// the wheel-selection step must stand down any pending automatic restore
+  /// (Kartend-ic4h6), and cancelPendingSelectionRestore() lives on the
+  /// restore-lifecycle half of the union. Same accessor shape as
+  /// ArrowNavigationHandler, which has the identical need.
+  [[nodiscard]] ISelectionManager *selectionMgr() const {
+    return m_ctx ? m_ctx->selectionManager() : nullptr;
   }
   [[nodiscard]] IViewportScrollState *viewportScrollState() const {
     return m_ctx ? m_ctx->viewportScrollState() : nullptr;

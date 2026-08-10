@@ -299,6 +299,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a collection in Cover Flow, your new selection could snap back to the
   restored item. Cover Flow selection now cancels the pending check the same
   way every other input path does (Kartend-ic4h6).
+
+  Two more members of the same family, found when the revert survived that
+  first fix: scrolling the selection with the mouse wheel also never told the
+  checker to stand down — and a wheel-moved selection was never written where
+  the restore reads, so any background refresh (for example the Steam store
+  details fetch finishing) would reload the view and faithfully "restore" a
+  selection you had already moved away from. The wheel now stands the checker
+  down like every other input, and every reload first records the selection
+  you actually have, so what gets restored is where you were.
 - **Cover Flow no longer writes an item off as artless before it has looked
   everywhere.** Cover art is searched for in the artwork folder and then in
   each of its typed sub-folders — `front`, `box`, `screenshot` and the rest,

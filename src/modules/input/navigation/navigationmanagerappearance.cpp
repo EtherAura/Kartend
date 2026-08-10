@@ -7,6 +7,7 @@
 #include "idatabasemanager.h"
 #include "idetailspane.h"
 #include "idetailspanemanager.h"
+#include "interactionhelpers.h"
 #include "interactionmanager.h"
 #include "interactionstateholder.h"
 #include "isessionmanager.h"
@@ -217,6 +218,23 @@ void NavigationManager::persistCurrentSelection() {
     // Still try to cache viewport even without selection for fast startup
   } else {
     settingsMgr()->setLastSelectedItem(coll, sel);
+    // Kartend-ic4h6: ALSO write the session store, under the same key
+    // SelectionRestoreCoordinator::getSelectionRestoreIndex reads. This
+    // function is the boundary persist — safeReloadCollection, navigation,
+    // and shutdown all run it — but it only wrote the settings store, while
+    // the coordinator restores from the SESSION store. Selections made
+    // through paths that don't persist per-move (the wheel-selection step
+    // moves through the bare ISelectionCore setter) therefore never reached
+    // the value the restore reads, so a background reload — e.g. the Steam
+    // enrichment finishing on another collection — "restored" a stale index
+    // and visibly reverted the user's selection.
+    if (sessionMgr()) {
+      const CollectionConfig &cfg = (*m_collections)[coll];
+      const QString sessionKey = CollectionUtils::selectionSessionKeyFor(cfg, *m_collections);
+      const QString path = scrollMgr() ? scrollMgr()->filePathForVisualIndex(sel) : QString();
+      sessionMgr()->setLastSelected(sessionKey, sel,
+                                    InteractionHelpers::displayTitleForFilePath(path));
+    }
   }
 
   // Also cache the current viewport for instant startup

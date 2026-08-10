@@ -48,6 +48,8 @@ private slots:
   void testVirtualFolderNavigationUpdatesSubfolderPath();
   void testVirtualFolderEnterIgnoredWithoutCurrentCollection();
   void testBreadcrumbLinksDriveSubfolderNavigation();
+  // Kartend-ic4h6
+  void testBoundaryPersistWritesSessionStoreForRestore();
 };
 
 #endif // KARTEND_TESTS_TEST_NAVIGATIONMANAGER_H

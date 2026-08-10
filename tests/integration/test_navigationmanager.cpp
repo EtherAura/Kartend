@@ -2,8 +2,10 @@
 
 #include "applicationmanager.h"
 #include "collection/collectionconfig.h"
+#include "collection/hierarchyhelpers.h"
 #include "emptystatewidget.h"
 #include "errorutils.h"
+#include "interactionmanager.h"
 #include "isettingsmanager.h"
 #include "mainwindow.h"
 // Kartend-xrj9r: this suite asserts only on in-memory coordinator state
@@ -12,6 +14,8 @@
 #include "mocks/mockedmainwindowfixture.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
+#include "selectionmanager.h"
+#include "sessionmanager.h"
 
 #include <QCoreApplication>
 #include <QEvent>
@@ -428,4 +432,43 @@ void TestNavigationManager::testBreadcrumbLinksDriveSubfolderNavigation() {
   // A "root:" link clears the subfolder scope entirely.
   nav->onBreadcrumbLinkClicked(QStringLiteral("root:"));
   QCOMPARE(win->m_collections[0].folderBrowsing.currentSubfolder, QString());
+}
+
+// Kartend-ic4h6: the boundary persist (safeReloadCollection, navigation,
+// shutdown — all funnel through persistCurrentSelection) only wrote the
+// SETTINGS store, while SelectionRestoreCoordinator::getSelectionRestoreIndex
+// restores from the SESSION store. A selection moved through the bare
+// ISelectionCore setter — the wheel-selection step does exactly this, and
+// persists nothing per-move — therefore never reached the value the restore
+// reads, so any background reload (e.g. Steam enrichment finishing on another
+// collection) "restored" a stale index and visibly reverted the user's
+// selection. The boundary persist must land the LIVE selection in the session
+// store, under the same key the restore reads.
+void TestNavigationManager::testBoundaryPersistWritesSessionStoreForRestore() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  auto *appMgr = win->getApplicationManager();
+  NavigationManager *nav = appMgr->getNavigationManager();
+  InteractionManager *im = appMgr->getInteractionManager();
+  auto *session = appMgr->getSessionManager();
+  QVERIFY(nav);
+  QVERIFY(im);
+  QVERIFY(session);
+  QVERIFY(im->selectionManager());
+
+  win->m_collections.append(makeCollectionStub(QStringLiteral("Films")));
+  win->m_currentCollectionIndex = 0;
+  win->rebuildHierarchyCache();
+
+  // Move the selection through the bare setter — the wheel path's exact
+  // write, which sets no flags and persists nothing on its own.
+  im->selectionManager()->setSelectedIndex(42);
+
+  // prepareForShutdown is the public wrapper over persistCurrentSelection,
+  // the same boundary persist every reload and navigation runs.
+  nav->prepareForShutdown();
+
+  const QString key =
+      CollectionUtils::selectionSessionKeyFor(win->m_collections[0], win->m_collections);
+  QCOMPARE(session->getLastSelectedIndex(key), 42);
 }
