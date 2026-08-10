@@ -308,9 +308,7 @@ steps, in this order:
 If neither resolves, the tile falls back to `placeholderArtwork`, and
 then to the generated cross-hatch placeholder.
 
-Grid and List do both steps. Cover Flow currently does step 1 only, so
-a subcollection relying on the naming convention shows a placeholder
-there until you give it a `collectionIcon`.
+Grid, List, and Cover Flow all do both steps, in this order.
 
 ## Loading and caching
 
