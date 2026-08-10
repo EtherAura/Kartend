@@ -289,6 +289,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registering an overlay could leave the stacking table out of order, so a
   later restack put the wrong overlay on top.
 - The About box and the parent-collection *None* entry are translatable.
+- **The full-size artwork preview now actually appears in Cover Flow, and the
+  strip's thumbnails show a hand cursor.** The preview window was attached to
+  the item grid — which Cover Flow hides while the carousel is on screen — so
+  asking for a preview there built one and displayed it into something
+  invisible, and the click looked dead. It now attaches to the main window, so
+  it works from every view; the same preview opened from the grid covers the
+  whole window rather than just the item area. The strip also gave no hover
+  feedback, so nothing suggested the thumbnails could be clicked
+  (Kartend-4hr3d).
 - **Clicking a thumbnail in Cover Flow's artwork strip now opens it full
   size, and the strip no longer flickers.** A click used to swap the centred
   cover for the artwork you clicked, which is not what the strip is for — the

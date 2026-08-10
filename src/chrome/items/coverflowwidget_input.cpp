@@ -96,6 +96,25 @@ void CoverFlowWidget::mousePressEvent(QMouseEvent *event) {
   event->accept();
 }
 
+void CoverFlowWidget::mouseMoveEvent(QMouseEvent *event) {
+  // Kartend-4hr3d: the strip thumbnails are clickable but gave no hover
+  // affordance, so they did not read as clickable at all. Mouse tracking is
+  // already on (set in the ctor), so this fires without a button held.
+  // Only the strip gets the hand: the cards themselves respond to clicks too,
+  // but a pointing hand over the whole carousel would be noise.
+  const bool overThumb =
+      m_galleryStrip && !m_gallery.isEmpty() && m_galleryStrip->hitTest(event->pos()) >= 0;
+  if (overThumb != m_galleryHoverCursorActive) {
+    m_galleryHoverCursorActive = overThumb;
+    if (overThumb) {
+      setCursor(Qt::PointingHandCursor);
+    } else {
+      unsetCursor();
+    }
+  }
+  QWidget::mouseMoveEvent(event);
+}
+
 void CoverFlowWidget::mouseDoubleClickEvent(QMouseEvent *event) {
   if (event->button() != Qt::LeftButton || m_cards.isEmpty()) {
     QWidget::mouseDoubleClickEvent(event);

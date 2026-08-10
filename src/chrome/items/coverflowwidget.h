@@ -174,6 +174,7 @@ protected:
   void resizeEvent(QResizeEvent *e) override;
   void wheelEvent(QWheelEvent *e) override;
   void mousePressEvent(QMouseEvent *e) override;
+  void mouseMoveEvent(QMouseEvent *e) override;
   void mouseDoubleClickEvent(QMouseEvent *e) override;
   void keyPressEvent(QKeyEvent *e) override;
   void hideEvent(QHideEvent *e) override;
@@ -284,6 +285,10 @@ private:
   // m_galleryStrip below is the owner; its public methods replace the
   // four declarations that lived here.
   CoverFlowGalleryStrip *m_galleryStrip = nullptr;
+  // Tracks whether the pointing-hand cursor is currently applied, so
+  // mouseMoveEvent only touches the cursor on an actual hover transition
+  // rather than on every mouse-move event (Kartend-4hr3d).
+  bool m_galleryHoverCursorActive = false;
 
   QList<CoverFlowCardData> m_cards;
   int m_selectedIndex = 0;

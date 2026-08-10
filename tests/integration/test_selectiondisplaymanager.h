@@ -41,6 +41,8 @@ private slots:
   void testSelectionOverlayRectForInvalidIndexReturnsEmpty();
 
   void testFixtureWiresArtworkPreviewForwardersThroughScrollManager();
+  // Kartend-4hr3d
+  void testPreviewOverlayIsNotParentedToTheHideableScrollArea();
 };
 
 #endif // KARTEND_TESTS_TEST_SELECTIONDISPLAYMANAGER_H

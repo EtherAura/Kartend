@@ -224,7 +224,23 @@ void SelectionDisplayManager::ensureArtworkPreviewOverlay() {
   if (m_artworkPreviewOverlay) {
     return;
   }
-  m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(m_mediaScrollArea);
+  // Kartend-4hr3d: parent to the TOP-LEVEL WINDOW, not the media scroll area.
+  // Cover flow hides the scroll area outright (CoverFlowController::
+  // applyVisibility does setVisible(!active) on it and shows the carousel in
+  // its layout slot), and a child of a hidden widget can never become visible
+  // — so a preview requested from the cover-flow gallery strip was constructed
+  // and shown into nothing at all. DetailsPaneGalleryView::openPreview already
+  // parents to window() for the same class of reason.
+  //
+  // Side effect worth knowing: the expand-mode / middle-click peek preview now
+  // covers the whole window instead of just the grid viewport. That is the
+  // more expected shape for a "show it full size" overlay and matches the
+  // sidebar gallery's, but it IS a visible change to those existing paths.
+  QWidget *overlayParent = m_mediaScrollArea ? m_mediaScrollArea->window() : nullptr;
+  if (!overlayParent) {
+    overlayParent = m_mediaScrollArea;
+  }
+  m_artworkPreviewOverlay = std::make_unique<ArtworkPreviewOverlay>(overlayParent);
   connect(m_artworkPreviewOverlay.get(), &ArtworkPreviewOverlay::launchRequested, this,
           &SelectionDisplayManager::artworkPreviewLaunchRequested);
   // bug #7: forward overlay visibility so DetailsPaneManager can

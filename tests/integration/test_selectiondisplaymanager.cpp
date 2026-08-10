@@ -6,6 +6,7 @@
 // Kartend-xrj9r: this suite asserts only on in-memory coordinator state
 // (never on persisted rows/INI), so it runs against the mocked fixture —
 // no SQLite/QSettings setup per slot.
+#include "artworkpreviewoverlay.h"
 #include "mocks/mockedmainwindowfixture.h"
 #include "scrollmanager.h"
 #include "selectiondisplaymanager.h"
@@ -13,6 +14,7 @@
 #include "selectionstatetracker.h"
 
 #include <QRect>
+#include <QScrollArea>
 #include <QString>
 #include <QStringLiteral>
 #include <QTest>
@@ -155,4 +157,37 @@ void TestSelectionDisplayManager::testFixtureWiresArtworkPreviewForwardersThroug
   // ever shown.
   QVERIFY(!scroll->isArtworkPreviewVisible());
   QCOMPARE(scroll->hideArtworkPreview(), false);
+}
+
+// Kartend-4hr3d: the preview overlay was parented to the media scroll area,
+// which CoverFlowController::applyVisibility HIDES whenever cover flow is the
+// active view (setVisible(!active)). A child of a hidden widget can never
+// become visible, so a preview requested from the cover-flow gallery strip was
+// constructed and shown into nothing — the click looked dead. Asserting on the
+// PARENT rather than on visibility keeps this honest in an offscreen test run,
+// where nothing is truly shown either way.
+void TestSelectionDisplayManager::testPreviewOverlayIsNotParentedToTheHideableScrollArea() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  auto *scroll = win->getApplicationManager()->getScrollManager();
+  QVERIFY(scroll);
+
+  // Lazily constructs the overlay. Path resolution is irrelevant here — the
+  // call is only a vehicle for ensureArtworkPreviewOverlay().
+  scroll->showPreviewAtPath(QStringLiteral("/nonexistent/art.png"), /*isVideo=*/false);
+
+  auto *overlay = win->findChild<ArtworkPreviewOverlay *>();
+  QVERIFY2(overlay, "showPreviewAtPath did not construct the overlay");
+
+  QWidget *parent = overlay->parentWidget();
+  QVERIFY(parent);
+  // The window itself is never hidden while the app is up; the scroll area is
+  // hidden for the whole time cover flow is on screen.
+  // The window is never hidden while the app is up; the media scroll area is
+  // hidden for the whole time cover flow is on screen. Requiring the top-level
+  // window rules that parent out by construction.
+  QCOMPARE(parent, static_cast<QWidget *>(win));
+  QVERIFY2(!qobject_cast<QScrollArea *>(parent),
+           "overlay is parented to a scroll area — cover flow hides the media scroll area, so a "
+           "preview parented there can never appear");
 }
