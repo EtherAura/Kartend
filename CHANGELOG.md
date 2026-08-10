@@ -289,25 +289,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registering an overlay could leave the stacking table out of order, so a
   later restack put the wrong overlay on top.
 - The About box and the parent-collection *None* entry are translatable.
-- **Moving the selection in Cover Flow no longer gets undone moments later.**
-  When a collection opens, Kartend restores your last selection and then
-  double-checks a little later that the restore stuck. That check read "the
-  selection isn't on the restored item" as "the restore failed" — but it's
-  equally what things look like after you've simply moved on, and unlike
-  clicking in the grid or using the arrow keys, moving the selection in Cover
-  Flow never told the checker to stand down. So a second or two after opening
-  a collection in Cover Flow, your new selection could snap back to the
-  restored item. Cover Flow selection now cancels the pending check the same
-  way every other input path does (Kartend-ic4h6).
-
-  Two more members of the same family, found when the revert survived that
-  first fix: scrolling the selection with the mouse wheel also never told the
-  checker to stand down — and a wheel-moved selection was never written where
-  the restore reads, so any background refresh (for example the Steam store
-  details fetch finishing) would reload the view and faithfully "restore" a
-  selection you had already moved away from. The wheel now stands the checker
-  down like every other input, and every reload first records the selection
-  you actually have, so what gets restored is where you were.
+- **The selected item no longer reverts on its own.** When a collection
+  opens, Kartend restores your last selection and then double-checks a moment
+  later that the restore stuck. That check read "the selection isn't on the
+  restored item" as "the restore failed" — but it is equally what things look
+  like once you have simply moved on, so it put the old item back. Clicking in
+  the grid and using the arrow keys told the check to stand down; selecting in
+  Cover Flow and scrolling the selection with the mouse wheel did not, so a
+  second or two after opening a collection your new selection could snap back.
+  Separately, a selection moved by the wheel was never written to the place
+  the restore reads from, so any background refresh — the Steam store details
+  fetch finishing, for instance — would reload the view and faithfully restore
+  a selection you had already moved away from. All three are fixed: both input
+  paths now stand the check down like every other one, and every reload first
+  records the selection you actually have, so what comes back is where you
+  were (Kartend-ic4h6).
 - **Cover Flow no longer writes an item off as artless before it has looked
   everywhere.** Cover art is searched for in the artwork folder and then in
   each of its typed sub-folders — `front`, `box`, `screenshot` and the rest,
