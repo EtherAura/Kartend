@@ -1036,6 +1036,8 @@ void TestCoverFlowWidget::mouseDoubleClickOffGalleryStillActivatesCard() {
 
   QCOMPARE(launchSpy.count(), 1);
   QCOMPARE(previewSpy.count(), 0);
+}
+
 // Kartend-ce0b4: the scaled-pixmap cache was keyed on the card's artworkPath
 // while the pixmap being scaled was whatever pixmapForIndex returned — which
 // is the PLACEHOLDER until the async decode lands. The placeholder therefore
