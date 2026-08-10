@@ -202,6 +202,7 @@
 #include "scrolleventscontroller.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
+#include "settingsutils.h"
 #include "timerutils.h"
 #include "toolbarcontroller.h"
 #include "ui_mainwindow.h"
@@ -548,6 +549,22 @@ void MainWindow::connectDatabaseManager() {
       }
     };
     lic.refreshCollection = [this](int collectionIndex) {
+      // Background enrichment targets a specific collection; if the user is
+      // viewing a different one, safeReloadCollection's fallback would rebuild
+      // the CURRENT view instead (scroll/artwork churn for a refresh of
+      // another collection — Kartend-xkdxn). Invalidate the target's cache so
+      // its next open sees the fresh metadata, and leave the view alone.
+      if (collectionIndex != m_currentCollectionIndex) {
+        if (auto *dbManager = m_appManager->getDatabaseManager();
+            dbManager && collectionIndex >= 0 && collectionIndex < m_collections.size()) {
+          const CollectionConfig &config = m_collections[collectionIndex];
+          const QString mediaDir =
+              SettingsUtils::expandConfigVariables(config.mediaDirectory, config.name);
+          dbManager->invalidateCollectionCache(
+              CollectionUtils::computeCollectionUuid(config.name, mediaDir));
+        }
+        return;
+      }
       if (auto *navManager = m_appManager->getNavigationManager()) {
         navManager->safeReloadCollection(collectionIndex);
       }

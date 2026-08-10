@@ -109,6 +109,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A launcher collection's background metadata fetch no longer rebuilds
+  the view you are looking at.** When the automatic Steam store-details
+  fetch finished for an imported collection, the app refreshed whatever
+  collection was currently on screen instead — a full reload with visible
+  scroll, artwork, and carousel churn, seconds after startup, even on huge
+  unrelated collections. The refresh now stays invisible unless you are
+  actually viewing the imported collection: anywhere else, the fetched
+  details are simply there the next time you open it (Kartend-xkdxn).
 - **Collections with "hide items without artwork" enabled no longer open
   empty.** With the per-collection toggle on, opening the app on such a
   collection — or switching into one — showed a permanent "No items" even
