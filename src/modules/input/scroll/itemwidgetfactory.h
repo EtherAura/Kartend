@@ -39,6 +39,33 @@ namespace ItemWidgetFactoryHelpers {
                                                 const QString &contextPlaceholder,
                                                 const QString &contextCollectionName);
 
+// Pure precedence policy for a SUBCOLLECTION TILE's artwork (Kartend-kb2vx),
+// extracted for the same reason as the placeholder policy above — it is a
+// decision, not a widget operation, and deserves testing without a widget
+// graph. Two sources, in order:
+//
+//   1. The CHILD's own `collectionIcon`, trimmed. An explicit per-collection
+//      choice, so it always wins.
+//   2. Otherwise an image named after the child in the PARENT's artwork
+//      directory (@p parentArtworkDirectory) — the convention that predates
+//      the collectionIcon key, resolved with the same name matching per-item
+//      artwork uses.
+//
+// Empty when neither resolves; the caller then falls back to placeholder
+// artwork. Grid and List were doing (2) only, which is why setting
+// collectionIcon on a subcollection appeared to do nothing there.
+//
+// The icon is used exactly as stored, with no path expansion, to match the
+// other two consumers of the key (CoverFlowController::buildCard and
+// MarqueeController). Unifying that is Kartend-dkh90.
+//
+// @p subcollectionName is the child's display name; empty input yields an
+// empty result rather than probing the directory for "".
+[[nodiscard]] QString resolveSubcollectionTileArtwork(const QList<CollectionConfig> *collections,
+                                                      int subcollectionIndex,
+                                                      const QString &subcollectionName,
+                                                      const QString &parentArtworkDirectory);
+
 } // namespace ItemWidgetFactoryHelpers
 
 /**

@@ -45,7 +45,11 @@ QImage loadAndScale(const QString &path, int targetSize) {
 
 } // namespace
 
-QPixmap CoverFlowWidget::pixmapForIndex(int idx) {
+QPixmap CoverFlowWidget::pixmapForIndex(int idx, QString *sourcePath) {
+  // Default to "this is a placeholder"; every early return below is one.
+  if (sourcePath) {
+    sourcePath->clear();
+  }
   if (idx < 0 || idx >= static_cast<int>(m_cards.size())) {
     return {};
   }
@@ -65,6 +69,11 @@ QPixmap CoverFlowWidget::pixmapForIndex(int idx) {
   }
   auto it = m_pixmapCache.constFind(path);
   if (it != m_pixmapCache.constEnd()) {
+    // The one branch that returns real image data — and the only one that
+    // may name a source path.
+    if (sourcePath) {
+      *sourcePath = path;
+    }
     return it.value();
   }
   // Schedule async load and return placeholder for now.

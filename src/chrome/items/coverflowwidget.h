@@ -139,6 +139,14 @@ signals:
   /// User activated the currently centered card (single click on center /
   /// double click anywhere). The caller handles launch / preview.
   void itemActivated(int visualIndex);
+  /// User double-clicked a thumbnail in the bottom gallery strip and wants
+  /// that exact image / video shown full size (Kartend-5jtyw). @p path is
+  /// already resolved — the receiver should display it directly rather than
+  /// re-running an artwork lookup. Single-clicking the same thumbnail keeps
+  /// its existing meaning (swap the centered card's displayed artwork), so
+  /// the two gestures are additive. Never emitted together with
+  /// itemActivated: the strip claims the double click outright.
+  void galleryPreviewRequested(const QString &path, bool isVideo);
 
 protected:
   void paintEvent(QPaintEvent *e) override;
@@ -179,7 +187,15 @@ private:
   // the iterator-fragile erase/std::find_if dance.
   void ensureCenterCardOnTop(QList<CardLayout> &layouts, int center, qreal frac) const;
   [[nodiscard]] int hitTestCard(const QPoint &pt) const;
-  [[nodiscard]] QPixmap pixmapForIndex(int idx);
+  // Returns the pixmap to draw for @p idx. On a miss in m_pixmapCache this
+  // schedules the decode and returns a PLACEHOLDER for the meantime, so the
+  // return value does not always correspond to the card's artworkPath.
+  // @p sourcePath (optional) reports which image the pixmap actually is:
+  // the resolved artwork/gallery path, or EMPTY for a placeholder. Callers
+  // that key a cache on the pixmap must key it on this, not on
+  // m_cards[idx].artworkPath — doing the latter stored a scaled placeholder
+  // under the real artwork's key and pinned it there (Kartend-ce0b4).
+  [[nodiscard]] QPixmap pixmapForIndex(int idx, QString *sourcePath = nullptr);
   [[nodiscard]] QPixmap buildPlaceholderPixmap(int width, int height) const;
   [[nodiscard]] QColor tileColorOrFallback() const;
   [[nodiscard]] QColor selectionColorOrFallback() const;
@@ -212,8 +228,11 @@ private:
   // draw-size back out via @p scaled / @p scaledDrawSize so
   // renderCardReflection reuses them. @p useFastTransform returns whether the
   // miss path disabled SmoothPixmapTransform on @p painter.
-  void renderCardPixmap(QPainter &painter, const CardLayout &c, const QPixmap &pm, QPixmap &scaled,
-                        QSize &scaledDrawSize, bool &useFastTransform);
+  // @p sourcePath identifies what @p pm actually is (see pixmapForIndex);
+  // empty means placeholder, which bypasses the scaled cache entirely.
+  void renderCardPixmap(QPainter &painter, const CardLayout &c, const QPixmap &pm,
+                        const QString &sourcePath, QPixmap &scaled, QSize &scaledDrawSize,
+                        bool &useFastTransform);
   // Draws the flipped, faded reflection beneath the card using the already-
   // resolved @p scaled pixmap, then the bottom-fade gradient toward @p bg.
   void renderCardReflection(QPainter &painter, const CardLayout &c, const QPixmap &scaled,

@@ -115,6 +115,12 @@ public:
   /// nor artwork exists (the overlay stays hidden).
   bool showMediaPreview(const QString &filePath, const QString &artworkDir,
                         const QString &videoDir);
+  /// Lazy-creates the overlay and shows the already-resolved media at
+  /// @p path — artwork, or video when @p isVideo. For callers holding an
+  /// exact path (cover flow's gallery strip) rather than an item to look up.
+  /// Returns false only when there is no viewport to host the overlay or
+  /// @p path is empty.
+  bool showPreviewAtPath(const QString &path, bool isVideo);
   /// Populate the expand-mode overlay's bottom thumb strip with the
   /// item's related artwork so Left/Right and thumb clicks can cycle
   /// the main preview between cover / screenshot / fanart / video.

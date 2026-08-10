@@ -452,7 +452,13 @@ void SettingsDialog::accept() {
   if (m_gamepadCapture) {
     m_gamepadCapture->stop();
   }
-  if (!resolveUnsavedChanges(tr("closing the dialog"), true)) {
+  // OK means "save and close", so commit pending edits outright rather than
+  // asking (Kartend-1g46b). Routing this through resolveUnsavedChanges raised
+  // "Save changes before closing the dialog?" — the prompt that belongs to
+  // Cancel, where the question is genuinely open. On an OK press it asks the
+  // user to repeat an intent they just expressed, and offers Discard, which
+  // contradicts the button they pressed. reject() below still prompts.
+  if (!commitUnsavedChanges(true)) {
     return;
   }
   // Surface QSettings disk-write failures (full disk, EROFS, permission

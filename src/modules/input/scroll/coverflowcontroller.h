@@ -111,6 +111,11 @@ signals:
   void virtualFolderEntered(const QString &folderPath);
   void itemActivated(int visualIndex);
   void activeChanged(bool active);
+  /// Forwarded from CoverFlowWidget: the user double-clicked a gallery-strip
+  /// thumbnail and wants @p path shown full size (Kartend-5jtyw). ScrollManager
+  /// connects this to its own preview role — see the connect site for why the
+  /// controller forwards instead of reaching for ctx->scrollPreview().
+  void galleryPreviewRequested(const QString &path, bool isVideo);
 
 private:
   void resolveAndPushVideo(int visualIndex);
@@ -128,12 +133,18 @@ private:
   // track those slots, prewarm their directories off-thread, and patch
   // just the pending cards once the cache is warm.
 
-  /// Queue @p visualIndex for the trailing retry when its artwork
-  /// directory is still cold; warm-cache empties are genuinely artless
-  /// and are skipped. Adds the directory to @p dirsToWarm.
+  /// Queue @p visualIndex for the trailing retry unless every directory its
+  /// cover lookup probes is already warm — only then is an empty result a
+  /// real "artless" rather than a not-yet-scanned one (Kartend-t4rjw). Adds
+  /// the artwork directory to @p dirsToWarm. @p settledByDir memoizes the
+  /// per-directory verdict across one pass and must not outlive it.
   void notePendingArtwork(int visualIndex, int actualIndex, IDatabaseManager *db,
-                          QSet<QString> &dirsToWarm);
-  /// schedulePrewarm() @p dirsToWarm and start the retry timer with a
+                          QSet<QString> &dirsToWarm, QHash<QString, bool> &settledByDir);
+  /// schedulePrewarm() the full lookup cascade of every directory in
+  /// @p artworkDirs — root plus typed cover subdirs, not just the root
+  /// (Kartend-t4rjw). No-op for an empty set.
+  static void prewarmArtworkCascades(const QSet<QString> &artworkDirs);
+  /// prewarmArtworkCascades() @p dirsToWarm and start the retry timer with a
   /// fresh attempt budget when anything is pending.
   void armArtworkRetry(const QSet<QString> &dirsToWarm);
   /// Timer body: re-run buildCard for pending slots whose directory is now
@@ -141,8 +152,14 @@ private:
   void retryPendingArtwork();
   /// Drop all pending slots, reset the attempt budget, stop the timer.
   void clearArtworkRetry();
-  /// The directory resolveCardArtworkPath would search for @p actualIndex
-  /// — empty for non-media indices.
+  /// The directory a subcollection TILE's cover is looked up in: the active
+  /// (parent) collection's artworkDirectory, where an image named after the
+  /// child lives (Kartend-5dhlv). Not the child's own artworkDirectory —
+  /// that holds the child's item covers.
+  [[nodiscard]] QString subcollectionArtworkDirectory() const;
+  /// The directory buildCard would search for @p actualIndex — the parent's
+  /// artwork directory for a subcollection slot, the item's own for a media
+  /// slot, empty for anything else (virtual folders carry no artwork).
   [[nodiscard]] QString artworkDirForActual(int actualIndex, IDatabaseManager *db) const;
 
   /// Kartend-yeik: ctx-routed FilterManager accessor. Replaces the old
@@ -166,11 +183,13 @@ private:
   int m_pendingVisualIndex = -1;
 
   // Kartend-6x8tn: carousel slots whose primary artwork resolved empty
-  // against a still-cold DirectoryCache, keyed by visual index → the
-  // directory the lookup searches. The bounded trailing retry re-runs
-  // buildCard for just these slots once their directory is cached —
-  // positive entry patches the card, cached negative means genuinely
-  // artless and the slot is dropped.
+  // against a still-cold DirectoryCache, keyed by visual index → the artwork
+  // directory the lookup searches (its root; the probed cascade is derived
+  // from that). The bounded trailing retry re-runs buildCard for just these
+  // slots once the whole cascade is cached — positive entry patches the card,
+  // an all-warm empty means genuinely artless and the slot is dropped
+  // (Kartend-t4rjw: keying that decision on the root alone dropped cards
+  // whose cover sat in a subdir the prewarm had not reached yet).
   QHash<int, QString> m_pendingArtwork;
   QTimer *m_artworkRetryTimer = nullptr;
   int m_artworkRetryAttempts = 0;

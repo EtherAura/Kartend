@@ -18,6 +18,7 @@
 // The suite also hosts the OverlayZOrderRegistry cases — it is the only
 // suite linking kartend_chrome, whose public include surface carries
 // chrome/overlays.
+#include "coverflowgallerystrip.h"
 #include "coverflowwidget.h"
 #include "overlayzorderregistry.h"
 #include "videopreviewwidget.h"
@@ -160,6 +161,13 @@ private slots:
   void mousePressOnEmptyCardsIgnored();
   void mouseDoubleClickEmptyCardsIgnored();
   void mouseDoubleClickRightButtonIgnored();
+  // Gallery-strip double click → full-size preview, never a launch
+  // (Kartend-5jtyw)
+  void mouseDoubleClickOnGalleryThumbPreviewsInsteadOfLaunching();
+  void mouseDoubleClickOffGalleryStillActivatesCard();
+
+  // Decoded artwork must reach the screen without a resize (Kartend-ce0b4)
+  void decodedArtworkReplacesThePlaceholderWithoutResizing();
 };
 
 void TestCoverFlowWidget::initTestCase() {
@@ -957,6 +965,129 @@ void TestCoverFlowWidget::mouseDoubleClickRightButtonIgnored() {
                 Qt::RightButton, Qt::RightButton, Qt::NoModifier);
   w.mouseDoubleClickEvent(&e);
   QCOMPARE(spy.count(), 0);
+}
+
+// Kartend-5jtyw: mouseDoubleClickEvent used to go straight to hitTestCard,
+// which misses every card for a point inside the strip — so double-clicking a
+// thumbnail did nothing. It must instead claim the event and ask for a preview
+// of that exact file. The launch assertion below is a guard, not a fixed
+// regression: the strip lays out below the card rects, so the old fall-through
+// was inert rather than harmful, and this pins that it stays that way even if
+// the layout later brings the two into overlap.
+void TestCoverFlowWidget::mouseDoubleClickOnGalleryThumbPreviewsInsteadOfLaunching() {
+  TestableCoverFlow w;
+  w.resize(600, 400);
+  w.setCards(makeCards(10));
+  w.setSelectedIndex(3, false);
+
+  QList<CoverFlowGalleryEntry> entries;
+  CoverFlowGalleryEntry cover;
+  cover.label = "cover";
+  cover.path = "/art/cover.png";
+  CoverFlowGalleryEntry clip;
+  clip.label = "clip";
+  clip.path = "/art/clip.mp4";
+  clip.isVideo = true;
+  entries << cover << clip;
+  w.setGalleryForIndex(3, entries);
+
+  auto *strip = w.findChild<CoverFlowGalleryStrip *>();
+  QVERIFY(strip);
+  const QList<QRect> thumbs = strip->thumbRects();
+  QCOMPARE(thumbs.size(), entries.size());
+
+  QSignalSpy launchSpy(&w, &CoverFlowWidget::itemActivated);
+  QSignalSpy previewSpy(&w, &CoverFlowWidget::galleryPreviewRequested);
+
+  // Double-click the second thumbnail (the video entry) — a deliberate pick:
+  // it proves the strip's own index is used rather than the centered card's
+  // default artwork.
+  const QPoint at = thumbs.at(1).center();
+  QMouseEvent e(QEvent::MouseButtonDblClick, QPointF(at), w.mapToGlobal(at), Qt::LeftButton,
+                Qt::LeftButton, Qt::NoModifier);
+  w.mouseDoubleClickEvent(&e);
+
+  QCOMPARE(previewSpy.count(), 1);
+  QCOMPARE(previewSpy.at(0).at(0).toString(), clip.path);
+  QCOMPARE(previewSpy.at(0).at(1).toBool(), true);
+  QVERIFY2(launchSpy.isEmpty(),
+           "double-clicking a gallery thumbnail fell through to the card hit-test and activated "
+           "the item");
+  QVERIFY(e.isAccepted());
+}
+
+// The card path is untouched: a double click away from the strip still
+// activates, so the fix above narrows nothing.
+void TestCoverFlowWidget::mouseDoubleClickOffGalleryStillActivatesCard() {
+  TestableCoverFlow w;
+  w.resize(600, 400);
+  w.setCards(makeCards(10));
+  w.setSelectedIndex(3, false);
+
+  QSignalSpy launchSpy(&w, &CoverFlowWidget::itemActivated);
+  QSignalSpy previewSpy(&w, &CoverFlowWidget::galleryPreviewRequested);
+
+  // No gallery is set, so the strip has no thumbnails and cannot claim the
+  // event; the centered card is at the widget's middle.
+  const QPoint at(w.width() / 2, w.height() / 2);
+  QMouseEvent e(QEvent::MouseButtonDblClick, QPointF(at), w.mapToGlobal(at), Qt::LeftButton,
+                Qt::LeftButton, Qt::NoModifier);
+  w.mouseDoubleClickEvent(&e);
+
+  QCOMPARE(launchSpy.count(), 1);
+  QCOMPARE(previewSpy.count(), 0);
+}
+
+// Kartend-ce0b4: the scaled-pixmap cache was keyed on the card's artworkPath
+// while the pixmap being scaled was whatever pixmapForIndex returned — which
+// is the PLACEHOLDER until the async decode lands. The placeholder therefore
+// got cached under the real artwork's key, and every later paint hit that
+// entry and redrew it, discarding the decoded artwork. The art only appeared
+// once the card changed size (a selection move resizes it) and the key missed.
+//
+// Rendered end-to-end rather than asserted on internal state, because the
+// defect is precisely that the internal state (m_pixmapCache) was CORRECT
+// while the pixels were wrong — instrumenting the layer above is what led an
+// earlier investigation to blame the GPU (Kartend-hrgf5).
+void TestCoverFlowWidget::decodedArtworkReplacesThePlaceholderWithoutResizing() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString artPath = QDir(dir.path()).absoluteFilePath(QStringLiteral("cover.png"));
+  // A saturated, unmistakable source: no placeholder shade is pure red.
+  QImage art(120, 180, QImage::Format_ARGB32);
+  art.fill(QColor(255, 0, 0));
+  QVERIFY(art.save(artPath));
+
+  TestableCoverFlow w;
+  w.resize(800, 600);
+  CoverFlowCardData card;
+  card.title = QStringLiteral("Only");
+  card.artworkPath = artPath;
+  w.setCards({card});
+  w.setSelectedIndex(0, false);
+
+  const QPoint centre(w.width() / 2, w.height() / 2);
+
+  // First paint: the decode has not landed, so this draws the placeholder and
+  // (pre-fix) poisoned the cache entry for artPath.
+  QImage frame(w.size(), QImage::Format_ARGB32);
+  frame.fill(Qt::black);
+  w.render(&frame);
+
+  // Let the decode land. Nothing resizes the card in between — that is the
+  // whole point: no selection change, no resize, no setCards.
+  QTRY_VERIFY_WITH_TIMEOUT(w.pixmapCacheSize() >= 1, 5000);
+
+  // Repaint exactly as update() would. The centre of the widget sits inside
+  // the centred card, which carries no shear at offset 0.
+  frame.fill(Qt::black);
+  w.render(&frame);
+  const QColor drawn = frame.pixelColor(centre);
+
+  QVERIFY2(drawn.red() > 200 && drawn.green() < 80 && drawn.blue() < 80,
+           qPrintable(QStringLiteral("centre card drew %1 instead of the decoded artwork — the "
+                                     "scaled-pixmap cache is still serving a stale placeholder")
+                          .arg(drawn.name())));
 }
 
 QTEST_MAIN(TestCoverFlowWidget)

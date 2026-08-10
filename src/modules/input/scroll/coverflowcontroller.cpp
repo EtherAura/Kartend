@@ -176,6 +176,17 @@ void CoverFlowController::ensureWidget() {
     // the same filter-aware visual-index pipeline the grid uses.
     emit itemActivated(idx);
   });
+
+  // Double-click on a gallery-strip thumbnail: show that exact variant full
+  // size (Kartend-5jtyw). The widget is a chrome/ dumb widget and cannot own
+  // an overlay itself, so the path comes out as a signal. We forward it rather
+  // than calling ctx->scrollPreview() here: ScrollManager both owns this
+  // controller and IS the preview role, so letting it connect the signal to
+  // itself keeps this file off a third sibling manager (the ctx fan-out
+  // ratchet in check-layering.py is what makes that concrete). Single click
+  // keeps swapping the centred card's artwork, which the widget does itself.
+  connect(m_widget, &CoverFlowWidget::galleryPreviewRequested, this,
+          &CoverFlowController::galleryPreviewRequested);
 }
 
 void CoverFlowController::applyConfig() {
@@ -548,7 +559,20 @@ CoverFlowCardData CoverFlowController::buildCard(int actualIndex, IDatabaseManag
     if (m_collections && sub >= 0 && sub < m_collections->size()) {
       const auto &subCfg = m_collections->at(sub);
       card.title = subCfg.name;
-      card.artworkPath = subCfg.collectionIcon;
+      // Same two sources, in the same order, that Grid/List resolve a
+      // subcollection tile from (Kartend-5dhlv): the child's own
+      // collectionIcon, then an image named after the child in the PARENT's
+      // artwork directory. Only the icon was read here, so a subcollection
+      // following the naming convention — the mechanism that predates the
+      // key — showed a placeholder in cover flow alone.
+      card.artworkPath = subCfg.collectionIcon.trimmed();
+      if (card.artworkPath.isEmpty()) {
+        // Cache-only, like every other lookup in this function: a cold miss
+        // is picked up by the trailing retry rather than paid for with a
+        // synchronous stat on the GUI thread (see resolveCardArtworkPath).
+        card.artworkPath =
+            ArtworkUtils::findArtworkForFileCached(subCfg.name, subcollectionArtworkDirectory());
+      }
     }
   } else if (m_dataManager->isVirtualFolderIndex(actualIndex)) {
     const QString folder = m_dataManager->virtualFolderFromActual(actualIndex);
@@ -597,11 +621,15 @@ void CoverFlowController::rebuildCards() {
   // retry timer alive (Kartend-6x8tn).
   const bool trackPending = isActive();
   QSet<QString> dirsToWarm;
+  // One memo for the whole rebuild — see artworkLookupSettled. Every card in
+  // a collection normally shares one artwork directory, so this collapses the
+  // cascade check to a single build for the entire pass.
+  QHash<QString, bool> settledByDir;
   for (int visualIndex = 0; visualIndex < total; ++visualIndex) {
     const int actualIndex = filtered ? filterMgr()->getActualIndex(visualIndex) : visualIndex;
     CoverFlowCardData card = buildCard(actualIndex, db);
     if (trackPending && card.artworkPath.isEmpty()) {
-      notePendingArtwork(visualIndex, actualIndex, db, dirsToWarm);
+      notePendingArtwork(visualIndex, actualIndex, db, dirsToWarm, settledByDir);
     }
     cards.append(std::move(card));
   }
@@ -632,6 +660,7 @@ void CoverFlowController::updateCardsIfActive(const QList<int> &updatedIndices) 
   }
   IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   QSet<QString> dirsToWarm;
+  QHash<QString, bool> settledByDir;
   for (int visualIndex : updatedIndices) {
     if (visualIndex < 0 || visualIndex >= total) {
       continue;
@@ -643,7 +672,7 @@ void CoverFlowController::updateCardsIfActive(const QList<int> &updatedIndices) 
     // resolves empty — queue it for the trailing retry (the old per-chunk
     // full rebuilds that self-healed these are gone since Kartend-x7bn8).
     if (card.artworkPath.isEmpty()) {
-      notePendingArtwork(visualIndex, visualIndex, db, dirsToWarm);
+      notePendingArtwork(visualIndex, visualIndex, db, dirsToWarm, settledByDir);
     } else {
       m_pendingArtwork.remove(visualIndex);
     }
@@ -653,12 +682,60 @@ void CoverFlowController::updateCardsIfActive(const QList<int> &updatedIndices) 
 
 // ── Pending-artwork retry (Kartend-6x8tn) ──────────────────────────────
 
+namespace {
+
+/// True when EVERY directory a cached cover lookup against @p artworkDir would
+/// probe is warm — so an empty result from it is a real "this item has no
+/// artwork" rather than "the cache has not caught up yet" (Kartend-t4rjw).
+///
+/// Asking `isDirectoryCached(artworkDir)` instead is the bug this replaces:
+/// the lookup cascades from the flat root through nine typed cover subdirs,
+/// and schedulePrewarm warms the roots in one phase and the subdirs in the
+/// next, so a warm root says nothing about whether `{root}/front` — where the
+/// scrape pipeline actually writes covers — has been scanned.
+///
+/// @p settledByDir memoizes the verdict for the duration of ONE pass. The
+/// cascade is ten path builds, and a rebuild registers pending slots for every
+/// item in the collection while nearly all of them share a single artwork
+/// directory, so without the memo the string work would dominate the pass.
+/// Callers must not keep the memo across passes: a stale "settled" is exactly
+/// the premature drop being fixed.
+bool artworkLookupSettled(const QString &artworkDir, QHash<QString, bool> &settledByDir) {
+  const auto cached = settledByDir.constFind(artworkDir);
+  if (cached != settledByDir.constEnd()) {
+    return cached.value();
+  }
+  const bool settled = ArtworkUtils::DirectoryCache::instance().areDirectoriesCached(
+      ArtworkUtils::artworkLookupDirectories(artworkDir));
+  settledByDir.insert(artworkDir, settled);
+  return settled;
+}
+
+} // namespace
+
 bool CoverFlowController::artworkRetryActive() const {
   return m_artworkRetryTimer && m_artworkRetryTimer->isActive();
 }
 
+QString CoverFlowController::subcollectionArtworkDirectory() const {
+  // The PARENT's artwork directory — a subcollection tile's cover is looked
+  // up there, named after the child. Deliberately not the child's own
+  // artworkDirectory: that holds the child's ITEM covers, not its tile.
+  return m_context ? m_context->config.artworkDirectory : QString();
+}
+
 QString CoverFlowController::artworkDirForActual(int actualIndex, IDatabaseManager *db) const {
-  if (!m_dataManager || !m_context || !m_dataManager->isMediaIndex(actualIndex)) {
+  if (!m_dataManager || !m_context) {
+    return {};
+  }
+  // Kartend-5dhlv: subcollection slots resolve their tile through the naming
+  // convention too, so they need the same cold-cache retry as media items.
+  // Registering them was previously impossible — this returned empty for
+  // anything failing isMediaIndex, so notePendingArtwork dropped them.
+  if (m_dataManager->isSubcollectionIndex(actualIndex)) {
+    return subcollectionArtworkDirectory();
+  }
+  if (!m_dataManager->isMediaIndex(actualIndex)) {
     return {};
   }
   const int mediaIdx = m_dataManager->mediaIndexFromActual(actualIndex);
@@ -668,30 +745,52 @@ QString CoverFlowController::artworkDirForActual(int actualIndex, IDatabaseManag
 }
 
 void CoverFlowController::notePendingArtwork(int visualIndex, int actualIndex, IDatabaseManager *db,
-                                             QSet<QString> &dirsToWarm) {
+                                             QSet<QString> &dirsToWarm,
+                                             QHash<QString, bool> &settledByDir) {
   const QString dir = artworkDirForActual(actualIndex, db);
   if (dir.isEmpty()) {
     // Subcollection / virtual-folder slot, or no artwork directory
     // configured — nothing a warmer cache could ever resolve.
     return;
   }
-  if (ArtworkUtils::DirectoryCache::instance().isDirectoryCached(dir)) {
-    // Warm directory + empty lookup = cached negative: the item is
-    // genuinely artless, retrying would never make progress.
+  if (artworkLookupSettled(dir, settledByDir)) {
+    // Every directory the lookup probes is warm and it still came back
+    // empty: a real cached negative, so the item is genuinely artless and
+    // retrying would never make progress.
     return;
   }
   m_pendingArtwork.insert(visualIndex, dir);
   dirsToWarm.insert(dir);
 }
 
-void CoverFlowController::armArtworkRetry(const QSet<QString> &dirsToWarm) {
-  if (!dirsToWarm.isEmpty()) {
-    // Safe off-thread entry; also drains m_queuedDirectories, picking up
-    // the dirs the cold findInDirectory probes queued (typed cover
-    // subdirs, mirror subfolders).
-    ArtworkUtils::DirectoryCache::instance().schedulePrewarm(
-        QStringList(dirsToWarm.cbegin(), dirsToWarm.cend()));
+void CoverFlowController::prewarmArtworkCascades(const QSet<QString> &artworkDirs) {
+  if (artworkDirs.isEmpty()) {
+    return;
   }
+  // Warm the whole lookup cascade per directory, not just the flat root
+  // (Kartend-t4rjw). The cold findInDirectory probes inside buildCard do
+  // queue the typed cover subdirs, so relying on the queue drain alone
+  // eventually gets there — but only after prewarmDirectories() has finished
+  // the roots, which is precisely the window where the retry used to see a
+  // warm root, read the still-empty result as "artless", and drop the card
+  // for good. Passing the cascade to the walk itself collapses that window:
+  // one blockingMap covers root and subdirs together. The drain still runs
+  // afterwards for the mirror subfolders the cascade doesn't name.
+  QSet<QString> cascade;
+  for (const QString &dir : artworkDirs) {
+    const QStringList probed = ArtworkUtils::artworkLookupDirectories(dir);
+    for (const QString &entry : probed) {
+      cascade.insert(entry);
+    }
+  }
+  // Safe off-thread entry; also drains m_queuedDirectories, picking up the
+  // dirs the cold findInDirectory probes queued (mirror subfolders).
+  ArtworkUtils::DirectoryCache::instance().schedulePrewarm(
+      QStringList(cascade.cbegin(), cascade.cend()));
+}
+
+void CoverFlowController::armArtworkRetry(const QSet<QString> &dirsToWarm) {
+  prewarmArtworkCascades(dirsToWarm);
   if (m_pendingArtwork.isEmpty() || !m_artworkRetryTimer) {
     return;
   }
@@ -711,7 +810,11 @@ void CoverFlowController::retryPendingArtwork() {
   ++m_artworkRetryAttempts;
   IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   const bool filtered = filterMgr() && filterMgr()->isFiltered();
-  auto &cache = ArtworkUtils::DirectoryCache::instance();
+  // Per-tick memo, deliberately not a member: the verdict is a snapshot of a
+  // cache the prewarm threads are actively warming, and carrying a stale
+  // "settled" across ticks would reintroduce exactly the premature drop this
+  // function was fixed for.
+  QHash<QString, bool> settledByDir;
   for (auto it = m_pendingArtwork.begin(); it != m_pendingArtwork.end();) {
     const int visualIndex = it.key();
     if (visualIndex < 0 || visualIndex >= m_widget->cardCount()) {
@@ -719,9 +822,10 @@ void CoverFlowController::retryPendingArtwork() {
       it = m_pendingArtwork.erase(it);
       continue;
     }
-    if (!cache.isDirectoryCached(it.value())) {
-      // Still cold — the prewarm has not reached this directory yet.
-      // O(1) check only; no per-card lookup until the cache is warm.
+    if (!artworkLookupSettled(it.value(), settledByDir)) {
+      // Some directory in the lookup cascade is still cold — the prewarm
+      // has not covered all of them yet. O(1) per card after the first of
+      // each directory; no per-card lookup until the cache is warm.
       ++it;
       continue;
     }
@@ -730,8 +834,9 @@ void CoverFlowController::retryPendingArtwork() {
     if (!card.artworkPath.isEmpty()) {
       m_widget->updateCard(visualIndex, card);
     }
-    // Warm directory: either the card just resolved or the cache holds a
-    // negative for it (genuinely artless) — done with this slot either way.
+    // The whole cascade is warm: either the card just resolved or every
+    // directory that could hold its cover holds a negative for it
+    // (genuinely artless) — done with this slot either way.
     it = m_pendingArtwork.erase(it);
   }
   if (m_pendingArtwork.isEmpty() ||
@@ -748,7 +853,7 @@ void CoverFlowController::retryPendingArtwork() {
   for (auto it = m_pendingArtwork.cbegin(); it != m_pendingArtwork.cend(); ++it) {
     remaining.insert(it.value());
   }
-  cache.schedulePrewarm(QStringList(remaining.cbegin(), remaining.cend()));
+  prewarmArtworkCascades(remaining);
   m_artworkRetryTimer->start();
 }
 

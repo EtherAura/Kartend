@@ -86,6 +86,7 @@ public:
   bool showMediaPreview(const QString &, const QString &, const QString &) override {
     return false;
   }
+  bool showPreviewAtPath(const QString &, bool) override { return false; }
   void centerHorizontalScrollbar(int, const QList<CollectionConfig> &) override {}
   void recenterVirtualContainer() override {}
   void handleLayoutChange() override {}

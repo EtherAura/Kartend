@@ -125,7 +125,7 @@ class TestSettingsDialogLiveSave : public QObject {
 private slots:
   void editBurstAppliesInMemoryImmediatelyButWritesDiskOnce();
   void rejectRestoresBaselineAndCancelsPendingWrite();
-  void acceptViaSaveSupersedesPendingDebounce();
+  void acceptSupersedesPendingDebounceWithoutPrompting();
   void fontsLiveSaveDoesNotPersistUnrelatedDeferredEdits();
 };
 
@@ -182,7 +182,7 @@ void TestSettingsDialogLiveSave::rejectRestoresBaselineAndCancelsPendingWrite() 
   QCOMPARE(h.sm.lastSaved.splash.bootSplashEnabled, original);
 }
 
-void TestSettingsDialogLiveSave::acceptViaSaveSupersedesPendingDebounce() {
+void TestSettingsDialogLiveSave::acceptSupersedesPendingDebounceWithoutPrompting() {
   Harness h;
   auto *toggle = h.dialog->findChild<QCheckBox *>(QStringLiteral("bootSplashCheckBox"));
   QVERIFY(toggle);
@@ -191,11 +191,13 @@ void TestSettingsDialogLiveSave::acceptViaSaveSupersedesPendingDebounce() {
   toggle->setChecked(!original);
   QCOMPARE(h.sm.saveCount, 0); // debounce pending
 
-  // OK with unsaved changes → prompt → Save → the full-save path persists
-  // the live value (and supersedes the pending flush).
+  // OK with unsaved changes commits straight away — no prompt (Kartend-1g46b)
+  // — and the full-save path persists the live value, superseding the pending
+  // flush. The driver is armed and must go untriggered: if a modal ever
+  // reappears here it would answer it, so a silent regression cannot hide.
   ModalDriver driver(QMessageBox::Save);
   h.dialog->accept();
-  QVERIFY(driver.triggered);
+  QVERIFY2(!driver.triggered, "OK raised the unsaved-changes prompt; it should save and close");
   QCOMPARE(h.dialog->result(), static_cast<int>(QDialog::Accepted));
 
   QVERIFY(h.sm.saveCount >= 1);

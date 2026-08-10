@@ -199,6 +199,24 @@ QString ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(
   return placeholderArtwork;
 }
 
+QString ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
+    const QList<CollectionConfig> *collections, int subcollectionIndex,
+    const QString &subcollectionName, const QString &parentArtworkDirectory) {
+  // 1. The child's own collectionIcon. Used as stored — see the header for
+  //    why no path expansion happens here (Kartend-dkh90).
+  if (collections && subcollectionIndex >= 0 && subcollectionIndex < collections->size()) {
+    const QString icon = collections->at(subcollectionIndex).collectionIcon.trimmed();
+    if (!icon.isEmpty()) {
+      return icon;
+    }
+  }
+  // 2. An image named after the child, in the PARENT's artwork directory.
+  if (subcollectionName.isEmpty() || parentArtworkDirectory.isEmpty()) {
+    return {};
+  }
+  return ArtworkUtils::findArtworkForFile(subcollectionName, parentArtworkDirectory);
+}
+
 QString ItemWidgetFactory::resolvePlaceholderArtworkForCollection(int collectionIndex) const {
   // Memoized per collection index (negative results included): the
   // parent-chain walk + expandConfigVariables ran on every widget

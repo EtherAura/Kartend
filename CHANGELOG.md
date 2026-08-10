@@ -259,6 +259,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registering an overlay could leave the stacking table out of order, so a
   later restack put the wrong overlay on top.
 - The About box and the parent-collection *None* entry are translatable.
+- **Cover Flow no longer writes an item off as artless before it has looked
+  everywhere.** Cover art is searched for in the artwork folder and then in
+  each of its typed sub-folders — `front`, `box`, `screenshot` and the rest,
+  which is where scraped covers actually land. Those sub-folders are indexed
+  separately from the top-level one and moments later, but Cover Flow decided
+  an item simply had no artwork as soon as the top-level folder was done, so a
+  cover sitting in `front` could be given up on before the folder holding it
+  had been read — after which nothing retried it. Cover Flow now waits for
+  every folder it would search, and asks for all of them to be indexed up
+  front instead of just the top level (Kartend-t4rjw).
+- **Double-clicking a thumbnail in Cover Flow's artwork strip now opens it full
+  size.** The double click was passed to the covers behind the strip, which
+  matched nothing there, so it did nothing at all. It now opens that exact
+  image or video in the same full-screen preview the sidebar gallery uses.
+  Single-clicking a thumbnail still just swaps the centre cover, as before
+  (Kartend-5jtyw).
+- **Cover Flow shows a subcollection's tile picture the same way Grid does.**
+  A subcollection tile takes its picture from the collection's own Collection
+  Icon, or failing that from an image named after the subcollection sitting in
+  the parent's artwork folder. Cover Flow only ever read the first, so a
+  subcollection relying on the naming convention — the older of the two, and
+  the only one that worked in Grid until recently — showed the generated
+  placeholder there. Both layouts now do both steps, in the same order
+  (Kartend-5dhlv).
+- **Cover Flow covers now appear as soon as they load, instead of staying
+  blank until you move the selection.** Covers are decoded in the background,
+  and a card shows a placeholder while that happens. The resized copy of that
+  placeholder was being filed under the cover's own name, so once the real
+  cover arrived the card kept finding — and drawing — the placeholder instead.
+  Moving the selection resizes the card, which asked for a differently-sized
+  copy and finally showed the artwork; that is why it looked like the covers
+  were waiting for a click. The same mix-up applied to the artwork variants in
+  the strip along the bottom (Kartend-ce0b4).
+- **A subcollection's Collection Icon now shows on its tile in Grid and List.**
+  The setting is offered for every collection and the documentation described
+  it as the image painted on a subcollection's tile, but only Cover Flow and
+  the marquee ever read it — in the two most-used layouts, setting it did
+  nothing and the tile stayed on the generated placeholder. Grid and List now
+  use it first, falling back as before to an image named after the
+  subcollection sitting in the parent's artwork folder. That older convention
+  is unchanged, and is now written down too (Kartend-kb2vx).
+- **OK in the Settings dialog now saves and closes instead of asking whether
+  you want to save.** With an edit pending, OK raised the "Save changes before
+  closing the dialog?" prompt — the one that belongs to Cancel. Pressing OK
+  already says to save, so the question was redundant, and one of its answers
+  was Discard, which throws away the edits the button was meant to keep.
+  Cancel still asks, which is where the question is genuinely open
+  (Kartend-1g46b).
 
 ## [0.0.18] - 2026-07-29
 
