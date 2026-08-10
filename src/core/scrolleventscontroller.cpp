@@ -46,11 +46,30 @@ void ScrollEventsController::onSortModeChangeRequested(SortMode sortMode) {
 }
 
 void ScrollEventsController::onSelectItemByIndex(int index) {
-  // Restore selection by index after sort change finds the item.
   auto *interaction = m_ctx.getInteractionManager ? m_ctx.getInteractionManager() : nullptr;
   if (!interaction) {
     return;
   }
+  // Kartend-ic4h6: cancel any pending automatic selection restore BEFORE
+  // applying this selection, exactly as the grid click / arrow-key /
+  // alphabetic-jump paths already do. This slot is the missing member of
+  // that set: it serves cover flow's user-driven selection (wheel, card
+  // click, arrows — every emit site of CoverFlowWidget's
+  // selectionChangeRequested is a user gesture). Without the cancel,
+  // SelectionRestoreCoordinator's staggered verification timers read
+  // "current != restore target" as "the restore has not landed" and
+  // re-assert the restored index — snapping the selection back to the
+  // first item seconds after the user moved (runtime-confirmed: repeated
+  // beginSelectionRestore targetIndex=0 in the reporter's trace).
+  //
+  // The signal's only other emitter is ScrollManager's restore-by-path
+  // (sort-change reload). Cancelling for it is also correct: that restore
+  // is the more precise, path-based expression of the same user intent,
+  // and the coordinator's coarser index-based verify must not clobber it
+  // either. The coordinator's own beginSelectionRestore does NOT route
+  // through this slot, so a legitimate session restore cannot cancel
+  // itself here.
+  interaction->cancelPendingSelectionRestore();
   interaction->selectItemByIndex(index, true);
   // Instantly scroll to make the item visible (no animation).
   interaction->applyImmediateViewportPositioningForSelection(index);

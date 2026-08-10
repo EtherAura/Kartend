@@ -3,6 +3,7 @@
 #include "applicationmanager.h"
 #include "collection/generalsettings.h"
 #include "collectiontypes.h"
+#include "interactionmanager.h"
 #include "mainwindow.h"
 #include "mocks/mockedmainwindowfixture.h"
 #include "mocks/mocksettingsmanager.h"
@@ -131,4 +132,60 @@ void TestScrollEventsController::sortModeChange_updatesAndPersistsSortMode() {
   QCOMPARE(int(settings.view.sortMode), int(SortMode::SizeDescending));
   QCOMPARE(recorder.saveGeneralSettingsCalls, 1);
   QCOMPARE(int(recorder.lastSaved.view.sortMode), int(SortMode::SizeDescending));
+}
+
+// Kartend-ic4h6: onSelectItemByIndex serves cover flow's user-driven selection
+// (every emit site of CoverFlowWidget::selectionChangeRequested is a user
+// gesture), yet unlike the grid click / arrow-key / alphabetic-jump paths it
+// never cancelled the pending automatic restore. SelectionRestoreCoordinator's
+// staggered verification timers then read "current != restore target" as "the
+// restore has not landed" and re-asserted the restored index — snapping the
+// selection back to the first item seconds after the user moved. The cancel is
+// observable as the userSelectionMade flag (the exact gate
+// beginSelectionRestore's skip-guard reads) plus a restoreToken bump (the gate
+// the coordinator's own validators read), so this pins both revert defences.
+void TestScrollEventsController::selectItemByIndex_cancelsPendingRestoreSoAVerifyCannotRevert() {
+  KartendTest::MockedMainWindowFixture fixture;
+  auto *interaction = fixture.window()->getApplicationManager()->getInteractionManager();
+  QVERIFY(interaction);
+
+  ScrollEventsController controller;
+  ScrollEventsControllerContext ctx;
+  ctx.getInteractionManager = [interaction]() { return interaction; };
+  controller.setContext(ctx);
+
+  // The state a freshly scheduled restore leaves behind: restore pending, no
+  // user input yet. This is the window the verification timers fire into.
+  auto &restore = interaction->state().selectionRestore();
+  restore.restorePending = true;
+  restore.userSelectionMade = false;
+  const int tokenBefore = restore.restoreToken;
+
+  // The user moves the selection in cover flow.
+  controller.onSelectItemByIndex(3);
+
+  // Both revert defences must now be armed: the flag beginSelectionRestore
+  // checks before overriding anything, and the token bump that makes the
+  // coordinator's captured validators reject their stale restore.
+  QVERIFY2(restore.userSelectionMade,
+           "onSelectItemByIndex did not mark the selection user-made — a pending restore "
+           "verification would revert the user's cover-flow selection");
+  QVERIFY2(restore.restoreToken > tokenBefore,
+           "onSelectItemByIndex did not invalidate the restore token — the coordinator's "
+           "staggered verify lambdas would still pass restoreStillValid");
+  QVERIFY(!restore.restorePending);
+
+  // And the flag genuinely gates a late verification: a beginSelectionRestore
+  // arriving now must leave no trace of a restore having run.
+  interaction->beginSelectionRestore(0);
+  QVERIFY(restore.userSelectionMade); // unchanged — the skip path touches nothing
+  QCOMPARE(restore.targetIndex, -1);
+}
+
+void TestScrollEventsController::selectItemByIndex_withoutInteractionManagerIsANoOp() {
+  // Guard parity with the other slots: an unwired context must not crash.
+  ScrollEventsController controller;
+  ScrollEventsControllerContext ctx;
+  controller.setContext(ctx);
+  controller.onSelectItemByIndex(7);
 }

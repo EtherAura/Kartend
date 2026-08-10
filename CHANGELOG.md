@@ -289,6 +289,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registering an overlay could leave the stacking table out of order, so a
   later restack put the wrong overlay on top.
 - The About box and the parent-collection *None* entry are translatable.
+- **Moving the selection in Cover Flow no longer gets undone moments later.**
+  When a collection opens, Kartend restores your last selection and then
+  double-checks a little later that the restore stuck. That check read "the
+  selection isn't on the restored item" as "the restore failed" — but it's
+  equally what things look like after you've simply moved on, and unlike
+  clicking in the grid or using the arrow keys, moving the selection in Cover
+  Flow never told the checker to stand down. So a second or two after opening
+  a collection in Cover Flow, your new selection could snap back to the
+  restored item. Cover Flow selection now cancels the pending check the same
+  way every other input path does (Kartend-ic4h6).
 - **Cover Flow no longer writes an item off as artless before it has looked
   everywhere.** Cover art is searched for in the artwork folder and then in
   each of its typed sub-folders — `front`, `box`, `screenshot` and the rest,

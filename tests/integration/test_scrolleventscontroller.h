@@ -24,6 +24,9 @@ private slots:
   void listColumnWidths_preferDebouncedSaverOverDirectSave();
   void sortModeChange_withoutNavigationManagerLeavesSettingsUntouched();
   void sortModeChange_updatesAndPersistsSortMode();
+  // Kartend-ic4h6
+  void selectItemByIndex_cancelsPendingRestoreSoAVerifyCannotRevert();
+  void selectItemByIndex_withoutInteractionManagerIsANoOp();
 };
 
 #endif // KARTEND_TESTS_TEST_SCROLLEVENTSCONTROLLER_H
