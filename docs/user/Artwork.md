@@ -293,6 +293,23 @@ the *tile* of this collection when it's a subcollection of another.
 See [Themes & Appearance](Themes-and-Appearance.md#header-logo) for
 positioning details.
 
+### Subcollection tile artwork
+
+The tile a subcollection shows inside its parent is resolved in two
+steps, in this order:
+
+1. **`collectionIcon` on the child** — an absolute path to an image.
+   This is the explicit choice and always wins.
+2. **An image named after the child, in the *parent's*
+   `artworkDirectory`** — so a subcollection called `Documentaries`
+   picks up `Documentaries.png` sitting alongside the parent's item
+   covers. Same name matching as per-item artwork.
+
+If neither resolves, the tile falls back to `placeholderArtwork`, and
+then to the generated cross-hatch placeholder.
+
+Grid, List, and Cover Flow all do both steps, in this order.
+
 ## Loading and caching
 
 Artwork loading is asynchronous and parallel. On collection open:

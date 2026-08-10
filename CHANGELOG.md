@@ -292,6 +292,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   copy and finally showed the artwork; that is why it looked like the covers
   were waiting for a click. The same mix-up applied to the artwork variants in
   the strip along the bottom (Kartend-ce0b4).
+- **A subcollection's Collection Icon now shows on its tile in Grid and List.**
+  The setting is offered for every collection and the documentation described
+  it as the image painted on a subcollection's tile, but only Cover Flow and
+  the marquee ever read it — in the two most-used layouts, setting it did
+  nothing and the tile stayed on the generated placeholder. Grid and List now
+  use it first, falling back as before to an image named after the
+  subcollection sitting in the parent's artwork folder. That older convention
+  is unchanged, and is now written down too (Kartend-kb2vx).
 
 ## [0.0.18] - 2026-07-29
 

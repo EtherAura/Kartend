@@ -17,6 +17,7 @@
 // policy cases build real directories under a QTemporaryDir.
 
 #include <QDir>
+#include <QFile>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -36,6 +37,14 @@ private slots:
   void placeholder_danglingPathResolvesEmpty();
   void placeholder_allEmptyReturnsEmpty();
 
+  // resolveSubcollectionTileArtwork precedence (Kartend-kb2vx)
+  void subTile_collectionIconWins();
+  void subTile_fallsBackToNamedImageInParentArtworkDir();
+  void subTile_collectionIconWinsOverAPresentNamedImage();
+  void subTile_whitespaceOnlyIconFallsThrough();
+  void subTile_emptyWhenNeitherSourceResolves();
+  void subTile_guardsOutOfRangeAndMissingInputs();
+
   // Pending range-request bookkeeping
   void prefetchRangeAt_requestsUnloadedChunkOnce();
   void prefetchRangeAt_guardsInvalidAndLoadedInputs();
@@ -51,6 +60,14 @@ QString makeDir(QTemporaryDir &root, const QString &name) {
   const QString path = QDir(root.path()).absoluteFilePath(name);
   QDir().mkpath(path);
   return path;
+}
+
+/// Creates a file at @p path. findArtworkForFile matches on name and existence
+/// only — it never decodes — so the bytes are irrelevant.
+void writeImage(const QString &path) {
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("px");
 }
 
 /// Factory wired to @p filePaths / @p fileNames only — enough for the
@@ -177,6 +194,126 @@ void TestItemWidgetFactory::placeholder_allEmptyReturnsEmpty() {
                                                                QStringLiteral("Ctx")),
            QString());
   QCOMPARE(ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(nullptr, 3, QString(), QString()),
+           QString());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subcollection tile artwork precedence (Kartend-kb2vx)
+//
+// Two sources: the child's own collectionIcon, then an image named after the
+// child in the PARENT's artwork directory. Grid and List honoured only the
+// second, so collectionIcon silently did nothing there while Cover Flow and
+// the marquee obeyed it — the docs described only the first.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestItemWidgetFactory::subTile_collectionIconWins() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString icon = QDir(root.path()).absoluteFilePath(QStringLiteral("shelf-icon.png"));
+  writeImage(icon);
+
+  QList<CollectionConfig> collections(1);
+  collections[0].name = QStringLiteral("Documentaries");
+  collections[0].collectionIcon = icon;
+
+  // No parent artwork directory at all: the icon alone must still resolve,
+  // which the old code could not do — its lookup was gated on that directory.
+  QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
+               &collections, 0, QStringLiteral("Documentaries"), QString()),
+           icon);
+}
+
+void TestItemWidgetFactory::subTile_fallsBackToNamedImageInParentArtworkDir() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString parentArt = makeDir(root, QStringLiteral("parent-art"));
+  const QString named = QDir(parentArt).absoluteFilePath(QStringLiteral("Documentaries.png"));
+  writeImage(named);
+
+  QList<CollectionConfig> collections(1);
+  collections[0].name = QStringLiteral("Documentaries");
+  // collectionIcon deliberately unset — the pre-existing convention still
+  // has to work, so the fix adds a source rather than replacing one.
+
+  QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
+               &collections, 0, QStringLiteral("Documentaries"), parentArt),
+           named);
+}
+
+void TestItemWidgetFactory::subTile_collectionIconWinsOverAPresentNamedImage() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString parentArt = makeDir(root, QStringLiteral("parent-art"));
+  writeImage(QDir(parentArt).absoluteFilePath(QStringLiteral("Documentaries.png")));
+  const QString icon = QDir(root.path()).absoluteFilePath(QStringLiteral("explicit.png"));
+  writeImage(icon);
+
+  QList<CollectionConfig> collections(1);
+  collections[0].name = QStringLiteral("Documentaries");
+  collections[0].collectionIcon = icon;
+
+  // Both sources available: the explicit per-collection choice must win, or
+  // setting collectionIcon on a collection that already follows the naming
+  // convention would appear to do nothing.
+  QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
+               &collections, 0, QStringLiteral("Documentaries"), parentArt),
+           icon);
+}
+
+void TestItemWidgetFactory::subTile_whitespaceOnlyIconFallsThrough() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString parentArt = makeDir(root, QStringLiteral("parent-art"));
+  const QString named = QDir(parentArt).absoluteFilePath(QStringLiteral("Documentaries.png"));
+  writeImage(named);
+
+  QList<CollectionConfig> collections(1);
+  collections[0].name = QStringLiteral("Documentaries");
+  collections[0].collectionIcon = QStringLiteral("   "); // e.g. a hand-edited INI
+
+  // Whitespace is not a path: it must not shadow the naming convention with
+  // an unloadable value.
+  QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
+               &collections, 0, QStringLiteral("Documentaries"), parentArt),
+           named);
+}
+
+void TestItemWidgetFactory::subTile_emptyWhenNeitherSourceResolves() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString parentArt = makeDir(root, QStringLiteral("parent-art"));
+
+  QList<CollectionConfig> collections(1);
+  collections[0].name = QStringLiteral("Documentaries");
+
+  // Nothing to show — the caller then falls back to placeholder artwork.
+  QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
+               &collections, 0, QStringLiteral("Documentaries"), parentArt),
+           QString());
+}
+
+void TestItemWidgetFactory::subTile_guardsOutOfRangeAndMissingInputs() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString parentArt = makeDir(root, QStringLiteral("parent-art"));
+  writeImage(QDir(parentArt).absoluteFilePath(QStringLiteral("Documentaries.png")));
+
+  QList<CollectionConfig> collections(1);
+  collections[0].name = QStringLiteral("Documentaries");
+  collections[0].collectionIcon =
+      QDir(root.path()).absoluteFilePath(QStringLiteral("unreachable.png"));
+
+  // A bad index must skip step 1 rather than read out of bounds — and still
+  // let step 2 answer, since that only needs the name and the parent's dir.
+  QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
+               &collections, 7, QStringLiteral("Documentaries"), parentArt),
+           QDir(parentArt).absoluteFilePath(QStringLiteral("Documentaries.png")));
+  QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
+               nullptr, 0, QStringLiteral("Documentaries"), parentArt),
+           QDir(parentArt).absoluteFilePath(QStringLiteral("Documentaries.png")));
+  // An empty name must not probe the directory for "".
+  QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(&collections, 7, QString(),
+                                                                     parentArt),
            QString());
 }
 
