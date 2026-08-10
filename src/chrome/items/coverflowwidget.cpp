@@ -260,6 +260,16 @@ void CoverFlowWidget::setGalleryForIndex(int index, const QList<CoverFlowGallery
     // card's gallery under the new selection.
     return;
   }
+  // Kartend-4hr3d: an identical re-push is a no-op, not a reason to throw the
+  // decoded thumbnails away. resolveAndPushGallery runs on the resolve
+  // debounce after every settled selection change (and on refresh paths), so
+  // re-pushing the SAME entries is routine — and the cache clear below sends
+  // every thumb back to a grey placeholder to be re-decoded asynchronously,
+  // which is the visible strip flicker. Same early-out shape as
+  // setVideoPathForIndex directly below.
+  if (m_galleryOwnerIndex == index && m_gallery == entries) {
+    return;
+  }
   m_gallery = entries;
   m_galleryOwnerIndex = index;
   m_galleryActiveIndex = -1;

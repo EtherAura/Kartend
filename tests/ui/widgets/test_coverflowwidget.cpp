@@ -163,7 +163,9 @@ private slots:
   void mouseDoubleClickRightButtonIgnored();
   // Gallery-strip double click → full-size preview, never a launch
   // (Kartend-5jtyw)
-  void mouseDoubleClickOnGalleryThumbPreviewsInsteadOfLaunching();
+  void galleryRepushOfIdenticalEntriesKeepsThumbCache();
+  void galleryThumbClickPreviewsInsteadOfSwappingTheCover();
+  void galleryThumbDoubleClickDoesNotOpenPreviewTwice();
   void mouseDoubleClickOffGalleryStillActivatesCard();
 
   // Decoded artwork must reach the screen without a resize (Kartend-ce0b4)
@@ -974,7 +976,47 @@ void TestCoverFlowWidget::mouseDoubleClickRightButtonIgnored() {
 // regression: the strip lays out below the card rects, so the old fall-through
 // was inert rather than harmful, and this pins that it stays that way even if
 // the layout later brings the two into overlap.
-void TestCoverFlowWidget::mouseDoubleClickOnGalleryThumbPreviewsInsteadOfLaunching() {
+// Kartend-4hr3d: resolveAndPushGallery re-pushes on the resolve debounce after
+// every settled selection change, and the push cleared the decoded-thumbnail
+// cache unconditionally — so an identical re-push sent every thumb back to a
+// grey placeholder to be re-decoded, which is the visible strip flicker. An
+// unchanged gallery must be a no-op.
+void TestCoverFlowWidget::galleryRepushOfIdenticalEntriesKeepsThumbCache() {
+  TestableCoverFlow w;
+  w.resize(600, 400);
+  w.setCards(makeCards(10));
+  w.setSelectedIndex(3, false);
+
+  QList<CoverFlowGalleryEntry> entries;
+  CoverFlowGalleryEntry cover;
+  cover.label = "cover";
+  cover.path = "/art/cover.png";
+  entries << cover;
+  w.setGalleryForIndex(3, entries);
+
+  auto *strip = w.findChild<CoverFlowGalleryStrip *>();
+  QVERIFY(strip);
+  // Resolving a thumb populates the cache (the async decode lands later; the
+  // placeholder is cached synchronously, which is what a repaint reads).
+  (void)strip->thumbPixmap(0, 48);
+  const int warmed = w.galleryThumbCacheSize();
+  QVERIFY2(warmed > 0, "thumbPixmap did not populate the cache — test premise is wrong");
+
+  // The same entries for the same owner: nothing to invalidate.
+  w.setGalleryForIndex(3, entries);
+  QCOMPARE(w.galleryThumbCacheSize(), warmed);
+
+  // A genuinely different gallery must still clear it.
+  QList<CoverFlowGalleryEntry> other;
+  CoverFlowGalleryEntry shot;
+  shot.label = "screenshot";
+  shot.path = "/art/shot.png";
+  other << shot;
+  w.setGalleryForIndex(3, other);
+  QCOMPARE(w.galleryThumbCacheSize(), 0);
+}
+
+void TestCoverFlowWidget::galleryThumbClickPreviewsInsteadOfSwappingTheCover() {
   TestableCoverFlow w;
   w.resize(600, 400);
   w.setCards(makeCards(10));
@@ -999,21 +1041,60 @@ void TestCoverFlowWidget::mouseDoubleClickOnGalleryThumbPreviewsInsteadOfLaunchi
   QSignalSpy launchSpy(&w, &CoverFlowWidget::itemActivated);
   QSignalSpy previewSpy(&w, &CoverFlowWidget::galleryPreviewRequested);
 
-  // Double-click the second thumbnail (the video entry) — a deliberate pick:
-  // it proves the strip's own index is used rather than the centered card's
-  // default artwork.
+  // Press the SECOND thumbnail (the video entry) — a deliberate pick: it
+  // proves the strip's own index is used rather than the centered card's
+  // default artwork, and that isVideo rides along.
   const QPoint at = thumbs.at(1).center();
-  QMouseEvent e(QEvent::MouseButtonDblClick, QPointF(at), w.mapToGlobal(at), Qt::LeftButton,
-                Qt::LeftButton, Qt::NoModifier);
-  w.mouseDoubleClickEvent(&e);
+  QMouseEvent press(QEvent::MouseButtonPress, QPointF(at), w.mapToGlobal(at), Qt::LeftButton,
+                    Qt::LeftButton, Qt::NoModifier);
+  w.mousePressEvent(&press);
 
   QCOMPARE(previewSpy.count(), 1);
   QCOMPARE(previewSpy.at(0).at(0).toString(), clip.path);
   QCOMPARE(previewSpy.at(0).at(1).toBool(), true);
+  QVERIFY2(launchSpy.isEmpty(), "clicking a gallery thumbnail activated the item");
+  QVERIFY(press.isAccepted());
+  // The centered card must be untouched — the click shows the artwork full
+  // size, it does not swap what the card displays (Kartend-4hr3d).
+  QCOMPARE(w.selectedIndex(), 3);
+}
+
+// Qt delivers press -> release -> dblclick, so a double click on a thumbnail
+// runs the press handler AND the double-click handler. The preview must open
+// once, not twice, and the double click must still be swallowed so it cannot
+// fall through to the card hit-test underneath (Kartend-5jtyw).
+void TestCoverFlowWidget::galleryThumbDoubleClickDoesNotOpenPreviewTwice() {
+  TestableCoverFlow w;
+  w.resize(600, 400);
+  w.setCards(makeCards(10));
+  w.setSelectedIndex(3, false);
+
+  QList<CoverFlowGalleryEntry> entries;
+  CoverFlowGalleryEntry cover;
+  cover.label = "cover";
+  cover.path = "/art/cover.png";
+  entries << cover;
+  w.setGalleryForIndex(3, entries);
+
+  auto *strip = w.findChild<CoverFlowGalleryStrip *>();
+  QVERIFY(strip);
+  const QPoint at = strip->thumbRects().at(0).center();
+
+  QSignalSpy launchSpy(&w, &CoverFlowWidget::itemActivated);
+  QSignalSpy previewSpy(&w, &CoverFlowWidget::galleryPreviewRequested);
+
+  QMouseEvent press(QEvent::MouseButtonPress, QPointF(at), w.mapToGlobal(at), Qt::LeftButton,
+                    Qt::LeftButton, Qt::NoModifier);
+  w.mousePressEvent(&press);
+  QMouseEvent dbl(QEvent::MouseButtonDblClick, QPointF(at), w.mapToGlobal(at), Qt::LeftButton,
+                  Qt::LeftButton, Qt::NoModifier);
+  w.mouseDoubleClickEvent(&dbl);
+
+  QCOMPARE(previewSpy.count(), 1);
   QVERIFY2(launchSpy.isEmpty(),
            "double-clicking a gallery thumbnail fell through to the card hit-test and activated "
            "the item");
-  QVERIFY(e.isAccepted());
+  QVERIFY(dbl.isAccepted());
 }
 
 // The card path is untouched: a double click away from the strip still

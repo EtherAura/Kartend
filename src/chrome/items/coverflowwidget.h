@@ -61,6 +61,13 @@ struct CoverFlowGalleryEntry {
   QString label;
   QString path;
   bool isVideo = false;
+  /// Lets setGalleryForIndex skip an identical re-push (Kartend-4hr3d). The
+  /// resolver re-pushes on every settled selection change, and the push
+  /// clears the decoded-thumbnail cache — so without a value compare the
+  /// strip flickers back to placeholders for a gallery that never changed.
+  bool operator==(const CoverFlowGalleryEntry &o) const {
+    return isVideo == o.isVideo && path == o.path && label == o.label;
+  }
 };
 
 class CoverFlowWidget : public QWidget {
@@ -127,6 +134,12 @@ public:
   [[nodiscard]] int fontSize() const { return m_fontSize; }
   [[nodiscard]] bool hideTitles() const { return m_hideTitles; }
   [[nodiscard]] QString tileColor() const { return m_tileColor; }
+  /// Number of gallery-strip thumbnails currently cached. Observability for
+  /// tests: an identical gallery re-push must not evict these, or the strip
+  /// flickers back to placeholders (Kartend-4hr3d).
+  [[nodiscard]] int galleryThumbCacheSize() const {
+    return static_cast<int>(m_galleryThumbCache.size());
+  }
   /// Number of decoded source pixmaps currently cached (artwork-path keyed).
   [[nodiscard]] int pixmapCacheSize() const { return static_cast<int>(m_pixmapCache.size()); }
   /// Number of scaled (path,size)-keyed pixmaps currently cached. Paired with

@@ -289,6 +289,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Registering an overlay could leave the stacking table out of order, so a
   later restack put the wrong overlay on top.
 - The About box and the parent-collection *None* entry are translatable.
+- **Clicking a thumbnail in Cover Flow's artwork strip now opens it full
+  size, and the strip no longer flickers.** A click used to swap the centred
+  cover for the artwork you clicked, which is not what the strip is for — the
+  card already shows the cover, and the reason to click a thumbnail is to look
+  at that image properly. It now opens full size, the same as clicking a
+  thumbnail in the sidebar gallery. Separately, the strip rebuilt its
+  thumbnails every time the selection settled, even when the artwork list had
+  not changed, so the row visibly blinked back to blank tiles and re-decoded
+  itself; an unchanged strip is now left alone (Kartend-4hr3d).
 - **The selected item no longer reverts on its own.** When a collection
   opens, Kartend restores your last selection and then double-checks a moment
   later that the restore stuck. That check read "the selection isn't on the

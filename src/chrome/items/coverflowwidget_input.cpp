@@ -43,16 +43,17 @@ void CoverFlowWidget::mousePressEvent(QMouseEvent *event) {
   // background card.
   if (event->button() == Qt::LeftButton) {
     int galleryHit = m_galleryStrip ? m_galleryStrip->hitTest(event->pos()) : -1;
-    if (galleryHit >= 0) {
+    if (galleryHit >= 0 && galleryHit < m_gallery.size()) {
+      // Kartend-4hr3d: a click on a strip thumbnail shows that image (or
+      // video) FULL SIZE. It used to swap the centered card's displayed
+      // pixmap instead, which answered a question nobody was asking — the
+      // strip's purpose is to look at the other artwork, and the card
+      // already shows the cover. This also matches the details-pane gallery,
+      // where a single click has always opened the preview overlay.
       const auto &entry = m_gallery[galleryHit];
-      m_galleryActiveIndex = galleryHit;
-      // Video gallery entries auto-enable video mode and route the preview
-      // through the chosen entry's path; image entries swap the centered
-      // card's displayed pixmap and turn video off.
-      m_videoMode = entry.isVideo;
-      m_galleryThumbCache.remove(QStringLiteral("__active__")); // future use
-      applyVideoPreviewState();
-      update();
+      if (!entry.path.isEmpty()) {
+        emit galleryPreviewRequested(entry.path, entry.isVideo);
+      }
       event->accept();
       return;
     }
@@ -108,10 +109,12 @@ void CoverFlowWidget::mouseDoubleClickEvent(QMouseEvent *event) {
   // geometry: whatever the layout, the strip never activates an item.
   const int galleryHit = m_galleryStrip ? m_galleryStrip->hitTest(event->pos()) : -1;
   if (galleryHit >= 0 && galleryHit < m_gallery.size()) {
-    const auto &entry = m_gallery[galleryHit];
-    if (!entry.path.isEmpty()) {
-      emit galleryPreviewRequested(entry.path, entry.isVideo);
-    }
+    // Claim it, but do NOT re-emit: the press half of this double click
+    // already opened the preview (Kartend-4hr3d made single click do that).
+    // Qt delivers press -> release -> dblclick, so emitting here too would
+    // fire the same preview twice. Swallowing it still keeps the strip from
+    // falling through to the card hit-test, which is what this override was
+    // originally added for (Kartend-5jtyw).
     event->accept();
     return;
   }
