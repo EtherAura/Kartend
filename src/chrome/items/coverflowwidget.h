@@ -129,6 +129,14 @@ public:
   [[nodiscard]] QString tileColor() const { return m_tileColor; }
   /// Number of decoded source pixmaps currently cached (artwork-path keyed).
   [[nodiscard]] int pixmapCacheSize() const { return static_cast<int>(m_pixmapCache.size()); }
+  /// Number of scaled (path,size)-keyed pixmaps currently cached. Paired with
+  /// pixmapCacheSize() so a caller can report how much decoded work a card-list
+  /// rebuild is about to discard (Kartend-i3mmq).
+  [[nodiscard]] int scaledPixmapCacheSize() const {
+    return static_cast<int>(m_scaledPixmapCache.size());
+  }
+  /// In-flight artwork decodes that a rebuild would cancel.
+  [[nodiscard]] int pendingLoadCount() const { return static_cast<int>(m_pendingLoads.size()); }
 
 signals:
   /// User shifted the selection (wheel/arrow/side-card click). The caller is

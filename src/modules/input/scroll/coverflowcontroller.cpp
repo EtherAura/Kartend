@@ -21,6 +21,7 @@
 #include "idatabasemanager.h"
 #include "ifiltermanager.h"
 #include "itemartwork.h"
+#include "loggingcategories.h"
 #include "pathutils.h"
 #include "scrolldatamanager.h"
 #include "textzoom.h"
@@ -634,6 +635,22 @@ void CoverFlowController::rebuildCards() {
     cards.append(std::move(card));
   }
 
+  // Kartend-i3mmq: a rebuild hands the whole list to setCards, which cancels
+  // every in-flight decode and drops both pixmap caches wholesale. That is
+  // invisible unless you count it, and repeated rebuilds during a chunked
+  // load are the leading explanation for cards appearing then vanishing
+  // before the view settles. Log what each rebuild is about to throw away,
+  // and how many rebuilds this carousel has seen, so the pattern is
+  // measurable instead of inferred.
+  ++m_rebuildCount;
+  if (lcPerfTrace().isDebugEnabled()) {
+    qCDebug(lcPerfTrace) << "CoverFlow rebuildCards #" << m_rebuildCount << "cards=" << total
+                         << "filtered=" << filtered << "active=" << trackPending
+                         << "| DISCARDING decoded=" << m_widget->pixmapCacheSize()
+                         << "scaled=" << m_widget->scaledPixmapCacheSize()
+                         << "inFlightDecodes=" << m_widget->pendingLoadCount();
+  }
+
   m_widget->setCards(cards);
   armArtworkRetry(dirsToWarm);
 }
@@ -655,8 +672,21 @@ void CoverFlowController::updateCardsIfActive(const QList<int> &updatedIndices) 
   const bool filtered = filterMgr() && filterMgr()->isFiltered();
   const int total = m_dataManager->totalItemCount();
   if (filtered || m_widget->cardCount() != total) {
+    // Kartend-i3mmq: name WHICH of the two conditions forced the fallback.
+    // A chunked load fires this per arrival, so if one of these is stuck on
+    // for the whole load the carousel is rebuilt — and wiped — ~30 times.
+    if (lcPerfTrace().isDebugEnabled()) {
+      qCDebug(lcPerfTrace) << "CoverFlow updateCardsIfActive -> FULL REBUILD because"
+                           << (filtered ? "a filter is active" : "cardCount != total")
+                           << "cardCount=" << m_widget->cardCount() << "total=" << total
+                           << "chunk=" << updatedIndices.size();
+    }
     rebuildCards();
     return;
+  }
+  if (lcPerfTrace().isDebugEnabled()) {
+    qCDebug(lcPerfTrace) << "CoverFlow updateCardsIfActive incremental chunk="
+                         << updatedIndices.size() << "(no cache discarded)";
   }
   IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
   QSet<QString> dirsToWarm;

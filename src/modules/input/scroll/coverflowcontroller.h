@@ -193,6 +193,12 @@ private:
   QHash<int, QString> m_pendingArtwork;
   QTimer *m_artworkRetryTimer = nullptr;
   int m_artworkRetryAttempts = 0;
+  // Kartend-i3mmq: how many full card-list rebuilds this carousel has done.
+  // Diagnostic only — every rebuild makes setCards cancel in-flight decodes
+  // and drop both pixmap caches, so a high count during a single collection
+  // load is the measurable form of "items load in and out before settling".
+  // Logged under kartend.perftrace, which is off unless asked for.
+  int m_rebuildCount = 0;
 };
 
 #endif
