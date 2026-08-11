@@ -43,6 +43,12 @@ private slots:
   void steamMetadataNeverOverwritesExistingFields();
   void steamMetadataMissingAppInfoReportsError();
 
+  // removeManagedImportDirs (Kartend-i366w)
+  void cleanupDeletesManagedDirsAndEmptyBase();
+  void cleanupRefusesUnmanagedAndTraversalDirs();
+  void cleanupIsNoOpForNonImportCollections();
+  void cleanupKeepsBaseWhenUserContentRemains();
+
 private:
   QTemporaryDir m_dir;
   int m_caseCounter = 0;
@@ -488,6 +494,88 @@ void TestLauncherImportService::steamMetadataMissingAppInfoReportsError() {
       m_dir.filePath(QStringLiteral("missing-appinfo.vdf")));
   QCOMPARE(result.rowsWritten, 0);
   QVERIFY(!result.errors.isEmpty());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// removeManagedImportDirs (Kartend-i366w) — the containment rule IS the
+// feature: only dirs provably inside the managed launcher-imports root may
+// be deleted by the removal checkbox.
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+CollectionConfig importCollection(const QString &base, const QString &source = "steam") {
+  CollectionConfig cfg;
+  cfg.name = QStringLiteral("Steam");
+  cfg.importSource = source;
+  cfg.mediaDirectory = base + QStringLiteral("/games");
+  cfg.artworkDirectory = base + QStringLiteral("/artwork");
+  return cfg;
+}
+
+void touch(const QString &path) {
+  QDir().mkpath(QFileInfo(path).absolutePath());
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("x");
+}
+
+} // namespace
+
+void TestLauncherImportService::cleanupDeletesManagedDirsAndEmptyBase() {
+  const QString base = m_dir.filePath(QStringLiteral("cleanup%1").arg(m_caseCounter++));
+  touch(base + QStringLiteral("/games/Portal 2.kartlink"));
+  touch(base + QStringLiteral("/artwork/front/Portal 2.jpg"));
+
+  const auto result = LauncherImportService::removeManagedImportDirs(importCollection(base), base);
+  QCOMPARE(result.removedDirs.size(), 2);
+  QVERIFY(result.errors.isEmpty());
+  QVERIFY(result.skippedUnmanaged.isEmpty());
+  // Both children gone, and the emptied base itself was dropped too.
+  QVERIFY(!QDir(base).exists());
+}
+
+void TestLauncherImportService::cleanupRefusesUnmanagedAndTraversalDirs() {
+  const QString base = m_dir.filePath(QStringLiteral("cleanup%1").arg(m_caseCounter++));
+  const QString victim = m_dir.filePath(QStringLiteral("victim%1").arg(m_caseCounter++));
+  touch(victim + QStringLiteral("/precious.jpg"));
+  touch(base + QStringLiteral("/games/stub.kartlink"));
+
+  // The artwork dir was re-pointed at the user's own folder; the media dir
+  // dresses a traversal up in a managed prefix. Neither may be deleted.
+  CollectionConfig cfg = importCollection(base);
+  cfg.artworkDirectory = victim;
+  cfg.mediaDirectory = base + QStringLiteral("/games/../../victim%1").arg(m_caseCounter - 1);
+
+  const auto result = LauncherImportService::removeManagedImportDirs(cfg, base);
+  QVERIFY(result.removedDirs.isEmpty());
+  QCOMPARE(result.skippedUnmanaged.size(), 2);
+  QVERIFY(QFileInfo::exists(victim + QStringLiteral("/precious.jpg")));
+  QVERIFY(QFileInfo::exists(base + QStringLiteral("/games/stub.kartlink")));
+}
+
+void TestLauncherImportService::cleanupIsNoOpForNonImportCollections() {
+  const QString base = m_dir.filePath(QStringLiteral("cleanup%1").arg(m_caseCounter++));
+  touch(base + QStringLiteral("/games/file.mp4"));
+
+  CollectionConfig cfg = importCollection(base, /*source=*/QString());
+  const auto result = LauncherImportService::removeManagedImportDirs(cfg, base);
+  QVERIFY(result.removedDirs.isEmpty());
+  QVERIFY(result.skippedUnmanaged.isEmpty());
+  QVERIFY(QFileInfo::exists(base + QStringLiteral("/games/file.mp4")));
+}
+
+void TestLauncherImportService::cleanupKeepsBaseWhenUserContentRemains() {
+  const QString base = m_dir.filePath(QStringLiteral("cleanup%1").arg(m_caseCounter++));
+  touch(base + QStringLiteral("/games/stub.kartlink"));
+  touch(base + QStringLiteral("/artwork/front/a.jpg"));
+  touch(base + QStringLiteral("/notes.txt")); // the user's own file
+
+  const auto result = LauncherImportService::removeManagedImportDirs(importCollection(base), base);
+  QCOMPARE(result.removedDirs.size(), 2);
+  // The plain (non-recursive) base rmdir must fail closed: the user's file
+  // — and with it the base dir — survives the cleanup.
+  QVERIFY(QFileInfo::exists(base + QStringLiteral("/notes.txt")));
 }
 
 QTEST_MAIN(TestLauncherImportService)

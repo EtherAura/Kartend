@@ -132,9 +132,13 @@ its own cache.
   the item's right-click menu; deleting its stub won't stick, because the
   next sync faithfully mirrors the launcher's library and recreates it.
 - Removing a launcher collection never touches the launcher's own install.
-  The stub and artwork folders stay behind under Kartend's data directory
-  (`launcher-imports/<source>/`) — delete them by hand if you want them
-  gone, or leave them and a future re-import picks them straight back up.
+  The removal prompt offers an opt-in **"Also delete the imported shortcut
+  files and copied artwork"** checkbox; leave it unchecked (the default)
+  and the stub and artwork folders stay behind under Kartend's data
+  directory (`launcher-imports/<source>/`), where a future re-import picks
+  them straight back up. The checkbox only ever deletes inside that managed
+  folder — if you re-pointed the collection at your own artwork folder, it
+  is never touched.
 - The stub format is plain JSON — a `.kartlink` file can be hand-written to
   point anywhere a launcher template can take it, which is also how you'd
   add a one-off entry to a launcher collection.

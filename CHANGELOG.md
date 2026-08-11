@@ -111,6 +111,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Video previews no longer convert every frame on the interface thread**,
   and the still-frame extractor shuts down before the application does
   instead of after.
+- **Removing a launcher collection can now clean up after itself.** The
+  removal prompt gains an opt-in checkbox — "Also delete the imported
+  shortcut files and copied artwork" — for collections that came from a
+  launcher import. It only ever deletes inside Kartend's own managed
+  `launcher-imports` folder: a collection you re-pointed at your personal
+  artwork folder keeps that folder untouched even with the box ticked, and
+  anything else you stored alongside the managed folders survives. Left
+  unchecked (the default), the imported files stay behind for a future
+  re-import to pick up, as before (Kartend-i366w).
 
 ### Fixed
 

@@ -206,6 +206,28 @@ struct MetadataApplyResult {
                                                   const QString &collectionUuid,
                                                   const QList<SyncedStub> &stubs);
 
+/// Outcome of the opt-in managed-folder cleanup (Kartend-i366w).
+struct CleanupResult {
+  QStringList removedDirs;      ///< Recursively deleted.
+  QStringList skippedUnmanaged; ///< Refused: outside the managed root.
+  QStringList errors;           ///< Human-readable failures.
+};
+
+/// Deletes the collection's stub and artwork directories, but ONLY those
+/// that provably live inside the managed `launcher-imports/<source>` root —
+/// a user who re-pointed an import collection's artworkDirectory at their
+/// own folder must never lose it to this checkbox; such dirs land in
+/// `skippedUnmanaged` instead. After removing the children the (then-empty)
+/// base dir itself is dropped with a plain rmdir, so anything else a user
+/// stashed in it survives and keeps the base alive. No-op for collections
+/// without an importSource.
+///
+/// `managedBaseDirOverride` substitutes for defaultBaseDir(importSource)
+/// so tests can drive the containment rule entirely inside a temp dir.
+[[nodiscard]] CleanupResult
+removeManagedImportDirs(const CollectionConfig &config,
+                        const QString &managedBaseDirOverride = QString());
+
 } // namespace LauncherImportService
 
 #endif

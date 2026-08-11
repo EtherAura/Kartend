@@ -19,6 +19,7 @@
 #include "itemmetadata.h"
 #include "kartlink.h"
 #include "lutrislibrary.h"
+#include "pathutils.h"
 #include "steamappinfo.h"
 #include "steamlibrary.h"
 #include <uiconstants/grid.h>
@@ -712,6 +713,59 @@ auto makeCollectionConfig(const QString &sourceId, ImportScope scope) -> Collect
     c.launcher.launcherName = c.name;
   }
   return c;
+}
+
+auto removeManagedImportDirs(const CollectionConfig &config, const QString &managedBaseDirOverride)
+    -> CleanupResult {
+  CleanupResult result;
+  if (config.importSource.trimmed().isEmpty()) {
+    return result; // not an import collection — nothing is managed
+  }
+  const QString base =
+      QDir::cleanPath(managedBaseDirOverride.isEmpty() ? defaultBaseDir(config.importSource)
+                                                       : managedBaseDirOverride);
+  if (base.isEmpty() || !QDir(base).isAbsolute()) {
+    result.errors.append(
+        QStringLiteral("managed base dir unresolved for source '%1'").arg(config.importSource));
+    return result;
+  }
+
+  // Containment is the whole safety story: a user who re-pointed the
+  // collection's artworkDirectory at their own folder must never lose it to
+  // this checkbox. cleanPath collapses any ../ segments BEFORE the prefix
+  // test, so a crafted "<base>/games/../../home" cannot pass as managed.
+  const auto isManaged = [&base](const QString &dir) {
+    return dir == base || dir.startsWith(base + QLatin1Char('/'));
+  };
+
+  for (const QString &raw : {config.mediaDirectory, config.artworkDirectory}) {
+    const QString expanded =
+        QDir::cleanPath(PathUtils::expandPathWithoutExistenceCheck(raw, config.name));
+    if (expanded.isEmpty()) {
+      continue;
+    }
+    if (!isManaged(expanded)) {
+      result.skippedUnmanaged.append(expanded);
+      continue;
+    }
+    QDir dir(expanded);
+    if (!dir.exists()) {
+      continue; // already gone — that's the desired end state
+    }
+    if (dir.removeRecursively()) {
+      result.removedDirs.append(expanded);
+    } else {
+      result.errors.append(QStringLiteral("could not fully delete '%1'").arg(expanded));
+    }
+  }
+
+  // Drop the now-empty base itself with a PLAIN (non-recursive) rmdir: if
+  // the user stashed anything else in it, the rmdir fails and the extra
+  // content survives.
+  if (!result.removedDirs.isEmpty() && QDir(base).exists()) {
+    QDir().rmdir(base);
+  }
+  return result;
 }
 
 } // namespace LauncherImportService

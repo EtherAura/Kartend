@@ -7,8 +7,10 @@
 #include "collection/collectionconfig.h"
 #include "collection/hierarchyhelpers.h"
 #include "collection/validationhelpers.h"
+#include "launcherimportservice.h"
 #include "settingsmodel.h"
 
+#include <QCheckBox>
 #include <QMessageBox>
 #include <QSet>
 
@@ -85,11 +87,33 @@ void CollectionRemover::run() {
     message = QString("Remove \"%1\"?").arg(live[index].name);
   }
 
-  const QMessageBox::StandardButton reply = QMessageBox::question(
-      m_host->dialogWidget(), "Remove Collection", message, QMessageBox::Yes | QMessageBox::No);
-  if (reply != QMessageBox::Yes) {
+  // Launcher-import collections manage their own stub+artwork folders under
+  // <AppData>/launcher-imports/<source>/; removing the collection alone
+  // leaves them behind. Offer an OPT-IN cleanup for any import collection
+  // in the removed set (Kartend-i366w). Snapshot the configs now — the
+  // removal below rewrites the list.
+  QList<CollectionConfig> importConfigs;
+  for (int i : QList<int>() << index << descendants) {
+    if (!live[i].importSource.trimmed().isEmpty()) {
+      importConfigs.append(live[i]);
+    }
+  }
+
+  // Hand-built QMessageBox instead of the static question(): only the
+  // instance API carries a checkbox.
+  QMessageBox confirm(QMessageBox::Question, QStringLiteral("Remove Collection"), message,
+                      QMessageBox::Yes | QMessageBox::No, m_host->dialogWidget());
+  QCheckBox *cleanupBox = nullptr;
+  if (!importConfigs.isEmpty()) {
+    cleanupBox =
+        new QCheckBox(tr("Also delete the imported shortcut files and copied artwork"), &confirm);
+    cleanupBox->setChecked(false); // opt-in: destructive, so never the default
+    confirm.setCheckBox(cleanupBox);
+  }
+  if (confirm.exec() != QMessageBox::Yes) {
     return;
   }
+  const bool cleanupManaged = cleanupBox != nullptr && cleanupBox->isChecked();
 
   const QList<int> expandedBefore = m_host->expandedCollectionIndices();
 
@@ -130,6 +154,26 @@ void CollectionRemover::run() {
   // keep silently dropping them on every rebuild.
   for (const QString &removed : namesAboutToVanish) {
     m_host->propagateCollectionNameChange(removed, QString{});
+  }
+
+  // Opt-in managed-folder cleanup, AFTER the list rewrite (order is
+  // irrelevant to the deletes — the configs were snapshotted — but doing it
+  // post-confirm keeps a mid-flow cancel from having touched disk). The
+  // service refuses anything outside its launcher-imports root, so a
+  // re-pointed artwork dir survives even with the box ticked.
+  if (cleanupManaged) {
+    QStringList cleanupErrors;
+    for (const CollectionConfig &cfg : importConfigs) {
+      const LauncherImportService::CleanupResult cleanup =
+          LauncherImportService::removeManagedImportDirs(cfg);
+      cleanupErrors.append(cleanup.errors);
+    }
+    if (!cleanupErrors.isEmpty()) {
+      QMessageBox::warning(m_host->dialogWidget(), tr("Remove Collection"),
+                           tr("The collection was removed, but some imported files could not "
+                              "be deleted:\n%1")
+                               .arg(cleanupErrors.join(QLatin1Char('\n'))));
+    }
   }
 
   // Persist the removal immediately.
