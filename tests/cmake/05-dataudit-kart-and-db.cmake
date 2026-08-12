@@ -174,6 +174,14 @@ kartend_add_test(NAME ItchLibrary
   LINK kartend_utils
 )
 
+# Kartend-ilkne: EsdeLibrary. The cases encode what a real ES-DE 3.4.1 install
+# writes — notably that gamelist.xml is a metadata sidecar rather than the game
+# list, which a hand-written fixture would have got backwards.
+kartend_add_test(NAME EsdeLibrary
+  SOURCES utils/fs/test_esdelibrary.cpp
+  LINK kartend_utils
+)
+
 kartend_add_test(NAME BottlesLibrary
   SOURCES utils/fs/test_bottleslibrary.cpp
   LINK kartend_utils

@@ -4,6 +4,7 @@ target_sources(kartend_utils PRIVATE
   bottleslibrary.cpp
   configvalidation.cpp
   desktopentry.cpp
+  esdelibrary.cpp
   extensionutils.cpp
   flatpaklibrary.cpp
   heroiclibrary.cpp
@@ -22,6 +23,7 @@ target_sources(kartend_utils PRIVATE
   bottleslibrary.h
   configvalidation.h
   desktopentry.h
+  esdelibrary.h
   extensionutils.h
   flatpaklibrary.h
   heroiclibrary.h
