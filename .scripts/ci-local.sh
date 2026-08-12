@@ -157,6 +157,45 @@ require_ci_image() {
     err "  docker build -f .scripts/Dockerfile.ci -t kartend-ci ."
     exit 2
   fi
+
+  # …and refuse an image older than the Dockerfile that defines it
+  # (Kartend-n94ln). A stale image does not fail loudly — it produces WRONG
+  # TEST RESULTS that look exactly like a regression in your own branch. The
+  # case that motivated this: ee6b63ec added qt6-image-formats-plugins on
+  # 2026-08-05, an image built before it lacked Qt's WebP codec, and two
+  # ScrapePersistence cases failed on a fixture QImage::save(…, "WEBP") could
+  # no longer produce. That reads as "my change broke the scraper" and costs a
+  # diagnostic cycle to disprove.
+  #
+  # Compared against the LATER of the file's commit date and its mtime, so a
+  # locally-edited-but-uncommitted Dockerfile counts too. Hard failure rather
+  # than a warning: a warning scrolls off the top of a 30-minute run, and the
+  # whole point of this wrapper is a verdict you can trust. The escape hatch
+  # is one env var, for when you know the delta is cosmetic.
+  local repo_root dockerfile
+  repo_root=$(cd "$(dirname "$0")/.." && pwd)
+  dockerfile="$repo_root/.scripts/Dockerfile.ci"
+  [ -f "$dockerfile" ] || return 0
+  local file_epoch commit_epoch image_iso image_epoch
+  file_epoch=$(stat -c %Y "$dockerfile" 2>/dev/null || echo 0)
+  commit_epoch=$(git log -1 --format=%ct -- "$dockerfile" 2>/dev/null || echo 0)
+  [ "${commit_epoch:-0}" -gt "$file_epoch" ] && file_epoch=$commit_epoch
+  image_iso=$(docker image inspect -f '{{.Created}}' kartend-ci 2>/dev/null || echo "")
+  image_epoch=$(date -d "$image_iso" +%s 2>/dev/null || echo 0)
+
+  if [ "$image_epoch" -gt 0 ] && [ "$file_epoch" -gt "$image_epoch" ]; then
+    if [ -n "${KARTEND_CI_ALLOW_STALE_IMAGE:-}" ]; then
+      info "kartend-ci image predates Dockerfile.ci — continuing (KARTEND_CI_ALLOW_STALE_IMAGE set)"
+      return 0
+    fi
+    err "kartend-ci image is OLDER than .scripts/Dockerfile.ci — its results cannot be trusted."
+    err "  image built:      $(date -d "@$image_epoch" '+%Y-%m-%d %H:%M')"
+    err "  Dockerfile dated: $(date -d "@$file_epoch" '+%Y-%m-%d %H:%M')"
+    err "Rebuild it, then re-run:"
+    err "  docker build -f .scripts/Dockerfile.ci -t kartend-ci ."
+    err "(Set KARTEND_CI_ALLOW_STALE_IMAGE=1 to run anyway.)"
+    exit 2
+  fi
 }
 
 # Map a subcommand to the volume-name pattern act will use for its jobs.

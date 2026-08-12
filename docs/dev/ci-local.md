@@ -53,6 +53,18 @@ Re-build whenever the Dockerfile changes (or once a quarter to pick
 up Ubuntu security updates). The `docker:*` subcommands check that the
 image exists and print this build command when it doesn't.
 
+They also **refuse to run an image older than `Dockerfile.ci`**
+(Kartend-n94ln), comparing the image's build time against the later of
+the Dockerfile's commit date and its mtime — so a locally-edited
+Dockerfile counts too. This is a hard failure rather than a warning
+because a stale image doesn't fail loudly, it produces *wrong test
+results that look like a regression in your branch*: an image built
+before `ee6b63ec` added `qt6-image-formats-plugins` has no WebP codec,
+so two `ScrapePersistence` cases fail on a fixture that
+`QImage::save(…, "WEBP")` can no longer produce — nothing to do with
+the code under test. Set `KARTEND_CI_ALLOW_STALE_IMAGE=1` to run
+anyway when you know the delta is cosmetic.
+
 ## `.scripts/ci-local.sh`
 
 [.scripts/ci-local.sh](../../.scripts/ci-local.sh) is the wrapper.
