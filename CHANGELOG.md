@@ -20,7 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and not just the parts you happen to have scraped. One thing is left to
   you: each collection arrives without a launcher, because ES-DE keeps its
   emulator settings somewhere Kartend cannot read — point it at your
-  emulator once, as you would for any ROM collection.
+  emulator once, as you would for any ROM collection. The import tells you
+  so when it finishes, and if you start a game before setting one, Kartend
+  names the collection and where to set it rather than just refusing.
 
 - **Heroic and itch.io games now arrive with their cover art.** Neither
   launcher keeps covers as files on disk, only as web links, so those

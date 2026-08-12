@@ -37,7 +37,16 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
       LauncherUtils::expandCollectionPlaceholder(launcher.corePath, collectionName);
 
   if (expandedLauncherPath.isEmpty()) {
-    return ErrorContext::error(ErrorCode::InvalidArgument, "No launcher configured",
+    // Name the collection and say what to do (Kartend-6tj2v). The bare "No
+    // launcher configured" was the FIRST thing a user saw after importing an
+    // ES-DE library — those collections ship without a launcher by design,
+    // since ES-DE keeps its emulator settings where Kartend cannot read them —
+    // and a red error with no next step reads as a broken import rather than
+    // an unfinished setup.
+    return ErrorContext::error(ErrorCode::InvalidArgument,
+                               QObject::tr("No launcher is set for \"%1\" — choose one in "
+                                           "Settings › Collections › Launcher.")
+                                   .arg(collectionName),
                                "LaunchCommandBuilder::buildLaunchCommand")
         .withDetails(QString("Collection '%1'").arg(collectionName));
   }

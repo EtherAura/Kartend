@@ -49,6 +49,7 @@ private slots:
   // %collection% expansion
   void testCollectionExpansion();
   void testCollectionExpansionDoesNotSplitArguments();
+  void testMissingLauncherErrorNamesCollectionAndNextStep();
   void testCollectionExpansionRejectsTraversal();
 
   // preset resolution feeding the builder
@@ -190,6 +191,25 @@ void TestLaunchCommandBuilder::testCollectionExpansionDoesNotSplitArguments() {
       LaunchCommandBuilder::buildLaunchCommand(lc, QStringLiteral("Live Recordings"), file);
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().arguments, (QStringList{"--profile", "Live Recordings", file}));
+}
+
+void TestLaunchCommandBuilder::testMissingLauncherErrorNamesCollectionAndNextStep() {
+  // Kartend-6tj2v: this error is the FIRST thing a user meets after importing
+  // an ES-DE library, because those collections ship without a launcher by
+  // design. A bare "No launcher configured" read as a broken import, so the
+  // message must name the collection and say where to fix it. Asserting on the
+  // text is deliberate — the wording IS the fix.
+  LauncherConfig noLauncher; // launcherPath deliberately left empty
+  const auto result = LaunchCommandBuilder::buildLaunchCommand(
+      noLauncher, QStringLiteral("ES-DE: nes"), QStringLiteral("/tmp/roms/nes/game.nes"));
+  QVERIFY(result.isError());
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidArgument);
+  QVERIFY2(result.error().message.contains(QStringLiteral("ES-DE: nes")),
+           qPrintable(QStringLiteral("message must name the collection, got: ") +
+                      result.error().message));
+  QVERIFY2(result.error().message.contains(QStringLiteral("Settings")),
+           qPrintable(QStringLiteral("message must point at where to set one, got: ") +
+                      result.error().message));
 }
 
 void TestLaunchCommandBuilder::testCollectionExpansionRejectsTraversal() {

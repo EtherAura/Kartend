@@ -5926,7 +5926,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 <context>
     <name>LauncherImportController</name>
     <message numerus="yes">
-        <location filename="../src/core/launcherimportcontroller.cpp" line="+189"/>
+        <location filename="../src/core/launcherimportcontroller.cpp" line="+200"/>
         <source>%1: re-synced — %2 added or updated, %3 removed, %n game(s) total.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5935,7 +5935,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message numerus="yes">
         <location line="+6"/>
-        <location line="+49"/>
+        <location line="+58"/>
         <source>%1: Steam metadata filled for %n item(s).</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5943,7 +5943,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         </translation>
     </message>
     <message numerus="yes">
-        <location line="-2"/>
+        <location line="-11"/>
         <source>%1: %n game(s) imported.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5951,7 +5951,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         </translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+6"/>
+        <source>%1: set an emulator for it in Settings › Collections › Launcher — %2 keeps that setting where Kartend cannot read it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+17"/>
         <source>Import from Launcher</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8197,7 +8202,12 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/input/launch/launchcommandbuilder.cpp" line="+244"/>
+        <location filename="../src/modules/input/launch/launchcommandbuilder.cpp" line="+47"/>
+        <source>No launcher is set for &quot;%1&quot; — choose one in Settings › Collections › Launcher.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+206"/>
         <source>Launcher executable not found: %1</source>
         <translation type="unfinished"></translation>
     </message>

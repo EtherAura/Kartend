@@ -28,6 +28,17 @@
 namespace {
 Q_LOGGING_CATEGORY(lcLauncherImport, "kartend.launcherimport")
 
+/// Proper noun for a source id, for user-facing text. Falls back to the id
+/// itself so a future source is never described as an empty string.
+QString sourceDisplayName(const QString &sourceId) {
+  for (const LauncherImportService::SourceInfo &source : LauncherImportService::detectSources()) {
+    if (source.id == sourceId) {
+      return source.displayName;
+    }
+  }
+  return sourceId;
+}
+
 void logSyncErrors(const QString &sourceId, const LauncherImportService::SyncResult &result) {
   for (const QString &error : result.errors) {
     qCWarning(lcLauncherImport).nospace() << "sync '" << sourceId << "': " << error;
@@ -240,6 +251,15 @@ void LauncherImportController::runImportDialog() {
       // writes nothing but the collection still gets every game.
       summary.append(
           tr("%1: %n game(s) imported.", nullptr, result.totalPresent()).arg(config.name));
+      // Tell them BEFORE they press a game and meet an error (Kartend-6tj2v).
+      // A source whose emulator command Kartend cannot know — ES-DE — creates
+      // collections with no launcher on purpose, and the import summary is the
+      // one moment the user is already reading about this collection.
+      if (config.launcher.launcherPath.isEmpty()) {
+        summary.append(tr("%1: set an emulator for it in Settings › Collections › Launcher "
+                          "— %2 keeps that setting where Kartend cannot read it.")
+                           .arg(config.name, sourceDisplayName(sourceId)));
+      }
       if (metadataRows > 0) {
         summary.append(tr("%1: Steam metadata filled for %n item(s).", nullptr, metadataRows)
                            .arg(config.name));
