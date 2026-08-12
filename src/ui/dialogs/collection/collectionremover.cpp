@@ -93,7 +93,15 @@ void CollectionRemover::run() {
   // in the removed set (Kartend-i366w). Snapshot the configs now — the
   // removal below rewrites the list.
   QList<CollectionConfig> importConfigs;
-  for (int i : QList<int>() << index << descendants) {
+  // Named, not `QList<int>() << index << descendants` inline: operator<<
+  // returns a REFERENCE to the temporary, and a range-for only extends the
+  // lifetime of a temporary bound directly to its range variable — not one
+  // reached through a returned reference. The temporary therefore died at the
+  // end of the full expression and the loop walked freed memory (TSan
+  // heap-use-after-free, confirmed on the SEGFAULT of Kartend-28m3f).
+  QList<int> removedIndexes{index};
+  removedIndexes.append(descendants);
+  for (int i : removedIndexes) {
     if (!live[i].importSource.trimmed().isEmpty()) {
       importConfigs.append(live[i]);
     }
