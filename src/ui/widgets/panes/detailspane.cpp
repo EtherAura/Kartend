@@ -509,11 +509,11 @@ void DetailsPane::updateFileInfo(const QString &filePath) {
     watcher->deleteLater();
     if (myGen != m_fileInfoGen) return;
     const StatResult res = watcher->result();
-    // Cache the resolved values, then paint them only while the File tab is
-    // showing. Off-tab the cache is enough — applyTabVisibility() re-applies it
-    // when the user switches to the File tab, so the result is never lost and a
-    // not-found verdict never leaks onto a hidden tab to surface stale later
-    // (Kartend-kujy5).
+    // Cache the resolved values, then paint them only while the rows are
+    // actually on screen. Off-screen the cache is enough — applyTabVisibility()
+    // and setFileInfoRowsVisible() re-apply it when the rows come back, so the
+    // result is never lost and a not-found verdict never leaks onto a hidden
+    // tab to surface stale later (Kartend-kujy5).
     m_fileStatDisplay.resolved = true;
     m_fileStatDisplay.exists = res.exists;
     if (res.exists) {
@@ -523,7 +523,12 @@ void DetailsPane::updateFileInfo(const QString &filePath) {
       m_fileStatDisplay.sizeText = QStringLiteral("-");
       m_fileStatDisplay.modifiedText = QStringLiteral("-");
     }
-    if (m_activeTab == DetailsPaneTab::File) {
+    // Kartend-e7xte: gate on whether the rows are SHOWING, not on the File
+    // tab. The Item tab surfaces the same rows as its unscraped fallback
+    // (DetailsPaneMetadataView::…setFileInfoRowsVisible(true)), so a
+    // tab-only gate left every unscraped item displaying the '…' placeholder
+    // for good — which is most items in a fresh library.
+    if (fileInfoRowsShowing()) {
       applyFileStatDisplay();
     }
   });

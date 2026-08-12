@@ -143,6 +143,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The details sidebar shows a file's size and modified date again.** Both
+  read "…" and stayed that way for any item without scraped metadata —
+  which, in a freshly scanned library, is most of them. The values were
+  being fetched correctly in the background but only ever painted onto the
+  File tab, while the Item tab shows the same rows whenever an item has no
+  metadata to display instead. A file that has since been deleted now
+  settles on "-" rather than sitting on the loading placeholder for good.
+
 - **Custom placeholder artwork now actually renders.** The per-collection
   "Placeholder Artwork" image — the picture shown in place of the
   procedural cross-hatch for items with no artwork — never appeared: the

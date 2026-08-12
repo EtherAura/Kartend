@@ -217,6 +217,15 @@ kartend_add_test(NAME ItemPlaceholderTint
   LINK kartend_chrome kartend_api kartend_utils
 )
 
+# Kartend-e7xte: DetailsPane's file-info rows take the async stat result
+# whenever they are showing — the Item tab's unscraped fallback shows the same
+# rows the File tab does, and a tab-only gate left them on '…' for good.
+# Constructed headlessly and queried by objectName; never shown.
+kartend_add_test(NAME DetailsPaneFileInfo
+  SOURCES ui/widgets/test_detailspanefileinfo.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # Kartend-liye: PathStatusGlyph attaches a trailing-action warning glyph to a
 # QLineEdit. Test links kartend_ui (for the helper) + kartend_utils (for
 # PathStatus + pathStatusDescription).

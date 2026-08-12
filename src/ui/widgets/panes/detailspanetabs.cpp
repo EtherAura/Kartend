@@ -148,6 +148,15 @@ void DetailsPane::setArtworkSectionVisible(bool visible) {
   }
 }
 
+bool DetailsPane::fileInfoRowsShowing() const {
+  // isHidden(), not isVisible(): the latter is false whenever an ancestor is
+  // hidden (a collapsed sidebar, a pane mid-construction), which would make
+  // the stat result skip a row set that is only temporarily off-screen.
+  // isHidden() answers the question actually being asked — has this row been
+  // explicitly hidden by setFileInfoRowsVisible?
+  return ui && ui->fileSizeValue && !ui->fileSizeValue->isHidden();
+}
+
 void DetailsPane::setFileInfoRowsVisible(bool visible) {
   ui->fileInfoTitle->setVisible(visible);
   ui->filePathLabel->setVisible(visible);
@@ -165,4 +174,12 @@ void DetailsPane::setFileInfoRowsVisible(bool visible) {
   // delineate sections.
   if (ui->separator1) ui->separator1->setVisible(visible);
   if (ui->separator2) ui->separator2->setVisible(visible);
+
+  // Kartend-e7xte: the rows can be turned on AFTER the stat worker has already
+  // delivered — the Item tab's unscraped fallback runs from setMetadata, whose
+  // ordering against the async result is not fixed. Re-apply the cache here so
+  // both orderings land a value; it is a no-op until the worker resolves.
+  if (visible) {
+    applyFileStatDisplay();
+  }
 }

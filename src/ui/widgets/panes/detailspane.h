@@ -303,11 +303,15 @@ private:
   // lambda that DetailsPane's preview pipeline drives).
   void setupVideo();
   void updateFileInfo(const QString &filePath);
-  /// Apply the cached async file-stat result (m_fileStatDisplay) to the File
-  /// tab's size/modified (and, when not-found, path/extension) labels. No-op
-  /// until the worker has resolved. Called from the worker (File tab active)
-  /// and when switching to the File tab (Kartend-kujy5).
+  /// Apply the cached async file-stat result (m_fileStatDisplay) to the
+  /// size/modified (and, when not-found, path/extension) labels. No-op until
+  /// the worker has resolved. Called from the worker, when switching to the
+  /// File tab (Kartend-kujy5), and whenever the rows are shown — the Item tab
+  /// surfaces the same rows as its unscraped fallback (Kartend-e7xte).
   void applyFileStatDisplay();
+  /// Whether the file-info rows are currently shown rather than hidden by
+  /// setFileInfoRowsVisible(false). The stat result paints only when they are.
+  [[nodiscard]] bool fileInfoRowsShowing() const;
   void updateFilePathDisplay();
   /// build + install the bubble-bg stylesheet on the content
   /// widget. Empty hex disables the corresponding bubble. Stylesheet
