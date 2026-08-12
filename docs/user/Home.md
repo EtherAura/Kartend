@@ -20,8 +20,9 @@ and want to dig into a feature, the index below is grouped by purpose.
   media of their own, used to group other collections into top-level
   categories like `Video` → Films / TV Shows / Documentaries
 - **[Launcher Import](Launcher-Import.md)** — build collections from the
-  games already installed through Steam, Flatpak, or Lutris, with their
-  existing artwork and on-demand re-sync
+  games already installed through Steam, Flatpak, Lutris, Heroic, itch.io,
+  Bottles, or your application menu, with their existing artwork and
+  on-demand re-sync
 
 ### Browsing & navigating
 

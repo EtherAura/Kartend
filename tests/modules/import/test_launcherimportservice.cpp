@@ -33,6 +33,7 @@ private slots:
   void collisionNumberingIsStable();
   void artworkFillMissingNeverOverwrites();
   void makeCollectionConfigShape();
+  void syncCarriesLaunchArgsOntoStubs();
   void importScopeRoundTrips();
   void importScopeUnknownNeverWidens();
   void makeCollectionConfigRecordsScope();
@@ -266,6 +267,59 @@ void TestLauncherImportService::makeCollectionConfigShape() {
   QCOMPARE(flatpak.launcher.launcherPath, QStringLiteral("flatpak"));
   QCOMPARE(flatpak.launcher.launchParameters, QStringLiteral("run %1"));
   QCOMPARE(flatpak.importSource, QStringLiteral("flatpak"));
+
+  // Kartend-4cff2 sources. Each template has to agree with the target shape
+  // its reader produces, which is the one thing a wrong entry here would break
+  // silently — the import would look perfect and nothing would launch.
+  const CollectionConfig heroic =
+      LauncherImportService::makeCollectionConfig(QStringLiteral("heroic"));
+  QCOMPARE(heroic.name, QStringLiteral("Heroic"));
+  QCOMPARE(heroic.launcher.launcherPath, QStringLiteral("xdg-open")); // heroic:// URI
+  QCOMPARE(heroic.launcher.launchParameters, QStringLiteral("%1"));
+
+  const CollectionConfig itch = LauncherImportService::makeCollectionConfig(QStringLiteral("itch"));
+  QCOMPARE(itch.name, QStringLiteral("itch.io"));
+  QCOMPARE(itch.launcher.launcherPath, QStringLiteral("xdg-open")); // itch:// URI
+
+  const CollectionConfig bottles =
+      LauncherImportService::makeCollectionConfig(QStringLiteral("bottles"));
+  QCOMPARE(bottles.launcher.launcherPath, QStringLiteral("bottles-cli"));
+  // The bottle itself rides on each stub's args; the template places only the
+  // program name.
+  QCOMPARE(bottles.launcher.launchParameters, QStringLiteral("run -p %1"));
+
+  const CollectionConfig xdg = LauncherImportService::makeCollectionConfig(QStringLiteral("xdg"));
+  QCOMPARE(xdg.launcher.launcherPath, QStringLiteral("gio"));
+  QCOMPARE(xdg.launcher.launchParameters, QStringLiteral("launch %1"));
+  QVERIFY(xdg.mediaDirectory.endsWith(QStringLiteral("launcher-imports/xdg/games")));
+}
+
+void TestLauncherImportService::syncCarriesLaunchArgsOntoStubs() {
+  QString stubDir;
+  QString artworkDir;
+  freshDirs(stubDir, artworkDir);
+  GameEntry game = entry(QStringLiteral("The Game"), QStringLiteral("The Game"));
+  game.launchArgs = {QStringLiteral("-b"), QStringLiteral("My Bottle"), QStringLiteral("--")};
+
+  const auto result =
+      LauncherImportService::syncEntries({game}, QStringLiteral("bottles"), stubDir, artworkDir);
+  QCOMPARE(result.written, 1);
+  const auto stub = KartLink::read(stubDir + QStringLiteral("/The Game.kartlink"));
+  QVERIFY(!stub.isError());
+  QCOMPARE(stub.value().args, game.launchArgs);
+
+  // A re-sync compares the parsed stub against what it would write, so the
+  // args have to take part in that comparison — otherwise a bottle rename
+  // would leave every stub pointing at the old one forever.
+  const auto again =
+      LauncherImportService::syncEntries({game}, QStringLiteral("bottles"), stubDir, artworkDir);
+  QCOMPARE(again.written, 0);
+  QCOMPARE(again.unchanged, 1);
+
+  game.launchArgs = {QStringLiteral("-b"), QStringLiteral("Renamed Bottle"), QStringLiteral("--")};
+  const auto renamed =
+      LauncherImportService::syncEntries({game}, QStringLiteral("bottles"), stubDir, artworkDir);
+  QCOMPARE(renamed.written, 1);
 }
 
 void TestLauncherImportService::importScopeRoundTrips() {

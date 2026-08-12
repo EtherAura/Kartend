@@ -4,9 +4,9 @@
 
 #include <QDir>
 #include <QDirIterator>
-#include <QFile>
 #include <QFileInfo>
-#include <QTextStream>
+
+#include "desktopentry.h"
 
 namespace FlatpakLibrary {
 
@@ -25,46 +25,16 @@ auto defaultExportRoots() -> QStringList {
 }
 
 auto parseDesktopFile(const QString &filePath) -> DesktopEntry {
+  // Kartend-4cff2: the parser itself now lives in DesktopEntryFile, shared
+  // with the XDG menu scan. This struct stays as the Flatpak-shaped view of
+  // it — the exports tree only ever needs these five keys.
+  const DesktopEntryFile::Entry parsed = DesktopEntryFile::parse(filePath);
   DesktopEntry entry;
-  QFile file(filePath);
-  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    return entry;
-  }
-  QTextStream in(&file);
-  bool inDesktopEntry = false;
-  while (!in.atEnd()) {
-    const QString line = in.readLine().trimmed();
-    if (line.isEmpty() || line.startsWith('#')) {
-      continue;
-    }
-    if (line.startsWith('[')) {
-      inDesktopEntry = (line == QLatin1String("[Desktop Entry]"));
-      continue;
-    }
-    if (!inDesktopEntry) {
-      continue;
-    }
-    const qsizetype eq = line.indexOf('=');
-    if (eq <= 0) {
-      continue;
-    }
-    const QString key = line.left(eq).trimmed();
-    const QString value = line.mid(eq + 1).trimmed();
-    // Exact keys only — `Name[de]`-style locale variants fall through, so
-    // the unlocalised Name is what lands in the stub filename and stays
-    // stable across the user's locale changes.
-    if (key == QLatin1String("Name")) {
-      entry.name = value;
-    } else if (key == QLatin1String("Icon")) {
-      entry.icon = value;
-    } else if (key == QLatin1String("Categories")) {
-      entry.categories = value.split(';', Qt::SkipEmptyParts);
-    } else if (key == QLatin1String("NoDisplay")) {
-      entry.noDisplay = (value.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0);
-    } else if (key == QLatin1String("X-Flatpak")) {
-      entry.flatpakId = value;
-    }
-  }
+  entry.name = parsed.name;
+  entry.icon = parsed.icon;
+  entry.flatpakId = parsed.flatpakId;
+  entry.categories = parsed.categories;
+  entry.noDisplay = parsed.noDisplay;
   return entry;
 }
 
@@ -85,22 +55,6 @@ auto findExportedIcon(const QString &exportShareRoot, const QString &appId) -> Q
 }
 
 auto installedGames(const QStringList &exportShareRoots) -> QList<App> {
-  // Gaming-adjacent TOOLS also declare the Game category (ProtonUp-Qt is
-  // "Game;Utility;", compatibility-layer managers and tweak utilities follow
-  // the same shape). Real games never pair Game with one of these main
-  // categories, so their presence is the tool signal.
-  static const QStringList kToolCategories = {
-      QStringLiteral("Utility"),
-      QStringLiteral("Settings"),
-      QStringLiteral("System"),
-      QStringLiteral("Development"),
-  };
-  const auto isTool = [](const QStringList &categories) {
-    return std::ranges::any_of(kToolCategories, [&categories](const QString &toolCategory) {
-      return categories.contains(toolCategory);
-    });
-  };
-
   QList<App> apps;
   QStringList seenIds;
   for (const QString &root : exportShareRoots) {
@@ -109,8 +63,7 @@ auto installedGames(const QStringList &exportShareRoots) -> QList<App> {
     while (it.hasNext()) {
       const QString desktopPath = it.next();
       const DesktopEntry entry = parseDesktopFile(desktopPath);
-      if (entry.noDisplay || !entry.categories.contains(QLatin1String("Game")) ||
-          isTool(entry.categories)) {
+      if (entry.noDisplay || !DesktopEntryFile::isGame(entry.categories)) {
         continue;
       }
       App app;

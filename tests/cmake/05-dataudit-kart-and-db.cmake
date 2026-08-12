@@ -151,6 +151,34 @@ kartend_add_test(NAME LutrisLibrary
   LINK kartend_utils
 )
 
+# The additional launcher-import sources (Kartend-4cff2): the .desktop parsing
+# shared by the Flatpak and XDG scans, the menu scan itself, and the Heroic /
+# itch / Bottles readers.
+kartend_add_test(NAME DesktopEntry
+  SOURCES utils/fs/test_desktopentry.cpp
+  LINK kartend_utils
+)
+
+kartend_add_test(NAME XdgGamesLibrary
+  SOURCES utils/fs/test_xdggameslibrary.cpp
+  LINK kartend_utils
+)
+
+kartend_add_test(NAME HeroicLibrary
+  SOURCES utils/fs/test_heroiclibrary.cpp
+  LINK kartend_utils
+)
+
+kartend_add_test(NAME ItchLibrary
+  SOURCES utils/fs/test_itchlibrary.cpp
+  LINK kartend_utils
+)
+
+kartend_add_test(NAME BottlesLibrary
+  SOURCES utils/fs/test_bottleslibrary.cpp
+  LINK kartend_utils
+)
+
 # KdeColorScheme tests
 # Includes resources.qrc so the test binary's `:/themes/` lookups
 # resolve to the same bundled .colors files the production app sees;

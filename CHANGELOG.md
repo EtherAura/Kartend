@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Launcher import now covers Heroic, itch.io, Bottles, and your
+  application menu.** Alongside Steam, Flatpak, and Lutris, File → Import →
+  "Import from Launcher…" now detects four more sources and builds the same
+  ready-made, self-syncing collections from them. **Heroic** brings in the
+  Epic, GOG, Amazon, and sideloaded games it has installed, launching each
+  back through Heroic so your per-game Wine/Proton settings still apply.
+  **itch.io** brings in what the itch app has installed, skipping the
+  tools, asset packs, and soundtracks itch also hosts. **Bottles** brings
+  in the programs you added to each bottle, launched through `bottles-cli`
+  in the right bottle — with the bottle's name in the title when you keep
+  more than one. **Desktop Menu** covers everything else: games installed
+  by your package manager, found the way your application menu finds them,
+  including their icons. Sources never step on each other — a menu entry
+  that belongs to Steam, Lutris, Heroic, Bottles, itch, or Flatpak is left
+  to the source that owns it, so ticking every box imports no duplicates —
+  and entries left behind by uninstalled packages are skipped. Heroic and
+  itch.io keep their cover art as remote URLs rather than files, so those
+  two collections start on placeholder art and want a scrape; the other
+  sources bring whatever art is already on disk, as before.
+
 - **Collections can now be built straight from Steam, Flatpak, and Lutris
   libraries.** File → Import → "Import from Launcher…" detects what's
   installed through each launcher and creates a ready-made collection per

@@ -3,9 +3,10 @@
 
 #include "errorutils.h"
 #include <QString>
+#include <QStringList>
 
 /// .kartlink shortcut stubs — tiny JSON files standing in for games that are
-/// installed through an external launcher (Steam / Flatpak / Lutris) and so
+/// installed through an external launcher (Steam / Flatpak / Lutris / …) and so
 /// have no media file of their own. LauncherImportService writes one stub per
 /// installed game into a Kartend-managed folder; the collection then scans,
 /// watches, titles, and art-matches them exactly like ordinary media files
@@ -21,6 +22,14 @@
 /// `title` is informational (the filename already carries the display title);
 /// `source` names the importer that owns the stub so a sync pass never
 /// deletes a stub it didn't write.
+///
+/// A stub may also carry `args` (Kartend-4cff2) — extra arguments appended
+/// after the launcher template's own, for launchers whose invocation needs
+/// more than one variable part. Bottles is the case that forced it: running a
+/// program takes BOTH its name and the bottle it lives in
+/// (`bottles-cli run -p <program> -b <bottle> --`), and a template can only
+/// substitute one target. The key is omitted entirely when the list is empty,
+/// so every other source's stubs keep their exact previous bytes.
 namespace KartLink {
 
 /// Bare lowercase extension, no dot — the same form CollectionConfig's
@@ -29,13 +38,17 @@ inline constexpr auto kExtension = "kartlink";
 
 struct LinkData {
   int version = 1;
-  QString source; ///< Importer id: "steam" / "flatpak" / "lutris".
+  QString source; ///< Importer id: "steam" / "flatpak" / "lutris" / ….
   QString target; ///< What the launcher receives instead of the stub path.
   QString title;  ///< Informational; display titles come from the filename.
+  /// Extra argv entries appended after the launcher template's arguments.
+  /// Each is one argument, passed literally — never re-split, never shell
+  /// interpreted. Usually empty.
+  QStringList args;
 
   bool operator==(const LinkData &other) const {
     return version == other.version && source == other.source && target == other.target &&
-           title == other.title;
+           title == other.title && args == other.args;
   }
 };
 

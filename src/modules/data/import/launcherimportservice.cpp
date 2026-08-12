@@ -14,14 +14,19 @@
 #include <QSqlQuery>
 #include <QStandardPaths>
 
+#include "bottleslibrary.h"
 #include "dbtxn.h"
+#include "desktopentry.h"
 #include "flatpaklibrary.h"
+#include "heroiclibrary.h"
+#include "itchlibrary.h"
 #include "itemmetadata.h"
 #include "kartlink.h"
 #include "lutrislibrary.h"
 #include "pathutils.h"
 #include "steamappinfo.h"
 #include "steamlibrary.h"
+#include "xdggameslibrary.h"
 #include <uiconstants/grid.h>
 #include <uiconstants/item.h>
 
@@ -223,6 +228,95 @@ QList<GameEntry> lutrisEntries() {
   return entries;
 }
 
+QList<GameEntry> heroicEntries() {
+  QList<GameEntry> entries;
+  const QString configDir = HeroicLibrary::defaultConfigDir();
+  if (configDir.isEmpty()) {
+    return entries;
+  }
+  const QList<HeroicLibrary::Game> games = HeroicLibrary::installedGames(configDir);
+  entries.reserve(games.size());
+  for (const HeroicLibrary::Game &game : games) {
+    GameEntry entry;
+    entry.title = game.title;
+    entry.target = HeroicLibrary::launchUri(game);
+    // Usually empty: Heroic's own cover art is remote-URL only, so most
+    // imported collections start on placeholders and want a scrape.
+    entry.coverPath = game.iconPath;
+    entries.append(entry);
+  }
+  return entries;
+}
+
+QList<GameEntry> itchEntries() {
+  QList<GameEntry> entries;
+  const QString configDir = ItchLibrary::defaultConfigDir();
+  if (configDir.isEmpty()) {
+    return entries;
+  }
+  const auto games = ItchLibrary::installedGames(configDir);
+  if (games.isError()) {
+    return entries;
+  }
+  entries.reserve(games.value().size());
+  for (const ItchLibrary::Game &game : games.value()) {
+    GameEntry entry;
+    entry.title = game.title;
+    entry.target = ItchLibrary::launchUri(game);
+    entries.append(entry); // itch keeps no local art at all
+  }
+  return entries;
+}
+
+QList<GameEntry> bottlesEntries() {
+  QList<GameEntry> entries;
+  const QString dataDir = BottlesLibrary::defaultDataDir();
+  if (dataDir.isEmpty()) {
+    return entries;
+  }
+  const QList<BottlesLibrary::Program> programs = BottlesLibrary::installedPrograms(dataDir);
+  entries.reserve(programs.size());
+  QSet<QString> bottleNames;
+  for (const BottlesLibrary::Program &program : programs) {
+    bottleNames.insert(program.bottle);
+  }
+  const bool multipleBottles = bottleNames.size() > 1;
+  for (const BottlesLibrary::Program &program : programs) {
+    GameEntry entry;
+    // Disambiguate across bottles only when there IS more than one: the same
+    // program installed in two bottles is a normal Bottles workflow (a test
+    // prefix beside a working one) and the collision suffix " (2)" would say
+    // nothing about which is which.
+    entry.title = multipleBottles ? QStringLiteral("%1 (%2)").arg(program.name, program.bottle)
+                                  : program.name;
+    // The program name identifies the game; the bottle rides along as a stub
+    // argument, since `bottles-cli run` needs both (Kartend-4cff2).
+    entry.target = program.name;
+    entry.launchArgs = BottlesLibrary::stubLaunchArguments(program);
+    entry.coverPath = program.iconPath;
+    entries.append(entry);
+  }
+  return entries;
+}
+
+QList<GameEntry> xdgEntries() {
+  QList<GameEntry> entries;
+  const QList<XdgGamesLibrary::Game> games =
+      XdgGamesLibrary::installedGames(DesktopEntryFile::defaultShareRoots());
+  entries.reserve(games.size());
+  for (const XdgGamesLibrary::Game &game : games) {
+    GameEntry entry;
+    entry.title = game.name;
+    // The desktop file itself is the target: `gio launch` runs it exactly as
+    // the menu would, honouring Terminal=, field codes and DBus activation —
+    // none of which survive picking the Exec line apart into an argv.
+    entry.target = game.desktopFile;
+    entry.coverPath = game.iconPath; // square icon; the best art a menu entry has
+    entries.append(entry);
+  }
+  return entries;
+}
+
 } // namespace
 
 auto detectSources() -> QList<SourceInfo> {
@@ -258,9 +352,42 @@ auto detectSources() -> QList<SourceInfo> {
   }
   sources.append(lutris);
 
-  // Flatpak and Lutris enumerate installed applications by definition — the
-  // wider tiers have no meaning there, so every tier reports the same count
-  // and the picker can read the fields uniformly.
+  // Kartend-4cff2. Each of these detects by the presence of its launcher's own
+  // data, and counts by listing — the readers are all file reads over a few
+  // hundred records at most, and this runs when the dialog opens.
+  SourceInfo heroic{QString::fromLatin1(kSourceHeroic), QStringLiteral("Heroic")};
+  heroic.available = !HeroicLibrary::defaultConfigDir().isEmpty();
+  if (heroic.available) {
+    heroic.gameCount = static_cast<int>(heroicEntries().size());
+  }
+  sources.append(heroic);
+
+  SourceInfo itch{QString::fromLatin1(kSourceItch), QStringLiteral("itch.io")};
+  itch.available = !ItchLibrary::defaultConfigDir().isEmpty();
+  if (itch.available) {
+    itch.gameCount = static_cast<int>(itchEntries().size());
+  }
+  sources.append(itch);
+
+  SourceInfo bottles{QString::fromLatin1(kSourceBottles), QStringLiteral("Bottles")};
+  bottles.available = !BottlesLibrary::defaultDataDir().isEmpty();
+  if (bottles.available) {
+    bottles.gameCount = static_cast<int>(bottlesEntries().size());
+  }
+  sources.append(bottles);
+
+  // The menu scan has no "is it installed" probe of its own — a desktop entry
+  // exists or it does not — so availability is simply whether the scan found
+  // any game at all. Reporting it as available-with-zero would put a
+  // permanent empty row in the picker on every machine.
+  SourceInfo xdg{QString::fromLatin1(kSourceXdg), QStringLiteral("Desktop Menu")};
+  xdg.gameCount = static_cast<int>(xdgEntries().size());
+  xdg.available = xdg.gameCount > 0;
+  sources.append(xdg);
+
+  // Every source but Steam enumerates installed applications by definition —
+  // the wider tiers have no meaning there, so every tier reports the same
+  // count and the picker can read the fields uniformly.
   for (SourceInfo &source : sources) {
     if (source.id != QLatin1String(kSourceSteam)) {
       source.ownedGameCount = source.gameCount;
@@ -305,6 +432,18 @@ auto listGames(const QString &sourceId, ImportScope scope) -> QList<GameEntry> {
   }
   if (sourceId == QLatin1String(kSourceLutris)) {
     return lutrisEntries();
+  }
+  if (sourceId == QLatin1String(kSourceHeroic)) {
+    return heroicEntries();
+  }
+  if (sourceId == QLatin1String(kSourceItch)) {
+    return itchEntries();
+  }
+  if (sourceId == QLatin1String(kSourceBottles)) {
+    return bottlesEntries();
+  }
+  if (sourceId == QLatin1String(kSourceXdg)) {
+    return xdgEntries();
   }
   return {};
 }
@@ -359,6 +498,7 @@ auto syncEntries(const QList<GameEntry> &entries, const QString &sourceId, const
     data.source = sourceId;
     data.target = it.value().target;
     data.title = it.value().title;
+    data.args = it.value().launchArgs;
     if (QFileInfo::exists(stubPath)) {
       const auto existing = KartLink::read(stubPath);
       if (!existing.isError() && existing.value() == data) {
@@ -702,12 +842,36 @@ auto makeCollectionConfig(const QString &sourceId, ImportScope scope) -> Collect
     c.launcher.launcherPath = QStringLiteral("flatpak");
     c.launcher.launchParameters = QStringLiteral("run %1");
     c.launcher.launcherName = QStringLiteral("Flatpak");
+  } else if (sourceId == QLatin1String(kSourceBottles)) {
+    // `bottles-cli run -p <program> -b <bottle> --`: the template carries the
+    // program, and the stub's own args carry the bottle it lives in
+    // (Kartend-4cff2). A Flatpak Bottles install exports bottles-cli onto the
+    // PATH as well, so one template covers both install shapes.
+    c.name = QStringLiteral("Bottles");
+    c.launcher.launcherPath = QStringLiteral("bottles-cli");
+    c.launcher.launchParameters = QStringLiteral("run -p %1");
+    c.launcher.launcherName = QStringLiteral("Bottles");
+  } else if (sourceId == QLatin1String(kSourceXdg)) {
+    // The target is a .desktop file; `gio launch` runs it the way the menu
+    // does. Picking the Exec line apart into an argv instead would drop
+    // Terminal=, field codes and DBus activation.
+    c.name = QStringLiteral("Desktop Games");
+    c.launcher.launcherPath = QStringLiteral("gio");
+    c.launcher.launchParameters = QStringLiteral("launch %1");
+    c.launcher.launcherName = QStringLiteral("Desktop");
   } else {
-    // URI-style targets (steam:// and lutris:) go through the desktop
-    // URL-handler registry — that works for native AND Flatpak installs of
-    // the launcher, where invoking a `steam`/`lutris` binary would not.
-    c.name = sourceId == QLatin1String(kSourceSteam) ? QStringLiteral("Steam")
-                                                     : QStringLiteral("Lutris");
+    // URI-style targets (steam://, lutris:, heroic://, itch://) go through the
+    // desktop URL-handler registry — that works for native AND Flatpak
+    // installs of the launcher, where invoking its binary would not.
+    if (sourceId == QLatin1String(kSourceSteam)) {
+      c.name = QStringLiteral("Steam");
+    } else if (sourceId == QLatin1String(kSourceHeroic)) {
+      c.name = QStringLiteral("Heroic");
+    } else if (sourceId == QLatin1String(kSourceItch)) {
+      c.name = QStringLiteral("itch.io");
+    } else {
+      c.name = QStringLiteral("Lutris");
+    }
     c.launcher.launcherPath = QStringLiteral("xdg-open");
     c.launcher.launchParameters = QStringLiteral("%1");
     c.launcher.launcherName = c.name;

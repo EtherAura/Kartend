@@ -3,6 +3,7 @@
 
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -37,6 +38,14 @@ auto read(const QString &filePath) -> ErrorUtils::Result<LinkData> {
   data.source = o["source"].toString();
   data.target = o["target"].toString().trimmed();
   data.title = o["title"].toString();
+  // Optional (Kartend-4cff2); absent in every stub written before it existed.
+  // Non-string members are dropped rather than stringified: a stub with a
+  // malformed arg list should lose the argument, not gain "null".
+  for (const auto &arg : o["args"].toArray()) {
+    if (arg.isString()) {
+      data.args.append(arg.toString());
+    }
+  }
 
   if (data.target.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidConfigValue, "Shortcut stub has no launch target",
@@ -52,6 +61,15 @@ auto write(const QString &filePath, const LinkData &data) -> bool {
   o["source"] = data.source;
   o["target"] = data.target;
   o["title"] = data.title;
+  // Written only when non-empty, so the stubs of every existing source keep
+  // their exact previous bytes and a re-sync doesn't rewrite them all.
+  if (!data.args.isEmpty()) {
+    QJsonArray args;
+    for (const QString &arg : data.args) {
+      args.append(arg);
+    }
+    o["args"] = args;
+  }
   return PathUtils::atomicWriteFile(filePath,
                                     QJsonDocument(o).toJson(QJsonDocument::Compact) + '\n');
 }

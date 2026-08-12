@@ -115,7 +115,8 @@ void MenuController::setupActionImportTheme() {
 }
 
 // File → Import entry for creating stub collections from installed-launcher
-// libraries (Steam / Flatpak / Lutris) — Kartend-wuq2c.
+// libraries (Steam / Flatpak / Lutris, plus Heroic / itch.io / Bottles / the
+// XDG application menu — Kartend-wuq2c, Kartend-4cff2).
 void MenuController::setupActionImportFromLauncher() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_importFromLauncherAction = new QAction(tr("Import from Launcher..."), this);

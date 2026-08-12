@@ -50,12 +50,20 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
   // the %1/%f substitution and append-at-end fallback below operate on the
   // target transparently, and keeps the preview honest about what executes.
   QString mediaArgument = filePath;
+  QStringList stubArguments;
   if (KartLink::isKartLinkPath(filePath)) {
     auto link = KartLink::read(filePath);
     if (link.isError()) {
       return link.error();
     }
     mediaArgument = link.value().target;
+    // Kartend-4cff2: a stub may carry extra arguments for launchers whose
+    // invocation has more than one variable part (Bottles needs the bottle
+    // name alongside the program). Each entry becomes exactly one argv slot —
+    // they are never re-split — so a value containing spaces cannot introduce
+    // an argument boundary. They are still validated below, on the same terms
+    // as the target, because a stub is an on-disk file a user can edit.
+    stubArguments = link.value().args;
   }
 
   // Validate the media argument (file path, or resolved shortcut target) for
@@ -64,6 +72,16 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
   auto fileValidation = PathUtils::validatePathSecurity(mediaArgument);
   if (fileValidation.isError()) {
     return fileValidation.error();
+  }
+  // Same character-level check for the stub's own arguments. The leading-dash
+  // guard below deliberately does NOT apply to them: an option flag is the
+  // whole point of the list, and unlike a filename it was written by the
+  // importer rather than derived from whatever a directory happened to hold.
+  for (const QString &argument : stubArguments) {
+    auto argumentValidation = PathUtils::validatePathSecurity(argument);
+    if (argumentValidation.isError()) {
+      return argumentValidation.error();
+    }
   }
 
   // The media path is appended as the final argument (both the libretro and
@@ -165,6 +183,7 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
       return paramResult.error();
     }
     cmd.arguments << "-L" << expandedCorePath << mediaArgument;
+    cmd.arguments << stubArguments; // normally empty; never silently dropped
     return cmd;
   }
 
@@ -179,6 +198,10 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
   if (!sawFilePlaceholder) {
     cmd.arguments << mediaArgument;
   }
+  // Stub arguments last: they close the invocation (Bottles' list ends in the
+  // `--` that terminates option parsing), so they must follow both the
+  // template's arguments and the appended media path.
+  cmd.arguments << stubArguments;
   return cmd;
 }
 

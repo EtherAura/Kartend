@@ -68,6 +68,9 @@ private slots:
   void testKartLinkStubAppendFallbackUsesTarget();
   void testKartLinkBrokenStubFailsToBuild();
   void testKartLinkTargetIsSecurityChecked();
+  // Stub-carried launcher arguments (Kartend-4cff2) — the Bottles shape.
+  void testKartLinkStubArgumentsFollowTheTemplate();
+  void testKartLinkStubArgumentsAreSecurityChecked();
 };
 
 void TestLaunchCommandBuilder::testFilePlaceholder_data() {
@@ -317,6 +320,55 @@ void TestLaunchCommandBuilder::testKartLinkStubAppendFallbackUsesTarget() {
   const QStringList expected = {QStringLiteral("run"),
                                 QStringLiteral("net.supertuxkart.SuperTuxKart")};
   QCOMPARE(cmd.value().arguments, expected);
+}
+
+void TestLaunchCommandBuilder::testKartLinkStubArgumentsFollowTheTemplate() {
+  QTemporaryDir dir;
+  KartLink::LinkData data;
+  data.source = QStringLiteral("bottles");
+  data.target = QStringLiteral("The Game");
+  data.args = {QStringLiteral("-b"), QStringLiteral("My Bottle"), QStringLiteral("--")};
+  const QString stub = dir.filePath(QStringLiteral("The Game.kartlink"));
+  QVERIFY(KartLink::write(stub, data));
+
+  // `bottles-cli run -p "The Game" -b "My Bottle" --`: the template places the
+  // target, the stub's args close the invocation. Each arg is one argv slot,
+  // so the bottle name's space cannot split it.
+  const auto cmd = LaunchCommandBuilder::buildLaunchCommand(
+      plainLauncher(QStringLiteral("run -p %1")), QStringLiteral("Bottles"), stub);
+  QVERIFY(!cmd.isError());
+  const QStringList expected = {QStringLiteral("run"),       QStringLiteral("-p"),
+                                QStringLiteral("The Game"),  QStringLiteral("-b"),
+                                QStringLiteral("My Bottle"), QStringLiteral("--")};
+  QCOMPARE(cmd.value().arguments, expected);
+
+  // A stub without args is byte-identical to one written before the field
+  // existed, and must build exactly as it did then.
+  KartLink::LinkData plain;
+  plain.source = QStringLiteral("steam");
+  plain.target = QStringLiteral("steam://rungameid/400");
+  const QString plainStub = dir.filePath(QStringLiteral("Portal.kartlink"));
+  QVERIFY(KartLink::write(plainStub, plain));
+  const auto plainCmd = LaunchCommandBuilder::buildLaunchCommand(
+      plainLauncher(QStringLiteral("%1")), QStringLiteral("Steam"), plainStub);
+  QVERIFY(!plainCmd.isError());
+  QCOMPARE(plainCmd.value().arguments, QStringList{QStringLiteral("steam://rungameid/400")});
+}
+
+void TestLaunchCommandBuilder::testKartLinkStubArgumentsAreSecurityChecked() {
+  QTemporaryDir dir;
+  KartLink::LinkData data;
+  data.source = QStringLiteral("bottles");
+  data.target = QStringLiteral("The Game");
+  data.args = {QStringLiteral("-b"), QStringLiteral("Bottle; rm -rf /")};
+  const QString stub = dir.filePath(QStringLiteral("evil-args.kartlink"));
+  QVERIFY(KartLink::write(stub, data));
+
+  // Same gate as the target: a hand-edited stub can't smuggle metacharacters
+  // in through the argument list either.
+  const auto cmd = LaunchCommandBuilder::buildLaunchCommand(
+      plainLauncher(QStringLiteral("run -p %1")), QStringLiteral("Bottles"), stub);
+  QVERIFY(cmd.isError());
 }
 
 void TestLaunchCommandBuilder::testKartLinkBrokenStubFailsToBuild() {

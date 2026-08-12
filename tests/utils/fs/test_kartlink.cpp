@@ -1,5 +1,6 @@
 // KartLink stub read/write round-trip. Pure file <-> struct, no DB or event
 // loop; every case stages its files in a QTemporaryDir.
+#include <QFile>
 #include <QObject>
 #include <QTemporaryDir>
 #include <QTest>
@@ -17,6 +18,7 @@ private slots:
   void readRejectsMalformedJson();
   void readRejectsEmptyTarget();
   void writeCreatesParentDirectory();
+  void argsRoundTripAndStayOptional();
 
 private:
   QTemporaryDir m_dir;
@@ -83,6 +85,45 @@ void TestKartLink::writeCreatesParentDirectory() {
   const auto loaded = KartLink::read(stub);
   QVERIFY(!loaded.isError());
   QCOMPARE(loaded.value().target, QStringLiteral("org.example.Game"));
+}
+
+// Kartend-4cff2: `args` is optional, and its absence has to keep meaning
+// exactly what it meant before the field existed — every pre-existing stub on
+// every user's disk is missing it.
+void TestKartLink::argsRoundTripAndStayOptional() {
+  KartLink::LinkData data;
+  data.source = QStringLiteral("bottles");
+  data.target = QStringLiteral("The Game");
+  data.title = QStringLiteral("The Game");
+  data.args = {QStringLiteral("-b"), QStringLiteral("My Bottle"), QStringLiteral("--")};
+
+  const QString stub = path(QStringLiteral("The Game.kartlink"));
+  QVERIFY(KartLink::write(stub, data));
+  const auto loaded = KartLink::read(stub);
+  QVERIFY(!loaded.isError());
+  QVERIFY(loaded.value() == data);
+  QCOMPARE(loaded.value().args.size(), 3);
+
+  // An args-less stub must not gain the key — a re-sync compares the parsed
+  // struct, so writing `"args":[]` would rewrite every existing stub once.
+  KartLink::LinkData plain;
+  plain.source = QStringLiteral("steam");
+  plain.target = QStringLiteral("steam://rungameid/220");
+  plain.title = QStringLiteral("Half-Life 2");
+  const QString plainStub = path(QStringLiteral("Half-Life 2 plain.kartlink"));
+  QVERIFY(KartLink::write(plainStub, plain));
+  QFile written(plainStub);
+  QVERIFY(written.open(QIODevice::ReadOnly));
+  QVERIFY(!written.readAll().contains("args"));
+
+  // A stub whose args are the wrong type loses the malformed entries rather
+  // than stringifying them into the argv.
+  const QString odd = path(QStringLiteral("odd.kartlink"));
+  writeRaw(odd, QByteArrayLiteral(R"({"version":1,"source":"bottles","target":"X",)"
+                                  R"("args":["-b",7,null,"Bottle"]})"));
+  const auto oddLoaded = KartLink::read(odd);
+  QVERIFY(!oddLoaded.isError());
+  QCOMPARE(oddLoaded.value().args, (QStringList{QStringLiteral("-b"), QStringLiteral("Bottle")}));
 }
 
 QTEST_MAIN(TestKartLink)

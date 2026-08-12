@@ -7,10 +7,11 @@
 
 #include "collection/collectionconfig.h"
 
-/// Synchronises an external launcher's installed-game library (Steam /
-/// Flatpak / Lutris) into a Kartend-managed folder of .kartlink shortcut
-/// stubs plus fill-missing artwork, so the ordinary folder-scan pipeline can
-/// present the games as launchable items (Kartend-wuq2c). Stateless free
+/// Synchronises an external launcher's installed-game library (Steam,
+/// Flatpak, Lutris, Heroic, itch.io, Bottles, and the XDG application menu)
+/// into a Kartend-managed folder of .kartlink shortcut stubs plus
+/// fill-missing artwork, so the ordinary folder-scan pipeline can present the
+/// games as launchable items (Kartend-wuq2c, Kartend-4cff2). Stateless free
 /// functions with no manager dependencies: the heavy entry points
 /// (listGames / syncSource) do only file and SQLite reads and atomic stub
 /// writes, so callers may run them on a worker thread; nothing here touches
@@ -24,6 +25,13 @@ namespace LauncherImportService {
 inline constexpr auto kSourceSteam = "steam";
 inline constexpr auto kSourceFlatpak = "flatpak";
 inline constexpr auto kSourceLutris = "lutris";
+// Kartend-4cff2. Each is a self-contained reader in utils/fs plus a listGames
+// branch; the id is also the managed folder name under launcher-imports/, so
+// these strings are on-disk state and must not be renamed.
+inline constexpr auto kSourceHeroic = "heroic";
+inline constexpr auto kSourceItch = "itch";
+inline constexpr auto kSourceBottles = "bottles";
+inline constexpr auto kSourceXdg = "xdg";
 
 /// How much of a launcher's library to import (Kartend-el5st). Steam is the
 /// only source that honours anything beyond Installed — Flatpak and Lutris
@@ -63,6 +71,9 @@ struct GameEntry {
   QString coverPath; ///< Portrait cover art → artwork/front/.
   QString logoPath;  ///< Transparent logo → artwork/logo/.
   QString heroPath;  ///< Wide banner art → artwork/fanart/.
+  /// Extra launcher arguments this game needs beyond the target — see
+  /// KartLink::LinkData::args. Empty for every source but Bottles.
+  QStringList launchArgs;
 };
 
 struct SourceInfo {

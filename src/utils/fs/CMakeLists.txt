@@ -1,9 +1,13 @@
 target_sources(kartend_utils PRIVATE
   archiverepack.cpp
   archivesafety.cpp
+  bottleslibrary.cpp
   configvalidation.cpp
+  desktopentry.cpp
   extensionutils.cpp
   flatpaklibrary.cpp
+  heroiclibrary.cpp
+  itchlibrary.cpp
   kartlink.cpp
   launcherprobe.cpp
   lutrislibrary.cpp
@@ -12,11 +16,16 @@ target_sources(kartend_utils PRIVATE
   romhasher.cpp
   steamappinfo.cpp
   steamlibrary.cpp
+  xdggameslibrary.cpp
   archiverepack.h
   archivesafety.h
+  bottleslibrary.h
   configvalidation.h
+  desktopentry.h
   extensionutils.h
   flatpaklibrary.h
+  heroiclibrary.h
+  itchlibrary.h
   kartlink.h
   launcherprobe.h
   lutrislibrary.h
@@ -25,4 +34,5 @@ target_sources(kartend_utils PRIVATE
   romhasher.h
   steamappinfo.h
   steamlibrary.h
+  xdggameslibrary.h
 )

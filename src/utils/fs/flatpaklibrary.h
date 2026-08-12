@@ -43,9 +43,11 @@ struct DesktopEntry {
 /// Enumerates `<root>/applications/*.desktop` across the given
 /// `exports/share` roots, keeping entries whose Categories contain "Game"
 /// and which aren't NoDisplay. Gaming-adjacent tools that declare Game
-/// alongside a tool-signal main category (Utility / Settings / System /
-/// Development — e.g. ProtonUp-Qt's "Game;Utility;") are excluded: real
-/// games never carry that pairing. The app id comes from X-Flatpak when
+/// alongside a tool-signal category (Utility / Settings / System /
+/// Development — e.g. ProtonUp-Qt's "Game;Utility;") are excluded; emulator
+/// frontends are not — see DesktopEntryFile::isGame, which both this and the
+/// XDG menu scan share so the rule cannot drift between them. The app id
+/// comes from X-Flatpak when
 /// present, else the desktop file's basename. First occurrence of an id
 /// wins (roots are probed in the order given).
 [[nodiscard]] QList<App> installedGames(const QStringList &exportShareRoots);
