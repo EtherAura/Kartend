@@ -25,6 +25,7 @@ private slots:
   void init();
 
   void unknownPerCollectionKey_preservedThroughLoadSave();
+  void importSourceKey_survivesLoadSave();
   void knownKey_overwritesPreservedDuplicate();
   void legacyBlocklistedKey_droppedNotPreserved();
   void extensions_legacyGlobFormMigratesToBare();
@@ -98,6 +99,39 @@ void TestSettingsRoundtrip::unknownPerCollectionKey_preservedThroughLoadSave() {
   QVERIFY2(rewritten.contains(QStringLiteral("experimentalScrollMode=trampoline")),
            qPrintable(
                QStringLiteral("Unknown string key was dropped on round-trip:\n%1").arg(rewritten)));
+}
+
+// Kartend-ilkne: importSourceKey decides WHICH slice of a multi-collection
+// source a collection holds. If it did not persist, a restart would re-sync
+// every ES-DE collection against the whole library and write every system's
+// games into each one.
+//
+// The config is built IN MEMORY rather than seeded from INI, and that is the
+// whole point of the case: every key read from a file is echoed back by the
+// preserved-unknown-keys mechanism, so a seeded value round-trips even with
+// the save wiring deleted. Only a collection that was never loaded — exactly
+// what the importer creates — actually exercises it.
+void TestSettingsRoundtrip::importSourceKey_survivesLoadSave() {
+  CollectionConfig created;
+  created.name = QStringLiteral("ES-DE: snes");
+  created.mediaDirectory = QStringLiteral("/tmp/media");
+  created.importSource = QStringLiteral("esde");
+  created.importSourceKey = QStringLiteral("snes");
+  QVERIFY(created.preservedKeys.isEmpty()); // nothing to echo it back
+
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections{created};
+  mgr.saveCollections(collections);
+
+  const QString written = readConfigIni();
+  QVERIFY2(written.contains(QStringLiteral("importSourceKey=snes")),
+           qPrintable(QStringLiteral("importSourceKey never reached the INI:\n%1").arg(written)));
+
+  // …and comes back on the next load.
+  QList<CollectionConfig> reloaded;
+  mgr.loadCollections(reloaded);
+  QCOMPARE(reloaded.size(), 1);
+  QCOMPARE(reloaded[0].importSourceKey, QStringLiteral("snes"));
 }
 
 void TestSettingsRoundtrip::uuidCollisionCapturedForStartupWarning() {

@@ -36,6 +36,7 @@ private slots:
   void collisionNumberingIsStable();
   void artworkFillMissingNeverOverwrites();
   void makeCollectionConfigShape();
+  void multiCollectionSourceKeepsSlicesApart();
   void syncCarriesLaunchArgsOntoStubs();
   void scalableIconIsRasterizedIntoArtwork();
   void remoteCoverIsPendingOnlyWhenTheSlotIsEmpty();
@@ -388,6 +389,56 @@ void TestLauncherImportService::remoteCoverIsPendingOnlyWhenTheSlotIsEmpty() {
       QStringLiteral("steam"), otherStubs, otherArtwork);
   QCOMPARE(steam.syncedStubs.size(), 1);
   QVERIFY(steam.syncedStubs.at(0).pendingCoverUrl.isEmpty());
+}
+
+// Kartend-ilkne: ES-DE yields one collection PER SYSTEM, so the pieces that
+// were "one per source" have to become "one per slice". The stub directory is
+// the one that bites hardest: a sync deletes the stubs whose source matches,
+// so sharing a folder between systems would make each system's sync delete the
+// others' games.
+void TestLauncherImportService::multiCollectionSourceKeepsSlicesApart() {
+  const CollectionConfig nes = LauncherImportService::makeCollectionConfig(
+      QStringLiteral("esde"), LauncherImportService::ImportScope::Installed, QStringLiteral("nes"));
+  const CollectionConfig snes = LauncherImportService::makeCollectionConfig(
+      QStringLiteral("esde"), LauncherImportService::ImportScope::Installed,
+      QStringLiteral("snes"));
+  QCOMPARE(nes.importSource, QStringLiteral("esde"));
+  QCOMPARE(nes.importSourceKey, QStringLiteral("nes"));
+  QCOMPARE(nes.name, QStringLiteral("ES-DE: nes"));
+  QCOMPARE(snes.importSourceKey, QStringLiteral("snes"));
+
+  // Distinct managed folders — the whole point.
+  QVERIFY(nes.mediaDirectory != snes.mediaDirectory);
+  QVERIFY(nes.mediaDirectory.endsWith(QStringLiteral("launcher-imports/esde/_nes/games")));
+  QVERIFY(snes.artworkDirectory.endsWith(QStringLiteral("launcher-imports/esde/_snes/artwork")));
+
+  // No launcher is guessed: ES-DE's emulator command lives in files only ES-DE
+  // can read, so a fabricated one would silently fail to launch.
+  QVERIFY(nes.launcher.launcherPath.isEmpty());
+
+  // A key comes from the user's ROM tree, so it must not be able to climb out
+  // of the managed root. The property that matters is CONTAINMENT after
+  // normalisation, not the absence of dots: the sanitizer strips path
+  // separators, so "../../etc" becomes one oddly-named directory that cannot
+  // traverse anywhere. cleanPath is what would collapse a real climb.
+  const QString root =
+      QDir::cleanPath(LauncherImportService::defaultBaseDir(QStringLiteral("esde")));
+  const QString escaping = QDir::cleanPath(
+      LauncherImportService::defaultBaseDir(QStringLiteral("esde"), QStringLiteral("../../etc")));
+  QVERIFY(escaping.startsWith(root + QLatin1Char('/')));
+  QVERIFY(!escaping.contains(QStringLiteral("/../")));
+
+  // An empty key is the single-collection case every other source uses, and
+  // must keep the pre-Kartend-ilkne layout exactly.
+  const CollectionConfig steam =
+      LauncherImportService::makeCollectionConfig(QStringLiteral("steam"));
+  QVERIFY(steam.importSourceKey.isEmpty());
+  QVERIFY(steam.mediaDirectory.endsWith(QStringLiteral("launcher-imports/steam/games")));
+
+  // Sources that are one collection report no slices — "no slices" means "I am
+  // one collection", not "I have nothing".
+  QVERIFY(LauncherImportService::sourceSlices(QStringLiteral("steam")).isEmpty());
+  QVERIFY(LauncherImportService::sourceSlices(QStringLiteral("xdg")).isEmpty());
 }
 
 void TestLauncherImportService::syncCarriesLaunchArgsOntoStubs() {

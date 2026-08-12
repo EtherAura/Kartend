@@ -32,6 +32,7 @@ inline constexpr auto kSourceHeroic = "heroic";
 inline constexpr auto kSourceItch = "itch";
 inline constexpr auto kSourceBottles = "bottles";
 inline constexpr auto kSourceXdg = "xdg";
+inline constexpr auto kSourceEsde = "esde";
 
 /// How much of a launcher's library to import (Kartend-el5st). Steam is the
 /// only source that honours anything beyond Installed — Flatpak and Lutris
@@ -92,6 +93,22 @@ struct SourceInfo {
   int recognizedGameCount = 0;
 };
 
+/// One SLICE of a source that yields several collections (Kartend-ilkne).
+/// ES-DE is the only such source today: its library is organised per system,
+/// each needing its own emulator, so one import produces one collection per
+/// system rather than a single mixed one.
+struct SourceSlice {
+  QString key;         ///< Stable id — for ES-DE the system directory ("snes").
+  QString displayName; ///< What the collection is named after.
+  int gameCount = 0;
+};
+
+/// The slices `sourceId` would import as separate collections. EMPTY for every
+/// one-collection-per-source importer, which is all of them but ES-DE — an
+/// empty list means "this source is one collection", not "this source has
+/// nothing".
+[[nodiscard]] QList<SourceSlice> sourceSlices(const QString &sourceId);
+
 /// One stub present after a sync (freshly written or already up to date) —
 /// the bridge between the file-level sync and follow-up steps that key off
 /// the stub path (metadata writes are keyed (collection_uuid, stub path)).
@@ -131,8 +148,11 @@ struct SyncResult {
 /// `steam://rungameid/<appid>` is a valid target for a game that is not
 /// installed — Steam offers to install it — so the wider tiers need no
 /// special target handling.
+/// `sourceKey` selects one slice of a multi-collection source (an ES-DE
+/// system); empty means the whole source, which is every other importer.
 [[nodiscard]] QList<GameEntry> listGames(const QString &sourceId,
-                                         ImportScope scope = ImportScope::Installed);
+                                         ImportScope scope = ImportScope::Installed,
+                                         const QString &sourceKey = QString());
 
 /// listGames + syncEntries in one call — the normal production path.
 ///
@@ -143,7 +163,8 @@ struct SyncResult {
 /// CollectionConfig::importScope (Kartend-el5st).
 [[nodiscard]] SyncResult syncSource(const QString &sourceId, const QString &stubDir,
                                     const QString &artworkDir,
-                                    ImportScope scope = ImportScope::Installed);
+                                    ImportScope scope = ImportScope::Installed,
+                                    const QString &sourceKey = QString());
 
 /// Diff-syncs `entries` into `stubDir`: writes new/changed stubs, deletes
 /// this source's stubs for games no longer present, and copies artwork into
@@ -153,9 +174,16 @@ struct SyncResult {
 [[nodiscard]] SyncResult syncEntries(const QList<GameEntry> &entries, const QString &sourceId,
                                      const QString &stubDir, const QString &artworkDir);
 
-/// `<AppDataLocation>/launcher-imports/<sourceId>`; stubs live in its
-/// `games/` child and artwork in `artwork/` (stubDirFor / artworkDirFor).
-[[nodiscard]] QString defaultBaseDir(const QString &sourceId);
+/// `<AppDataLocation>/launcher-imports/<sourceId>`, or
+/// `.../<sourceId>/_<sourceKey>` for one slice of a multi-collection source;
+/// stubs live in its `games/` child and artwork in `artwork/`.
+///
+/// The per-slice directory is NOT cosmetic. A sync deletes the stubs whose
+/// `source` matches the source being synced, so if every ES-DE system shared
+/// one folder, syncing `snes` would delete every `nes` stub in it and vice
+/// versa. Separate folders are what make the ownership contract hold when one
+/// source id spans several collections (Kartend-ilkne).
+[[nodiscard]] QString defaultBaseDir(const QString &sourceId, const QString &sourceKey = QString());
 [[nodiscard]] QString stubDirFor(const QString &baseDir);
 [[nodiscard]] QString artworkDirFor(const QString &baseDir);
 
@@ -171,7 +199,8 @@ struct SyncResult {
 /// recognises it and re-syncs at the tier it was imported with.
 /// Mirrors SettingsDialog::addCollection's defaulted field set.
 [[nodiscard]] CollectionConfig makeCollectionConfig(const QString &sourceId,
-                                                    ImportScope scope = ImportScope::Installed);
+                                                    ImportScope scope = ImportScope::Installed,
+                                                    const QString &sourceKey = QString());
 
 /// Outcome of a Steam-metadata pass (Kartend-11elw).
 struct MetadataApplyResult {

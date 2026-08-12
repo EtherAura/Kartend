@@ -57,13 +57,22 @@ void LauncherImportController::runImportDialog() {
     return;
   }
 
-  const auto indexForSource = [collections](const QString &sourceId) {
+  // Matched on (source, KEY): a source that yields several collections has one
+  // per slice, so "is this already imported?" is per-slice too. With an empty
+  // key this is exactly the old behaviour (Kartend-ilkne).
+  const auto indexForSlice = [collections](const QString &sourceId, const QString &sourceKey) {
     for (int i = 0; i < collections->size(); ++i) {
-      if (collections->at(i).importSource == sourceId) {
+      if (collections->at(i).importSource == sourceId &&
+          collections->at(i).importSourceKey == sourceKey) {
         return i;
       }
     }
     return -1;
+  };
+  const auto anyImportedForSource = [collections](const QString &sourceId) {
+    return std::ranges::any_of(*collections, [&sourceId](const CollectionConfig &c) {
+      return c.importSource == sourceId;
+    });
   };
 
   const QList<LauncherImportService::SourceInfo> sources = LauncherImportService::detectSources();
@@ -77,7 +86,7 @@ void LauncherImportController::runImportDialog() {
     row.gameCount = source.gameCount;
     row.ownedGameCount = source.ownedGameCount;
     row.recognizedGameCount = source.recognizedGameCount;
-    row.alreadyImported = indexForSource(source.id) >= 0;
+    row.alreadyImported = anyImportedForSource(source.id);
     rows.append(row);
   }
 
@@ -135,89 +144,106 @@ void LauncherImportController::runImportDialog() {
   // artwork copies finish in low seconds. The wait cursor marks the pause.
   QApplication::setOverrideCursor(Qt::WaitCursor);
   for (const QString &sourceId : selected) {
-    const int existingIndex = indexForSource(sourceId);
-    if (existingIndex >= 0) {
-      // Source already has a collection — selecting it means "re-sync now",
-      // at the scope just chosen. Record the scope on the collection before
-      // syncing: the sync prunes stubs the new listing doesn't carry, so the
-      // persisted value has to agree with what is now on disk or the next
-      // startup sync would widen or prune it right back (Kartend-el5st).
-      const QString scopeText = LauncherImportService::scopeToString(scope);
-      if ((*collections)[existingIndex].importScope != scopeText) {
-        (*collections)[existingIndex].importScope = scopeText;
-        if (m_ctx.persistCollections) {
-          m_ctx.persistCollections();
-        }
-      }
-      const CollectionConfig &existing = collections->at(existingIndex);
-      const LauncherImportService::SyncResult result = LauncherImportService::syncSource(
-          sourceId,
-          PathUtils::expandPathWithoutExistenceCheck(existing.mediaDirectory, existing.name),
-          PathUtils::expandPathWithoutExistenceCheck(existing.artworkDirectory, existing.name),
-          scope);
-      logSyncErrors(sourceId, result);
-      artworkTouched = artworkTouched || result.artworkCopied > 0;
-      const int metadataRows = applyMetadataForCollection(existing, result.syncedStubs);
-      enrichFromStore(existing, result.syncedStubs);
-      fetchRemoteCovers(existing, result.syncedStubs);
-      if (result.changed() && m_ctx.refreshCollection) {
-        m_ctx.refreshCollection(existingIndex);
-      }
-      summary.append(tr("%1: re-synced — %2 added or updated, %3 removed, %n game(s) total.",
-                        nullptr, result.totalPresent())
-                         .arg(existing.name)
-                         .arg(result.written)
-                         .arg(result.removed));
-      if (metadataRows > 0) {
-        summary.append(tr("%1: Steam metadata filled for %n item(s).", nullptr, metadataRows)
-                           .arg(existing.name));
-      }
-      continue;
+    // A source normally means one collection; ES-DE means one PER SYSTEM
+    // (Kartend-ilkne). Expanding to a list of slice keys here — with a single
+    // empty key for every other source — keeps one code path for both, so the
+    // re-sync, naming, parenting and metadata passes below are written once.
+    QStringList sliceKeys;
+    for (const LauncherImportService::SourceSlice &slice :
+         LauncherImportService::sourceSlices(sourceId)) {
+      sliceKeys.append(slice.key);
+    }
+    if (sliceKeys.isEmpty()) {
+      sliceKeys.append(QString());
     }
 
-    CollectionConfig config = LauncherImportService::makeCollectionConfig(sourceId, scope);
-    // Unique display name: several hierarchy paths key collections by name,
-    // and the uuid itself hashes name + media dir.
-    const QString baseName = config.name;
-    for (int n = 2; nameTaken(config.name); ++n) {
-      config.name = baseName + QStringLiteral(" (%1)").arg(n);
-    }
-    // Apply the chosen parent, inheriting the layout/sidebar fields a
-    // subcollection takes from its parent — the same set
-    // SettingsDialog::addCollection and createCollectionForDat copy, so an
-    // imported subcollection looks consistent with its siblings.
-    if (parentIndex >= 0 && parentIndex < collections->size()) {
-      const CollectionConfig &parentConfig = collections->at(parentIndex);
-      config.parentCollectionIndex = parentIndex;
-      config.isSubcollection = true;
-      config.gridLayout = parentConfig.gridLayout;
-      config.sidebar.sidebarMode = parentConfig.sidebar.sidebarMode;
-      config.viewType = parentConfig.viewType;
-      config.showAllSubcollectionItems = parentConfig.showAllSubcollectionItems;
-      config.horizontalAlignment = parentConfig.horizontalAlignment;
-      config.hideTitles = parentConfig.hideTitles;
-      config.hideSubcollectionTitles = parentConfig.hideSubcollectionTitles;
-    }
-    // Sync before persisting so the collection's very first scan already
-    // sees the stubs (and the fill-missing artwork).
-    const LauncherImportService::SyncResult result = LauncherImportService::syncSource(
-        sourceId, config.mediaDirectory, config.artworkDirectory, scope);
-    logSyncErrors(sourceId, result);
-    artworkTouched = artworkTouched || result.artworkCopied > 0;
-    m_ctx.appendCollectionAndPersist(config, /*navigate=*/false);
-    // Metadata after the sync (the stub dir exists now, so the canonical
-    // uuid — which validates the media dir — resolves correctly).
-    const int metadataRows = applyMetadataForCollection(config, result.syncedStubs);
-    // …then the store pass for what only the web has (descriptions, media).
-    // Async: the dialog closes immediately and the status bar reports.
-    enrichFromStore(config, result.syncedStubs);
-    fetchRemoteCovers(config, result.syncedStubs);
-    // totalPresent, not written: a re-import over a surviving stub folder
-    // writes nothing but the collection still gets every game.
-    summary.append(tr("%1: %n game(s) imported.", nullptr, result.totalPresent()).arg(config.name));
-    if (metadataRows > 0) {
+    for (const QString &sourceKey : sliceKeys) {
+      const int existingIndex = indexForSlice(sourceId, sourceKey);
+      if (existingIndex >= 0) {
+        // Source already has a collection — selecting it means "re-sync now",
+        // at the scope just chosen. Record the scope on the collection before
+        // syncing: the sync prunes stubs the new listing doesn't carry, so the
+        // persisted value has to agree with what is now on disk or the next
+        // startup sync would widen or prune it right back (Kartend-el5st).
+        const QString scopeText = LauncherImportService::scopeToString(scope);
+        if ((*collections)[existingIndex].importScope != scopeText) {
+          (*collections)[existingIndex].importScope = scopeText;
+          if (m_ctx.persistCollections) {
+            m_ctx.persistCollections();
+          }
+        }
+        const CollectionConfig &existing = collections->at(existingIndex);
+        const LauncherImportService::SyncResult result = LauncherImportService::syncSource(
+            sourceId,
+            PathUtils::expandPathWithoutExistenceCheck(existing.mediaDirectory, existing.name),
+            PathUtils::expandPathWithoutExistenceCheck(existing.artworkDirectory, existing.name),
+            scope, sourceKey);
+        logSyncErrors(sourceId, result);
+        artworkTouched = artworkTouched || result.artworkCopied > 0;
+        const int metadataRows = applyMetadataForCollection(existing, result.syncedStubs);
+        enrichFromStore(existing, result.syncedStubs);
+        fetchRemoteCovers(existing, result.syncedStubs);
+        if (result.changed() && m_ctx.refreshCollection) {
+          m_ctx.refreshCollection(existingIndex);
+        }
+        summary.append(tr("%1: re-synced — %2 added or updated, %3 removed, %n game(s) total.",
+                          nullptr, result.totalPresent())
+                           .arg(existing.name)
+                           .arg(result.written)
+                           .arg(result.removed));
+        if (metadataRows > 0) {
+          summary.append(tr("%1: Steam metadata filled for %n item(s).", nullptr, metadataRows)
+                             .arg(existing.name));
+        }
+        continue;
+      }
+
+      CollectionConfig config =
+          LauncherImportService::makeCollectionConfig(sourceId, scope, sourceKey);
+      // Unique display name: several hierarchy paths key collections by name,
+      // and the uuid itself hashes name + media dir.
+      const QString baseName = config.name;
+      for (int n = 2; nameTaken(config.name); ++n) {
+        config.name = baseName + QStringLiteral(" (%1)").arg(n);
+      }
+      // Apply the chosen parent, inheriting the layout/sidebar fields a
+      // subcollection takes from its parent — the same set
+      // SettingsDialog::addCollection and createCollectionForDat copy, so an
+      // imported subcollection looks consistent with its siblings.
+      if (parentIndex >= 0 && parentIndex < collections->size()) {
+        const CollectionConfig &parentConfig = collections->at(parentIndex);
+        config.parentCollectionIndex = parentIndex;
+        config.isSubcollection = true;
+        config.gridLayout = parentConfig.gridLayout;
+        config.sidebar.sidebarMode = parentConfig.sidebar.sidebarMode;
+        config.viewType = parentConfig.viewType;
+        config.showAllSubcollectionItems = parentConfig.showAllSubcollectionItems;
+        config.horizontalAlignment = parentConfig.horizontalAlignment;
+        config.hideTitles = parentConfig.hideTitles;
+        config.hideSubcollectionTitles = parentConfig.hideSubcollectionTitles;
+      }
+      // Sync before persisting so the collection's very first scan already
+      // sees the stubs (and the fill-missing artwork).
+      const LauncherImportService::SyncResult result = LauncherImportService::syncSource(
+          sourceId, config.mediaDirectory, config.artworkDirectory, scope, sourceKey);
+      logSyncErrors(sourceId, result);
+      artworkTouched = artworkTouched || result.artworkCopied > 0;
+      m_ctx.appendCollectionAndPersist(config, /*navigate=*/false);
+      // Metadata after the sync (the stub dir exists now, so the canonical
+      // uuid — which validates the media dir — resolves correctly).
+      const int metadataRows = applyMetadataForCollection(config, result.syncedStubs);
+      // …then the store pass for what only the web has (descriptions, media).
+      // Async: the dialog closes immediately and the status bar reports.
+      enrichFromStore(config, result.syncedStubs);
+      fetchRemoteCovers(config, result.syncedStubs);
+      // totalPresent, not written: a re-import over a surviving stub folder
+      // writes nothing but the collection still gets every game.
       summary.append(
-          tr("%1: Steam metadata filled for %n item(s).", nullptr, metadataRows).arg(config.name));
+          tr("%1: %n game(s) imported.", nullptr, result.totalPresent()).arg(config.name));
+      if (metadataRows > 0) {
+        summary.append(tr("%1: Steam metadata filled for %n item(s).", nullptr, metadataRows)
+                           .arg(config.name));
+      }
     }
   }
   QApplication::restoreOverrideCursor();
@@ -542,8 +568,8 @@ void LauncherImportController::startBackgroundSync(bool announce) {
       outcome.collectionIndex = job.collectionIndex;
       outcome.sourceId = job.sourceId;
       outcome.collectionUuid = job.collectionUuid;
-      outcome.result =
-          LauncherImportService::syncSource(job.sourceId, job.stubDir, job.artworkDir, job.scope);
+      outcome.result = LauncherImportService::syncSource(job.sourceId, job.stubDir, job.artworkDir,
+                                                         job.scope, job.sourceKey);
       // No-op for non-Steam sources (their targets carry no appid).
       outcome.metadata = LauncherImportService::applySteamMetadata(job.dbPath, job.collectionUuid,
                                                                    outcome.result.syncedStubs);
@@ -649,6 +675,7 @@ auto LauncherImportController::snapshotJobs() const -> QList<SyncJob> {
     SyncJob job;
     job.collectionIndex = i;
     job.sourceId = config.importSource;
+    job.sourceKey = config.importSourceKey;
     job.scope = LauncherImportService::scopeFromString(config.importScope);
     job.stubDir = PathUtils::expandPathWithoutExistenceCheck(config.mediaDirectory, config.name);
     job.artworkDir =

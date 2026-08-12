@@ -109,6 +109,12 @@ private:
     /// The tier the collection was imported with, carried so a re-sync
     /// re-lists the same breadth — see CollectionConfig::importScope.
     LauncherImportService::ImportScope scope = LauncherImportService::ImportScope::Installed;
+    /// Which slice of the source this collection holds — see
+    /// CollectionConfig::importSourceKey. Empty for every source but ES-DE.
+    /// Carried for the same reason as the scope: re-syncing an ES-DE
+    /// collection WITHOUT it would list the whole library and write every
+    /// system's games into that one collection (Kartend-ilkne).
+    QString sourceKey;
   };
   struct SyncOutcome {
     int collectionIndex = -1;

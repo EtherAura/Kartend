@@ -62,6 +62,7 @@ void load(QSettings &settings, CollectionConfig &config, bool &needsRewrite,
   config.collectionIcon = settings.value(keys::kCollectionIcon).toString();
   config.importSource = settings.value(keys::kImportSource).toString().trimmed();
   config.importScope = settings.value(keys::kImportScope).toString().trimmed();
+  config.importSourceKey = settings.value(keys::kImportSourceKey).toString().trimmed();
 
   QStringList rawList = settings.value(keys::kExtensions).toString().split(',', Qt::SkipEmptyParts);
   for (QString &extension : rawList) {
@@ -147,6 +148,7 @@ void save(QSettings &settings, const CollectionConfig &config, const QString &se
   settings.setValue(keys::kCollectionIcon, config.collectionIcon);
   settings.setValue(keys::kImportSource, config.importSource);
   settings.setValue(keys::kImportScope, config.importScope);
+  settings.setValue(keys::kImportSourceKey, config.importSourceKey);
   settings.setValue(keys::kExtensions, config.extensions.join(", "));
   settings.setValue(keys::kCustomArtworkTypes, config.customArtworkTypes.join(", "));
   settings.setValue(keys::kShowAllSubcollectionItems, config.showAllSubcollectionItems);

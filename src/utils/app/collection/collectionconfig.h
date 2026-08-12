@@ -172,6 +172,21 @@ struct CollectionConfig {
   /// an unrecognised value.
   QString importScope;
 
+  /// Which SLICE of the import source this collection holds, when one source
+  /// yields several collections (Kartend-ilkne). ES-DE is the case that forced
+  /// it: its library is organised per system, each needing its own emulator,
+  /// so one ES-DE import produces a collection per system and this carries the
+  /// system name ("snes"). Persisted to INI (kImportSourceKey).
+  ///
+  /// Empty for every one-collection-per-source importer, which is all of the
+  /// others — and empty is what pre-Kartend-ilkne collections read back as, so
+  /// it must keep meaning "the whole source".
+  ///
+  /// A re-sync MUST honour it: syncing an ES-DE collection without its key
+  /// would list the entire library and write every system's games into that
+  /// one collection.
+  QString importSourceKey;
+
   /// Virtual-folder browsing cluster — the persisted "treat subfolders as
   /// virtual navigable folders" toggles plus the runtime currentSubfolder
   /// cursor. Access as `cfg.folderBrowsing.includeContentSubfolders` /
@@ -262,9 +277,10 @@ struct CollectionConfig {
            background == other.background && archive == other.archive &&
            expandMode == other.expandMode && watchFilesystem == other.watchFilesystem &&
            importSource == other.importSource && importScope == other.importScope &&
-           folderBrowsing == other.folderBrowsing && listView == other.listView &&
-           customFontFamily == other.customFontFamily && isPlaylist == other.isPlaylist &&
-           playlistId == other.playlistId && isSmartPlaylist == other.isSmartPlaylist &&
+           importSourceKey == other.importSourceKey && folderBrowsing == other.folderBrowsing &&
+           listView == other.listView && customFontFamily == other.customFontFamily &&
+           isPlaylist == other.isPlaylist && playlistId == other.playlistId &&
+           isSmartPlaylist == other.isSmartPlaylist &&
            playlistReservedKind == other.playlistReservedKind &&
            scraperOverrides == other.scraperOverrides &&
            additionalParentNames == other.additionalParentNames;

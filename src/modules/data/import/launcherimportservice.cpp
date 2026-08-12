@@ -18,6 +18,7 @@
 #include "bottleslibrary.h"
 #include "dbtxn.h"
 #include "desktopentry.h"
+#include "esdelibrary.h"
 #include "flatpaklibrary.h"
 #include "heroiclibrary.h"
 #include "itchlibrary.h"
@@ -366,7 +367,60 @@ QList<GameEntry> xdgEntries() {
   return entries;
 }
 
+/// Games of ONE ES-DE system. The system is the sourceKey; an empty key would
+/// be meaningless here, since ES-DE never imports as a single collection.
+QList<GameEntry> esdeEntries(const QString &systemKey) {
+  QList<GameEntry> entries;
+  const QString dataDir = EsdeLibrary::defaultDataDir();
+  if (dataDir.isEmpty() || systemKey.isEmpty()) {
+    return entries;
+  }
+  const QString mediaDir = EsdeLibrary::mediaDirectory(dataDir);
+  for (const EsdeLibrary::System &system :
+       EsdeLibrary::systems(EsdeLibrary::romDirectory(dataDir))) {
+    if (system.name != systemKey) {
+      continue;
+    }
+    const QList<EsdeLibrary::Game> games = EsdeLibrary::games(system, dataDir, mediaDir);
+    entries.reserve(games.size());
+    for (const EsdeLibrary::Game &game : games) {
+      GameEntry entry;
+      entry.title = game.title;
+      // The ROM path itself: an ES-DE collection is an ordinary ROM collection
+      // whose launcher the user configures, because the emulator command lives
+      // in a file only ES-DE can reach (Kartend-ilkne).
+      entry.target = game.romPath;
+      entry.coverPath = game.coverPath;
+      entry.logoPath = game.logoPath;
+      // ES-DE scrapes screenshots far more often than fanart, so a screenshot
+      // is the better wide-art fallback when no fanart was downloaded.
+      entry.heroPath = game.fanartPath.isEmpty() ? game.screenshotPath : game.fanartPath;
+      entries.append(entry);
+    }
+    break;
+  }
+  return entries;
+}
+
 } // namespace
+
+auto sourceSlices(const QString &sourceId) -> QList<SourceSlice> {
+  QList<SourceSlice> slices;
+  // Only ES-DE splits. Everything else is one collection per source, and an
+  // empty list is how callers are told so.
+  if (sourceId != QLatin1String(kSourceEsde)) {
+    return slices;
+  }
+  const QString dataDir = EsdeLibrary::defaultDataDir();
+  if (dataDir.isEmpty()) {
+    return slices;
+  }
+  for (const EsdeLibrary::System &system :
+       EsdeLibrary::systems(EsdeLibrary::romDirectory(dataDir))) {
+    slices.append({system.name, system.name, system.gameCount});
+  }
+  return slices;
+}
 
 auto detectSources() -> QList<SourceInfo> {
   QList<SourceInfo> sources;
@@ -434,6 +488,17 @@ auto detectSources() -> QList<SourceInfo> {
   xdg.available = xdg.gameCount > 0;
   sources.append(xdg);
 
+  // ES-DE reports the TOTAL across its systems, while the import creates one
+  // collection per system (Kartend-ilkne) — the picker row is a summary of what
+  // ticking it brings in, not of one collection.
+  SourceInfo esde{QString::fromLatin1(kSourceEsde), QStringLiteral("ES-DE")};
+  const QList<SourceSlice> esdeSlices = sourceSlices(kSourceEsde);
+  esde.available = !EsdeLibrary::defaultDataDir().isEmpty() && !esdeSlices.isEmpty();
+  for (const SourceSlice &slice : esdeSlices) {
+    esde.gameCount += slice.gameCount;
+  }
+  sources.append(esde);
+
   // Every source but Steam enumerates installed applications by definition —
   // the wider tiers have no meaning there, so every tier reports the same
   // count and the picker can read the fields uniformly.
@@ -472,7 +537,8 @@ auto scopeFromString(const QString &text) -> ImportScope {
   return ImportScope::Installed;
 }
 
-auto listGames(const QString &sourceId, ImportScope scope) -> QList<GameEntry> {
+auto listGames(const QString &sourceId, ImportScope scope, const QString &sourceKey)
+    -> QList<GameEntry> {
   if (sourceId == QLatin1String(kSourceSteam)) {
     return steamEntries(scope);
   }
@@ -494,12 +560,15 @@ auto listGames(const QString &sourceId, ImportScope scope) -> QList<GameEntry> {
   if (sourceId == QLatin1String(kSourceXdg)) {
     return xdgEntries();
   }
+  if (sourceId == QLatin1String(kSourceEsde)) {
+    return esdeEntries(sourceKey);
+  }
   return {};
 }
 
 auto syncSource(const QString &sourceId, const QString &stubDir, const QString &artworkDir,
-                ImportScope scope) -> SyncResult {
-  return syncEntries(listGames(sourceId, scope), sourceId, stubDir, artworkDir);
+                ImportScope scope, const QString &sourceKey) -> SyncResult {
+  return syncEntries(listGames(sourceId, scope, sourceKey), sourceId, stubDir, artworkDir);
 }
 
 auto syncEntries(const QList<GameEntry> &entries, const QString &sourceId, const QString &stubDir,
@@ -611,9 +680,17 @@ auto syncEntries(const QList<GameEntry> &entries, const QString &sourceId, const
   return result;
 }
 
-auto defaultBaseDir(const QString &sourceId) -> QString {
-  return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
-         QStringLiteral("/launcher-imports/") + sourceId;
+auto defaultBaseDir(const QString &sourceId, const QString &sourceKey) -> QString {
+  const QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
+                       QStringLiteral("/launcher-imports/") + sourceId;
+  if (sourceKey.isEmpty()) {
+    return base;
+  }
+  // Underscore-prefixed and sanitized: the key is a directory name from the
+  // user's ROM tree, so it must not be able to climb out of the managed root —
+  // removeManagedImportDirs' containment check is what would otherwise be
+  // asked to refuse a path this function built.
+  return base + QStringLiteral("/_") + sanitizeStubBaseName(sourceKey);
 }
 
 auto stubDirFor(const QString &baseDir) -> QString {
@@ -863,8 +940,9 @@ auto stubsMissingDescription(const QString &dbPath, const QString &collectionUui
   return failed ? all : missing;
 }
 
-auto makeCollectionConfig(const QString &sourceId, ImportScope scope) -> CollectionConfig {
-  const QString baseDir = defaultBaseDir(sourceId);
+auto makeCollectionConfig(const QString &sourceId, ImportScope scope, const QString &sourceKey)
+    -> CollectionConfig {
+  const QString baseDir = defaultBaseDir(sourceId, sourceKey);
 
   // Mirror SettingsDialog::addCollection's defaulted field set (see
   // createCollectionForDat's provenance comment) so an imported collection
@@ -877,6 +955,9 @@ auto makeCollectionConfig(const QString &sourceId, ImportScope scope) -> Collect
   c.gridLayout.gridWidth = UIConstants::Grid::DEFAULT_WIDTH;
   c.gridLayout.fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
   c.importSource = sourceId;
+  // Which slice of the source this collection holds; empty for every
+  // one-collection-per-source importer (Kartend-ilkne).
+  c.importSourceKey = sourceKey;
   // Persisted so every later re-sync reproduces this tier; without it the
   // startup sync would re-list at Installed and delete the not-installed
   // stubs as "no longer present".
@@ -910,6 +991,17 @@ auto makeCollectionConfig(const QString &sourceId, ImportScope scope) -> Collect
     c.launcher.launcherPath = QStringLiteral("bottles-cli");
     c.launcher.launchParameters = QStringLiteral("run -p %1");
     c.launcher.launcherName = QStringLiteral("Bottles");
+  } else if (sourceId == QLatin1String(kSourceEsde)) {
+    // One collection per ES-DE system, named after it. NO launcher is set: the
+    // emulator command lives in es_systems.xml + es_find_rules.xml, both inside
+    // the ES-DE binary and unreadable from here, so guessing one would ship a
+    // collection that silently fails to launch. The user points it at their
+    // emulator once, exactly as for any ROM collection, and the launcher probe
+    // can suggest one.
+    c.name = QStringLiteral("ES-DE: %1").arg(sourceKey);
+    // Targets are real ROM paths rather than stubs, but they are still written
+    // as .kartlink stubs so the managed folder, the sync diff and the artwork
+    // fill-missing all behave exactly as for every other source.
   } else if (sourceId == QLatin1String(kSourceXdg)) {
     // The target is a .desktop file; `gio launch` runs it the way the menu
     // does. Picking the Exec line apart into an argv instead would drop
@@ -944,9 +1036,13 @@ auto removeManagedImportDirs(const CollectionConfig &config, const QString &mana
   if (config.importSource.trimmed().isEmpty()) {
     return result; // not an import collection — nothing is managed
   }
-  const QString base =
-      QDir::cleanPath(managedBaseDirOverride.isEmpty() ? defaultBaseDir(config.importSource)
-                                                       : managedBaseDirOverride);
+  // The per-slice base for a multi-collection source: removing the 'snes'
+  // collection must clean launcher-imports/esde/_snes, not the shared
+  // launcher-imports/esde — which would otherwise be left holding an empty
+  // per-system directory after its contents went (Kartend-ilkne).
+  const QString base = QDir::cleanPath(
+      managedBaseDirOverride.isEmpty() ? defaultBaseDir(config.importSource, config.importSourceKey)
+                                       : managedBaseDirOverride);
   if (base.isEmpty() || !QDir(base).isAbsolute()) {
     result.errors.append(
         QStringLiteral("managed base dir unresolved for source '%1'").arg(config.importSource));

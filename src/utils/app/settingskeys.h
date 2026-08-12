@@ -94,6 +94,7 @@ inline constexpr auto kHorizontalSpacing = "horizontalSpacing";
 inline constexpr auto kId = "id";
 inline constexpr auto kImportScope = "importScope";
 inline constexpr auto kImportSource = "importSource";
+inline constexpr auto kImportSourceKey = "importSourceKey";
 inline constexpr auto kIncludeArtworkSubfolders = "includeArtworkSubfolders";
 inline constexpr auto kIncludeContentSubfolders = "includeContentSubfolders";
 inline constexpr auto kItemHeight = "itemHeight";

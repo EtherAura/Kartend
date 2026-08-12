@@ -32,6 +32,7 @@ What each source provides:
 | **itch.io** | The itch app's database of installed games | Installed games (tools, asset packs, and soundtracks are skipped) | None — see below |
 | **Bottles** | Each bottle's config, listing the programs you added to it | Every program across every bottle | The program's icon, when you set a real image as one |
 | **Desktop Menu** | Application-menu entries with the `Game` category, system-wide and per-user | Natively installed games — typically what your package manager put there | The entry's icon from the icon theme |
+| **ES-DE** | Your ES-DE ROM folders, plus the metadata and art it has scraped | Every ROM, per system — **one collection per system** | Covers, marquees and screenshots ES-DE downloaded |
 
 Only *installed* games appear. Titles you own but haven't installed live
 solely in the launcher's online account and are out of scope — the one
@@ -167,6 +168,17 @@ its own cache.
   right-click menu. If something unwanted still slips through, hide it from
   the item's right-click menu; deleting its stub won't stick, because the
   next sync faithfully mirrors the launcher's library and recreates it.
+- **ES-DE imports as one collection per system**, because each system needs
+  its own emulator — a single mixed collection could not launch them all.
+  Each one arrives *without* a launcher configured: ES-DE keeps its emulator
+  settings inside its own program files, where Kartend cannot read them, so
+  rather than guess and give you collections that silently fail to launch,
+  it leaves the launcher for you to set once per system (the launcher picker
+  can suggest one). Your games come from your ROM folders rather than from
+  ES-DE's metadata files — those only list games you have scraped or edited,
+  so reading them would import a fraction of your library. Titles,
+  descriptions and scraped art are taken from ES-DE where it has them, and
+  games you hid in ES-DE stay hidden here.
 - The Desktop Menu source lists what the *menu* knows about, which is a
   slightly different question from what is installed. An entry whose
   `TryExec` binary is gone (a leftover from an uninstalled package) is

@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **ES-DE libraries can be imported, one collection per system.** File →
+  Import → "Import from Launcher…" now detects ES-DE and brings in each of
+  its systems as its own collection — SNES games in a SNES collection, PS2
+  in a PS2 one — because each system needs its own emulator and a single
+  mixed collection could never launch them all. Titles, descriptions,
+  developers, genres and the artwork ES-DE has scraped all come across, and
+  games you hid in ES-DE stay hidden. The games come from your ROM folders
+  rather than from ES-DE's metadata files, so you get your whole library
+  and not just the parts you happen to have scraped. One thing is left to
+  you: each collection arrives without a launcher, because ES-DE keeps its
+  emulator settings somewhere Kartend cannot read — point it at your
+  emulator once, as you would for any ROM collection.
+
 - **Heroic and itch.io games now arrive with their cover art.** Neither
   launcher keeps covers as files on disk, only as web links, so those
   collections used to import onto blank placeholder tiles. Kartend now
