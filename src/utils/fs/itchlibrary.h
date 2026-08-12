@@ -21,6 +21,11 @@ namespace ItchLibrary {
 struct Game {
   QString caveId; ///< Install id; the cave in the launch URI.
   QString title;
+  /// Remote cover, preferring the STILL over the animated one — an animated
+  /// GIF cover would land in the grid as a static first frame anyway, and the
+  /// still is what itch itself shows in listings. Downloading is the caller's
+  /// business; the reader stays offline (Kartend-g1g30).
+  QString coverUrl;
 };
 
 /// First existing itch config dir: ~/.config/itch, then the Flatpak app-config

@@ -1,5 +1,6 @@
 // Categorizes file extensions by media type (ROM, disc image, archive, etc.).
 #include "extensionutils.h"
+#include <QBuffer>
 #include <QByteArray>
 #include <QDir>
 #include <QFile>
@@ -90,6 +91,30 @@ auto ExtensionUtils::imageFilters() -> QStringList {
     filters.append(QStringLiteral("*.") + ext);
   }
   return filters;
+}
+
+auto ExtensionUtils::imageExtensionForBytes(const QString &urlPath, const QByteArray &bytes)
+    -> QString {
+  static const QSet<QString> kImageExts(imageBaseExtensions().begin(), imageBaseExtensions().end());
+  // QFileInfo::suffix on the URL's PATH (never the full URL) so a query string
+  // cannot contribute a bogus suffix. Whitelisted, so a pathological
+  // ".../cover.php" does not become a ".php" file.
+  const QString rawExt = QFileInfo(urlPath).suffix().toLower();
+  if (kImageExts.contains(rawExt)) {
+    return rawExt;
+  }
+  QBuffer probe;
+  probe.setData(bytes);
+  if (probe.open(QIODevice::ReadOnly)) {
+    QString format = QString::fromLatin1(QImageReader::imageFormat(&probe)).toLower();
+    if (format == QLatin1String("jpeg")) {
+      format = QStringLiteral("jpg");
+    }
+    if (kImageExts.contains(format)) {
+      return format;
+    }
+  }
+  return QStringLiteral("png");
 }
 
 auto ExtensionUtils::videoBaseExtensions() -> const QStringList & {

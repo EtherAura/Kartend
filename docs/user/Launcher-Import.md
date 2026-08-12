@@ -44,13 +44,16 @@ where that matters most, because launchers write menu entries too: an entry
 that runs Steam, Lutris, Heroic, Bottles, itch, or `flatpak run` is left to
 the source that owns it, so ticking every box doesn't produce duplicates.
 
-**Heroic and itch.io arrive without cover art.** Neither keeps its covers as
-files on disk — they are remote URLs their clients fetch on demand — so
-those collections start on placeholder art. Everything else works
-(launching, titles, statistics); scrape the collection to fill the covers
-in. Heroic games do pick up an icon when one happens to be on disk: a GOG
-title's own installer icon, or an icon Heroic downloaded for a desktop
-shortcut you created.
+**Heroic and itch.io covers are fetched in the background.** Neither keeps
+its covers as files on disk — they are remote URLs their clients fetch on
+demand — so Kartend downloads them for you just after the import, straight
+from the launcher's own artwork, and the grid fills in as they arrive. The
+status bar reports progress. Because every cover comes from the id the
+launcher itself recorded, this never guesses by name the way scraping can.
+It is fill-missing like everything else here: art you scraped or placed by
+hand is never downloaded over, and a re-sync only fetches what is still
+missing. If a download fails the import is unaffected — you simply get the
+placeholder for that one game.
 
 ## How it works
 

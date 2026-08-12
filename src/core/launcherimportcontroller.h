@@ -140,6 +140,22 @@ private:
   void enrichFromStore(const CollectionConfig &config,
                        const QList<LauncherImportService::SyncedStub> &stubs);
 
+  /// Downloads the covers that exist only as URLs (Heroic, itch.io) into the
+  /// collection's artwork/front/ (Kartend-g1g30).
+  ///
+  /// Lives HERE rather than in LauncherImportService because that service is
+  /// offline by contract — file and SQLite reads only, runnable on a worker
+  /// thread with no manager dependencies. The sync therefore decides WHICH
+  /// covers are missing (SyncedStub::pendingCoverUrl) and this pass performs
+  /// the network, exactly as enrichFromStore already splits that work.
+  ///
+  /// Fire-and-forget through the shared rate-limited HttpClient: an import is
+  /// usable the moment the stubs exist, so a slow CDN must never hold up the
+  /// dialog. Failures are logged, never surfaced as import errors — a missing
+  /// cover is not a failed import.
+  void fetchRemoteCovers(const CollectionConfig &config,
+                         const QList<LauncherImportService::SyncedStub> &stubs);
+
   /// Enrichment runs one collection at a time; queued requests wait so a
   /// multi-source import doesn't open two store-throttled batches at once.
   struct PendingEnrichment {

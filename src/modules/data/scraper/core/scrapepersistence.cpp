@@ -127,23 +127,12 @@ QString extensionForAsset(const QUrl &url, MediaKind kind, const QByteArray &byt
                                         ExtensionUtils::videoBaseExtensions().end());
   static const QSet<QString> kDocExts{"pdf", "epub", "cbz", "cbr", "djvu"};
   switch (kind) {
-  case MediaKind::Image: {
-    if (kImageExts.contains(rawExt)) return rawExt;
-    // The image plugins already know their own magic — ask them rather
-    // than hand-rolling signatures. This is the same plugin set that
-    // decodes the file later, so a sniffed name is decodable by
-    // construction. Gated through the whitelist so a plugin-recognised
-    // format the lookup tables don't admit (e.g. svg) still lands on
-    // the default rather than an unresolvable extension.
-    QBuffer probe;
-    probe.setData(bytes);
-    if (probe.open(QIODevice::ReadOnly)) {
-      QString fmt = QString::fromLatin1(QImageReader::imageFormat(&probe)).toLower();
-      if (fmt == QLatin1String("jpeg")) fmt = QStringLiteral("jpg");
-      if (kImageExts.contains(fmt)) return fmt;
-    }
-    return QStringLiteral("png");
-  }
+  case MediaKind::Image:
+    // Kartend-g1g30: the suffix-then-sniff rule moved to ExtensionUtils so
+    // the launcher-import cover fetch uses the very same logic. Behaviour is
+    // unchanged — whitelisted URL suffix first, QImageReader sniff second,
+    // "png" last — and ScrapePersistence's own cases still pin it.
+    return ExtensionUtils::imageExtensionForBytes(url.path(), bytes);
   case MediaKind::Video: {
     if (kVideoExts.contains(rawExt)) return rawExt;
     const QString sniffed = sniffedVideoExtension(bytes);

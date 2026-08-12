@@ -38,6 +38,7 @@ private slots:
   void makeCollectionConfigShape();
   void syncCarriesLaunchArgsOntoStubs();
   void scalableIconIsRasterizedIntoArtwork();
+  void remoteCoverIsPendingOnlyWhenTheSlotIsEmpty();
   void importScopeRoundTrips();
   void importScopeUnknownNeverWidens();
   void makeCollectionConfigRecordsScope();
@@ -335,6 +336,58 @@ void TestLauncherImportService::scalableIconIsRasterizedIntoArtwork() {
   // Rendered from the vector rather than upscaled from its 64px intrinsic
   // size, so the cover is usable on a 4K grid.
   QVERIFY(loaded.width() > 64);
+}
+
+// Kartend-g1g30: the sync stays OFFLINE — it never fetches a remote cover, it
+// only decides which ones are worth fetching. Getting that decision here (not
+// in the controller) keeps the fill-missing rule in one place, so a scraped or
+// hand-placed cover is never downloaded over.
+void TestLauncherImportService::remoteCoverIsPendingOnlyWhenTheSlotIsEmpty() {
+  QString stubDir;
+  QString artworkDir;
+  freshDirs(stubDir, artworkDir);
+
+  GameEntry remote = entry(QStringLiteral("Remote Art"), QStringLiteral("itch://caves/a/launch"));
+  remote.coverUrl = QStringLiteral("https://img.itch.zone/abc/original/cover.png");
+  GameEntry local = entry(QStringLiteral("Local Art"), QStringLiteral("itch://caves/b/launch"));
+  local.coverUrl = QStringLiteral("https://img.itch.zone/def/original/cover.png");
+
+  // Pre-place a cover for the second one, as a scrape or the user would.
+  QVERIFY(QDir().mkpath(artworkDir + QStringLiteral("/front")));
+  QFile existing(artworkDir + QStringLiteral("/front/Local Art.jpg"));
+  QVERIFY(existing.open(QIODevice::WriteOnly));
+  existing.write("x");
+  existing.close();
+
+  const auto result = LauncherImportService::syncEntries({remote, local}, QStringLiteral("itch"),
+                                                         stubDir, artworkDir);
+  QCOMPARE(result.syncedStubs.size(), 2);
+  // Nothing was fetched — this call does no network at all.
+  QCOMPARE(result.artworkCopied, 0);
+
+  QString pendingFor;
+  QString coveredFor;
+  for (const SyncedStub &stub : result.syncedStubs) {
+    const QString base = QFileInfo(stub.path).completeBaseName();
+    if (!stub.pendingCoverUrl.isEmpty()) {
+      pendingFor = base;
+    } else {
+      coveredFor = base;
+    }
+  }
+  QCOMPARE(pendingFor, QStringLiteral("Remote Art"));
+  QCOMPARE(coveredFor, QStringLiteral("Local Art"));
+
+  // A source with no remote covers leaves every stub unflagged, so the
+  // controller's pass is a no-op for Steam/Flatpak/Lutris/Bottles/XDG.
+  QString otherStubs;
+  QString otherArtwork;
+  freshDirs(otherStubs, otherArtwork);
+  const auto steam = LauncherImportService::syncEntries(
+      {entry(QStringLiteral("Portal"), QStringLiteral("steam://rungameid/400"))},
+      QStringLiteral("steam"), otherStubs, otherArtwork);
+  QCOMPARE(steam.syncedStubs.size(), 1);
+  QVERIFY(steam.syncedStubs.at(0).pendingCoverUrl.isEmpty());
 }
 
 void TestLauncherImportService::syncCarriesLaunchArgsOntoStubs() {

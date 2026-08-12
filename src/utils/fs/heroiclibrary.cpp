@@ -113,6 +113,14 @@ auto installedGames(const QString &configDir) -> QList<Game> {
         game.title = game.appName;
       }
       seenAppNames.append(game.appName);
+      // Portrait first — the grid is portrait — then the wide fallback.
+      game.coverUrl = entry.value(QStringLiteral("art_square")).toString();
+      if (game.coverUrl.isEmpty()) {
+        game.coverUrl = entry.value(QStringLiteral("art_cover")).toString();
+      }
+      // Epic URLs carry a literal "{ext}" that Heroic substitutes at use
+      // time; left in place it is a 404. jpg is what Heroic itself picks.
+      game.coverUrl.replace(QLatin1String("{ext}"), QLatin1String("jpg"));
       const QJsonObject install = entry.value(QStringLiteral("install")).toObject();
       game.iconPath = localIcon(configDir, game.appName, game.runner,
                                 install.value(QStringLiteral("install_path")).toString());

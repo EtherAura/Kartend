@@ -25,9 +25,15 @@ struct Game {
   QString runner;  ///< "legendary" | "gog" | "nile" | "sideload".
   QString title;
   /// Icon Heroic already cached on disk (shortcut icons, or a GOG install's
-  /// own icon). Empty for most games: Heroic's cover art is remote-URL only,
-  /// so an imported collection generally needs a scrape for art.
+  /// own icon). Empty for most games — Heroic's cover art lives at a URL,
+  /// not on disk.
   QString iconPath;
+  /// Remote cover, preferring the PORTRAIT art_square over the wide
+  /// art_cover: the grid renders portrait tiles. Heroic writes a literal
+  /// "{ext}" placeholder into some Epic URLs, already substituted here.
+  /// Downloading is the caller's business — the reader stays offline
+  /// (Kartend-g1g30).
+  QString coverUrl;
 };
 
 /// First existing Heroic config dir: ~/.config/heroic, then the Flatpak

@@ -30,6 +30,25 @@ public:
   [[nodiscard]] static const QStringList &imageBaseExtensions();
   [[nodiscard]] static QStringList imageFilters();
 
+  /// The extension an image payload should be WRITTEN under, given the URL it
+  /// came from and its bytes. Honours a recognised URL suffix; otherwise the
+  /// bytes are content-sniffed, falling back to "png".
+  ///
+  /// Sniffing asks QImageReader rather than hand-rolling magic numbers: that
+  /// is the same plugin set which decodes the file later, so a sniffed name is
+  /// decodable by construction. The result is gated through
+  /// imageBaseExtensions() so a plugin-recognised format the artwork lookup
+  /// does not admit (svg, say) still lands on the default rather than an
+  /// unresolvable name.
+  ///
+  /// Exists because CDNs serve images from extension-less URLs: Steam's store
+  /// serves WebP bytes that way, and naming those ".png" gave a file whose
+  /// name lied about its content (Kartend-aiws7). Shared so the scraper's
+  /// media writer and the launcher-import cover fetch cannot drift on it
+  /// (Kartend-g1g30).
+  [[nodiscard]] static QString imageExtensionForBytes(const QString &urlPath,
+                                                      const QByteArray &bytes);
+
   /// Canonical lowercase preview-video extensions (no dots), shared with the
   /// per-item video-lookup path.
   [[nodiscard]] static const QStringList &videoBaseExtensions();

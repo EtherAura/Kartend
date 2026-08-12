@@ -18,6 +18,7 @@ private slots:
   void readsInstalledCavesWithTitles();
   void toleratesMissingGamesTable();
   void launchUriUsesCaveId();
+  void coverUrlPrefersTheStill();
 
 private:
   QTemporaryDir m_dir;
@@ -56,16 +57,22 @@ private:
           ok = ok && query.exec(QStringLiteral(
                          "CREATE TABLE games (id INTEGER PRIMARY KEY, title TEXT, url TEXT, "
                          "classification TEXT, cover_url TEXT, still_cover_url TEXT)"));
-          const auto game = [&query, &ok](int id, const QString &title,
-                                          const QString &classification) {
-            query.prepare(
-                QStringLiteral("INSERT INTO games (id, title, classification) VALUES (?, ?, ?)"));
+          const auto game = [&query,
+                             &ok](int id, const QString &title, const QString &classification,
+                                  const QString &coverUrl = {}, const QString &stillUrl = {}) {
+            query.prepare(QStringLiteral("INSERT INTO games (id, title, classification, "
+                                         "cover_url, still_cover_url) VALUES (?, ?, ?, ?, ?)"));
             query.addBindValue(id);
             query.addBindValue(title);
             query.addBindValue(classification);
+            query.addBindValue(coverUrl);
+            query.addBindValue(stillUrl);
             ok = ok && query.exec();
           };
-          game(1, QStringLiteral("A Free Game"), QStringLiteral("game"));
+          // An animated cover carries BOTH; the still is the one to use.
+          game(1, QStringLiteral("A Free Game"), QStringLiteral("game"),
+               QStringLiteral("https://img.itch.zone/1/animated.gif"),
+               QStringLiteral("https://img.itch.zone/1/still.png"));
           // Installed, but not a game — itch hosts tools and asset packs too.
           game(2, QStringLiteral("A Pixel Art Tool"), QStringLiteral("tool"));
         }
@@ -112,6 +119,21 @@ void TestItchLibrary::launchUriUsesCaveId() {
   game.caveId = QStringLiteral("6ad5f0ff-4b53-4b9c-9fca-d1a5bd0e6d0c");
   QCOMPARE(ItchLibrary::launchUri(game),
            QStringLiteral("itch://caves/6ad5f0ff-4b53-4b9c-9fca-d1a5bd0e6d0c/launch"));
+}
+
+// Kartend-g1g30: itch keeps covers as URLs only. still_cover_url is populated
+// only when the cover is animated, and is what itch itself shows in listings,
+// so it wins — a GIF would otherwise land in the grid as a static first frame.
+void TestItchLibrary::coverUrlPrefersTheStill() {
+  const QString configDir = stageDatabase(/*withGames=*/true);
+  QVERIFY(!configDir.isEmpty());
+  const auto result = ItchLibrary::installedGames(configDir);
+  QVERIFY(!result.isError());
+  QCOMPARE(result.value().at(0).title, QStringLiteral("A Free Game"));
+  QCOMPARE(result.value().at(0).coverUrl, QStringLiteral("https://img.itch.zone/1/still.png"));
+  // The cave whose metadata row is missing has no cover to offer, and says so
+  // rather than inventing one.
+  QVERIFY(result.value().at(1).coverUrl.isEmpty());
 }
 
 QTEST_MAIN(TestItchLibrary)

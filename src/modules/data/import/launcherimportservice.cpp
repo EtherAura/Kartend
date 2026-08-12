@@ -286,9 +286,10 @@ QList<GameEntry> heroicEntries() {
     GameEntry entry;
     entry.title = game.title;
     entry.target = HeroicLibrary::launchUri(game);
-    // Usually empty: Heroic's own cover art is remote-URL only, so most
-    // imported collections start on placeholders and want a scrape.
+    // Local icon when Heroic happens to have one on disk; otherwise the
+    // remote cover, fetched later by the controller (Kartend-g1g30).
     entry.coverPath = game.iconPath;
+    entry.coverUrl = game.coverUrl;
     entries.append(entry);
   }
   return entries;
@@ -309,7 +310,9 @@ QList<GameEntry> itchEntries() {
     GameEntry entry;
     entry.title = game.title;
     entry.target = ItchLibrary::launchUri(game);
-    entries.append(entry); // itch keeps no local art at all
+    // itch keeps no local art at all — only the URL (Kartend-g1g30).
+    entry.coverUrl = game.coverUrl;
+    entries.append(entry);
   }
   return entries;
 }
@@ -545,17 +548,27 @@ auto syncEntries(const QList<GameEntry> &entries, const QString &sourceId, const
     data.target = it.value().target;
     data.title = it.value().title;
     data.args = it.value().launchArgs;
+    // Kartend-g1g30: hand the controller only the covers it actually has to
+    // fetch. Deciding here — where the artwork dir and the stub's basename are
+    // both in hand — keeps the fill-missing rule in ONE place, so a scraped or
+    // hand-placed cover is never re-downloaded over.
+    QString pendingCoverUrl;
+    if (!it.value().coverUrl.isEmpty() && !artworkDir.isEmpty() &&
+        !artworkSlotTaken(artworkDir + QStringLiteral("/front"),
+                          QFileInfo(it.key()).completeBaseName())) {
+      pendingCoverUrl = it.value().coverUrl;
+    }
     if (QFileInfo::exists(stubPath)) {
       const auto existing = KartLink::read(stubPath);
       if (!existing.isError() && existing.value() == data) {
         ++result.unchanged;
-        result.syncedStubs.append({stubPath, data.target, data.title});
+        result.syncedStubs.append({stubPath, data.target, data.title, pendingCoverUrl});
         continue;
       }
     }
     if (KartLink::write(stubPath, data)) {
       ++result.written;
-      result.syncedStubs.append({stubPath, data.target, data.title});
+      result.syncedStubs.append({stubPath, data.target, data.title, pendingCoverUrl});
     } else {
       result.errors.append(QStringLiteral("Cannot write stub %1").arg(stubPath));
     }

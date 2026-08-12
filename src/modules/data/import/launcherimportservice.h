@@ -74,6 +74,10 @@ struct GameEntry {
   /// Extra launcher arguments this game needs beyond the target — see
   /// KartLink::LinkData::args. Empty for every source but Bottles.
   QStringList launchArgs;
+  /// Cover that exists only as a URL (Heroic, itch.io). NOT fetched here:
+  /// syncEntries is offline by contract, so this is carried through to
+  /// SyncedStub for the controller's background pass (Kartend-g1g30).
+  QString coverUrl;
 };
 
 struct SourceInfo {
@@ -95,6 +99,10 @@ struct SyncedStub {
   QString path;   ///< Absolute stub path.
   QString target; ///< The stub's launch target (carries the Steam appid).
   QString title;
+  /// Set only when the source's cover is remote-only AND the artwork slot is
+  /// still empty, so the controller's fetch pass has nothing to re-check
+  /// (Kartend-g1g30). Empty for every already-covered or local-art item.
+  QString pendingCoverUrl;
 };
 
 struct SyncResult {

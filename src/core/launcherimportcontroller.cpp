@@ -7,11 +7,19 @@
 #include <QMessageBox>
 #include <QtConcurrent/QtConcurrentRun>
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QPointer>
+#include <QUrl>
+
 #include "artworkutils.h"
 #include "batchscraperunner.h"
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
+#include "extensionutils.h"
 #include "flathubprovider.h"
+#include "httpclient.h"
 #include "idatabasemanager.h"
 #include "launcherimportdialog.h"
 #include "pathutils.h"
@@ -151,6 +159,7 @@ void LauncherImportController::runImportDialog() {
       artworkTouched = artworkTouched || result.artworkCopied > 0;
       const int metadataRows = applyMetadataForCollection(existing, result.syncedStubs);
       enrichFromStore(existing, result.syncedStubs);
+      fetchRemoteCovers(existing, result.syncedStubs);
       if (result.changed() && m_ctx.refreshCollection) {
         m_ctx.refreshCollection(existingIndex);
       }
@@ -202,6 +211,7 @@ void LauncherImportController::runImportDialog() {
     // …then the store pass for what only the web has (descriptions, media).
     // Async: the dialog closes immediately and the status bar reports.
     enrichFromStore(config, result.syncedStubs);
+    fetchRemoteCovers(config, result.syncedStubs);
     // totalPresent, not written: a re-import over a surviving stub folder
     // writes nothing but the collection still gets every game.
     summary.append(tr("%1: %n game(s) imported.", nullptr, result.totalPresent()).arg(config.name));
@@ -278,6 +288,122 @@ void LauncherImportController::enrichFromStore(
   }
   m_enrichQueue.append(pending);
   startNextEnrichment();
+}
+
+namespace {
+// A cover is a JPEG/PNG of a few hundred KB; anything wildly larger is not
+// artwork and should not be written into the user's library. The cap is the
+// HttpClient's own guard, applied before the body is buffered.
+constexpr qint64 kMaxCoverBytes = 12LL * 1024 * 1024;
+} // namespace
+
+void LauncherImportController::fetchRemoteCovers(
+    const CollectionConfig &config, const QList<LauncherImportService::SyncedStub> &stubs) {
+  // syncEntries already applied the fill-missing rule, so anything carrying a
+  // pendingCoverUrl genuinely has an empty cover slot. Re-deciding that here
+  // would duplicate the rule in a second place.
+  QList<LauncherImportService::SyncedStub> wanted;
+  for (const LauncherImportService::SyncedStub &stub : stubs) {
+    if (!stub.pendingCoverUrl.isEmpty()) {
+      wanted.append(stub);
+    }
+  }
+  if (wanted.isEmpty()) {
+    return;
+  }
+  const QString artworkDir = PathUtils::validateAndExpandPath(config.artworkDirectory, config.name);
+  if (artworkDir.isEmpty()) {
+    qCWarning(lcLauncherImport) << "skipping cover fetch: unresolved artwork dir for"
+                                << config.name;
+    return;
+  }
+  const QString frontDir = artworkDir + QStringLiteral("/front");
+  if (!QDir().mkpath(frontDir)) {
+    qCWarning(lcLauncherImport) << "skipping cover fetch: cannot create" << frontDir;
+    return;
+  }
+
+  if (m_ctx.showStatusMessage) {
+    m_ctx.showStatusMessage(
+        tr("%1: fetching cover art for %n game(s)…", nullptr, static_cast<int>(wanted.size()))
+            .arg(config.name));
+  }
+
+  // Shared counter so the completion line reports once, after the last reply,
+  // without keeping any per-request state on the controller. Captured by
+  // value into each callback; QPointer guards the controller outliving them.
+  auto remaining = std::make_shared<int>(static_cast<int>(wanted.size()));
+  auto written = std::make_shared<int>(0);
+  QPointer<LauncherImportController> self(this);
+  const QString collectionName = config.name;
+  const QString sourceId = config.importSource;
+
+  for (const LauncherImportService::SyncedStub &stub : wanted) {
+    const QString baseName = QFileInfo(stub.path).completeBaseName();
+    const QUrl url(stub.pendingCoverUrl);
+    if (!url.isValid() || url.scheme().startsWith(QLatin1String("http")) == false) {
+      // A launcher database is user-writable, so treat its URLs as data:
+      // anything that is not plain http(s) is dropped rather than handed to
+      // the network stack.
+      qCWarning(lcLauncherImport) << "cover url rejected for" << baseName << url.scheme();
+      --*remaining;
+      continue;
+    }
+    Scraper::HttpClient::instance()->get(
+        url, {},
+        [self, frontDir, baseName, url, remaining, written, collectionName,
+         sourceId](ErrorUtils::Result<QByteArray> response) {
+          --*remaining;
+          if (!response.isError() && !response.value().isEmpty()) {
+            // Extension from the bytes, not the URL: CDNs serve images from
+            // extension-less paths, and a name that lies about its content is
+            // the Kartend-aiws7 defect. Shared with the scraper's writer.
+            const QString extension =
+                ExtensionUtils::imageExtensionForBytes(url.path(), response.value());
+            QFile file(frontDir + QLatin1Char('/') + baseName + QLatin1Char('.') + extension);
+            if (file.open(QIODevice::WriteOnly) &&
+                file.write(response.value()) == response.value().size()) {
+              ++*written;
+            } else {
+              qCWarning(lcLauncherImport) << "cover write failed for" << baseName;
+            }
+          } else if (response.isError()) {
+            qCWarning(lcLauncherImport)
+                << "cover fetch failed for" << baseName << response.error().message;
+          }
+          if (*remaining > 0 || self.isNull()) {
+            return;
+          }
+          // Last reply in: refresh the grid once rather than per cover, and
+          // only when something actually landed.
+          if (*written > 0) {
+            // The directory-listing cache holds negative entries for the
+            // artwork folder that was empty a moment ago.
+            ArtworkUtils::clearDirectoryCache();
+            if (self->m_ctx.showStatusMessage) {
+              self->m_ctx.showStatusMessage(
+                  tr("%1: cover art added for %n game(s).", nullptr, *written).arg(collectionName));
+            }
+            // indexForSource is a local lambda in runImportDialog, and the
+            // list may have been re-ordered while the fetch was in flight, so
+            // resolve by source id at delivery time.
+            QList<CollectionConfig> *collections =
+                self->m_ctx.getCollections ? self->m_ctx.getCollections() : nullptr;
+            if (collections && self->m_ctx.refreshCollection) {
+              for (int i = 0; i < collections->size(); ++i) {
+                if (collections->at(i).importSource == sourceId) {
+                  self->m_ctx.refreshCollection(i);
+                  break;
+                }
+              }
+            }
+          }
+        },
+        /*maxResponseBytes=*/kMaxCoverBytes,
+        // Covers are images; a launcher database pointing at anything else is
+        // refused before a byte is written.
+        /*expectedContentTypePrefix=*/QStringLiteral("image/"));
+  }
 }
 
 void LauncherImportController::startNextEnrichment() {
@@ -466,6 +592,7 @@ void LauncherImportController::onSyncFinished() {
         outcome.collectionIndex < collections->size() &&
         collections->at(outcome.collectionIndex).importSource == outcome.sourceId) {
       enrichFromStore(collections->at(outcome.collectionIndex), outcome.result.syncedStubs);
+      fetchRemoteCovers(collections->at(outcome.collectionIndex), outcome.result.syncedStubs);
     }
     if (!outcome.result.changed()) {
       continue;

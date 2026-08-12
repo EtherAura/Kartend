@@ -5926,7 +5926,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 <context>
     <name>LauncherImportController</name>
     <message numerus="yes">
-        <location filename="../src/core/launcherimportcontroller.cpp" line="+157"/>
+        <location filename="../src/core/launcherimportcontroller.cpp" line="+166"/>
         <source>%1: re-synced — %2 added or updated, %3 removed, %n game(s) total.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5935,7 +5935,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message numerus="yes">
         <location line="+6"/>
-        <location line="+47"/>
+        <location line="+48"/>
         <source>%1: Steam metadata filled for %n item(s).</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5956,7 +5956,23 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location line="+110"/>
+        <location line="+98"/>
+        <source>%1: fetching cover art for %n game(s)…</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+57"/>
+        <source>%1: cover art added for %n game(s).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location line="+71"/>
         <source>%1: fetching details for %n game(s) from %2 — this can take a few minutes…</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5987,7 +6003,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+93"/>
+        <location line="+94"/>
         <source>Launcher collections are up to date.</source>
         <translation type="unfinished"></translation>
     </message>

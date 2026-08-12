@@ -18,6 +18,7 @@ private slots:
   void skipsUnreadableCacheWithoutLosingOthers();
   void findsLocalIconsWhereHeroicLeavesThem();
   void launchUriIsPercentEncoded();
+  void coverUrlPrefersPortraitAndSubstitutesExtPlaceholder();
   void emptyConfigDirYieldsNothing();
 
 private:
@@ -138,6 +139,34 @@ void TestHeroicLibrary::launchUriIsPercentEncoded() {
   game.runner = QStringLiteral("sideload");
   QCOMPARE(HeroicLibrary::launchUri(game),
            QStringLiteral("heroic://launch?appName=My%20Game%20%26%20Co&runner=sideload"));
+}
+
+// Kartend-g1g30: Heroic keeps covers as URLs, so the reader has to surface a
+// USABLE one — portrait for a portrait grid, and with the "{ext}" placeholder
+// Heroic writes into Epic URLs already substituted (left in place it 404s).
+void TestHeroicLibrary::coverUrlPrefersPortraitAndSubstitutesExtPlaceholder() {
+  const QString configDir = newConfigDir();
+  // Raw strings assigned first, never passed through QByteArrayLiteral: the
+  // parentheses in R"(...)" terminate the macro argument early.
+  const QByteArray epic =
+      R"({"library":[{"app_name":"Quail","title":"Kena","runner":"legendary","is_installed":true,)"
+      R"("art_square":"https://cdn1.epicgames.com/quail/square.{ext}",)"
+      R"("art_cover":"https://cdn1.epicgames.com/quail/wide.jpg"}]})";
+  writeFile(configDir + QStringLiteral("/store_cache/legendary_library.json"), epic);
+  // No art_square: the wide cover is better than nothing.
+  const QByteArray gog =
+      R"({"games":[{"app_name":"42","title":"A GOG Game","runner":"gog","is_installed":true,)"
+      R"("art_cover":"https://images.gog.com/42/wide.png"}]})";
+  writeFile(configDir + QStringLiteral("/store_cache/gog_library.json"), gog);
+
+  const QList<HeroicLibrary::Game> games = HeroicLibrary::installedGames(configDir);
+  QCOMPARE(games.size(), 2);
+  QCOMPARE(games.at(0).title, QStringLiteral("A GOG Game"));
+  QCOMPARE(games.at(0).coverUrl, QStringLiteral("https://images.gog.com/42/wide.png"));
+  QCOMPARE(games.at(1).title, QStringLiteral("Kena"));
+  // Portrait won, and {ext} is gone — a URL containing it is not fetchable.
+  QCOMPARE(games.at(1).coverUrl, QStringLiteral("https://cdn1.epicgames.com/quail/square.jpg"));
+  QVERIFY(!games.at(1).coverUrl.contains(QStringLiteral("{ext}")));
 }
 
 void TestHeroicLibrary::emptyConfigDirYieldsNothing() {

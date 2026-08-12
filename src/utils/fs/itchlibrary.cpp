@@ -78,17 +78,31 @@ auto installedGames(const QString &configDir) -> ErrorUtils::Result<QList<Game>>
       // versions, so naming columns up front would reject databases that are
       // perfectly readable, and record-index lookups degrade per column
       // instead (mirrors LutrisLibrary).
-      QHash<QString, QPair<QString, QString>> titlesById; // game id -> (title, classification)
+      struct GameMeta {
+        QString title;
+        QString classification;
+        QString coverUrl;
+      };
+      QHash<QString, GameMeta> metaById;
       QSqlQuery gamesQuery(db);
       if (gamesQuery.exec(QStringLiteral("SELECT * FROM games"))) {
         const QSqlRecord record = gamesQuery.record();
         const int idCol = record.indexOf(QStringLiteral("id"));
         const int titleCol = record.indexOf(QStringLiteral("title"));
         const int classCol = record.indexOf(QStringLiteral("classification"));
+        const int stillCol = record.indexOf(QStringLiteral("still_cover_url"));
+        const int coverCol = record.indexOf(QStringLiteral("cover_url"));
         while (idCol >= 0 && gamesQuery.next()) {
-          titlesById.insert(gamesQuery.value(idCol).toString(),
-                            {titleCol >= 0 ? gamesQuery.value(titleCol).toString() : QString(),
-                             classCol >= 0 ? gamesQuery.value(classCol).toString() : QString()});
+          GameMeta meta;
+          meta.title = titleCol >= 0 ? gamesQuery.value(titleCol).toString() : QString();
+          meta.classification = classCol >= 0 ? gamesQuery.value(classCol).toString() : QString();
+          // still_cover_url is populated only for games whose cover is
+          // animated; the plain cover_url is the usual one.
+          meta.coverUrl = stillCol >= 0 ? gamesQuery.value(stillCol).toString() : QString();
+          if (meta.coverUrl.isEmpty() && coverCol >= 0) {
+            meta.coverUrl = gamesQuery.value(coverCol).toString();
+          }
+          metaById.insert(gamesQuery.value(idCol).toString(), meta);
         }
       }
 
@@ -111,13 +125,14 @@ auto installedGames(const QString &configDir) -> ErrorUtils::Result<QList<Game>>
             if (game.caveId.isEmpty()) {
               continue;
             }
-            const auto metadata = gameIdCol >= 0
-                                      ? titlesById.value(cavesQuery.value(gameIdCol).toString())
-                                      : QPair<QString, QString>{};
-            if (!isGameClassification(metadata.second)) {
+            const GameMeta metadata = gameIdCol >= 0
+                                          ? metaById.value(cavesQuery.value(gameIdCol).toString())
+                                          : GameMeta{};
+            if (!isGameClassification(metadata.classification)) {
               continue;
             }
-            game.title = metadata.first;
+            game.title = metadata.title;
+            game.coverUrl = metadata.coverUrl;
             if (game.title.isEmpty() && folderCol >= 0) {
               // Better than the cave's uuid when the metadata row is gone.
               game.title = cavesQuery.value(folderCol).toString();

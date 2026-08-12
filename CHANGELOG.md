@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Heroic and itch.io games now arrive with their cover art.** Neither
+  launcher keeps covers as files on disk, only as web links, so those
+  collections used to import onto blank placeholder tiles. Kartend now
+  fetches each cover in the background right after the import — from the
+  launcher's own artwork, matched by the id the launcher recorded rather
+  than guessed by name — and the grid fills in as they land. Art you
+  scraped or placed by hand is never overwritten, a re-sync only fetches
+  what is still missing, and a failed download costs you nothing but that
+  one cover.
+
 - **Launcher import now covers Heroic, itch.io, Bottles, and your
   application menu.** Alongside Steam, Flatpak, and Lutris, File → Import →
   "Import from Launcher…" now detects four more sources and builds the same
@@ -24,10 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   including their icons. Sources never step on each other — a menu entry
   that belongs to Steam, Lutris, Heroic, Bottles, itch, or Flatpak is left
   to the source that owns it, so ticking every box imports no duplicates —
-  and entries left behind by uninstalled packages are skipped. Heroic and
-  itch.io keep their cover art as remote URLs rather than files, so those
-  two collections start on placeholder art and want a scrape; the other
-  sources bring whatever art is already on disk, as before.
+  and entries left behind by uninstalled packages are skipped. Every source
+  brings whatever art it has: on-disk art is copied, and the covers Heroic
+  and itch.io keep only as web links are fetched in the background (see
+  above).
 
 - **Collections can now be built straight from Steam, Flatpak, and Lutris
   libraries.** File → Import → "Import from Launcher…" detects what's
