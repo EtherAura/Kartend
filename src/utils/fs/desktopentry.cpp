@@ -118,10 +118,13 @@ auto findIcon(const QString &iconName, const QStringList &shareRoots) -> QString
   if (QDir::isAbsolutePath(iconName)) {
     return QFileInfo::exists(iconName) ? iconName : QString();
   }
-  // Largest-first so covers get the best raster the theme carries.
+  // Largest-first so covers get the best raster the theme carries. 48 and 32
+  // are poor covers but beat no cover at all, and plenty of older packages
+  // ship nothing larger (Kartend-0tddh).
   static const QStringList kSizes = {
       QStringLiteral("512x512"), QStringLiteral("256x256"), QStringLiteral("192x192"),
       QStringLiteral("128x128"), QStringLiteral("96x96"),   QStringLiteral("64x64"),
+      QStringLiteral("48x48"),   QStringLiteral("32x32"),
   };
   for (const QString &root : shareRoots) {
     for (const QString &size : kSizes) {
@@ -137,6 +140,23 @@ auto findIcon(const QString &iconName, const QStringList &shareRoots) -> QString
         root + QStringLiteral("/pixmaps/") + iconName + QStringLiteral(".png");
     if (QFileInfo::exists(candidate)) {
       return candidate;
+    }
+  }
+  // Scalable last, and only after every raster is exhausted: an SVG needs
+  // rasterising before it can be used as artwork (the importer does that —
+  // see LauncherImportService::copyArtworkIfMissing), whereas a PNG is a
+  // straight copy. Preferring a real raster keeps the common path cheap.
+  // Reporting SVGs at all is what stops SVG-only apps — increasingly the
+  // norm — importing with no cover (Kartend-0tddh).
+  for (const QString &root : shareRoots) {
+    for (const QString &relative :
+         {QStringLiteral("/icons/hicolor/scalable/apps/"), QStringLiteral("/pixmaps/")}) {
+      for (const QString &extension : {QStringLiteral(".svg"), QStringLiteral(".svgz")}) {
+        const QString candidate = root + relative + iconName + extension;
+        if (QFileInfo::exists(candidate)) {
+          return candidate;
+        }
+      }
     }
   }
   return {};

@@ -14,6 +14,9 @@
 #include "../../support/appinfofixture.h"
 #include "../../support/migrateddb.h"
 #include "itemmetadata.h"
+#include <QImage>
+#include <QImageReader>
+
 #include "kartlink.h"
 #include "launcherimportservice.h"
 
@@ -34,6 +37,7 @@ private slots:
   void artworkFillMissingNeverOverwrites();
   void makeCollectionConfigShape();
   void syncCarriesLaunchArgsOntoStubs();
+  void scalableIconIsRasterizedIntoArtwork();
   void importScopeRoundTrips();
   void importScopeUnknownNeverWidens();
   void makeCollectionConfigRecordsScope();
@@ -292,6 +296,45 @@ void TestLauncherImportService::makeCollectionConfigShape() {
   QCOMPARE(xdg.launcher.launcherPath, QStringLiteral("gio"));
   QCOMPARE(xdg.launcher.launchParameters, QStringLiteral("launch %1"));
   QVERIFY(xdg.mediaDirectory.endsWith(QStringLiteral("launcher-imports/xdg/games")));
+}
+
+// Kartend-0tddh: SVG-only applications are the norm now, and an SVG cannot be
+// copied into the artwork tree as-is — the artwork lookup is raster-only. The
+// importer renders it instead, and the file it writes is a real PNG under a
+// .png name (a name that lied about its content is the Kartend-aiws7 defect).
+void TestLauncherImportService::scalableIconIsRasterizedIntoArtwork() {
+  if (!QImageReader::supportedImageFormats().contains("svg")) {
+    QSKIP("Qt has no SVG reader here (qsvg imageformats plugin absent) — the "
+          "importer degrades to no cover by design, so there is nothing to assert");
+  }
+  QString stubDir;
+  QString artworkDir;
+  freshDirs(stubDir, artworkDir);
+
+  const QString svgPath = m_dir.filePath(QStringLiteral("icon.svg"));
+  QFile svg(svgPath);
+  QVERIFY(svg.open(QIODevice::WriteOnly));
+  svg.write("<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'>"
+            "<rect width='64' height='64' fill='#3366cc'/></svg>");
+  svg.close();
+
+  GameEntry game = entry(QStringLiteral("Vector Game"), QStringLiteral("/x/vector.desktop"));
+  game.coverPath = svgPath;
+  const auto result =
+      LauncherImportService::syncEntries({game}, QStringLiteral("xdg"), stubDir, artworkDir);
+  QCOMPARE(result.written, 1);
+  QCOMPARE(result.artworkCopied, 1);
+
+  // Written as .png regardless of the source suffix…
+  const QString cover = artworkDir + QStringLiteral("/front/Vector Game.png");
+  QVERIFY(QFileInfo::exists(cover));
+  // …and it is genuinely a PNG that loads, not an SVG wearing the extension.
+  QImage loaded(cover);
+  QVERIFY(!loaded.isNull());
+  QCOMPARE(QImageReader(cover).format(), QByteArray("png"));
+  // Rendered from the vector rather than upscaled from its 64px intrinsic
+  // size, so the cover is usable on a 4K grid.
+  QVERIFY(loaded.width() > 64);
 }
 
 void TestLauncherImportService::syncCarriesLaunchArgsOntoStubs() {

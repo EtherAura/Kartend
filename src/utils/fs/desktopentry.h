@@ -51,10 +51,16 @@ struct Entry {
 /// shortcut runs `steam`), not to build a launch command.
 [[nodiscard]] QString execProgram(const QString &exec);
 
-/// Largest raster icon for `iconName` under the given `share` roots, probing
-/// `<root>/icons/hicolor/<size>/apps/` then `<root>/pixmaps/`. An absolute
-/// path in `iconName` is returned as-is when it exists. SVG is deliberately
-/// not considered: the artwork copier only accepts raster formats.
+/// Best icon for `iconName` under the given `share` roots, probing
+/// `<root>/icons/hicolor/<size>/apps/` largest-first, then `<root>/pixmaps/`,
+/// and finally the SCALABLE (`.svg`/`.svgz`) locations. An absolute path in
+/// `iconName` is returned as-is when it exists.
+///
+/// Scalable is last on purpose: a PNG is a straight copy for the artwork
+/// importer while an SVG has to be rasterised first, so a real raster is
+/// preferred whenever the theme has one. Returning SVGs at all is what keeps
+/// SVG-only applications — increasingly the norm — from importing with no
+/// cover at all (Kartend-0tddh).
 [[nodiscard]] QString findIcon(const QString &iconName, const QStringList &shareRoots);
 
 /// The `share` roots a desktop-entry scan should consider: `$XDG_DATA_HOME`

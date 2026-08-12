@@ -143,6 +143,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Games whose icon is an SVG now get a cover when imported from the
+  application menu.** Modern desktop packages increasingly ship only a
+  scalable icon, and those imported with no artwork at all — on a test
+  machine, only one of three menu games had a cover. Scalable icons are now
+  rendered into the collection's artwork folder, drawn at full size from the
+  vector so they stay sharp on a 4K grid rather than being blown up from a
+  small preview. Icons that only exist at small sizes (48 or 32 pixels) are
+  picked up too; a small cover beats none. A real raster is still preferred
+  whenever the icon theme has one.
+
 - **The details sidebar shows a file's size and modified date again.** Both
   read "…" and stayed that way for any item without scraped metadata —
   which, in a freshly scanned library, is most of them. The values were

@@ -8,6 +8,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QRegularExpression>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -52,17 +53,62 @@ bool artworkSlotTaken(const QString &typedDir, const QString &baseName) {
   });
 }
 
+/// Renders a scalable icon into `destPath` as PNG. Returns false when Qt has
+/// no SVG reader, which is a legitimate runtime state rather than an error:
+/// the format comes from the `qsvg` imageformats PLUGIN, so no Qt6::Svg link
+/// dependency is taken and a build without the plugin simply gets no cover,
+/// exactly as before (Kartend-0tddh).
+///
+/// Rendered through QImageReader::setScaledSize rather than QImage::scaled:
+/// the SVG handler honours it by rasterising the VECTOR at that size, whereas
+/// scaling afterwards would upscale the icon's small intrinsic raster (256px
+/// is typical) and look soft on a 4K grid.
+bool rasterizeScalableIcon(const QString &sourcePath, const QString &destPath) {
+  constexpr int kRenderSize = 512; // matches the largest hicolor raster probed
+  QImageReader reader(sourcePath);
+  if (!reader.canRead()) {
+    return false;
+  }
+  const QSize intrinsic = reader.size();
+  QSize target(kRenderSize, kRenderSize);
+  if (intrinsic.isValid() && !intrinsic.isEmpty()) {
+    // Keep the icon's own aspect ratio; square is only the common case.
+    target = intrinsic.scaled(kRenderSize, kRenderSize, Qt::KeepAspectRatio);
+  }
+  if (reader.supportsOption(QImageIOHandler::ScaledSize)) {
+    reader.setScaledSize(target);
+  }
+  const QImage rendered = reader.read();
+  if (rendered.isNull()) {
+    return false;
+  }
+  return rendered.save(destPath, "PNG");
+}
+
 void copyArtworkIfMissing(const QString &sourcePath, const QString &typedDir,
                           const QString &baseName, SyncResult &result) {
   if (sourcePath.isEmpty() || artworkSlotTaken(typedDir, baseName)) {
     return;
   }
   QString suffix = QFileInfo(sourcePath).suffix().toLower();
-  if (!artworkExtensions().contains(suffix)) {
+  // Scalable sources are RENDERED, not copied — the scan reports them only
+  // when the theme has no raster (Kartend-0tddh). The written file is a PNG
+  // regardless of the source suffix, so the name never lies about content.
+  const bool isScalable = (suffix == QLatin1String("svg") || suffix == QLatin1String("svgz"));
+  if (!isScalable && !artworkExtensions().contains(suffix)) {
     return;
   }
   if (!QDir().mkpath(typedDir)) {
     result.errors.append(QStringLiteral("Cannot create artwork directory %1").arg(typedDir));
+    return;
+  }
+  if (isScalable) {
+    const QString destPath = typedDir + QLatin1Char('/') + baseName + QStringLiteral(".png");
+    if (rasterizeScalableIcon(sourcePath, destPath)) {
+      ++result.artworkCopied;
+    }
+    // No error recorded on failure: an absent SVG reader is a normal runtime
+    // state, and a missing cover is not a failed import.
     return;
   }
   const QString destPath = typedDir + QLatin1Char('/') + baseName + QLatin1Char('.') + suffix;

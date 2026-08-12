@@ -109,8 +109,22 @@ void TestDesktopEntry::iconLookupPrefersLargestRaster() {
               .contains(QStringLiteral("256x256")));
   QVERIFY(DesktopEntryFile::findIcon(QStringLiteral("oldgame"), {root})
               .endsWith(QStringLiteral("pixmaps/oldgame.png")));
-  QVERIFY(DesktopEntryFile::findIcon(QStringLiteral("vector"), {root}).isEmpty());
   QVERIFY(DesktopEntryFile::findIcon(QStringLiteral("missing"), {root}).isEmpty());
+
+  // Kartend-0tddh: scalable is reported, but only after every raster is
+  // exhausted — a PNG is a straight copy for the importer while an SVG has to
+  // be rasterised, so a real raster always wins when the theme has one.
+  QVERIFY(DesktopEntryFile::findIcon(QStringLiteral("vector"), {root})
+              .endsWith(QStringLiteral("scalable/apps/vector.svg")));
+  writeFile(root + QStringLiteral("/icons/hicolor/scalable/apps/thegame.svg"), "x");
+  QVERIFY(DesktopEntryFile::findIcon(QStringLiteral("thegame"), {root})
+              .endsWith(QStringLiteral("256x256/apps/thegame.png")));
+
+  // Small rasters are poor covers but beat no cover; plenty of older packages
+  // ship nothing bigger.
+  writeFile(root + QStringLiteral("/icons/hicolor/48x48/apps/smallonly.png"), "x");
+  QVERIFY(DesktopEntryFile::findIcon(QStringLiteral("smallonly"), {root})
+              .endsWith(QStringLiteral("48x48/apps/smallonly.png")));
 
   // An absolute Icon= value is taken as-is, but only when it exists.
   const QString absolute = root + QStringLiteral("/pixmaps/oldgame.png");
