@@ -143,6 +143,15 @@ auto findIcon(const QString &iconName, const QStringList &shareRoots) -> QString
 }
 
 auto defaultShareRoots() -> QStringList {
+#ifdef Q_OS_WIN
+  // There is no XDG menu on Windows, and pretending otherwise is actively
+  // wrong here: XDG_DATA_DIRS is COLON-separated, so the split below would
+  // shred any Windows path at its drive letter ("C:/Users/..." -> "C",
+  // "/Users/..."). Nothing downstream wants that, and the sources that read
+  // these roots (the menu scan, the Flatpak exports scan) describe Linux
+  // desktop concepts. Report no roots rather than nonsense ones.
+  return {};
+#else
   const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
   QStringList candidates;
   const QString dataHome = env.value(QStringLiteral("XDG_DATA_HOME"));
@@ -165,6 +174,7 @@ auto defaultShareRoots() -> QStringList {
     roots.append(root);
   }
   return roots;
+#endif
 }
 
 } // namespace DesktopEntryFile

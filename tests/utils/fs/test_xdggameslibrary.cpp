@@ -152,6 +152,14 @@ void TestXdgGamesLibrary::userEntryShadowsSystemEntry() {
 }
 
 void TestXdgGamesLibrary::skipsEntriesWhoseTryExecIsGone() {
+#ifdef Q_OS_WIN
+  // TryExec resolution asks whether a file is executable, which on Unix is a
+  // permission bit and on Windows is inferred from the extension — an
+  // extensionless staged script is never executable there, so the entry that
+  // SHOULD survive gets skipped and the case tests nothing real. The rule it
+  // covers only matters on a system that has an XDG menu at all.
+  QSKIP("TryExec resolution is Unix executable-bit semantics; not meaningful on Windows");
+#else
   const QString present = m_dir.filePath(QStringLiteral("bin/realgame"));
   writeFile(present, "#!/bin/sh\n");
   QFile::setPermissions(present, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
@@ -166,6 +174,7 @@ void TestXdgGamesLibrary::skipsEntriesWhoseTryExecIsGone() {
   const QList<XdgGamesLibrary::Game> games = XdgGamesLibrary::installedGames({systemRoot()});
   QCOMPARE(games.size(), 1);
   QCOMPARE(games.at(0).name, QStringLiteral("Real Game"));
+#endif
 }
 
 void TestXdgGamesLibrary::findsIconForGame() {

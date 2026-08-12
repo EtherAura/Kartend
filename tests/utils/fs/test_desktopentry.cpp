@@ -119,6 +119,13 @@ void TestDesktopEntry::iconLookupPrefersLargestRaster() {
 }
 
 void TestDesktopEntry::shareRootsFollowXdgEnvironment() {
+#ifdef Q_OS_WIN
+  // XDG_DATA_DIRS is colon-separated, which cannot express a Windows path —
+  // "C:/x:C:/y" is ambiguous at the drive letter. defaultShareRoots() reports
+  // no roots there by design, so there is nothing to assert. The parsing
+  // cases above stay live on every platform; only this one is Unix-shaped.
+  QSKIP("XDG data roots are a Unix concept; defaultShareRoots() returns {} on Windows");
+#else
   const QString home = m_dir.filePath(QStringLiteral("datahome"));
   const QString system = m_dir.filePath(QStringLiteral("datasystem"));
   QDir().mkpath(home);
@@ -138,6 +145,7 @@ void TestDesktopEntry::shareRootsFollowXdgEnvironment() {
 
   qputenv("XDG_DATA_HOME", previousHome);
   qputenv("XDG_DATA_DIRS", previousDirs);
+#endif
 }
 
 QTEST_MAIN(TestDesktopEntry)
