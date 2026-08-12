@@ -1307,7 +1307,7 @@ Skipped %3 items that already had artwork.</source>
 <context>
     <name>BulkEdit</name>
     <message>
-        <location filename="../src/utils/db/bulkedit.cpp" line="+124"/>
+        <location filename="../src/utils/db/bulkedit.cpp" line="+130"/>
         <source>Add tag</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1548,6 +1548,25 @@ Skipped %3 items that already had artwork.</source>
     <message>
         <location line="+1"/>
         <source>Select None</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>CollectionRemover</name>
+    <message>
+        <location filename="../src/ui/dialogs/collection/collectionremover.cpp" line="+117"/>
+        <source>Also delete the imported shortcut files and copied artwork</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+63"/>
+        <source>Remove Collection</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>The collection was removed, but some imported files could not be deleted:
+%1</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -2077,7 +2096,7 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+284"/>
+        <location line="+294"/>
         <source>No items</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4595,7 +4614,7 @@ Please check that the file path is valid.</source>
 <context>
     <name>FirstRunWizard</name>
     <message>
-        <location filename="../src/ui/dialogs/firstrunwizard.cpp" line="+34"/>
+        <location filename="../src/ui/dialogs/firstrunwizard.cpp" line="+35"/>
         <source>Welcome to Kartend</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4619,7 +4638,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+92"/>
+        <location line="+102"/>
         <source>All set</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5907,7 +5926,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 <context>
     <name>LauncherImportController</name>
     <message numerus="yes">
-        <location filename="../src/core/launcherimportcontroller.cpp" line="+156"/>
+        <location filename="../src/core/launcherimportcontroller.cpp" line="+157"/>
         <source>%1: re-synced — %2 added or updated, %3 removed, %n game(s) total.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5937,21 +5956,21 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location line="+86"/>
-        <source>%1: fetching descriptions and artwork for %n game(s) from Steam — this can take a few minutes…</source>
+        <location line="+110"/>
+        <source>%1: fetching details for %n game(s) from %2 — this can take a few minutes…</source>
         <translation type="unfinished">
             <numerusform></numerusform>
             <numerusform></numerusform>
         </translation>
     </message>
     <message>
-        <location line="+18"/>
-        <source>%1: fetching Steam details… %2 of %3</source>
+        <location line="+19"/>
+        <source>%1: fetching %2 details… %3 of %4</source>
         <translation type="unfinished"></translation>
     </message>
     <message numerus="yes">
-        <location line="+7"/>
-        <source>%1: Steam store details fetched for %n item(s).</source>
+        <location line="+8"/>
+        <source>%1: %2 details fetched for %n item(s).</source>
         <translation type="unfinished">
             <numerusform></numerusform>
             <numerusform></numerusform>
@@ -6156,7 +6175,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 <context>
     <name>LauncherProbe</name>
     <message>
-        <location filename="../src/utils/fs/launcherprobe.cpp" line="+101"/>
+        <location filename="../src/utils/fs/launcherprobe.cpp" line="+107"/>
         <source>Video</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7120,7 +7139,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow.cpp" line="+498"/>
+        <location filename="../src/core/mainwindow.cpp" line="+501"/>
         <source>Import Kart</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7537,7 +7556,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+14"/>
+        <location line="+15"/>
         <source>Import from Launcher...</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7703,7 +7722,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>MetadataQueue</name>
     <message>
-        <location filename="../src/utils/db/metadataqueue.cpp" line="+19"/>
+        <location filename="../src/utils/db/metadataqueue.cpp" line="+25"/>
         <source>Title</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7822,7 +7841,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>PlaceholderWarmer</name>
     <message>
-        <location filename="../src/utils/view/placeholderwarmer.cpp" line="+79"/>
+        <location filename="../src/utils/view/placeholderwarmer.cpp" line="+85"/>
         <source>This collection has no media folder configured. Set Configuration → Media Directory first.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7832,25 +7851,25 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+10"/>
+        <location line="+9"/>
         <source>Media folder does not exist or is not a directory:
 %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+12"/>
         <source>Artwork folder is not a valid absolute path:
 %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+6"/>
         <source>Could not create artwork folder:
 %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+6"/>
         <source>Artwork folder is not writable:
 %1</source>
         <translation type="unfinished"></translation>
@@ -7861,7 +7880,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+100"/>
+        <location line="+101"/>
         <source>%1: placeholder render returned null image</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8057,7 +8076,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../src/modules/input/scroll/coverflowcontroller.cpp" line="+513"/>
+        <location filename="../src/modules/input/scroll/coverflowcontroller.cpp" line="+525"/>
         <source>Cover</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8162,7 +8181,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/input/launch/launchcommandbuilder.cpp" line="+221"/>
+        <location filename="../src/modules/input/launch/launchcommandbuilder.cpp" line="+244"/>
         <source>Launcher executable not found: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9712,7 +9731,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
     </message>
     <message>
         <location line="+7"/>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialogform.cpp" line="+220"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialogform.cpp" line="+230"/>
         <source>Header Logo</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9907,8 +9926,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+24"/>
-        <location line="+42"/>
+        <location line="+72"/>
         <source>closing the dialog</source>
         <translation type="unfinished"></translation>
     </message>
