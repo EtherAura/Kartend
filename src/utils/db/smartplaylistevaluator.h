@@ -30,6 +30,13 @@ struct Match {
 /// the items table — the evaluator does not run schema migrations.
 [[nodiscard]] QList<Match> evaluate(QSqlDatabase &db, const SmartFilter::Filter &filter);
 
+/// Evaluate a composed set and combine the per-rule results — intersection
+/// for MatchMode::All, union for MatchMode::Any. Each rule runs as its own
+/// query so its ordering and result cap keep their meaning; the combined list
+/// follows the first rule's order. A single-rule set is exactly the overload
+/// above.
+[[nodiscard]] QList<Match> evaluate(QSqlDatabase &db, const SmartFilter::FilterSet &set);
+
 } // namespace SmartPlaylistEvaluator
 
 #endif // SMARTPLAYLISTEVALUATOR_H

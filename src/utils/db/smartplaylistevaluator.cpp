@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include <QDateTime>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -417,6 +418,64 @@ QList<Match> evaluate(QSqlDatabase &db, const SmartFilter::Filter &filter) {
     return evalFavorite(db);
   }
   return {};
+}
+
+QList<Match> evaluate(QSqlDatabase &db, const SmartFilter::FilterSet &set) {
+  if (set.rules.isEmpty()) {
+    return {}; // rejected at parse time; belt-and-braces against a hand-built set
+  }
+  if (set.rules.size() == 1) {
+    return evaluate(db, set.rules.first());
+  }
+
+  // Composition happens over result SETS rather than by fusing the rules into
+  // one WHERE clause. Each Kind's SQL carries its own ordering and its own
+  // LIMIT — "top 20 played" means the top 20, not "played, capped later" — and
+  // those semantics survive intact only if each rule runs as written. The cost
+  // is one query per rule on playlist open, against a table the scanner
+  // already indexes.
+  //
+  // Ordering follows the FIRST rule: it is the one the user wrote first, and
+  // an "all" set can only ever be a subset of it. Union appends later rules'
+  // items in rule order, so the result is stable across rebuilds.
+  const auto keyOf = [](const Match &m) { return m.collectionUuid + QChar(u'\0') + m.path; };
+
+  QList<Match> combined = evaluate(db, set.rules.first());
+  for (qsizetype i = 1; i < set.rules.size(); ++i) {
+    if (combined.isEmpty() && set.match == SmartFilter::MatchMode::All) {
+      break; // an intersection can only shrink — the remaining queries can't change it
+    }
+    const QList<Match> next = evaluate(db, set.rules.at(i));
+
+    QSet<QString> nextKeys;
+    nextKeys.reserve(next.size());
+    for (const Match &m : next) {
+      nextKeys.insert(keyOf(m));
+    }
+
+    if (set.match == SmartFilter::MatchMode::All) {
+      QList<Match> kept;
+      kept.reserve(std::min(combined.size(), next.size()));
+      for (const Match &m : combined) {
+        if (nextKeys.contains(keyOf(m))) {
+          kept.append(m);
+        }
+      }
+      combined = kept;
+    } else {
+      QSet<QString> haveKeys;
+      haveKeys.reserve(combined.size());
+      for (const Match &m : combined) {
+        haveKeys.insert(keyOf(m));
+      }
+      for (const Match &m : next) {
+        if (!haveKeys.contains(keyOf(m))) {
+          combined.append(m);
+        }
+      }
+    }
+  }
+  return combined;
 }
 
 } // namespace SmartPlaylistEvaluator

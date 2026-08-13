@@ -21,6 +21,15 @@ private slots:
   void fromJson_rejectsUnknownKind();
   void fromJsonString_rejectsEmpty();
   void fromJson_defaultsLimitWhenAbsent();
+
+  // FilterSet composition + wire compatibility (Kartend-r5dbe)
+  void setToJson_singleRuleIsByteIdenticalToLegacyFilter();
+  void setFromJson_legacySpecWithoutRulesParsesAsOneRule();
+  void setRoundTrip_multiRulePreservesOrderAndMatchMode();
+  void setToJson_multiRuleMirrorsFirstRuleForOlderBuilds();
+  void setFromJson_rejectsUnknownMatchMode();
+  void setFromJson_rejectsEmptyRulesArray();
+  void setFromJson_oneBadRuleFailsTheWholeSet();
 };
 
 void TestSmartFilter::kindTagRoundTrip_coversEveryKind() {
@@ -155,6 +164,107 @@ void TestSmartFilter::byTitleSearch_roundTripsNeedle() {
   auto parsed = SmartFilter::fromJson(json);
   QVERIFY(parsed.isOk());
   QCOMPARE(parsed.value().titleSearch, QStringLiteral("concert"));
+}
+
+void TestSmartFilter::setToJson_singleRuleIsByteIdenticalToLegacyFilter() {
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::ByTitleSearch;
+  f.titleSearch = QStringLiteral("concert");
+  f.limit = 25;
+
+  SmartFilter::FilterSet set;
+  set.rules = {f};
+
+  // The whole no-migration promise rests on this: a one-rule set must write
+  // the exact bytes a single Filter always wrote, so existing smart_filter
+  // rows are never rewritten and an older build reads them unchanged. In
+  // particular "match" and "rules" must be absent, not present-and-defaulted.
+  QCOMPARE(SmartFilter::setToJsonString(set), SmartFilter::toJsonString(f));
+  QVERIFY(!SmartFilter::setToJson(set).contains(QStringLiteral("rules")));
+  QVERIFY(!SmartFilter::setToJson(set).contains(QStringLiteral("match")));
+}
+
+void TestSmartFilter::setFromJson_legacySpecWithoutRulesParsesAsOneRule() {
+  SmartFilter::Filter f;
+  f.kind = SmartFilter::Kind::Favorite;
+
+  const auto parsed = SmartFilter::setFromJsonString(SmartFilter::toJsonString(f));
+  QVERIFY(parsed.isOk());
+  QCOMPARE(parsed.value().rules.size(), 1);
+  QCOMPARE(parsed.value().rules.first().kind, SmartFilter::Kind::Favorite);
+  // Absent match mode means All, which is the only reading that keeps a
+  // one-rule playlist behaving as it did.
+  QCOMPARE(parsed.value().match, SmartFilter::MatchMode::All);
+}
+
+void TestSmartFilter::setRoundTrip_multiRulePreservesOrderAndMatchMode() {
+  SmartFilter::Filter first;
+  first.kind = SmartFilter::Kind::ByExtension;
+  first.extensions = {QStringLiteral("mp4")};
+  SmartFilter::Filter second;
+  second.kind = SmartFilter::Kind::ByTitleSearch;
+  second.titleSearch = QStringLiteral("live");
+
+  SmartFilter::FilterSet set;
+  set.match = SmartFilter::MatchMode::Any;
+  set.rules = {first, second};
+
+  const auto parsed = SmartFilter::setFromJsonString(SmartFilter::setToJsonString(set));
+  QVERIFY(parsed.isOk());
+  QCOMPARE(parsed.value().match, SmartFilter::MatchMode::Any);
+  QCOMPARE(parsed.value().rules.size(), 2);
+  // Order is load-bearing: the first rule decides the result ordering, so a
+  // round-trip that reorders rules would reorder the playlist.
+  QCOMPARE(parsed.value().rules.at(0).kind, SmartFilter::Kind::ByExtension);
+  QCOMPARE(parsed.value().rules.at(0).extensions, QStringList{QStringLiteral("mp4")});
+  QCOMPARE(parsed.value().rules.at(1).kind, SmartFilter::Kind::ByTitleSearch);
+  QCOMPARE(parsed.value().rules.at(1).titleSearch, QStringLiteral("live"));
+}
+
+void TestSmartFilter::setToJson_multiRuleMirrorsFirstRuleForOlderBuilds() {
+  SmartFilter::Filter first;
+  first.kind = SmartFilter::Kind::ByTitleSearch;
+  first.titleSearch = QStringLiteral("keynote");
+  SmartFilter::Filter second;
+  second.kind = SmartFilter::Kind::Favorite;
+
+  SmartFilter::FilterSet set;
+  set.match = SmartFilter::MatchMode::All;
+  set.rules = {first, second};
+
+  // A build that predates composition — and the call sites that still parse a
+  // single Filter to validate a spec — must read a multi-rule playlist as its
+  // FIRST rule rather than failing. Narrower than intended, but it opens.
+  const auto legacyView = SmartFilter::fromJsonString(SmartFilter::setToJsonString(set));
+  QVERIFY(legacyView.isOk());
+  QCOMPARE(legacyView.value().kind, SmartFilter::Kind::ByTitleSearch);
+  QCOMPARE(legacyView.value().titleSearch, QStringLiteral("keynote"));
+}
+
+void TestSmartFilter::setFromJson_rejectsUnknownMatchMode() {
+  // Guessing "all" for an unrecognised mode would silently show a strict
+  // intersection to someone who asked for something else — missing items look
+  // like a Kartend bug, a rejected spec looks like what it is.
+  const auto parsed = SmartFilter::setFromJsonString(
+      QStringLiteral(R"({"kind":"favorite","match":"most","rules":[{"kind":"favorite"}]})"));
+  QVERIFY(parsed.isError());
+}
+
+void TestSmartFilter::setFromJson_rejectsEmptyRulesArray() {
+  // An unconstrained set must never be read as "match the whole library".
+  const auto parsed =
+      SmartFilter::setFromJsonString(QStringLiteral(R"({"kind":"favorite","rules":[]})"));
+  QVERIFY(parsed.isError());
+}
+
+void TestSmartFilter::setFromJson_oneBadRuleFailsTheWholeSet() {
+  // Skipping an unparseable rule would change what the playlist MEANS —
+  // dropping a rule from an "all" set widens it, surfacing items the user had
+  // excluded. Failing leaves the playlist inert, which is what a single
+  // unknown kind has always done.
+  const auto parsed = SmartFilter::setFromJsonString(QStringLiteral(
+      R"({"kind":"favorite","match":"all","rules":[{"kind":"favorite"},{"kind":"from_the_future"}]})"));
+  QVERIFY(parsed.isError());
 }
 
 QTEST_MAIN(TestSmartFilter)

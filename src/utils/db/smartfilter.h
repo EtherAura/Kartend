@@ -1,6 +1,7 @@
 #ifndef SMARTFILTER_H
 #define SMARTFILTER_H
 
+#include <QList>
 #include <QString>
 #include <QStringList>
 
@@ -55,6 +56,23 @@ struct Filter {
   QString titleSearch;
 };
 
+/// How a FilterSet's rules combine (Kartend-r5dbe).
+enum class MatchMode {
+  All, ///< Intersection — an item must satisfy every rule.
+  Any, ///< Union — an item must satisfy at least one rule.
+};
+
+/// One or more rules plus how they combine. A smart playlist held exactly
+/// one `Filter` until composition landed; a FilterSet with a single rule is
+/// that same playlist, and serialises to byte-identical JSON, so nothing
+/// already on disk changes shape until the user actually adds a rule.
+struct FilterSet {
+  MatchMode match = MatchMode::All;
+  /// Evaluated in order. Never empty after a successful parse — an empty
+  /// `rules` array is rejected rather than silently matching everything.
+  QList<Filter> rules;
+};
+
 /// String tag used in the JSON payload's "kind" field. Stable across
 /// versions so persisted filters survive renames of the C++ enum.
 [[nodiscard]] QString kindToTag(Kind kind);
@@ -79,6 +97,20 @@ struct Filter {
 /// "no filter persisted" from "filter is corrupt".
 [[nodiscard]] QString toJsonString(const Filter &filter);
 [[nodiscard]] ErrorUtils::Result<Filter> fromJsonString(const QString &json);
+
+/// FilterSet round-trip. Distinct names rather than overloads because these
+/// differ from the single-Filter pair only in return type.
+///
+/// The wire format is a superset of the single-filter one: a set of one rule
+/// emits exactly the legacy object, and a set of several ALSO mirrors its
+/// first rule into the legacy top-level fields before adding "match" and
+/// "rules". That mirroring is what lets an older build — and the call sites
+/// that still parse a single Filter to validate a spec — read a multi-rule
+/// playlist as its first rule instead of failing outright.
+[[nodiscard]] QJsonObject setToJson(const FilterSet &set);
+[[nodiscard]] ErrorUtils::Result<FilterSet> setFromJson(const QJsonObject &obj);
+[[nodiscard]] QString setToJsonString(const FilterSet &set);
+[[nodiscard]] ErrorUtils::Result<FilterSet> setFromJsonString(const QString &json);
 
 } // namespace SmartFilter
 

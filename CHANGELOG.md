@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A smart playlist can hold more than one rule.** Until now it held
+  exactly one, so "recently launched" and "favourite" were each expressible
+  but "recently launched *and* favourite" was not. A playlist now takes a
+  list of rules and matches items that satisfy **all** of them or **any** of
+  them. Each rule keeps its own ordering and its own limit — "top 20 played"
+  still means the top 20 of that rule, not the whole set trimmed afterwards
+  — and the results are ordered by the first rule you wrote. An item
+  matching two rules appears once. Existing playlists are untouched: a
+  one-rule playlist is stored exactly as it always was, so nothing needs
+  migrating and nothing is rewritten on upgrade.
+
 - **Launch parameters can now name the parts of an item's path.** A
   template could already place the whole path with `%1`; it can now also
   use `%name%` for the title, `%dir%` for the containing folder, plus
