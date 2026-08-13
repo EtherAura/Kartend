@@ -137,7 +137,17 @@ public slots:
   /// is spent or teardown begins. Callers that invalidate caches on completion
   /// MUST use it: runWrite no longer necessarily finishes synchronously, so
   /// firing the hop after it returns would invalidate before the write lands.
-  void runWrite(const std::function<bool(QSqlDatabase &)> &op,
+  /// Takes @p op BY VALUE and moves it onward (Kartend-kykdx). It used to be
+  /// a const& forwarded into runWriteRung's by-value parameter, which copied
+  /// the std::function a second time ON THE WORKER THREAD after it had
+  /// already been moved there — while the caller's captured state was going
+  /// out of scope on the GUI thread. For a lambda capturing a Qt COW
+  /// container (purgeOrphanCollectionData captures a QSet of live uuids) that
+  /// is a refcount bump racing a destructor: memory-safe, pointless, and what
+  /// ThreadSanitizer reports inside QHash's copy constructor. By value, a
+  /// temporary constructs in place and an lvalue pays its copy on the
+  /// caller's own thread, where nothing contends with it.
+  void runWrite(std::function<bool(QSqlDatabase &)> op,
                 const QString &context = QStringLiteral("QueryManager::runWrite"),
                 std::function<void()> onSettled = {});
 

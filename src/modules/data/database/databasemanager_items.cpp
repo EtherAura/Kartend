@@ -210,7 +210,14 @@ void DatabaseManager::queueWorkerWrite(std::function<bool(QSqlDatabase &)> op,
   QPointer<DatabaseManager> self(this);
   QMetaObject::invokeMethod(
       m_worker,
-      [w = m_worker, op = std::move(op), onCompleted = std::move(onCompleted), self, context]() {
+      // MUTABLE so the op can be moved onward (Kartend-kykdx). This closure
+      // runs on the WORKER thread; without mutable, `op` is const here and
+      // runWrite's by-value parameter copies the std::function right there —
+      // the cross-thread copy of a lambda's captured Qt COW container that
+      // TSan reports inside QHash's copy constructor. The closure runs once,
+      // so moving out of it is safe.
+      [w = m_worker, op = std::move(op), onCompleted = std::move(onCompleted), self,
+       context]() mutable {
         // Kartend-rctcv: hand the hop to runWrite instead of firing it once
         // runWrite returns. A contended write now settles on a LATER event-loop
         // turn, so invalidating here would re-open the Kartend-4tprf hole from
@@ -229,7 +236,7 @@ void DatabaseManager::queueWorkerWrite(std::function<bool(QSqlDatabase &)> op,
                 Qt::QueuedConnection);
           };
         }
-        w->runWrite(op, context, std::move(onSettled));
+        w->runWrite(std::move(op), context, std::move(onSettled));
       },
       Qt::QueuedConnection);
 }

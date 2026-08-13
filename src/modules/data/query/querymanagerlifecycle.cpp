@@ -134,13 +134,13 @@ void QueryManager::invalidateUsageSensitiveCaches() {
   m_cachedPlaylistScopeKey.clear();
 }
 
-void QueryManager::runWrite(const std::function<bool(QSqlDatabase &)> &op, const QString &context,
+void QueryManager::runWrite(std::function<bool(QSqlDatabase &)> op, const QString &context,
                             std::function<void()> onSettled) {
   assertOwnerThread();
   if (!op) {
     return;
   }
-  runWriteRung(op, context, std::move(onSettled), /*deferral=*/0);
+  runWriteRung(std::move(op), context, std::move(onSettled), /*deferral=*/0);
 }
 
 void QueryManager::runWriteRung(std::function<bool(QSqlDatabase &)> op, const QString &context,
