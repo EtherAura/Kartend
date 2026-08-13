@@ -136,6 +136,12 @@ kartend_add_test(NAME SteamLibrary
   LINK kartend_utils
 )
 
+# Multi-disc release detection (Kartend-21t50): pure name parsing + grouping.
+kartend_add_test(NAME MultiDisc
+  SOURCES utils/fs/test_multidisc.cpp
+  LINK kartend_utils
+)
+
 kartend_add_test(NAME SteamAppInfo
   SOURCES utils/fs/test_steamappinfo.cpp
   LINK kartend_utils

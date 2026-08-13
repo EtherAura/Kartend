@@ -1,0 +1,161 @@
+#include "multidisc.h"
+
+#include <algorithm>
+
+#include <QDir>
+#include <QFileInfo>
+#include <QHash>
+#include <QRegularExpression>
+
+namespace MultiDisc {
+
+namespace {
+
+// The tag group itself — parenthesised or bracketed. Matched globally so a
+// name can carry several tags ("(USA) (Disc 2)") and only the disc one is
+// consumed; the rest stay in the base title, where they still distinguish
+// releases that differ by region or revision.
+const QRegularExpression &tagGroupRe() {
+  static const QRegularExpression re(QStringLiteral("[\\(\\[]([^\\)\\]]*)[\\)\\]]"));
+  return re;
+}
+
+// Contents of a tag group that names a disc. The separator is optional so
+// "(CD1)" parses the same as "(CD 1)"; the value is either a run of digits or
+// a single letter, which is what keeps "(Disc Two)" and "(Special Edition)"
+// from being read as discs — a marker we cannot ORDER is worse than none,
+// since it would place discs arbitrarily in the playlist.
+const QRegularExpression &discTagRe() {
+  static const QRegularExpression re(QStringLiteral("^(disc|disk|cd|side)\\s*([0-9]+|[a-z])$"),
+                                     QRegularExpression::CaseInsensitiveOption);
+  return re;
+}
+
+} // namespace
+
+Marker parse(const QString &fileName) {
+  Marker out;
+  const QString completeBase = QFileInfo(fileName).completeBaseName();
+
+  auto it = tagGroupRe().globalMatch(completeBase);
+  while (it.hasNext()) {
+    const QRegularExpressionMatch group = it.next();
+    const QString inside = group.captured(1).trimmed();
+    const QRegularExpressionMatch disc = discTagRe().match(inside);
+    if (!disc.hasMatch()) {
+      continue;
+    }
+
+    QString type = disc.captured(1).toLower();
+    if (type == QLatin1String("disk")) {
+      type = QStringLiteral("disc"); // fold so both spellings group together
+    }
+    const QString value = disc.captured(2).toLower();
+
+    out.qualifier = type + QLatin1Char(' ') + value;
+    // Numbered discs sort by VALUE, so "disc 10" lands after "disc 9" instead
+    // of next to "disc 1" — lexicographic order would silently shuffle the
+    // playlist of any release with ten or more parts. Lettered discs sort
+    // after every numbered one, far enough out that the two never interleave.
+    bool numeric = false;
+    const int asNumber = value.toInt(&numeric);
+    out.order = numeric ? asNumber : (1000 + value.at(0).unicode());
+
+    // Remove only this tag group, then tidy the double spacing its removal
+    // leaves behind. Other tag groups survive untouched.
+    QString base = completeBase;
+    base.remove(group.capturedStart(0), group.capturedLength(0));
+    out.base = base.simplified();
+    return out;
+  }
+  return out;
+}
+
+QList<Group> group(const QStringList &absolutePaths) {
+  // Key on directory + base title: two releases that share a name under
+  // different folders are different releases, and merging them would build a
+  // playlist that jumps between directories.
+  struct Entry {
+    QString path;
+    int order;
+    QString qualifier;
+  };
+  QHash<QString, QList<Entry>> buckets;
+  QStringList bucketOrder; // keep output stable in first-seen input order
+
+  for (const QString &path : absolutePaths) {
+    const QFileInfo info(path);
+    const Marker marker = parse(info.fileName());
+    if (!marker.isValid() || marker.base.isEmpty()) {
+      continue;
+    }
+    const QString key = info.absolutePath() + QChar(u'\0') + marker.base.toLower();
+    if (!buckets.contains(key)) {
+      bucketOrder.append(key);
+    }
+    buckets[key].append({path, marker.order, marker.qualifier});
+  }
+
+  QList<Group> out;
+  for (const QString &key : bucketOrder) {
+    QList<Entry> entries = buckets.value(key);
+    // A lone "(Disc 1)" is a file that happens to be labelled, not a release
+    // split across discs. Collapsing it would strip the label from the title
+    // for no gain and leave a one-line playlist behind.
+    if (entries.size() < 2) {
+      continue;
+    }
+    std::stable_sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) {
+      if (a.order != b.order) {
+        return a.order < b.order;
+      }
+      return a.qualifier < b.qualifier;
+    });
+
+    Group g;
+    // Recover the base with its original casing from the first member rather
+    // than using the lowercased key.
+    g.base = parse(QFileInfo(entries.first().path).fileName()).base;
+    for (const Entry &e : entries) {
+      g.files.append(e.path);
+    }
+    out.append(g);
+  }
+  return out;
+}
+
+QString buildM3uContents(const QStringList &absolutePaths, const QString &m3uDir) {
+  QString out;
+  const QDir dir(m3uDir);
+  for (const QString &path : absolutePaths) {
+    QString line = path;
+    if (!m3uDir.isEmpty()) {
+      const QFileInfo info(path);
+      // Relative only for files sitting directly in the playlist's own
+      // directory. Anything deeper or outside stays absolute: a "../.." chain
+      // is more fragile than the absolute path it replaces.
+      if (info.absolutePath() == dir.absolutePath()) {
+        line = info.fileName();
+      }
+    }
+    out += line;
+    out += QLatin1Char('\n');
+  }
+  return out;
+}
+
+QString m3uFileNameFor(const QString &base) {
+  QString safe = base.simplified();
+  // Path separators and the characters Windows refuses, so a name derived
+  // from a title can never escape its directory or fail to be written on a
+  // shared drive.
+  static const QRegularExpression illegal(QStringLiteral(R"([/\\:*?"<>|])"));
+  safe.replace(illegal, QStringLiteral("_"));
+  safe = safe.trimmed();
+  if (safe.isEmpty()) {
+    safe = QStringLiteral("playlist");
+  }
+  return safe + QStringLiteral(".m3u");
+}
+
+} // namespace MultiDisc
