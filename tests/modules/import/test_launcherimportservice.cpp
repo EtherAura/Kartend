@@ -7,9 +7,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QObject>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QTemporaryDir>
-#include <QSet>
 #include <QTest>
 
 #include "../../support/appinfofixture.h"
@@ -786,10 +786,10 @@ void TestLauncherImportService::watchPathsAreDirectoriesThatExist() {
   // Machine-independent invariants: this runs wherever the suite runs, and
   // which launchers are installed is none of its business. What it pins is
   // the contract that keeps the watch alive.
-  const QStringList sources = {QStringLiteral("steam"),   QStringLiteral("flatpak"),
-                               QStringLiteral("lutris"),  QStringLiteral("heroic"),
-                               QStringLiteral("itch"),    QStringLiteral("bottles"),
-                               QStringLiteral("xdg"),     QStringLiteral("esde")};
+  const QStringList sources = {QStringLiteral("steam"),  QStringLiteral("flatpak"),
+                               QStringLiteral("lutris"), QStringLiteral("heroic"),
+                               QStringLiteral("itch"),   QStringLiteral("bottles"),
+                               QStringLiteral("xdg"),    QStringLiteral("esde")};
   for (const QString &sourceId : sources) {
     const QStringList paths = LauncherImportService::watchPaths(sourceId);
     QSet<QString> seen;

@@ -33,7 +33,9 @@ void LauncherManifestWatcher::setDebounceInterval(int milliseconds) {
   m_debounce->setInterval(milliseconds);
 }
 
-auto LauncherManifestWatcher::debounceInterval() const -> int { return m_debounce->interval(); }
+auto LauncherManifestWatcher::debounceInterval() const -> int {
+  return m_debounce->interval();
+}
 
 void LauncherManifestWatcher::configureForSources(const QStringList &sourceIds) {
   QStringList directories;
