@@ -361,7 +361,7 @@ void TestArtworkManager::testSubcollectionArtwork_survivesNameThatDiffersFromFil
 
   ItemWidget widget;
   widget.setItemDimensions(220, 280);
-  widget.setAsSubcollection(0, QStringLiteral("Games"));  // name != file basename
+  widget.setAsSubcollection(0, QStringLiteral("Games")); // name != file basename
   QVERIFY(widget.isSubcollection());
 
   ArtworkInfo info{QPointer<ItemWidget>(&widget), artPath};
