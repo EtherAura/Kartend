@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Launch parameters can now name the parts of an item's path.** A
+  template could already place the whole path with `%1`; it can now also
+  use `%name%` for the title, `%dir%` for the containing folder, plus
+  `%filename%` and `%ext%`. That is enough to tell a player which title to
+  show in its window bar, or to point a subtitle flag at the file sitting
+  next to the video — both of which previously meant wrapping the launcher
+  in a shell script. Tokens are substituted inside each argument after the
+  parameter string has been split, so a title containing spaces stays a
+  single argument instead of becoming several. Items imported from Steam,
+  Flatpak and the like launch through a shortcut rather than a file on
+  disk: `%name%` still gives their title, the path-part tokens come out
+  empty, and **Preview launch command…** now says so instead of leaving you
+  to wonder why an argument went blank.
+
 - **ES-DE libraries can be imported, one collection per system.** File →
   Import → "Import from Launcher…" now detects ES-DE and brings in each of
   its systems as its own collection — SNES games in a SNES collection, PS2
@@ -117,6 +131,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   load in and out" and "the selection reverted" are almost impossible to
   attribute by watching the screen: the trace names the culprit in a single
   run (Kartend-i3mmq, Kartend-ic4h6).
+
+- **Ctrl+Shift+I opens "Import from Launcher".** It was reachable only through
+  File → Import → Import from Launcher, two levels of menu, and re-running it
+  is the ordinary way to pick up games installed since the last import — so
+  the trip was one you made repeatedly.
 
 ### Changed
 

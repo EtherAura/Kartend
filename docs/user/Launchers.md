@@ -59,17 +59,61 @@ You don't need to wrap launch parameters in quotes either.
 
 ### Where the file path goes
 
-The selected item's absolute path is appended **last** by default. If
-your launcher needs the path elsewhere — say, after a `--media` flag —
-use a wrapper script:
+The selected item's absolute path is appended **last** by default. To put
+it somewhere else, name it with a placeholder token — writing `%1` (or
+`%f`) anywhere in `launchParameters` places the path there instead, and
+suppresses the append-at-the-end fallback:
+
+```ini
+launchParameters=--media %1 --extra-flag
+```
+
+### Placeholder tokens
+
+Tokens are substituted **inside** each argument after the parameter
+string has been split, so a token can never introduce a new argument
+boundary — `"%1"` stays one argument even when the path contains spaces.
+Matching is case-insensitive.
+
+| Token | Expands to | Example |
+|-------|-----------|---------|
+| `%1`, `%f` | Full path of the selected item. Suppresses the append-at-end fallback. | `/media/talks/Keynote.mkv` |
+| `%name%` | Display title — the filename without its extension, the same text the grid shows. | `Keynote` |
+| `%filename%` | Filename with extension. | `Keynote.mkv` |
+| `%dir%` | Directory containing the item. | `/media/talks` |
+| `%ext%` | Extension, without the dot. | `mkv` |
+| `%core%` | Configured libretro core path. Only meaningful for a libretro launcher. | `/usr/lib/cores/engine.so` |
+| `%collection%` | Name of the collection being launched. | `Talks` |
+
+A worked example — passing the title to a player that shows it in the
+window bar, and pointing a subtitle flag at a sibling file:
+
+```ini
+launchParameters=--title=%name% --sub-file=%dir%/%name%.srt %1
+```
+
+Only `%1` and `%f` place the media argument. Naming a *part* of the path
+does not count, so a template that uses `%name%` but never `%1` still
+gets the full path appended at the end.
+
+Two things worth knowing:
+
+- **Launcher-import entries have no file on disk.** Items imported from
+  Steam, Flatpak, Lutris and friends are shortcut stubs that resolve to a
+  target like `steam://rungameid/220`. `%name%` still gives the title, but
+  `%filename%`, `%dir%` and `%ext%` expand to empty. **Preview launch
+  command…** warns when a template asks for them.
+- **Unknown tokens are left alone.** A `%something%` Kartend doesn't
+  recognise is passed through verbatim rather than blanked, and the launch
+  preview flags it as unresolved — so a typo is visible instead of silent.
+
+If you need genuine shell behavior — pipes, globs, conditionals — a
+wrapper script is still the answer:
 
 ```bash
 #!/bin/sh
 exec /usr/bin/some-tool --media "$1" --extra-flag
 ```
-
-There's no built-in `{path}` placeholder syntax in `launchParameters`
-today.
 
 ## Primary launcher
 

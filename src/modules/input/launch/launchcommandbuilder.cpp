@@ -127,6 +127,47 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
   // passing a literal token through. Replacing inside the already-split token
   // keeps the argv boundary the template author chose — `"%1"` stays one
   // argument even when filePath contains spaces.
+  // Kartend-kvcxd: derived path tokens. %1/%f hand the launcher the whole
+  // media argument; these name its parts, which is what a template needs when
+  // the launcher wants a title, a working directory, or a sibling file — the
+  // only alternative was wrapping every launcher in a shell script.
+  //
+  // %name% follows the GRID's display title (completeBaseName of the item's own
+  // path), so a .kartlink stub yields "Half-Life 2" rather than a fragment of
+  // its steam:// target. The other three describe a real file on disk and are
+  // therefore deliberately empty for a stub: a launcher-import entry has no
+  // media file whose directory or extension could be named. previewLaunchCommand
+  // warns when a template asks for them anyway.
+  const QFileInfo mediaInfo(filePath);
+  const bool isLauncherStub = KartLink::isKartLinkPath(filePath);
+  const QString nameToken = mediaInfo.completeBaseName();
+  const QString fileNameToken = isLauncherStub ? QString() : mediaInfo.fileName();
+  const QString dirToken = isLauncherStub ? QString() : mediaInfo.absolutePath();
+  const QString extToken = isLauncherStub ? QString() : mediaInfo.suffix();
+
+  // The same argv-flag guard the media path gets above, applied to whichever
+  // derived values the template actually names: a file called "-rf.mkv" yields
+  // %name% == "-rf", which a launcher reads as an option rather than a value.
+  // Substitution happens inside an already-split token so this can never add an
+  // argument, but it can still flip a flag. Only tokens the template mentions
+  // are checked, so a pathological filename cannot break launches whose
+  // template never asks for that part of it.
+  const QString rawParameters = launcher.launchParameters.trimmed();
+  const QList<QPair<QString, QString>> derivedTokens{{QStringLiteral("%name%"), nameToken},
+                                                     {QStringLiteral("%filename%"), fileNameToken},
+                                                     {QStringLiteral("%dir%"), dirToken},
+                                                     {QStringLiteral("%ext%"), extToken}};
+  for (const auto &[token, value] : derivedTokens) {
+    if (value.startsWith('-') && rawParameters.contains(token, Qt::CaseInsensitive)) {
+      return ErrorContext::error(ErrorCode::InvalidFilePath,
+                                 QObject::tr("%1 would expand to \"%2\", which the launcher would "
+                                             "read as an option rather than a value.")
+                                     .arg(token, value),
+                                 "LaunchCommandBuilder::buildLaunchCommand")
+          .withDetails(QString("Token '%1' from file path '%2'").arg(token, filePath));
+    }
+  }
+
   bool sawFilePlaceholder = false;
   // Boundary-aware placeholder tokens, mirroring previewLaunchCommand's
   // unresolved-placeholder regex (kPlaceholderRe below). Plain substring
@@ -153,6 +194,14 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
     QStringList expandedArgs = parseResult.value();
     for (QString &arg : expandedArgs) {
       arg.replace("%collection%", collectionName, Qt::CaseInsensitive);
+      // Derived tokens before %1/%f: each is %word%-delimited, so a plain
+      // case-insensitive replace is enough — no \b needed, and "%name%" is not
+      // a substring of "%filename%", so the two cannot alias regardless of
+      // order. Doing them ahead of the media path also keeps a path that
+      // happens to contain a literal token from being re-substituted.
+      for (const auto &[token, value] : derivedTokens) {
+        arg.replace(token, value, Qt::CaseInsensitive);
+      }
       if (arg.contains(kFileTokenRe)) {
         sawFilePlaceholder = true;
         arg.replace(kFileTokenRe, mediaArgument);
@@ -286,6 +335,24 @@ auto previewLaunchCommand(const CollectionConfig &collection, const LauncherConf
     out.warnings << QObject::tr(
                         "Core path will be ignored (launcher is not a libretro core launcher): %1")
                         .arg(previewCorePath.trimmed());
+  }
+
+  // Kartend-kvcxd: %filename%/%dir%/%ext% describe a media file on disk, which
+  // a launcher-import stub does not have — they expand to empty rather than to
+  // a fragment of the stub's steam:// target. Say so here, or the emptied
+  // argument in the preview above reads as a Kartend bug. %name% is absent from
+  // this list on purpose: it resolves to the display title for stubs too.
+  if (KartLink::isKartLinkPath(filePath)) {
+    static const QStringList kPathPartTokens{QStringLiteral("%filename%"), QStringLiteral("%dir%"),
+                                             QStringLiteral("%ext%")};
+    for (const QString &token : kPathPartTokens) {
+      if (launcher.launchParameters.contains(token, Qt::CaseInsensitive)) {
+        out.warnings << QObject::tr("%1 is empty for launcher-import entries — they launch through "
+                                    "a shortcut and have no media file on disk.")
+                            .arg(token);
+        break; // one is enough; the argument list already shows the effect
+      }
+    }
   }
 
   // Heuristic unresolved-placeholder check. We've already substituted

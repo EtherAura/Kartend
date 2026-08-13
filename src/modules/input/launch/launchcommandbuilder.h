@@ -36,8 +36,11 @@ namespace LaunchCommandBuilder {
 /// entry. Pure construction: it does NOT verify the launcher exists or is
 /// executable (LaunchManager::validateLauncherPath owns that); it only
 /// assembles the command and validates argument semantics — %collection% /
-/// %1 / %f / %core substitution, the libretro `-L <core> <file>` triple, and
-/// the append-media-path fallback when no file placeholder is present.
+/// %1 / %f / %core substitution, the derived path tokens (%name% / %filename% /
+/// %dir% / %ext%), the libretro `-L <core> <file>` triple, and the
+/// append-media-path fallback when no file placeholder is present.
+/// Only %1 / %f suppress that fallback; naming a part of the path does not
+/// count as placing the media argument.
 /// `collectionName` is used solely for diagnostics and `%collection%`
 /// substitution.
 [[nodiscard]] ErrorUtils::Result<LaunchCommand> buildLaunchCommand(const LauncherConfig &launcher,
