@@ -39,6 +39,22 @@ concurrency:
   # finish is pure waste. Main/release pipelines (refs/heads/main) keep
   # their runs so a force-cancel doesn't blank out the green checkmark
   # CDN consumers (badges, release process) depend on.
+  #
+  # THAT PROTECTS A RUNNING MAIN BUILD, NOT A QUEUED ONE (Kartend-ur7uo).
+  # cancel-in-progress: false makes a new run WAIT rather than cancel, but
+  # GitHub allows only ONE PENDING run per concurrency group — a third
+  # arrival cancels the one still waiting. Three pushes to main in quick
+  # succession on 2026-08-12 did exactly that: the middle commit's Build and
+  # Test never ran, while its Coverage, CodeQL and CHANGELOG Enforcer (which
+  # share no group) all passed. So an intermediate main commit can carry a
+  # green-looking check set with no build behind it, which matters to a
+  # bisect or a release audit rather than to the tip.
+  #
+  # Accepted rather than fixed. Adding the SHA to the group would guarantee a
+  # build per commit, at the cost of running the full sanitizer matrix
+  # concurrently for every push in a burst — the expense this block exists to
+  # avoid. Batching commits into one push avoids it for free; the tip of main
+  # is always built either way.
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
