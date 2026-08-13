@@ -198,6 +198,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A subcollection's chosen icon shows on its tile again.** Setting
+  `collectionIcon` on a subcollection left its Grid tile on the striped
+  placeholder unless the image file happened to be named after the
+  subcollection itself — so pointing "Games" at `SuperTuxKart.png` showed
+  nothing, while the same file renamed to `Games.png` worked. The tile fell
+  back to the placeholder silently, which read as missing artwork rather
+  than a setting being ignored.
+
 - **Games whose icon is an SVG now get a cover when imported from the
   application menu.** Modern desktop packages increasingly ship only a
   scalable icon, and those imported with no artwork at all — on a test

@@ -62,6 +62,7 @@ private slots:
   void testCancelAllArtworkLoading_idempotent();
   void testCancelAllArtworkLoading_clearsPending();
   void testDestruct_withInFlightDispatch_doesNotCrash();
+  void testSubcollectionArtwork_survivesNameThatDiffersFromFile();
 
   // ArtworkLoadDispatcher generation-counter regression coverage (Kartend-7rpq)
   void testDispatcher_dispatchAfterCancelAllStillCompletes();
@@ -339,6 +340,36 @@ void TestArtworkManager::testDestruct_withInFlightDispatch_doesNotCrash() {
   QCoreApplication::processEvents();
 
   QVERIFY(true);
+}
+
+void TestArtworkManager::testSubcollectionArtwork_survivesNameThatDiffersFromFile() {
+  // Kartend-zxl0y. A subcollection tile takes its artwork from the child's
+  // collectionIcon first, and that can point at ANY file — its name has no
+  // relation to the subcollection's. The pre-dispatch identity check used to
+  // compare basenames, and for a subcollection the "basename" is its NAME, so
+  // an icon like ".../SuperTuxKart.png" on a subcollection called "Games" was
+  // dropped before ever reaching a worker and the tile fell back to the
+  // procedural placeholder. Nothing logged it: discarding a stale request is
+  // the normal job of that loop.
+  const QString artPath = m_tempDir.path() + "/SuperTuxKart.png";
+  QPixmap onDisk(64, 64);
+  onDisk.fill(Qt::green);
+  QVERIFY(onDisk.save(artPath, "PNG"));
+
+  ArtworkManager manager;
+  wireSetup(&manager);
+
+  ItemWidget widget;
+  widget.setItemDimensions(220, 280);
+  widget.setAsSubcollection(0, QStringLiteral("Games"));  // name != file basename
+  QVERIFY(widget.isSubcollection());
+
+  ArtworkInfo info{QPointer<ItemWidget>(&widget), artPath};
+  info.widgetIdentity = widget.getItemName();
+  manager.loadArtworkParallel({info}, /*highPriority=*/true);
+
+  // The decode is off-thread; spin until it lands rather than sleeping.
+  QTRY_VERIFY_WITH_TIMEOUT(manager.hasArtworkForWidget(&widget), 5000);
 }
 
 // ─── ArtworkLoadDispatcher generation-counter coverage (Kartend-7rpq) ───────

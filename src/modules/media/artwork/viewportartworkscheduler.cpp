@@ -194,22 +194,40 @@ void ViewportArtworkScheduler::collectUncachedAndApplyCached(const QList<Artwork
     // delivered. Widgets are pooled and recycled across roles (item ↔
     // subcollection ↔ virtual folder); without this check, a queued artwork
     // load for the previous role can clobber the new role's pixmap.
-    QString widgetBaseName;
+    //
+    // PREFER THE IDENTITY SNAPSHOT, exactly as the delivery gate below does.
+    // This used to compare basenames only, and for a subcollection the
+    // "basename" is its NAME — which silently required the artwork file to be
+    // named after the subcollection. That held while the only source was an
+    // image named after the child in the parent's artwork directory, and broke
+    // the moment collectionIcon became the first choice (Kartend-zxl0y): an
+    // icon at any other filename was dropped here, before dispatch, and the
+    // tile fell back to the procedural placeholder. Nothing logged it, because
+    // dropping a stale request is the normal case this loop exists for.
+    QString widgetIdentity;
     if (info.mediaItem->isSubcollection() || info.mediaItem->isVirtualFolder()) {
-      widgetBaseName = info.mediaItem->getItemName();
+      widgetIdentity = info.mediaItem->getItemName();
     } else {
-      const QString widgetFilePath = info.mediaItem->getFilePath();
-      if (widgetFilePath.isEmpty()) {
+      widgetIdentity = info.mediaItem->getFilePath();
+    }
+    if (widgetIdentity.isEmpty()) {
+      continue;
+    }
+    if (!info.widgetIdentity.isEmpty()) {
+      if (widgetIdentity != info.widgetIdentity) {
         continue;
       }
-      widgetBaseName = QFileInfo(widgetFilePath).completeBaseName();
-    }
-    if (widgetBaseName.isEmpty()) {
-      continue;
-    }
-    const QString artworkBaseName = QFileInfo(info.artworkPath).completeBaseName();
-    if (ArtworkUtils::baseMatchKey(widgetBaseName) != ArtworkUtils::baseMatchKey(artworkBaseName)) {
-      continue;
+    } else {
+      // Legacy fallback for an ArtworkInfo built without the identity field.
+      const QString widgetBaseName =
+          (info.mediaItem->isSubcollection() || info.mediaItem->isVirtualFolder())
+              ? widgetIdentity
+              : QFileInfo(widgetIdentity).completeBaseName();
+      const QString artworkBaseName = QFileInfo(info.artworkPath).completeBaseName();
+      if (ArtworkUtils::baseMatchKey(widgetBaseName) !=
+          ArtworkUtils::baseMatchKey(artworkBaseName)) {
+        continue;
+      }
     }
 
     QPixmap cached = m_owner->getCachedPixmap(info.artworkPath);
