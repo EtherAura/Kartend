@@ -302,6 +302,11 @@ auto SettingsUtils::getPresentationProfilesPath() -> QString {
   return info.absoluteDir().absoluteFilePath("presentation_profiles.json");
 }
 
+auto SettingsUtils::getSearchPresetsPath() -> QString {
+  const QFileInfo info(getConfigPath());
+  return info.absoluteDir().absoluteFilePath("search_presets.json");
+}
+
 auto SettingsUtils::tightenConfigPermissions() -> void {
   const QString path = getConfigPath();
   if (!QFile::exists(path)) {
