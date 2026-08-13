@@ -152,8 +152,8 @@ void TestLaunchCommandBuilder::testDerivedPathTokens_data() {
       << QStringLiteral("%filename% %name%") << QStringList{"concert.mp4", "concert", file};
   // Naming a part of the path is not placing the media argument: %1 still
   // decides that, and here it suppresses the fallback so the path appears once.
-  QTest::newRow("with-explicit-media")
-      << QStringLiteral("--title=%name% %1") << QStringList{QStringLiteral("--title=concert"), file};
+  QTest::newRow("with-explicit-media") << QStringLiteral("--title=%name% %1")
+                                       << QStringList{QStringLiteral("--title=concert"), file};
   // An unrecognised %word% token is passed through verbatim rather than
   // blanked, so a typo stays visible (the preview flags it as unresolved).
   QTest::newRow("unknown-token") << QStringLiteral("--x %nope%")

@@ -123,11 +123,10 @@ void TestMultiDisc::group_ignoresLoneDiscFile() {
 void TestMultiDisc::group_separatesIdenticalNamesInDifferentDirectories() {
   // Same title, two folders: two releases. Merging them would build a playlist
   // that jumps between directories.
-  const QStringList paths{
-      QStringLiteral("/m/live/Recital (Disc 1).flac"),
-      QStringLiteral("/m/live/Recital (Disc 2).flac"),
-      QStringLiteral("/m/studio/Recital (Disc 1).flac"),
-      QStringLiteral("/m/studio/Recital (Disc 2).flac")};
+  const QStringList paths{QStringLiteral("/m/live/Recital (Disc 1).flac"),
+                          QStringLiteral("/m/live/Recital (Disc 2).flac"),
+                          QStringLiteral("/m/studio/Recital (Disc 1).flac"),
+                          QStringLiteral("/m/studio/Recital (Disc 2).flac")};
   const auto groups = MultiDisc::group(paths);
   QCOMPARE(groups.size(), 2);
   QCOMPARE(groups.at(0).files.size(), 2);

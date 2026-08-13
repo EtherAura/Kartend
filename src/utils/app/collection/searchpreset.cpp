@@ -117,8 +117,8 @@ ErrorUtils::Result<QList<SearchPreset>> loadRegistry(const QString &filePath) {
   const auto doc = QJsonDocument::fromJson(file.readAll(), &err);
   file.close();
   if (err.error != QJsonParseError::NoError || !doc.isArray()) {
-    return ErrorContext::error(ErrorCode::InvalidArgument,
-                               "Search-preset registry is malformed", "SearchPresetIO::loadRegistry")
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Search-preset registry is malformed",
+                               "SearchPresetIO::loadRegistry")
         .withDetails(err.errorString());
   }
 
@@ -152,8 +152,7 @@ ErrorUtils::Result<bool> saveRegistry(const QList<SearchPreset> &presets, const 
   }
   file.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
   if (!file.commit()) {
-    return ErrorContext::error(ErrorCode::FileWriteError,
-                               "Could not commit search-preset registry",
+    return ErrorContext::error(ErrorCode::FileWriteError, "Could not commit search-preset registry",
                                "SearchPresetIO::saveRegistry")
         .withDetails(filePath);
   }

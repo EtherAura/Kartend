@@ -114,8 +114,8 @@ void TestSearchPreset::fromViewSettings_snapshotsAndDefaultsTheName() {
   view.collectionTypeFilter = QStringLiteral("Reference");
   view.hideSubcollectionTiles = true;
 
-  const auto named =
-      SearchPresetIO::fromViewSettings(view, QStringLiteral("favorite:true"), QStringLiteral("Dip"));
+  const auto named = SearchPresetIO::fromViewSettings(view, QStringLiteral("favorite:true"),
+                                                      QStringLiteral("Dip"));
   QCOMPARE(named.name, QStringLiteral("Dip"));
   QCOMPARE(named.searchText, QStringLiteral("favorite:true"));
   QCOMPARE(named.sortMode, SortMode::Random);
