@@ -128,6 +128,13 @@ kartend_add_test(NAME PresentationProfile
   LINK kartend_utils
 )
 
+# SearchPreset tests (Kartend-jklv4). Same registry shape as the profiles
+# above: JSON round-trip + apply/snapshot + name-keyed registry helpers.
+kartend_add_test(NAME SearchPreset
+  SOURCES utils/app/test_searchpreset.cpp
+  LINK kartend_utils
+)
+
 # CollectionHealth tests (Kartend-lprv). Pure analyzer over fixture rows.
 kartend_add_test(NAME CollectionHealth
   SOURCES utils/db/test_collectionhealth.cpp
