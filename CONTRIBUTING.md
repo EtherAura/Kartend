@@ -234,3 +234,19 @@ release moves the now-oldest one into the archive: cut its `## [X.Y.Z]` block
 (and its comparison link-ref) into `docs/changelogs/`, then refresh the root's
 bottom-of-file link-refs and the "Older releases" pointer. This keeps the root
 file small enough to grep and to render cleanly in PR diffs (Kartend-zdgj).
+
+### Opting out of the CHANGELOG Enforcer
+
+The **CHANGELOG Enforcer** workflow fails any change touching `src/` (outside
+`tests/`) that adds no entry under `[Unreleased]`. Doc-only, test-only and
+CI-only changes are exempt automatically. For a genuinely internal change —
+a refactor, a diagnostic — opt out explicitly:
+
+- **On a PR:** add the `no-changelog` label.
+- **On a push:** put `[no-changelog]` **on a line of its own** in the commit
+  message. Mentioning it mid-sentence does not count, so a commit that merely
+  discusses the marker is still checked.
+
+The marker exempts **only the commit carrying it**. Batching a marked commit
+with unmarked `src/` work does not exempt that work — each commit stands on
+its own, and a push mixing the two is still checked for the unmarked part.

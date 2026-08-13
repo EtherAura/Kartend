@@ -4,9 +4,10 @@ name: CHANGELOG Enforcer
 # adding a corresponding entry under [Unreleased] in CHANGELOG.md. Doc-only,
 # test-only, and CI-only changes are auto-exempted by the path check; anything
 # else can opt out with the `no-changelog` label (PRs) or a `[no-changelog]`
-# marker in a commit message (pushes). On a push the marker exempts ONLY the
-# commit carrying it — a marked commit batched with unmarked src/ work does
-# not exempt that work.
+# marker in a commit message (pushes). The marker must sit ALONE ON ITS OWN
+# LINE — merely mentioning it in prose does not opt out. On a push it exempts
+# ONLY the commit carrying it: a marked commit batched with unmarked src/ work
+# does not exempt that work.
 #
 # Rationale: CHANGELOG.md has lagged code several times in the past
 # (Kartend-pbed); manual discipline is fragile. This gate is a lightweight,
@@ -80,9 +81,16 @@ jobs:
             # silently exempted that work — and pushes to main here are
             # usually multi-commit, so the loophole was wide open. Now only
             # the unmarked commits are examined for user-visible changes.
+            # THE MARKER MUST BE ALONE ON A LINE. Matching it anywhere in the
+            # message meant a commit that merely MENTIONS it opted itself out —
+            # this workflow's own commit did exactly that and skipped the check
+            # while claiming to be exempt. The case that matters is `git revert`
+            # of a marked commit, which copies the original message verbatim and
+            # would silently inherit the exemption. Every real marker in this
+            # repo's history is already written on its own line.
             UNMARKED_SHAS=""
             for sha in $(git rev-list "${RANGE_BASE}..HEAD"); do
-              if git log -1 --format=%B "$sha" | grep -qF '[no-changelog]'; then
+              if git log -1 --format=%B "$sha" | grep -qE '^[[:space:]]*\[no-changelog\][[:space:]]*$'; then
                 echo "::notice::$(git log -1 --format='%h %s' "$sha") — carries [no-changelog], exempt."
               else
                 UNMARKED_SHAS="${UNMARKED_SHAS} ${sha}"
