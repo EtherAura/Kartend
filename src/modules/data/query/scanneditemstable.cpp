@@ -22,12 +22,18 @@ bool ScannedItemsTable::ensure() {
   // path holds the ABSOLUTE filesystem path (the PK / upsert key); rel_path
   // holds the media-dir-relative form that subfolder / virtual-folder queries
   // need. See dbmigrations.cpp v13 for the items-table counterpart.
+  //
+  // artwork_path is filled after staging, by ScanArtwork::resolveStagedArtwork
+  // (Kartend-guyc5) — not by insertBatch, so that the multi-disc collapse's
+  // generated playlist rows get resolved too. NULL means "no cover for this
+  // item", which is exactly what the apply then writes into items.
   if (!q.exec("CREATE TEMP TABLE IF NOT EXISTS scanned_items ("
               "path TEXT PRIMARY KEY, "
               "rel_path TEXT, "
               "name TEXT, "
               "last_modified TEXT, "
-              "file_size INTEGER DEFAULT 0"
+              "file_size INTEGER DEFAULT 0, "
+              "artwork_path TEXT"
               ")")) {
     ErrorUtils::logError(ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
                                                "Failed to create scanned_items temp table",
@@ -125,17 +131,26 @@ bool ScannedItemsTable::applyToItems(int legacyId, const QString &collectionUuid
   // entirely (Kartend-fux2w), so rows persisted through this legacy path
   // took DEFAULT 0 and never matched ByDateAdded smart playlists (the
   // evaluator treats date_added <= 0 as "unknown" and excludes the row).
+  //
+  // artwork_path IS in the DO UPDATE clause (like file_size, unlike
+  // date_added): it caches where the item's cover was found on disk at scan
+  // time (Kartend-guyc5), so a rescan must re-derive it — art added since the
+  // last scan has to appear, and art deleted since has to clear. Staged rows
+  // carry NULL when nothing resolved, which is precisely the "no cover" value
+  // every DB-side predicate tests for.
   if (!upsert.prepare(
           "INSERT INTO items (collection_id, collection_uuid, path, "
-          "rel_path, name, last_modified, file_size, date_added) "
-          "SELECT ?, ?, path, rel_path, name, last_modified, file_size, ? FROM scanned_items "
+          "rel_path, name, last_modified, file_size, date_added, artwork_path) "
+          "SELECT ?, ?, path, rel_path, name, last_modified, file_size, ?, artwork_path "
+          "FROM scanned_items "
           "WHERE true "
           "ON CONFLICT(collection_uuid, path) DO UPDATE SET "
           "collection_id=excluded.collection_id, "
           "rel_path=excluded.rel_path, "
           "name=excluded.name, "
           "last_modified=excluded.last_modified, "
-          "file_size=excluded.file_size")) {
+          "file_size=excluded.file_size, "
+          "artwork_path=excluded.artwork_path")) {
     if (errorDetailsOut) {
       *errorDetailsOut = upsert.lastError().text();
     } else {

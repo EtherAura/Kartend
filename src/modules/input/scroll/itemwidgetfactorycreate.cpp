@@ -294,24 +294,16 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
 
   qint64 afterDirLookup = lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
 
-  // Mirror the subfolder structure from media directory to artwork directory
-  // when:
-  // 1. includeArtworkSubfolders is explicitly enabled, OR
-  // 2. artworkDirectory equals mediaDirectory (artwork is co-located with
-  // media)
-  const QString &mediaDir = m_context.config.mediaDirectory;
-  bool shouldMirrorSubfolders = m_context.config.folderBrowsing.includeArtworkSubfolders ||
-                                (QDir(artworkDir).absolutePath() == QDir(mediaDir).absolutePath());
-
-  if (shouldMirrorSubfolders && !mediaDir.isEmpty()) {
-    QDir mediaDirObj(mediaDir);
-    QString relativePath = mediaDirObj.relativeFilePath(fullPath);
-    // Extract the directory component (subfolder path without the filename)
-    QString relativeDir = QFileInfo(relativePath).path();
-    if (!relativeDir.isEmpty() && relativeDir != ".") {
-      artworkDir = QDir(artworkDir).absoluteFilePath(relativeDir);
-    }
-  }
+  // Mirror the media subfolder structure into the artwork directory when the
+  // collection asks for it (includeArtworkSubfolders, or artwork co-located
+  // with media). The shared helper also decides when NOT to mirror — an item
+  // living outside the media directory has no media-relative subfolder, and
+  // the `../../..` chain this used to build resolved outside the artwork tree
+  // entirely (Kartend-j5amz). CoverFlowController resolves its cards through
+  // the same helper so the two views never search different directories.
+  artworkDir = ArtworkUtils::mirroredArtworkDirectory(
+      artworkDir, m_context.config.mediaDirectory, fullPath,
+      m_context.config.folderBrowsing.includeArtworkSubfolders);
 
   // if the user previously shift+middle-clicked this item to
   // cycle its artwork type, prefer the override over the legacy lookup so a

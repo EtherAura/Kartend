@@ -375,12 +375,13 @@ here. See [Scraper](Scraper.md) for the workflow side.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `includeContentSubfolders` | bool | `false` | Show subfolders as virtual-folder tiles. |
-| `includeArtworkSubfolders` | bool | `false` | Match artwork in subfolders too. |
+| `includeArtworkSubfolders` | bool | `false` | Mirror content subfolders into the artwork folder when matching artwork. |
 | `showAllSubfolderItems` | bool | `false` | Mix subfolder items into the parent grid. |
 | `showAllSubcollectionItems` | bool | `false` | Mix descendant collection items into this grid. |
 | `showHiddenFolders` | bool | `false` | Include dot-prefixed folders. |
 | `extractArchives` | bool | `false` | Auto-extract archives before launch. |
 | `extractedExtension` | string | empty | Which extension to launch from inside an archive. |
+| `groupMultiDisc` | bool | `false` | Collapse files that differ only by a disc marker — `(Disc 1)`, `(CD 2)`, `[Side A]` — into one item backed by a playlist generated under Kartend's data directory. See [Multi-disc grouping](Collections.md#multi-disc-grouping). |
 
 ### Grid layout
 

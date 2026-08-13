@@ -179,6 +179,7 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
 
   o["view_type"] = CollectionUtils::viewTypeToString(c.viewType);
   o["hide_missing_artwork"] = c.hideMissingArtwork;
+  o["group_multi_disc"] = c.groupMultiDisc;
   o["horizontal_spacing"] = c.gridLayout.horizontalSpacing;
   o["vertical_spacing"] = c.gridLayout.verticalSpacing;
   o["hide_horizontal_scrollbar"] = c.gridLayout.hideHorizontalScrollbar;
@@ -319,6 +320,9 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.viewType = CollectionUtils::stringToViewType(rawViewType, &viewTypeFallback);
   if (viewTypeFallback) warnUnknown("view_type", rawViewType, "grid");
   c.hideMissingArtwork = o["hide_missing_artwork"].toBool(false);
+  // Absent in karts written before multi-disc grouping existed, and false is
+  // exactly what those collections meant — the files were never collapsed.
+  c.groupMultiDisc = o["group_multi_disc"].toBool(false);
   c.gridLayout.horizontalSpacing = o["horizontal_spacing"].toInt(UIConstants::Grid::SPACING);
   c.gridLayout.verticalSpacing = o["vertical_spacing"].toInt(20);
   c.gridLayout.hideHorizontalScrollbar = o["hide_horizontal_scrollbar"].toBool(false);

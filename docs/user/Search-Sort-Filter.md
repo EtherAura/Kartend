@@ -60,8 +60,8 @@ literally except for `tag:` which case-folds.
 |-------|---------|
 | `played:true` / `played:false` | Items that have / haven't been launched at least once (uses `launch_history`). |
 | `favorite:true` / `favorite:false` | Items present (or absent) in the reserved Favorites playlist. |
-| `missing:artwork` | Items with no artwork file on disk. |
-| `has:artwork` | Inverse of `missing:artwork` — items with artwork resolved. |
+| `missing:artwork` | Items no cover was found for in the collection's artwork folder when it was last scanned. |
+| `has:artwork` | Inverse of `missing:artwork` — items a cover was found for. Per-item [artwork links](Artwork.md) don't count; auto-discovered covers do, typed cover subfolders included. |
 | `tag:NAME` | Items whose tag list contains `NAME` (case-insensitive). Repeat to AND multiple tags: `tag:rewatch tag:holiday`. |
 
 Tokens you type but Kartend doesn't recognise (typos, unsupported
@@ -218,6 +218,11 @@ are skipped at compile time without aborting the rest of the list.
 `hideMissingArtwork=true` (per-collection) hides items that have no
 artwork found. Subcollection / virtual-folder tiles are unaffected
 (they always render).
+
+This one checks your artwork folder as it is now, not as it was at the
+last scan — so it can disagree with `missing:artwork` and the *Missing
+artwork* smart playlist for a short while after you add or delete covers,
+until that collection is scanned again.
 
 Set per-collection in Settings → Appearance.
 

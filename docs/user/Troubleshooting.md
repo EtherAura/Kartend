@@ -85,7 +85,7 @@ a soft reload (re-renders without re-scanning).
 | Filename mismatch | Artwork is matched by base filename (case-sensitive on case-sensitive filesystems). `a-film.mkv` needs `a-film.png` (or `.jpg` / `.jpeg` / `.webp`) in the artwork directory. |
 | Wrong artwork directory | Settings → Paths → **Artwork Directory**. |
 | Unsupported image format | Convert to `png`, `jpg`, `jpeg`, or `webp`. |
-| Artwork in nested folders | Enable `includeArtworkSubfolders=true`. |
+| Artwork in nested folders | Enable `includeArtworkSubfolders=true`. It expects the artwork folder to be arranged like the content folder — see [Artwork → Subfolders](Artwork.md#subfolders). |
 | Large artwork directory still loading | Artwork loads asynchronously in batches. Wait a few seconds; the in-memory + disk cache speeds up subsequent opens. |
 | Custom artwork type | Standard auto-discovery doesn't apply. Add a manual link via right-click → **Edit artwork links…**. See [Artwork → Custom artwork types](Artwork.md#custom-artwork-types). |
 

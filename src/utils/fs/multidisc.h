@@ -2,6 +2,7 @@
 #define KARTEND_UTILS_FS_MULTIDISC_H
 
 #include <QList>
+#include <QPair>
 #include <QString>
 #include <QStringList>
 
@@ -77,6 +78,58 @@ struct Group {
 /// with characters that are illegal or awkward in a file name replaced by
 /// underscores. Never returns an empty string.
 [[nodiscard]] QString m3uFileNameFor(const QString &base);
+
+/// Directory the generated .m3u for a collection's releases belongs in:
+/// `<appDataDir>/multi-disc/<collectionUuid>`, a sibling of the
+/// `launcher-imports/<source>` root the .kartlink stubs already use.
+///
+/// Generated playlists live under Kartend's own data directory and never in
+/// the user's media folders, so turning the feature off leaves nothing behind
+/// and a re-scan is free to regenerate them. `appDataDir` is passed in rather
+/// than read from QStandardPaths here, which keeps this a pure string join —
+/// testable without depending on the machine it runs on.
+///
+/// Scoped per collection uuid, not per directory: two collections may cover
+/// the same folder with different settings, and one must not clean up or
+/// overwrite the other's playlists. Returns an empty string for an empty uuid
+/// rather than a path pointing at the shared root, which a caller could
+/// otherwise delete wholesale.
+[[nodiscard]] QString playlistDirFor(const QString &appDataDir, const QString &collectionUuid);
+
+/// The per-disc metadata that collapsing has to reconcile. Deliberately a
+/// flat value type rather than a DB row: the merge policy is a decision about
+/// what the user keeps, and it should be testable without a database.
+struct DiscMetadata {
+  QString artworkPath;
+  QString notes;
+  QString sourceUrl;
+  /// Half-star scale, -1 meaning unrated (the items-table convention).
+  int rating = -1;
+  QStringList tags;
+  /// Ordered so a merge result is stable; keys are case-sensitive as stored.
+  QList<QPair<QString, QString>> customFields;
+  bool pinned = false;
+  bool hidden = false;
+  bool continueLater = false;
+};
+
+/// Reconcile the discs of one release into the metadata its single collapsed
+/// item should carry. `discsInOrder` is disc order, so the first entry is
+/// disc 1.
+///
+/// Every unique property is kept — collapsing must not lose what the user
+/// recorded against disc 2. Disc 1 stays authoritative, which is the same
+/// fill-missing-never-overwrite rule the launcher importers and the scraper
+/// already follow:
+///   * Scalars (artwork, notes, source URL, rating) take disc 1's value; a
+///     later disc only fills a field disc 1 left empty.
+///   * Tags union, de-duplicated case-insensitively, in first-seen order.
+///   * Custom fields merge by key — disc 1 wins a collision, later discs
+///     contribute keys disc 1 does not have.
+///   * State flags OR together: marking disc 2 "continue later" is a
+///     statement about the release, and clearing it on collapse would throw
+///     away something the user did on purpose.
+[[nodiscard]] DiscMetadata mergeDiscs(const QList<DiscMetadata> &discsInOrder);
 
 } // namespace MultiDisc
 

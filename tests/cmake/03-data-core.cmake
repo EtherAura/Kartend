@@ -79,6 +79,27 @@ kartend_add_test(NAME ScanServicePersist
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Multi-disc scan integration (Kartend-3mq7v): the collapse post-pass that
+# rewrites the staged rows of a multi-disc release into one .m3u-backed item,
+# plus the regenerate/sweep rules when discs come and go and the cleanup when
+# the per-collection setting is turned off. Real on-disk SQLite, same
+# standalone ScanService wiring as ScanServicePersist above.
+kartend_add_test(NAME MultiDiscCollapse
+  SOURCES modules/query/test_multidisccollapse.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# Scan-side artwork resolution (Kartend-guyc5): items.artwork_path — the column
+# behind every DB-side artwork predicate — was never written by either persist
+# pipeline, so smart playlists, the has:/missing:artwork tokens, Collection
+# Health and the artwork review queue all reported arted items as artless.
+# Asserts the stored path equals what the render path resolves for the same
+# item, across the lookup cascade and the multi-disc disc-marked fallback.
+kartend_add_test(NAME ScanArtwork
+  SOURCES modules/query/test_scanartwork.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # QueryManager cache generation-token tests (Kartend-z8i0c): the pure
 # QueryCacheHash digests that drive count/range cache hit/miss/invalidate.
 kartend_add_test(NAME QueryManagerCache

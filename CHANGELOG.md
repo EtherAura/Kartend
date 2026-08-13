@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A release split across several discs can now appear as one item.** A
+  recording or film that arrives as `Recital (Disc 1).flac` and `Recital
+  (Disc 2).flac` used to browse as two tiles, each holding half of
+  something you think of as one thing. Turn on **Group multi-disc releases
+  into one item** for a collection and files whose names differ only by a
+  disc marker — `(Disc 1)`, `(CD 2)`, `[Side A]`, with `disk` spelled
+  either way — collapse into a single tile named for what they have in
+  common, which plays every part in order through a playlist Kartend
+  generates. That playlist lives in Kartend's own data directory, never
+  beside your media: the feature reads your folders and does not write to
+  them. Metadata is merged rather than picked from whichever file was
+  scanned first — the first disc wins where two discs disagree, later
+  discs fill in anything it lacks, and tags accumulate across all of them,
+  so artwork or notes attached to a later part are not lost. Anything you
+  edit on the grouped item afterwards outranks all of it and survives
+  rescans. An art folder filed per disc needs no renaming either: a
+  grouped item with no cover of its own now takes the art of its lowest
+  disc, and a cover named for the release still wins where you have one.
+  Grouping is per-collection and off by default, so existing
+  libraries look exactly as they did until you ask for this. A file
+  standing alone is never collapsed, and identically-named releases in
+  different folders stay separate. Turning it back off restores the
+  individual items, per-disc notes and ratings included, and removes the
+  playlists it generated — nothing is left behind either way.
+
+- **Games installed while Kartend is open now appear on their own.** A
+  launcher collection used to refresh at startup or when you asked it to, so
+  a game installed in Steam or Heroic mid-session stayed invisible until the
+  next launch. Kartend now watches the folders those launchers write their
+  manifests into and re-syncs shortly after they change. It waits for the
+  dust to settle first — a Steam download rewrites its manifest repeatedly
+  while it runs, and the sync is silent and idempotent, so nothing interrupts
+  you and a burst of writes still costs one pass. Only sources you have
+  actually imported are watched.
+
 - **A smart playlist can hold more than one rule.** Until now it held
   exactly one, so "recently launched" and "favourite" were each expressible
   but "recently launched *and* favourite" was not. A playlist now takes a
@@ -33,16 +68,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   disk: `%name%` still gives their title, the path-part tokens come out
   empty, and **Preview launch command…** now says so instead of leaving you
   to wonder why an argument went blank.
-
-- **Games installed while Kartend is open now appear on their own.** A
-  launcher collection used to refresh at startup or when you asked it to, so
-  a game installed in Steam or Heroic mid-session stayed invisible until the
-  next launch. Kartend now watches the folders those launchers write their
-  manifests into and re-syncs shortly after they change. It waits for the
-  dust to settle first — a Steam download rewrites its manifest repeatedly
-  while it runs, and the sync is silent and idempotent, so nothing interrupts
-  you and a burst of writes still costs one pass. Only sources you have
-  actually imported are watched.
 
 - **ES-DE libraries can be imported, one collection per system.** File →
   Import → "Import from Launcher…" now detects ES-DE and brings in each of
@@ -207,6 +232,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-import to pick up, as before (Kartend-i366w).
 
 ### Fixed
+
+- **Collections that keep artwork in matching subfolders now find it even
+  when the content folder is a symbolic link.** With **Include Artwork
+  Subfolders** on, Kartend looks for an item's cover in the artwork subfolder
+  matching the item's own content subfolder — and working out which subfolder
+  that is assumed the item sat under the content folder exactly as you spelled
+  it. A collection pointed at a symbolic link does not: its items are known by
+  the real location behind the link, which is a different path. The
+  disagreement turned into a chain of `..` steps that climbed out of the
+  artwork folder entirely, so the search happened somewhere belonging to
+  neither setting and every tile in a subfolder fell back to the placeholder.
+  An item that does not sit under the content folder now has its cover looked
+  for in the artwork folder itself, which is the same place a scan records it,
+  so tiles and the scan's record agree. Cover flow resolved covers through its
+  own copy of this and had the same fault; both now share one answer.
+
+- **Everything that answers "does this item have a cover?" now agrees with
+  what you can see.** The *Has artwork* and *Missing artwork* smart-playlist
+  rules, the `has:artwork` and `missing:artwork` search terms, the
+  missing-artwork count in Collection Health and the artwork wizard's
+  worklist all read a record of the cover found for each item — and the scan
+  never wrote that record. So they reported an entire library as artless
+  while its tiles painted covers perfectly well: *Missing artwork* returned
+  everything, *Has artwork* returned nothing, and the health dashboard put
+  the missing count at 100%. Scanning a collection now files each item's
+  cover as it finds it, using the same search the grid uses — the artwork
+  folder and its typed subfolders, matched on the item's name, including the
+  case where a multi-disc release takes the art of one of its discs. The
+  record is refreshed on every scan, so art you add or delete is reflected
+  the next time that collection is scanned, and the grid itself is unchanged:
+  it still looks at your folders directly and remains the last word on what
+  you see.
 
 - **A subcollection's chosen icon shows on its tile again.** Setting
   `collectionIcon` on a subcollection left its Grid tile on the striped

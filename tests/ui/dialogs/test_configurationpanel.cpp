@@ -16,11 +16,13 @@
 #include "pathutils.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QDateTime>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
+#include <QSignalSpy>
 #include <QTest>
 
 class TestConfigurationPanel : public QObject {
@@ -31,6 +33,10 @@ private slots:
   void lastAuditedLabel_neverWhenHookReturnsZero();
   void lastAuditedLabel_usesCanonicalUuidAndShowsRelative();
   void openAuditButton_passesWorkingCopyWithUnsavedEdits();
+  void groupMultiDisc_loadsFromConfig();
+  void groupMultiDisc_savesToConfig();
+  void groupMultiDisc_togglingMarksDialogDirty();
+  void groupMultiDisc_clearResetsToDefaultOff();
 };
 
 namespace {
@@ -49,6 +55,10 @@ QString canonicalUuid(const CollectionConfig &c) {
 
 QLabel *lastAuditedLabel(const ConfigurationPanel &panel) {
   return panel.findChild<QLabel *>(QStringLiteral("lastAuditedValueLabel"));
+}
+
+QCheckBox *groupMultiDiscBox(const ConfigurationPanel &panel) {
+  return panel.findChild<QCheckBox *>(QStringLiteral("groupMultiDiscCheckBox"));
 }
 
 } // namespace
@@ -162,6 +172,92 @@ void TestConfigurationPanel::openAuditButton_passesWorkingCopyWithUnsavedEdits()
   QCOMPARE(
       launched.scraperOverrides.datFilePaths,
       (QStringList{QStringLiteral("/d/a.dat"), QStringLiteral("/d/b.dat")})); // saved + unsaved
+}
+
+// Kartend-3mq7v: multi-disc grouping is a per-collection bool that persists,
+// round-trips through .kart and feeds the scan signature — but it was
+// unreachable until this checkbox existed. These four cover the same
+// load/save/dirty/clear contract every other per-collection bool on this panel
+// has (watchFilesystem is the closest analogue).
+
+void TestConfigurationPanel::groupMultiDisc_loadsFromConfig() {
+  ConfigurationPanel panel;
+  CollectionConfig music = makeCollection(QStringLiteral("Music"), QStringLiteral("/m/music"));
+  music.groupMultiDisc = true;
+  QList<CollectionConfig> cols{music};
+  int idx = 0;
+  SettingsModel model;
+  model.workingCollections = &cols;
+  model.currentIndex = &idx;
+  panel.setModel(&model);
+
+  QCheckBox *box = groupMultiDiscBox(panel);
+  QVERIFY(box);
+  QVERIFY(!box->isChecked()); // default-off before load
+  panel.load();
+  QVERIFY(box->isChecked());
+
+  // ...and a collection that leaves it off loads unchecked, so switching
+  // between collections in the tree can't leak the previous one's value.
+  cols[0].groupMultiDisc = false;
+  panel.load();
+  QVERIFY(!box->isChecked());
+}
+
+void TestConfigurationPanel::groupMultiDisc_savesToConfig() {
+  ConfigurationPanel panel;
+  QList<CollectionConfig> cols{makeCollection(QStringLiteral("Music"), QStringLiteral("/m/music"))};
+  int idx = 0;
+  SettingsModel model;
+  model.workingCollections = &cols;
+  model.currentIndex = &idx;
+  panel.setModel(&model);
+  panel.load();
+
+  QCheckBox *box = groupMultiDiscBox(panel);
+  QVERIFY(box);
+  box->setChecked(true);
+  panel.save();
+  QVERIFY(cols[0].groupMultiDisc);
+
+  box->setChecked(false);
+  panel.save();
+  QVERIFY(!cols[0].groupMultiDisc);
+}
+
+void TestConfigurationPanel::groupMultiDisc_togglingMarksDialogDirty() {
+  // Without this the Apply button would stay greyed out and the toggle would
+  // look like it did nothing.
+  ConfigurationPanel panel;
+  QList<CollectionConfig> cols{makeCollection(QStringLiteral("Music"), QStringLiteral("/m/music"))};
+  int idx = 0;
+  SettingsModel model;
+  model.workingCollections = &cols;
+  model.currentIndex = &idx;
+  panel.setModel(&model);
+  panel.load();
+
+  QSignalSpy spy(&panel, &ConfigurationPanel::changed);
+  QVERIFY(spy.isValid());
+  groupMultiDiscBox(panel)->setChecked(true);
+  QCOMPARE(spy.count(), 1);
+}
+
+void TestConfigurationPanel::groupMultiDisc_clearResetsToDefaultOff() {
+  ConfigurationPanel panel;
+  CollectionConfig music = makeCollection(QStringLiteral("Music"), QStringLiteral("/m/music"));
+  music.groupMultiDisc = true;
+  QList<CollectionConfig> cols{music};
+  int idx = 0;
+  SettingsModel model;
+  model.workingCollections = &cols;
+  model.currentIndex = &idx;
+  panel.setModel(&model);
+  panel.load();
+  QVERIFY(groupMultiDiscBox(panel)->isChecked());
+
+  panel.clear();
+  QVERIFY(!groupMultiDiscBox(panel)->isChecked());
 }
 
 QTEST_MAIN(TestConfigurationPanel)

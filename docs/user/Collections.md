@@ -209,7 +209,7 @@ Related toggles (all per-collection, on the **Paths & Extensions** tab):
 | Setting | INI key | Effect |
 |---------|---------|--------|
 | Include Content Subfolders | `includeContentSubfolders` | Show subfolders as virtual tiles. |
-| Include Artwork Subfolders | `includeArtworkSubfolders` | Match artwork from any subfolder. |
+| Include Artwork Subfolders | `includeArtworkSubfolders` | Look for each item's artwork in the artwork subfolder matching the item's own content subfolder. See [Artwork](Artwork.md#subfolders). |
 | Show All Subfolder Items | `showAllSubfolderItems` | Mix items from subfolders with the parent's items, instead of requiring you to enter the subfolder. |
 | Show Hidden Folders | `showHiddenFolders` | Include dot-prefixed (`.config`-style) folders. |
 | Hide Subfolder Titles | `hideSubfolderTitles` | Hide titles on virtual folder tiles. |
@@ -261,6 +261,104 @@ If you don't need automatic rescans, leave it off — for collections
 that change only when you explicitly edit them, the manual
 **File → Rescan Collection** (`Ctrl+F5`) is cheaper. The watcher's
 RAM cost scales with the number of subdirectories per collection.
+
+## Multi-disc grouping
+
+Some releases arrive as several files that are really one thing — a
+recital split across two discs, a film cut over three, an audiobook
+pressed as four. Scanned literally, each part becomes its own tile,
+and playing the release means launching each part in turn.
+
+Turn on **Group multi-disc releases into one item** and files whose
+names differ only by a disc marker collapse into a single item, named
+for what they have in common:
+
+```
+Recital (Disc 1).flac  ┐
+Recital (Disc 2).flac  ├─►  Recital
+Recital (Disc 3).flac  ┘
+```
+
+Launching the grouped item plays every part in order. Kartend does
+that by generating an `.m3u` playlist — but the playlist is written
+under Kartend's own data directory, not into your media folder.
+Nothing is added, renamed, or moved next to your files; the feature
+reads your folders and never writes to them.
+
+| Setting | INI key | Default | Effect |
+|---------|---------|---------|--------|
+| Group Multi-Disc | `groupMultiDisc` | `false` | Collapse disc-marked files of one release into a single item backed by a generated playlist. |
+
+> **Where to find this** — Settings Dialog → per-collection
+> **Configuration** tab → **Group multi-disc releases into one item**.
+
+### What counts as a disc marker
+
+The marker has to sit inside a parenthesised or bracketed tag group,
+and matching is case-insensitive with the space optional:
+
+| Recognised | Not recognised |
+|------------|----------------|
+| `(Disc 1)`, `(disc 2)` | `Recital Disc 1.flac` (no brackets) |
+| `(Disk 1)` — folds to `disc`, so both spellings group together | `Recital - Part 1.flac` (not a disc word) |
+| `(CD 2)`, `(CD3)` | |
+| `[Side A]` | |
+
+Numbered discs sort by value, so disc 10 follows disc 9 rather than
+disc 1; lettered sides sort alphabetically after any numbered parts.
+
+Grouping is scoped **per directory**, so two different releases that
+happen to share a title stay separate as long as they live in
+separate folders. A base title with only one disc file is left alone
+— collapsing a lone file would rename it for no benefit and hide its
+disc tag. Files carrying no disc marker are ignored entirely.
+
+### Metadata across the parts
+
+The parts' metadata is merged rather than taken from whichever file
+happened to be scanned first:
+
+- The **first disc is authoritative**. Where two parts disagree on a
+  field, disc 1's value stands.
+- Later discs **fill gaps only** — a description, rating or artwork
+  path that disc 1 lacks is picked up from a later part rather than
+  left empty. This is the same fill-missing-never-overwrite rule the
+  scraper and the launcher importers follow.
+- **Tags accumulate** across every part, de-duplicated.
+- Anything **you** edit on the grouped item outranks all of it and
+  survives later rescans.
+
+### Adding, removing, and turning it off
+
+The grouping is recomputed on every scan, so it keeps up with the
+folder:
+
+- Add a disc and the next scan folds it into the existing item.
+- Drop a release to a single remaining disc and it stops being a
+  group — the lone file returns as an ordinary item.
+- Delete the release and its generated playlist is swept with it.
+
+Turning the setting **off** restores the individual per-disc items
+and deletes the playlists Kartend generated for that collection.
+Per-disc notes, tags and ratings are preserved through the round
+trip, so toggling the setting is not a destructive act in either
+direction.
+
+Because grouping changes what a scan produces, flipping the setting
+invalidates the collection's cached scan by itself: it re-scans the
+next time it loads, without you running **Rescan Collection**
+(`Ctrl+F5`) by hand.
+
+### Artwork for a grouped item
+
+The grouped item is called `Recital`, but the art beside it is
+usually filed per disc. Both work: an image named for the release
+(`Recital.png`) is matched first, and if there is none, the art
+filed against its **lowest disc** stands in — `Recital (Disc 1).png`,
+or `Recital (CD 2).png` if disc 1 has no art of its own. Nothing has
+to be renamed, and a [manual per-item link](Artwork.md#manual-per-item-links)
+still overrides both. See [Artwork](Artwork.md#artwork-for-multi-disc-releases)
+for the full rule, which applies to any item, grouped or not.
 
 ## Variant inspector
 
@@ -347,13 +445,14 @@ the section structure at load time and are not INI keys.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `includeContentSubfolders` | bool | `false` | Show subfolders as virtual tiles. |
-| `includeArtworkSubfolders` | bool | `false` | Match artwork in subfolders. |
+| `includeArtworkSubfolders` | bool | `false` | Mirror content subfolders into the artwork folder when matching artwork. |
 | `showAllSubfolderItems` | bool | `false` | Flatten subfolder items into parent grid. |
 | `showHiddenFolders` | bool | `false` | Include dot-prefixed folders. |
 | `showAllSubcollectionItems` | bool | `false` | Mix descendants' items into this collection. |
 | `extractArchives` | bool | `false` | Auto-extract `.zip` / `.7z` etc. before launch. |
 | `extractedExtension` | string | empty | Which extension inside the archive to launch. |
 | `watchFilesystem` | bool | `false` | Auto-rescan on filesystem changes (debounced). See [Filesystem watcher](#filesystem-watcher). |
+| `groupMultiDisc` | bool | `false` | Collapse disc-marked parts of one release into a single item. See [Multi-disc grouping](#multi-disc-grouping). |
 
 ### Display options
 

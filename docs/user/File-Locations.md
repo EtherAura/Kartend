@@ -136,6 +136,30 @@ on first open. You lose:
 
 Configuration in `kartend.cfg` is preserved.
 
+## Generated playlists
+
+```
+~/.local/share/kartend/
+└── multi-disc/
+    └── <collection-uuid>/
+        └── (one .m3u per grouped release)
+```
+
+Collections with
+[multi-disc grouping](Collections.md#multi-disc-grouping) enabled
+(`groupMultiDisc=true`) get one generated `.m3u` per grouped release.
+They live here, under Kartend's own data directory, and **never
+alongside your media** — the feature reads your folders without
+writing to them.
+
+Each collection keeps its own subdirectory keyed by collection UUID,
+so two collections covering the same folder with different settings
+can't disturb each other's playlists.
+
+Regenerated on every scan, so safe to delete while Kartend isn't
+running — the next scan rewrites them. Turning `groupMultiDisc` off
+removes that collection's directory on the following scan.
+
 ## Cache
 
 ```

@@ -34,17 +34,65 @@ If multiple matches exist (`.png` *and* `.jpg`), the first one found
 wins; you can force a specific image by deleting the others or by
 [manually linking](#manual-per-item-links) the preferred one.
 
+### Artwork for multi-disc releases
+
+An image whose own name carries a disc marker also answers to the
+release it belongs to:
+
+```
+artworkDirectory/Recital (Disc 1).png   ← art for the item "Recital"
+```
+
+This is what makes [multi-disc grouping](Collections.md#multi-disc-grouping)
+work against an art folder filed per disc: the grouped item is named
+`Recital`, with the disc tag stripped, and nothing on disk carries
+that name exactly.
+
+The rule, in order:
+
+1. An image named for the item exactly (`Recital.png`) always wins —
+   anywhere in the search, including the typed subfolders below.
+2. Only if there is none does a disc-marked image stand in, and the
+   **lowest disc** is the one taken: disc 1 before disc 2, numbered
+   discs before lettered sides. `Recital (CD 2).png` is used when
+   disc 1 has no art at all.
+3. A [manual per-item link](#manual-per-item-links) overrides both.
+
+The markers recognised are the ones
+[multi-disc grouping](Collections.md#what-counts-as-a-disc-marker)
+uses — `(Disc 1)`, `(Disk 2)`, `(CD3)`, `[Side A]`, inside brackets,
+case-insensitive. Any other parenthesised tag is part of the title, so
+`Some Movie (2021).png` never stands in for an item called
+`Some Movie`.
+
+Nothing about this requires grouping to be on, and it never replaces a
+match an item already had.
+
 ### Subfolders
 
-Set `includeArtworkSubfolders=true` to recurse into subfolders. Useful
-for collections where artwork is grouped per-item:
+Set `includeArtworkSubfolders=true` when your artwork folder is
+arranged in the same shape as your content folder. An item's cover is
+then looked for in the artwork subfolder matching the item's own
+subfolder, rather than at the artwork folder's root:
 
 ```
-artworkDirectory/Some Movie (2021)/cover.png
-artworkDirectory/Some Movie (2021)/backdrop.jpg
+mediaDirectory/Live/Recital.flac
+artworkDirectory/Live/Recital.png     ← the cover for that item
 ```
 
-The first base-filename match within the entire artwork tree wins.
+Nesting is followed to any depth, and the match is still on the item's
+base filename — the artwork subfolder mirrors *where* the item lives,
+not *what* its cover is called.
+
+Pointing `artworkDirectory` at the same folder as `mediaDirectory`
+mirrors the same way without the setting, since art kept beside your
+content is already arranged that way by definition.
+
+An item that does not live under `mediaDirectory` has no subfolder to
+mirror — a [grouped multi-disc release](Collections.md#multi-disc-grouping)
+is the usual case, since the playlist standing in for it lives in
+Kartend's own data folder. Its cover is looked for in the artwork
+folder itself.
 
 ## Artwork types
 
@@ -196,8 +244,11 @@ artwork links…** by hand — so the choice survives rescans and
 collection renames.
 
 > **Tip** — pair with the **Missing artwork**
-> [smart-playlist kind](Smart-Playlists.md#filter-kinds) for a
-> persistent worklist tile that empties as you assign.
+> [smart-playlist kind](Smart-Playlists.md#filter-kinds) for a persistent
+> worklist tile. Both it and the wizard's own pile are built from the
+> covers auto-discovered on the collection's last scan, so an item leaves
+> the list after the next scan of that collection rather than the moment
+> you assign it.
 
 ## Sidebar gallery
 

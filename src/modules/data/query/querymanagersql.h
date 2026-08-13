@@ -44,8 +44,8 @@ constexpr const char *UPDATE_COLLECTION_SCAN_METADATA =
 constexpr const char *UPDATE_COLLECTION_EXT_SIGNATURE =
     "UPDATE collections SET ext_signature = ? WHERE uuid = ?";
 constexpr const char *SELECT_STAGED_SCAN_RESULTS =
-    "SELECT rowid, path, rel_path, name, last_modified, file_size FROM scanned_items "
-    "WHERE rowid > ? ORDER BY rowid LIMIT ?";
+    "SELECT rowid, path, rel_path, name, last_modified, file_size, artwork_path "
+    "FROM scanned_items WHERE rowid > ? ORDER BY rowid LIMIT ?";
 
 // Added Kartend-de4ft — the sorted-cache fast paths built and prepared these
 // locally on every call (the range probe fires per scroll page, the position

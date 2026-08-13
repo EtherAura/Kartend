@@ -189,10 +189,17 @@ QList<Match> evalHasArtwork(QSqlDatabase &db) {
     return out;
   }
   QSqlQuery q(db);
-  // items.artwork_path is populated by the scanner (v1 column) when an
-  // artwork file matched on disk; an empty / NULL value means "fall back
-  // to the procedural placeholder". Filtering on non-empty artwork_path
-  // is the cheap way to ask "does this item have a real cover".
+  // items.artwork_path caches where the collection's artwork directory
+  // answered to this item's name on its LAST SCAN — the same cascade, disc
+  // fallback included, that the grid resolves live per tile
+  // (ScanArtwork::resolveStagedArtwork fills it; see scanartwork.h). Empty /
+  // NULL means "no cover matched, fall back to the procedural placeholder".
+  // Filtering on non-empty artwork_path is the cheap way to ask "does this
+  // item have a real cover" without a filesystem probe per row.
+  //
+  // Scan-time, not live: art dropped into the artwork directory without the
+  // media directory changing does not trigger a rescan, so this answer catches
+  // up on the collection's next scan.
   if (!q.exec(QStringLiteral("SELECT collection_uuid, path FROM items "
                              "WHERE artwork_path IS NOT NULL AND artwork_path != '' "
                              "ORDER BY name COLLATE NOCASE ASC"))) {
@@ -300,7 +307,9 @@ QList<Match> evalMissingArtwork(QSqlDatabase &db) {
   }
   QSqlQuery q(db);
   // Symmetric to evalHasArtwork — NULL OR empty captures both shapes the
-  // scanner can leave behind when an artwork file isn't found on disk.
+  // scanner can leave behind when no artwork file matched on disk (a row the
+  // apply never touched is NULL; one the apply refreshed with an unresolved
+  // staged value is the empty string).
   if (!q.exec(QStringLiteral("SELECT collection_uuid, path FROM items "
                              "WHERE artwork_path IS NULL OR artwork_path = '' "
                              "ORDER BY name COLLATE NOCASE ASC"))) {

@@ -1,4 +1,5 @@
 target_sources(kartend_data PRIVATE
+  multidisccollapse.cpp
   preparedstatementcache.cpp
   queryhelpers.cpp
   querymanager.cpp
@@ -10,12 +11,15 @@ target_sources(kartend_data PRIVATE
   querymanagerload.cpp
   querymanagerscan.cpp
   querymanagerstatichelpers.cpp
+  scanartwork.cpp
   scanneditemstable.cpp
   scanservice.cpp
   scanservice_persist.cpp
   scanworkcontroller.cpp
+  multidisccollapse.h
   preparedstatementcache.h
   querymanager.h
+  scanartwork.h
   scanneditemstable.h
   scanservice.h
   scanworkcontroller.h

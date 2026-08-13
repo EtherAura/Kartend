@@ -61,11 +61,71 @@ public:
   [[nodiscard]] QString findInDirectory(const QString &baseName, const QString &artworkDirectory);
 
   /**
+   * @brief Artwork filed against a DISC of the release @p baseName names
+   * (Kartend-knub1).
+   *
+   * An image whose own name carries a disc marker — "Recital (Disc 1).png",
+   * "Recital [CD 2].jpg" — also answers to the release's base title, so an
+   * item named for the release ("Recital") resolves art that was filed per
+   * disc. This is what a multi-disc release collapsed into ONE library item
+   * needs: the item is keyed on the generated playlist, whose name is the
+   * shared base title with the disc tag stripped, while the art beside the
+   * media is still named per disc and matches nothing exactly.
+   *
+   * The lowest disc order wins (disc 1 before disc 2, numbers before letters —
+   * MultiDisc::Marker::order), and among equal orders the extension priority
+   * of the directory listing decides, so the answer does not depend on
+   * readdir order.
+   *
+   * A FALLBACK, never a substitute: callers must exhaust their exact-name
+   * cascade first (findArtworkForFile / findArtworkForFileCached do), because
+   * an item's own art always outranks a disc's.
+   *
+   * Resolved purely from the cached listing — the disc numbers on disk are not
+   * knowable from the item's name, so there is nothing to stat-probe for.
+   * An uncached directory therefore returns empty and, unlike findInDirectory,
+   * is NOT queued here: every caller reaches this only after an exact pass
+   * that already queued it.
+   *
+   * @param baseName The item's base name (without extension).
+   * @param artworkDirectory The directory to search in.
+   * @return Full path to the disc-marked artwork if one is indexed, empty
+   * string otherwise.
+   */
+  [[nodiscard]] QString findDiscFallbackInDirectory(const QString &baseName,
+                                                    const QString &artworkDirectory);
+
+  /**
    * @brief Pre-warm cache for multiple directories (call from background
    * thread).
    * @param directories List of directories to cache.
    */
   void prewarmDirectories(const QStringList &directories);
+
+  /**
+   * @brief Re-scan @p directories and REPLACE their cached listings, even when
+   * already cached (Kartend-guyc5).
+   *
+   * prewarmDirectories fills gaps; this one refreshes. The distinction matters
+   * for a caller whose whole job is to re-derive the truth about a collection:
+   * a listing is only ever re-scanned on clear() (collection switch), so within
+   * one session a cached listing can be arbitrarily old, and the cached
+   * NEGATIVES it holds are what make a bulk lookup miss a cover added since.
+   * Warming would leave that stale entry in place and the caller would record
+   * "artless" for an item whose cover is sitting on disk.
+   *
+   * Both listing halves are rebuilt — exact names AND the disc-marked index —
+   * and the contents generation is bumped once, so generation-keyed consumers
+   * (FilterManager's artwork key set) rebuild on their next pass. Directories
+   * that no longer exist cache an empty listing, exactly as a first scan would.
+   *
+   * Scans run OUTSIDE the lock and the swap happens under a single write lock,
+   * so readers never observe a half-replaced cascade. Blocking and serial —
+   * its one caller is already on a background scan thread, and borrowing the
+   * prewarm pool would contend with a GUI-scheduled walk for no gain over the
+   * ~10 directories a cascade holds. Never call it from the GUI thread.
+   */
+  void refreshDirectories(const QStringList &directories);
 
   /**
    * @brief Schedule a background dentry prewarm of @p directories on the global
@@ -158,8 +218,43 @@ public:
    * Directories without a cached listing are queued for a background scan
    * and contribute nothing, mirroring findInDirectory's non-blocking
    * contract. One read-lock acquisition covers the whole enumeration.
+   *
+   * Release base titles answered by disc-marked artwork
+   * (findDiscFallbackInDirectory) are keys too: a bulk predicate built from
+   * this set has to agree with what the per-item lookup resolves, or
+   * FilterManager's hide-missing-artwork pass would hide a tile that renders
+   * with a cover on it.
    */
   [[nodiscard]] QSet<QString> collectPositiveKeys(const QStringList &directories);
+
+  /**
+   * @brief collectPositiveKeys, but carrying the resolved PATH per key —
+   * the whole cascade folded into one lookup table (Kartend-guyc5).
+   *
+   * collectPositiveKeys answers "does a cover exist for this name". A caller
+   * that has to STORE the answer (the scan pipeline, filling
+   * `items.artwork_path`) needs the path the per-item cascade would have
+   * returned, and must not re-derive it with a second resolver that could
+   * drift from findArtworkForFileCached.
+   *
+   * Priority reproduces that cascade exactly: @p directories are folded in
+   * order and the first positive entry for a key wins, so the flat root
+   * outranks `front/`, which outranks `box/`, and so on. Disc-marked art
+   * (findDiscFallbackInDirectory) is folded in a SECOND pass over the same
+   * order, so it can only answer for a key no exact name claimed anywhere —
+   * the same "a fallback, never a substitute" rule the per-item lookup obeys.
+   *
+   * Cached negatives contribute nothing, uncached directories contribute
+   * nothing and are queued for a background scan, and one read-lock
+   * acquisition covers the whole enumeration — all as collectPositiveKeys.
+   *
+   * One divergence from the per-item cascade, shared with buildArtworkKeySet:
+   * the cascade probes stem-then-full-name WITHIN each directory, while a
+   * caller of this map probes the whole map by stem and then by full name.
+   * The two disagree only for an item that has stem-named art in a
+   * lower-priority directory AND full-name-named art in a higher-priority one.
+   */
+  [[nodiscard]] QHash<QString, QString> collectPositivePaths(const QStringList &directories);
 
   /**
    * @brief Clear all cached directory contents and queued directories.
@@ -186,9 +281,22 @@ private:
   // byte-identical reconstruction matters: these paths key CacheManager's
   // memory cache and the MD5-keyed disk artwork cache, so a changed spelling
   // would orphan every existing entry.
+  // Kartend-knub1: one disc-marked image per release base title, kept
+  // alongside the file name so re-indexing a directory can prefer the lowest
+  // disc rather than whichever entry readdir handed over first.
+  struct DiscArtwork {
+    QString fileName;
+    int order = 0;
+  };
   struct DirectoryListing {
     QString pathPrefix;
     QHash<QString, QString> byKey;
+    // baseMatchKey(release base title) -> the release's lowest-ordered
+    // disc-marked image. Deliberately SEPARATE from byKey: these are fallback
+    // answers for a name no file actually carries, and byKey's cached-negative
+    // convention (present-but-empty value) must keep meaning "the stat sweep
+    // for this exact name found nothing".
+    QHash<QString, DiscArtwork> byDiscBase;
   };
   // Maps directory path -> listing (baseMatchKey -> bare file name). A
   // contained key with a NULL/empty value is a cached NEGATIVE result
@@ -198,6 +306,15 @@ private:
   // clear() — a file dropped in mid-session becomes visible on the next
   // collection switch, same contract as the directory listing itself.
   QHash<QString, DirectoryListing> m_cache;
+  // Index a scanned image under the release base title when its own name
+  // carries a disc marker. Static: it only rewrites the listing handed to it,
+  // which ensureDirectoryCached builds OUTSIDE the lock.
+  static void indexDiscMarkedArtwork(DirectoryListing &listing, const QString &fileName);
+  // Walk one directory into a listing. No locking and no cache access — the
+  // single indexer shared by the fill path (ensureDirectoryCached) and the
+  // refresh path (refreshDirectories), so the two can never index a directory
+  // differently from one another.
+  [[nodiscard]] static DirectoryListing scanListing(const QString &directory);
   // Directories requested but not yet scanned
   QSet<QString> m_queuedDirectories;
   // Bumped (under the write lock) on every m_cache mutation; lets derived
@@ -222,6 +339,15 @@ private:
  * 2. baseName.{PNG,JPG,JPEG,WEBP,GIF,BMP} (uppercase)
  * 3. fullName.{extensions} (same pattern)
  *
+ * Only when that EXACT cascade comes up empty across the flat root and every
+ * typed cover subdir does the disc fallback run (Kartend-knub1): art named
+ * "<baseName> (Disc 1).png" answers for "<baseName>", which is how a
+ * collapsed multi-disc item — named for the release, with the disc tag
+ * stripped — finds art filed per disc. That step reads the DirectoryCache
+ * index rather than probing (see findDiscFallbackInDirectory), so a cold
+ * artwork directory yields the pre-Kartend-knub1 answer until the prewarm
+ * lands and the caller re-resolves.
+ *
  * @param fileName The media filename to find artwork for.
  * @param artworkDirectory The directory to search in.
  * @return The full path to the artwork file if found, empty string otherwise.
@@ -233,6 +359,10 @@ private:
  *
  * Uses DirectoryCache to avoid repeated filesystem scans.
  * Preferred for bulk operations like showAllSubcollectionItems.
+ *
+ * Same two-stage rule as findArtworkForFile: the exact-name cascade over the
+ * flat root and the typed cover subdirs first, then the disc-marked fallback
+ * over the same directories (Kartend-knub1).
  *
  * @param fileName The media filename to find artwork for.
  * @param artworkDirectory The directory to search in.
@@ -276,6 +406,44 @@ private:
 [[nodiscard]] QStringList artworkLookupDirectories(const QString &artworkDirectory);
 
 /**
+ * @brief The artwork directory to search for ONE item, with the media
+ * subfolder structure mirrored into it where that applies (Kartend-j5amz).
+ *
+ * A collection can ask for its artwork tree to follow the shape of its media
+ * tree — explicitly via `includeArtworkSubfolders`, or implicitly by pointing
+ * both settings at the same folder, where "beside the media" is the only thing
+ * mirroring can mean. An item at `<media>/Live/Recital.flac` then resolves its
+ * cover under `<artwork>/Live/` rather than the artwork root.
+ *
+ * That mirror is only DEFINED for an item that actually lives under
+ * @p mediaDirectory. Two things in Kartend produce items that do not:
+ *  - a multi-disc release collapsed into one item, whose file is the playlist
+ *    Kartend generates under its own data directory; and
+ *  - any load that keys items by their canonical path (symlinks resolved)
+ *    while the collection's configured media directory is the symlink's own
+ *    spelling.
+ * For those, `QDir::relativeFilePath` answers with a `../../..` chain, and
+ * appending it walks straight out of the artwork tree — a lookup in a
+ * directory that has nothing to do with either setting. The rule here is that
+ * an item outside the media directory has NO media-relative subfolder, so the
+ * artwork directory is used exactly as given. That is also what the scan-side
+ * bulk resolver (ArtworkUtils::buildArtworkPathMap, which mirrors nothing)
+ * searches for such an item, so the two agree on the answer.
+ *
+ * @p artworkDirectory is returned unchanged when it is empty, when
+ * @p mediaDirectory is empty, when neither mirroring trigger applies, and when
+ * the item sits at the media root (there is no subfolder to mirror).
+ *
+ * Pure string work — no filesystem or cache access. Callers pass the artwork
+ * directory they have already resolved for the item (the per-item override
+ * under `showAllSubcollectionItems` included); this does not look one up.
+ */
+[[nodiscard]] QString mirroredArtworkDirectory(const QString &artworkDirectory,
+                                               const QString &mediaDirectory,
+                                               const QString &itemPath,
+                                               bool includeArtworkSubfolders);
+
+/**
  * @brief Build the set of artwork-backed basename keys for @p artworkDirectory.
  *
  * Enumerates the flat root plus the typed cover subdirs (`front/`, `box/`, …)
@@ -298,6 +466,29 @@ private:
  *    clear().
  */
 [[nodiscard]] QSet<QString> buildArtworkKeySet(const QString &artworkDirectory);
+
+/**
+ * @brief buildArtworkKeySet with the resolved cover PATH per key
+ * (Kartend-guyc5).
+ *
+ * Same directory cascade, same keys, same disc-marked fallback — see
+ * DirectoryCache::collectPositivePaths for the priority rules and the one
+ * documented divergence from the per-item cascade.
+ *
+ * This is the bulk form of findArtworkForFileCached for callers that must
+ * PERSIST what the lookup resolves rather than paint it: the scan pipeline
+ * fills `items.artwork_path` from it, so every DB-side artwork predicate
+ * (smart playlists, `has:artwork` / `missing:artwork`, Collection Health, the
+ * artwork review queue) answers with the same covers the grid paints.
+ *
+ * Look a key up with baseMatchKey(completeBaseName) first and
+ * baseMatchKey(fileName) second, exactly as the key-set callers do.
+ *
+ * Reads only what the DirectoryCache already holds — callers that need the
+ * answer to be complete rather than best-effort must warm the cascade first
+ * (DirectoryCache::prewarmDirectories over artworkLookupDirectories()).
+ */
+[[nodiscard]] QHash<QString, QString> buildArtworkPathMap(const QString &artworkDirectory);
 
 /**
  * @brief Compose the final item-card image: scale-to-fit + center on a

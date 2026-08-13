@@ -32,7 +32,7 @@ Some examples of what you can build:
 - **What's new this month?** — *Recently added, 30* (items added to the
   database in the last 30 days)
 - **Show me only the items I've illustrated** — *Has artwork* (every
-  item with a non-empty artwork override)
+  item a cover was found for in the collection's artwork folder)
 - **Items I've started but haven't finished** — *Continue later* (the
   in-progress queue, driven by the per-item flag)
 - **A worklist for the artwork wizard** — *Missing artwork*
@@ -63,8 +63,8 @@ immediately and opens populated with its current matches.
 | **Most played** | Show top (1–1000, default 50) | The N items with the highest cumulative play count, then by total play seconds. |
 | **Never launched** | Show first (1–1000, default 50) | The first N items with zero recorded launches. Ordered the same way the rest of the grid is by default. |
 | **By extension** | Extensions (csv, lowercase, leading dot optional) | Every item whose file extension is in the list. Empty list = no matches. Example: `pdf,epub,cbz`. |
-| **Has artwork** | *(none)* | Every item with a non-empty artwork file recorded against it (auto-discovered or manually [linked](Artwork.md)). |
-| **Missing artwork** | *(none)* | The complement of *Has artwork* — items with no artwork file on disk. Useful as a worklist for the [Artwork Wizard](Artwork.md#artwork-assignment-wizard). |
+| **Has artwork** | *(none)* | Every item whose cover was auto-discovered in `artworkDirectory` when the collection was last scanned. Per-item [links](Artwork.md) don't count. |
+| **Missing artwork** | *(none)* | The complement of *Has artwork* — items no cover was found for on the last scan. Useful as a worklist for the [Artwork Wizard](Artwork.md#artwork-assignment-wizard). |
 | **Recently added** | Window (1–3650 days, default 30) | Items whose `date_added` falls within the last N days, newest first. |
 | **By collection** | Collection (picker) | Every item belonging to the chosen collection. The collection is referenced by UUID so renames don't break the filter. Empty selection yields zero matches. |
 | **By title search** | Substring | Every item whose name contains the given substring (case-insensitive, `LIKE %?%`). Empty substring yields zero matches. |
@@ -118,13 +118,21 @@ Trims whitespace around each token. An empty list yields zero matches.
 
 ### Has artwork
 
-Returns every item with a non-empty artwork association. This includes:
+Returns every item with a cover auto-discovered from `artworkDirectory` —
+the same search the grid uses to paint the tile: the artwork folder and
+its typed cover subfolders (`front/`, `box/`, …), matched on the item's
+name, including the multi-disc case where a grouped item takes the art of
+one of its discs. Items showing the procedural placeholder (no real
+artwork) are excluded.
 
-- Items whose artwork was auto-discovered from `artworkDirectory`
-- Items linked to a custom artwork file via
-  [Item Artwork Links](Artwork.md)
+The match is recorded when the collection is scanned, so it reflects your
+artwork folder as of that scan. Add or remove a cover without touching the
+media folder and this rule catches up the next time that collection is
+scanned; the grid, which looks at the folder directly, updates sooner.
 
-Items showing the procedural placeholder (no real artwork) are excluded.
+Per-item [artwork links](Artwork.md) are *not* counted here — a manually
+linked cover renders on the tile but does not make the item match *Has
+artwork*.
 
 ### Recently added
 

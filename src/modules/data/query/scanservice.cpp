@@ -138,11 +138,9 @@ bool ScanService::needsRescan(int collectionIndex, const CollectionConfig &colle
     return false;
   }
 
-  // Include includeContentSubfolders in the signature - changing it requires
-  // rescan
-  QString currentSignature =
-      collection.extensions.isEmpty() ? QString() : collection.extensions.join('|');
-  currentSignature += collection.folderBrowsing.includeContentSubfolders ? "|subfolders" : "";
+  // Extensions plus every setting that changes what a scan produces (content
+  // subfolders, multi-disc grouping) — see buildExtSignature.
+  const QString currentSignature = buildExtSignature(collection);
 
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);

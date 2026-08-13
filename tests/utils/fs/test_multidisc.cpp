@@ -30,6 +30,13 @@ private slots:
 
   void m3u_writesRelativePathsForSiblingsAndAbsoluteOtherwise();
   void m3uFileName_sanitisesIllegalCharacters();
+
+  void playlistDir_isScopedPerCollectionAndRefusesEscapes();
+
+  void merge_disc1WinsAndLaterDiscsFillGaps();
+  void merge_unionsTagsAndCustomFieldsWithoutOverwriting();
+  void merge_orsStateFlags();
+  void merge_emptyInputIsInert();
 };
 
 void TestMultiDisc::parse_detectsMarkers_data() {
@@ -174,6 +181,100 @@ void TestMultiDisc::m3uFileName_sanitisesIllegalCharacters() {
   QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("AC/DC: Live?")),
            QStringLiteral("AC_DC_ Live_.m3u"));
   QCOMPARE(MultiDisc::m3uFileNameFor(QString()), QStringLiteral("playlist.m3u"));
+}
+
+void TestMultiDisc::playlistDir_isScopedPerCollectionAndRefusesEscapes() {
+  QCOMPARE(MultiDisc::playlistDirFor(QStringLiteral("/data/kartend"), QStringLiteral("abc-123")),
+           QStringLiteral("/data/kartend/multi-disc/abc-123"));
+
+  // Two collections may cover the same folder with different settings, so the
+  // scope is the collection, not the media directory.
+  QVERIFY(MultiDisc::playlistDirFor(QStringLiteral("/data/kartend"), QStringLiteral("a")) !=
+          MultiDisc::playlistDirFor(QStringLiteral("/data/kartend"), QStringLiteral("b")));
+
+  // Empty inputs must NOT degrade to the shared root — this path is handed to
+  // directory removal, and "clean up this collection" would become "clean up
+  // every collection".
+  QVERIFY(MultiDisc::playlistDirFor(QStringLiteral("/data/kartend"), QString()).isEmpty());
+  QVERIFY(MultiDisc::playlistDirFor(QString(), QStringLiteral("abc")).isEmpty());
+
+  // Same reasoning for a uuid that could climb out of the managed root.
+  QVERIFY(MultiDisc::playlistDirFor(QStringLiteral("/data/kartend"), QStringLiteral("../../etc"))
+              .isEmpty());
+  QVERIFY(
+      MultiDisc::playlistDirFor(QStringLiteral("/data/kartend"), QStringLiteral("a/b")).isEmpty());
+}
+
+void TestMultiDisc::merge_disc1WinsAndLaterDiscsFillGaps() {
+  MultiDisc::DiscMetadata one;
+  one.artworkPath = QStringLiteral("/art/disc1.png");
+  one.rating = 8;
+  // notes and sourceUrl deliberately left empty on disc 1.
+
+  MultiDisc::DiscMetadata two;
+  two.artworkPath = QStringLiteral("/art/disc2.png"); // must NOT win
+  two.rating = 2;                                     // must NOT win
+  two.notes = QStringLiteral("second half of the set");
+  two.sourceUrl = QStringLiteral("https://example.invalid/release");
+
+  const auto merged = MultiDisc::mergeDiscs({one, two});
+
+  // Disc 1 is authoritative wherever it has a value...
+  QCOMPARE(merged.artworkPath, QStringLiteral("/art/disc1.png"));
+  QCOMPARE(merged.rating, 8);
+  // ...and a later disc fills only what disc 1 left empty, so collapsing
+  // never discards something the user recorded against disc 2.
+  QCOMPARE(merged.notes, QStringLiteral("second half of the set"));
+  QCOMPARE(merged.sourceUrl, QStringLiteral("https://example.invalid/release"));
+}
+
+void TestMultiDisc::merge_unionsTagsAndCustomFieldsWithoutOverwriting() {
+  MultiDisc::DiscMetadata one;
+  one.tags = {QStringLiteral("live"), QStringLiteral("remaster")};
+  one.customFields = {{QStringLiteral("Venue"), QStringLiteral("Hall A")}};
+
+  MultiDisc::DiscMetadata two;
+  // "LIVE" is the same tag in different casing and must not duplicate.
+  two.tags = {QStringLiteral("LIVE"), QStringLiteral("encore")};
+  two.customFields = {{QStringLiteral("Venue"), QStringLiteral("Hall B")}, // collision: disc 1 wins
+                      {QStringLiteral("Runtime"), QStringLiteral("74m")}}; // new key: kept
+
+  const auto merged = MultiDisc::mergeDiscs({one, two});
+
+  const QStringList expectedTags{QStringLiteral("live"), QStringLiteral("remaster"),
+                                 QStringLiteral("encore")};
+  QCOMPARE(merged.tags, expectedTags);
+
+  QCOMPARE(merged.customFields.size(), 2);
+  QCOMPARE(merged.customFields.at(0).first, QStringLiteral("Venue"));
+  QCOMPARE(merged.customFields.at(0).second, QStringLiteral("Hall A"));
+  QCOMPARE(merged.customFields.at(1).first, QStringLiteral("Runtime"));
+  QCOMPARE(merged.customFields.at(1).second, QStringLiteral("74m"));
+}
+
+void TestMultiDisc::merge_orsStateFlags() {
+  MultiDisc::DiscMetadata one;
+  MultiDisc::DiscMetadata two;
+  two.continueLater = true;
+  MultiDisc::DiscMetadata three;
+  three.pinned = true;
+
+  const auto merged = MultiDisc::mergeDiscs({one, two, three});
+  // A flag set on any disc is a statement about the release; clearing it on
+  // collapse would throw away something the user did deliberately.
+  QVERIFY(merged.continueLater);
+  QVERIFY(merged.pinned);
+  QVERIFY(!merged.hidden);
+}
+
+void TestMultiDisc::merge_emptyInputIsInert() {
+  const auto merged = MultiDisc::mergeDiscs({});
+  QVERIFY(merged.artworkPath.isEmpty());
+  QVERIFY(merged.tags.isEmpty());
+  QVERIFY(merged.customFields.isEmpty());
+  // Unrated, not zero-rated — a zero star rating is a real value a user can
+  // set, so the "no opinion" sentinel has to survive an empty merge.
+  QCOMPARE(merged.rating, -1);
 }
 
 QTEST_APPLESS_MAIN(TestMultiDisc)

@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QRegularExpression>
+#include <QSet>
 
 namespace MultiDisc {
 
@@ -140,6 +141,79 @@ QString buildM3uContents(const QStringList &absolutePaths, const QString &m3uDir
     }
     out += line;
     out += QLatin1Char('\n');
+  }
+  return out;
+}
+
+QString playlistDirFor(const QString &appDataDir, const QString &collectionUuid) {
+  const QString uuid = collectionUuid.trimmed();
+  if (appDataDir.isEmpty() || uuid.isEmpty()) {
+    // Never fall back to the shared root: a caller cleaning up "this
+    // collection's playlists" would then be handed every collection's.
+    return {};
+  }
+  // The uuid is Kartend-generated, but this path is handed to directory
+  // removal, so refuse anything that could climb out of the managed root
+  // rather than trusting that it always will be.
+  if (uuid.contains(QLatin1Char('/')) || uuid.contains(QLatin1Char('\\')) ||
+      uuid.contains(QStringLiteral(".."))) {
+    return {};
+  }
+  return QDir::cleanPath(appDataDir + QStringLiteral("/multi-disc/") + uuid);
+}
+
+DiscMetadata mergeDiscs(const QList<DiscMetadata> &discsInOrder) {
+  DiscMetadata out;
+  if (discsInOrder.isEmpty()) {
+    return out;
+  }
+
+  // Case-insensitive membership sets, kept alongside the ordered output so the
+  // result is stable across runs rather than hash-ordered.
+  QSet<QString> seenTags;
+  QSet<QString> seenFieldKeys;
+
+  for (const DiscMetadata &disc : discsInOrder) {
+    // Scalars: first non-empty wins, so disc 1 is authoritative and a later
+    // disc only fills a gap. Never overwrite — that is the same rule the
+    // importers and the scraper follow, and it is what makes collapsing safe
+    // to run over a library the user has already curated.
+    if (out.artworkPath.isEmpty()) {
+      out.artworkPath = disc.artworkPath;
+    }
+    if (out.notes.isEmpty()) {
+      out.notes = disc.notes;
+    }
+    if (out.sourceUrl.isEmpty()) {
+      out.sourceUrl = disc.sourceUrl;
+    }
+    if (out.rating < 0) {
+      out.rating = disc.rating;
+    }
+
+    for (const QString &tag : disc.tags) {
+      const QString key = tag.trimmed().toLower();
+      if (key.isEmpty() || seenTags.contains(key)) {
+        continue;
+      }
+      seenTags.insert(key);
+      out.tags.append(tag.trimmed());
+    }
+
+    for (const auto &[fieldKey, fieldValue] : disc.customFields) {
+      const QString key = fieldKey.trimmed().toLower();
+      if (key.isEmpty() || seenFieldKeys.contains(key)) {
+        continue; // disc 1 wins a collision; later discs only add new keys
+      }
+      seenFieldKeys.insert(key);
+      out.customFields.append({fieldKey, fieldValue});
+    }
+
+    // Flags OR: marking disc 2 "continue later" says something about the
+    // release, and dropping it on collapse would discard a deliberate act.
+    out.pinned = out.pinned || disc.pinned;
+    out.hidden = out.hidden || disc.hidden;
+    out.continueLater = out.continueLater || disc.continueLater;
   }
   return out;
 }

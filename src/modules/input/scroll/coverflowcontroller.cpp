@@ -325,26 +325,18 @@ static QString cardArtworkDirectory(const QString &fullPath, const CollectionCon
   if (artworkDir.isEmpty()) {
     return {};
   }
-  const QString &mediaDir = context.config.mediaDirectory;
-  const bool shouldMirror =
-      context.config.folderBrowsing.includeArtworkSubfolders ||
-      (!mediaDir.isEmpty() && QDir(artworkDir).absolutePath() == QDir(mediaDir).absolutePath());
-  if (shouldMirror && !mediaDir.isEmpty()) {
-    QDir mediaDirObj(mediaDir);
-    QString relativePath = mediaDirObj.relativeFilePath(fullPath);
-    QString relativeDir = QFileInfo(relativePath).path();
-    if (!relativeDir.isEmpty() && relativeDir != QStringLiteral(".")) {
-      artworkDir = QDir(artworkDir).absoluteFilePath(relativeDir);
-    }
-  }
-  return artworkDir;
+  // Shared with ItemWidgetFactory::configureArtworkForWidget (Kartend-j5amz):
+  // one helper owns both the "should this mirror at all" test and the refusal
+  // to mirror for an item that lives outside the media directory.
+  return ArtworkUtils::mirroredArtworkDirectory(
+      artworkDir, context.config.mediaDirectory, fullPath,
+      context.config.folderBrowsing.includeArtworkSubfolders);
 }
 
-// Resolve the artwork path for a single media item. Mirrors the lookup
-// logic in ItemWidgetFactory::configureArtworkForWidget (per-item override
-// for showAllSubcollectionItems, subfolder mirroring when artworkDir ==
-// mediaDir or includeArtworkSubfolders is set) — but uses the directory
-// cache only. The synchronous filesystem fallback that the grid factory
+// Resolve the artwork path for a single media item. Same directory as
+// ItemWidgetFactory::configureArtworkForWidget resolves (per-item override for
+// showAllSubcollectionItems, then the shared subfolder mirror) — but uses the
+// directory cache only. The synchronous filesystem fallback that the grid factory
 // employs for visible widgets is too expensive here: cover flow rebuilds
 // the entire card list on every navigation/filter/range-load event, and
 // running ArtworkUtils::findArtworkForFile across tens of thousands of
