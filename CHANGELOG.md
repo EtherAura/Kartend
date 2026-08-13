@@ -34,6 +34,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   empty, and **Preview launch command…** now says so instead of leaving you
   to wonder why an argument went blank.
 
+- **Games installed while Kartend is open now appear on their own.** A
+  launcher collection used to refresh at startup or when you asked it to, so
+  a game installed in Steam or Heroic mid-session stayed invisible until the
+  next launch. Kartend now watches the folders those launchers write their
+  manifests into and re-syncs shortly after they change. It waits for the
+  dust to settle first — a Steam download rewrites its manifest repeatedly
+  while it runs, and the sync is silent and idempotent, so nothing interrupts
+  you and a burst of writes still costs one pass. Only sources you have
+  actually imported are watched.
+
 - **ES-DE libraries can be imported, one collection per system.** File →
   Import → "Import from Launcher…" now detects ES-DE and brings in each of
   its systems as its own collection — SNES games in a SNES collection, PS2

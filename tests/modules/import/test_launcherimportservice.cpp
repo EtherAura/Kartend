@@ -9,6 +9,7 @@
 #include <QObject>
 #include <QSqlDatabase>
 #include <QTemporaryDir>
+#include <QSet>
 #include <QTest>
 
 #include "../../support/appinfofixture.h"
@@ -28,6 +29,8 @@ class TestLauncherImportService : public QObject {
   Q_OBJECT
 
 private slots:
+  void watchPathsAreDirectoriesThatExist();
+  void watchPathsIgnoreUnknownSources();
   void sanitizeStubBaseName_data();
   void sanitizeStubBaseName();
   void initialSyncWritesStubs();
@@ -777,6 +780,38 @@ void TestLauncherImportService::cleanupKeepsBaseWhenUserContentRemains() {
   // The plain (non-recursive) base rmdir must fail closed: the user's file
   // — and with it the base dir — survives the cleanup.
   QVERIFY(QFileInfo::exists(base + QStringLiteral("/notes.txt")));
+}
+
+void TestLauncherImportService::watchPathsAreDirectoriesThatExist() {
+  // Machine-independent invariants: this runs wherever the suite runs, and
+  // which launchers are installed is none of its business. What it pins is
+  // the contract that keeps the watch alive.
+  const QStringList sources = {QStringLiteral("steam"),   QStringLiteral("flatpak"),
+                               QStringLiteral("lutris"),  QStringLiteral("heroic"),
+                               QStringLiteral("itch"),    QStringLiteral("bottles"),
+                               QStringLiteral("xdg"),     QStringLiteral("esde")};
+  for (const QString &sourceId : sources) {
+    const QStringList paths = LauncherImportService::watchPaths(sourceId);
+    QSet<QString> seen;
+    for (const QString &path : paths) {
+      // DIRECTORIES ONLY. Steam replaces appmanifest_*.acf during a download
+      // and QFileSystemWatcher drops a replaced file permanently, so a file
+      // entry here would make the watch die exactly when it mattered.
+      QVERIFY2(QFileInfo(path).isDir(),
+               qPrintable(QStringLiteral("%1: %2 is not a directory").arg(sourceId, path)));
+      QVERIFY2(!seen.contains(path),
+               qPrintable(QStringLiteral("%1: %2 listed twice").arg(sourceId, path)));
+      seen.insert(path);
+    }
+  }
+}
+
+void TestLauncherImportService::watchPathsIgnoreUnknownSources() {
+  // Callers hand over whatever importSource a collection carries, including
+  // one written by a newer build; an unknown id must be silent, not a crash
+  // and not a stray watch.
+  QVERIFY(LauncherImportService::watchPaths(QStringLiteral("not-a-launcher")).isEmpty());
+  QVERIFY(LauncherImportService::watchPaths(QString()).isEmpty());
 }
 
 QTEST_MAIN(TestLauncherImportService)

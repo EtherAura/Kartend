@@ -109,6 +109,19 @@ struct SourceSlice {
 /// nothing".
 [[nodiscard]] QList<SourceSlice> sourceSlices(const QString &sourceId);
 
+/// Directories worth watching so an install made while Kartend is running is
+/// noticed without waiting for the next startup (Kartend-5vuqy).
+///
+/// DIRECTORIES ONLY, never the manifest files themselves. Steam rewrites and
+/// replaces appmanifest_*.acf repeatedly during a download, and a
+/// QFileSystemWatcher entry for a file that gets replaced is dropped for good
+/// — the watch would go dead precisely when it mattered. A directory entry
+/// survives its contents churning.
+///
+/// Empty when the source is not installed, so callers can watch every source
+/// unconditionally and get back only what exists.
+[[nodiscard]] QStringList watchPaths(const QString &sourceId);
+
 /// One stub present after a sync (freshly written or already up to date) —
 /// the bridge between the file-level sync and follow-up steps that key off
 /// the stub path (metadata writes are keyed (collection_uuid, stub path)).

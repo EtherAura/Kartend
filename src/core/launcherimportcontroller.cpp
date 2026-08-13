@@ -22,6 +22,7 @@
 #include "httpclient.h"
 #include "idatabasemanager.h"
 #include "launcherimportdialog.h"
+#include "launchermanifestwatcher.h"
 #include "pathutils.h"
 #include "steamstoreprovider.h"
 
@@ -549,6 +550,43 @@ void LauncherImportController::startNextEnrichment() {
             startNextEnrichment();
           });
   m_enrichRunner->start();
+}
+
+void LauncherImportController::startWatchingLaunchers() {
+  // Only watch sources that actually have a collection: watching Steam for a
+  // user who never imported it would fire syncs that have nowhere to land.
+  QStringList sourceIds;
+  if (m_ctx.getCollections) {
+    if (const QList<CollectionConfig> *collections = m_ctx.getCollections()) {
+      for (const CollectionConfig &config : *collections) {
+        const QString sourceId = config.importSource.trimmed();
+        if (!sourceId.isEmpty() && !sourceIds.contains(sourceId)) {
+          sourceIds.append(sourceId);
+        }
+      }
+    }
+  }
+
+  if (sourceIds.isEmpty()) {
+    if (m_manifestWatcher) {
+      m_manifestWatcher->setWatchedDirectories({});
+    }
+    return;
+  }
+
+  if (!m_manifestWatcher) {
+    m_manifestWatcher = new LauncherManifestWatcher(this);
+    m_manifestWatcher->setSyncCallback([this]() {
+      // Silent: this fires because the user installed something in ANOTHER
+      // application, so announcing it would interrupt whatever they are doing
+      // here to report something they already know.
+      startBackgroundSync(/*announce=*/false);
+    });
+  }
+  m_manifestWatcher->configureForSources(sourceIds);
+  qCDebug(lcLauncherImport).nospace()
+      << "watching " << m_manifestWatcher->activeDirectories().size()
+      << " launcher director(ies) for " << sourceIds.size() << " source(s)";
 }
 
 void LauncherImportController::startupSync() {

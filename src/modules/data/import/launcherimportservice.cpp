@@ -422,6 +422,61 @@ auto sourceSlices(const QString &sourceId) -> QList<SourceSlice> {
   return slices;
 }
 
+auto watchPaths(const QString &sourceId) -> QStringList {
+  QStringList paths;
+  const auto addExisting = [&paths](const QString &dir) {
+    if (!dir.isEmpty() && QFileInfo(dir).isDir() && !paths.contains(dir)) {
+      paths.append(dir);
+    }
+  };
+
+  if (sourceId == QLatin1String(kSourceSteam)) {
+    const QString root = SteamLibrary::defaultRoot();
+    if (root.isEmpty()) {
+      return paths;
+    }
+    // Every library folder, not just the default one: a game installed to a
+    // second drive writes its appmanifest there and nowhere else.
+    for (const QString &library : SteamLibrary::libraryFolders(root)) {
+      addExisting(library + QStringLiteral("/steamapps"));
+    }
+  } else if (sourceId == QLatin1String(kSourceFlatpak)) {
+    // Both roots: system-wide installs and --user installs land in different
+    // trees and a user with only one of them is normal.
+    addExisting(QStringLiteral("/var/lib/flatpak/exports/share/applications"));
+    addExisting(QDir::homePath() +
+                QStringLiteral("/.local/share/flatpak/exports/share/applications"));
+  } else if (sourceId == QLatin1String(kSourceLutris)) {
+    // pga.db is a file, and watching files is what this function refuses to
+    // do — SQLite replaces it on write. The directory sees that replacement.
+    addExisting(LutrisLibrary::defaultDataDir());
+  } else if (sourceId == QLatin1String(kSourceHeroic)) {
+    addExisting(HeroicLibrary::defaultConfigDir() + QStringLiteral("/store_cache"));
+    addExisting(HeroicLibrary::defaultConfigDir() + QStringLiteral("/sideload_apps"));
+  } else if (sourceId == QLatin1String(kSourceItch)) {
+    addExisting(ItchLibrary::defaultConfigDir() + QStringLiteral("/db"));
+  } else if (sourceId == QLatin1String(kSourceBottles)) {
+    addExisting(BottlesLibrary::defaultDataDir() + QStringLiteral("/bottles"));
+  } else if (sourceId == QLatin1String(kSourceXdg)) {
+    for (const QString &root : DesktopEntryFile::defaultShareRoots()) {
+      addExisting(root + QStringLiteral("/applications"));
+    }
+  } else if (sourceId == QLatin1String(kSourceEsde)) {
+    // The ROM root, plus each system directory: a new ROM dropped into an
+    // existing system changes that subdirectory, not the root above it.
+    const QString dataDir = EsdeLibrary::defaultDataDir();
+    if (dataDir.isEmpty()) {
+      return paths;
+    }
+    const QString romDir = EsdeLibrary::romDirectory(dataDir);
+    addExisting(romDir);
+    for (const EsdeLibrary::System &system : EsdeLibrary::systems(romDir)) {
+      addExisting(system.romDir);
+    }
+  }
+  return paths;
+}
+
 auto detectSources() -> QList<SourceInfo> {
   QList<SourceInfo> sources;
 

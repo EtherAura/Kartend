@@ -312,6 +312,9 @@ void MainWindow::showStartupSplash() {
   QTimer::singleShot(8000, this, [this]() {
     if (m_launcherImportController) {
       m_launcherImportController->startupSync();
+      // Then keep watching, so an install made in Steam or Heroic while
+      // Kartend is open turns up without a restart (Kartend-5vuqy).
+      m_launcherImportController->startWatchingLaunchers();
     }
   });
   // startup video plays first when enabled. The splash is
