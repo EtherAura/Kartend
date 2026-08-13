@@ -4,7 +4,9 @@ name: CHANGELOG Enforcer
 # adding a corresponding entry under [Unreleased] in CHANGELOG.md. Doc-only,
 # test-only, and CI-only changes are auto-exempted by the path check; anything
 # else can opt out with the `no-changelog` label (PRs) or a `[no-changelog]`
-# marker in a commit message (pushes).
+# marker in a commit message (pushes). On a push the marker exempts ONLY the
+# commit carrying it — a marked commit batched with unmarked src/ work does
+# not exempt that work.
 #
 # Rationale: CHANGELOG.md has lagged code several times in the past
 # (Kartend-pbed); manual discipline is fragile. This gate is a lightweight,
@@ -71,19 +73,38 @@ jobs:
               RANGE_BASE="$(git rev-parse 'HEAD~1')"
             fi
 
-            # Push counterpart of the `no-changelog` label: any commit in the
-            # pushed range may carry a [no-changelog] marker.
-            if git log --format=%B "${RANGE_BASE}..HEAD" | grep -qF '[no-changelog]'; then
-              echo "::notice::A commit in this push carries [no-changelog] — skipping CHANGELOG check."
+            # Push counterpart of the `no-changelog` label. THE MARKER EXEMPTS
+            # THE COMMIT THAT CARRIES IT, NOT THE WHOLE PUSH. It used to skip
+            # the entire check whenever any commit in the range mentioned it,
+            # so one marked doc commit batched alongside real src/ work
+            # silently exempted that work — and pushes to main here are
+            # usually multi-commit, so the loophole was wide open. Now only
+            # the unmarked commits are examined for user-visible changes.
+            UNMARKED_SHAS=""
+            for sha in $(git rev-list "${RANGE_BASE}..HEAD"); do
+              if git log -1 --format=%B "$sha" | grep -qF '[no-changelog]'; then
+                echo "::notice::$(git log -1 --format='%h %s' "$sha") — carries [no-changelog], exempt."
+              else
+                UNMARKED_SHAS="${UNMARKED_SHAS} ${sha}"
+              fi
+            done
+            if [ -z "${UNMARKED_SHAS// /}" ]; then
+              echo "::notice::Every commit in this push carries [no-changelog] — skipping CHANGELOG check."
               exit 0
             fi
+            # Files touched by the unmarked commits only. -m diffs a merge
+            # against each parent, which over-reports rather than under-reports
+            # — the safe direction for a gate.
+            CHANGED=$(for sha in ${UNMARKED_SHAS}; do
+              git diff-tree -r -m --no-commit-id --name-only "$sha"
+            done | sort -u)
           else
             BASE_SHA="$(git rev-parse "origin/${BASE_REF}")"
             RANGE_BASE="$(git merge-base "${BASE_SHA}" HEAD)"
+            CHANGED=$(git diff --name-only "${RANGE_BASE}" HEAD)
           fi
 
-          CHANGED=$(git diff --name-only "${RANGE_BASE}" HEAD)
-          echo "Changed files since ${RANGE_BASE}:"
+          echo "Changed files considered (since ${RANGE_BASE}):"
           printf '  %s\n' $CHANGED
 
           # Decide if the change touches user-visible code:
