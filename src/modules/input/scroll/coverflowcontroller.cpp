@@ -346,8 +346,22 @@ static QString cardArtworkDirectory(const QString &fullPath, const CollectionCon
 // them up): the controller tracks them in m_pendingArtwork, prewarms their
 // directories off-thread, and a bounded trailing retry re-runs buildCard
 // for just those slots (Kartend-6x8tn).
+//
+// A cover the user linked by hand answers first (Kartend-1js9j): @p manualCovers
+// is the prebuilt, existence-checked map from
+// ItemArtworkStore::loadManualCoverPaths, so honouring the link costs one hash
+// lookup rather than the per-item item_artwork read the cards cannot afford —
+// and it needs no warm directory cache, which is why a hit here also keeps the
+// slot out of the pending-artwork retry.
 static QString resolveCardArtworkPath(const QString &fullPath, const CollectionContext &context,
-                                      IDatabaseManager *db) {
+                                      IDatabaseManager *db,
+                                      const QHash<QString, QString> &manualCovers) {
+  if (!manualCovers.isEmpty()) {
+    const QString manualCover = manualCovers.value(fullPath);
+    if (!manualCover.isEmpty()) {
+      return manualCover;
+    }
+  }
   const QString artworkDir = cardArtworkDirectory(fullPath, context, db);
   if (artworkDir.isEmpty()) {
     return {};
@@ -512,7 +526,8 @@ void CoverFlowController::resolveAndPushGallery(int visualIndex) {
   // image is what every other card in the carousel renders by default,
   // so it deserves a slot in the gallery so the user can return to it
   // after browsing variants.
-  const QString primaryArtwork = resolveCardArtworkPath(fullPath, *m_context, db);
+  const QString primaryArtwork =
+      resolveCardArtworkPath(fullPath, *m_context, db, m_manualCoverPaths);
   if (!primaryArtwork.isEmpty()) {
     entries.append({QObject::tr("Cover"), primaryArtwork, /*isVideo=*/false});
     seenPaths.insert(primaryArtwork);
@@ -584,7 +599,7 @@ CoverFlowCardData CoverFlowController::buildCard(int actualIndex, IDatabaseManag
     const QString fileName = QFileInfo(fullPath).fileName();
     card.title = m_dataManager->fileNames().value(fullPath.isEmpty() ? rawEntry : fullPath,
                                                   QFileInfo(fileName).completeBaseName());
-    card.artworkPath = resolveCardArtworkPath(fullPath, *m_context, db);
+    card.artworkPath = resolveCardArtworkPath(fullPath, *m_context, db, m_manualCoverPaths);
   }
   return card;
 }

@@ -260,6 +260,31 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     perfTimer.start();
   }
 
+  // A cover the user linked by hand outranks everything below (Kartend-1js9j).
+  // It has to come first, not just before the name cascade: the session artwork
+  // cache and the shift+middle-click type override are both name-based
+  // auto-discovery, and a manual link beats auto-discovery in the sidebar
+  // gallery, in loadItemDetail, and in items.artwork_path — the tile was the
+  // one surface that disagreed. The map is prebuilt and existence-checked
+  // (ItemArtworkStore::loadManualCoverPaths), so this stays a hash lookup on
+  // the virtual-scroll hot path; the isEmpty() guard makes it free for the
+  // libraries with no hand-linked artwork at all.
+  //
+  // LIST MODE is deliberately left to the name-based cascade below: its
+  // hasArtwork flag drives a preview BUTTON whose overlay
+  // (SelectionDisplayManager::showArtworkPreview) resolves the image by name
+  // all over again, so flagging a link-only item here would offer a button
+  // that opens nothing.
+  if (!m_manualCoverPaths.isEmpty() && !(widget && widget->isListMode())) {
+    const QString manualCover = m_manualCoverPaths.value(fullPath);
+    if (!manualCover.isEmpty()) {
+      if (auto *art = artworkMgr()) {
+        art->addPendingArtwork(widget, manualCover);
+        return;
+      }
+    }
+  }
+
   // Check cached artwork paths first (instant startup optimization)
   if (!m_cachedArtworkPaths.isEmpty()) {
     QString cachedPath = m_cachedArtworkPaths.value(fullPath);

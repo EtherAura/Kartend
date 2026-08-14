@@ -167,6 +167,16 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
     m_preSearchStateManager->setReferences(m_mediaScrollArea, m_gridContainer);
   }
 
+  // Kartend-1js9j: a manual artwork link is a DATABASE fact, so nothing in the
+  // filesystem-watching / directory-cache machinery can notice one being made.
+  // Listen for the write directly and re-derive the manual-cover map from it.
+  // Wired here rather than in MainWindow because the three consumers of that
+  // map all hang off ScrollManager.
+  if (IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr) {
+    connect(db, &IDatabaseManager::itemArtworkLinksChanged, this,
+            &ScrollManager::onItemArtworkLinksChanged, Qt::UniqueConnection);
+  }
+
   if (m_mediaScrollArea) {
     m_mediaScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     if (auto *horizontalScrollbar = m_mediaScrollArea->horizontalScrollBar()) {
@@ -261,6 +271,12 @@ void ScrollManager::setupVirtualScrolling(int totalCount, const CollectionContex
   m_totalItems = m_dataManager->totalItemCount();
   qCDebug(lcSearchDiag)
       << QString("setupVirtualScrolling: final m_totalItems=%1").arg(m_totalItems);
+
+  // Kartend-1js9j: hand the manual-cover map to the tile factory, the carousel
+  // and the hideMissingArtwork predicate before any of them runs. It has to
+  // land before the FilterManager baseline below, or the first pass would hide
+  // items whose tiles are about to paint a hand-linked cover.
+  refreshManualCoverPaths(/*force=*/false);
 
   // when the collection has hideMissingArtwork enabled the
   // FilterManager needs the latest source data + context so its baseline

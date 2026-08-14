@@ -324,6 +324,26 @@ auto FilterManager::mediaItemHasArtwork(int mediaIndex) const -> bool {
     // once its real path has landed.
     return true;
   }
+  // A hand-linked cover settles the question before the name-based key set is
+  // consulted at all (Kartend-1js9j): the grid tile and the cover-flow card
+  // paint that link now, so hiding the item would hide a tile with a real cover
+  // on it. The map is prebuilt and existence-checked, and — unlike the key set
+  // — needs no warm DirectoryCache, so it answers even during the cold-cache
+  // window below. m_filePaths entries can be media-dir-relative, so the key is
+  // resolved through the FileMapCache-backed lookup (an O(1) hash hit, the same
+  // one itemBelongsToTargetCollections already pays per item); the isEmpty()
+  // guard keeps that off the pass entirely for libraries with no links.
+  if (!m_manualCoverPaths.isEmpty()) {
+    if (!m_manualCoverPaths.value(rawEntry).isEmpty()) {
+      return true;
+    }
+    if (auto *db = dbMgr()) {
+      const QString fullPath = db->resolveFilePath(rawEntry, m_context);
+      if (!fullPath.isEmpty() && !m_manualCoverPaths.value(fullPath).isEmpty()) {
+        return true;
+      }
+    }
+  }
   // Membership test against the precomputed artwork key set instead of the
   // per-item findArtworkForFileCached cascade (20 lock-guarded probes plus
   // potential first-miss stat sweeps, for EVERY item on EVERY filter pass).

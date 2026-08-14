@@ -39,6 +39,12 @@ private slots:
   // the hideMissingArtwork predicate.
   void testBuildArtworkKeySetFromCachedListings();
   void testHideMissingArtworkResolvesSubdirAndFullNameKeys();
+
+  // Hand-linked covers (Kartend-1js9j): the name-based key set cannot see a
+  // manual item_artwork link, so the predicate consults the manual-cover map
+  // the render surfaces paint from before it consults the key set.
+  void testHideMissingArtworkKeepsHandLinkedItems();
+  void testHideMissingArtworkHandLinkAnswersEvenOnAColdCascade();
 };
 
 #endif // KARTEND_TESTS_TEST_FILTERMANAGER_H

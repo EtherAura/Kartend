@@ -42,6 +42,26 @@ constexpr const char *DELETE_ONE_SQL =
     "DELETE FROM item_artwork "
     "WHERE collection_uuid = ? AND path = ? AND artwork_type = ?";
 
+/// Bulk manual-cover query (Kartend-1js9j). The artwork_type IN (...) list is
+/// filled from ArtworkUtils::coverSubdirPriority() at call time so the set of
+/// cover types stays defined in exactly one place; gallery-only rows (logo,
+/// the scraper's non-standard types) never reach the fold. ORDER BY path lets
+/// the fold stream one item at a time.
+QString selectManualCoversSql(int coverTypeCount) {
+  QString placeholders;
+  placeholders.reserve(coverTypeCount * 2);
+  for (int i = 0; i < coverTypeCount; ++i) {
+    if (i > 0) {
+      placeholders += QLatin1Char(',');
+    }
+    placeholders += QLatin1Char('?');
+  }
+  return QStringLiteral("SELECT path, artwork_type, manual_path FROM item_artwork "
+                        "WHERE manual_path IS NOT NULL AND manual_path != '' "
+                        "AND artwork_type IN (") +
+         placeholders + QStringLiteral(") ORDER BY path");
+}
+
 QVariant nullableString(const QString &value) {
   return value.isEmpty() ? QVariant(QMetaType(QMetaType::QString)) : QVariant(value);
 }
@@ -297,6 +317,57 @@ QString resolveCoverPath(const QHash<QString, QString> &manualByType,
     }
   }
   return autoDiscovered;
+}
+
+ErrorUtils::Result<QHash<QString, QString>> loadManualCoverPaths(QSqlDatabase &db) {
+  if (!db.isOpen()) {
+    return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                 "ItemArtworkStore::loadManualCoverPaths");
+  }
+
+  const QStringList &coverTypes = ArtworkUtils::coverSubdirPriority();
+  QSqlQuery q(db);
+  if (!q.prepare(selectManualCoversSql(static_cast<int>(coverTypes.size())))) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                               "Failed to prepare item_artwork manual-cover select",
+                               "ItemArtworkStore::loadManualCoverPaths")
+        .withDetails(q.lastError().text());
+  }
+  for (const QString &type : coverTypes) {
+    q.addBindValue(type);
+  }
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                               "Failed to query item_artwork manual covers",
+                               "ItemArtworkStore::loadManualCoverPaths")
+        .withDetails(q.lastError().text());
+  }
+
+  QHash<QString, QString> covers;
+  QString currentPath;
+  QHash<QString, QString> manualByType;
+  // One item's links are contiguous thanks to ORDER BY path, so the fold only
+  // ever holds the group it is inside.
+  const auto flush = [&]() {
+    if (currentPath.isEmpty()) {
+      return;
+    }
+    const QString cover = resolveCoverPath(manualByType, QString());
+    if (!cover.isEmpty()) {
+      covers.insert(currentPath, cover);
+    }
+    manualByType.clear();
+  };
+  while (q.next()) {
+    const QString path = q.value(0).toString();
+    if (path != currentPath) {
+      flush();
+      currentPath = path;
+    }
+    manualByType.insert(q.value(1).toString(), q.value(2).toString());
+  }
+  flush();
+  return covers;
 }
 
 } // namespace ItemArtworkStore

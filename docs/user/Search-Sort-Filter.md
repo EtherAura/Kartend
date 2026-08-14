@@ -224,12 +224,12 @@ last scan — so it can disagree with `missing:artwork` and the *Missing
 artwork* smart playlist for a short while after you add or delete covers,
 until that collection is scanned again.
 
-It also goes purely by file name, so it does not see
-[per-item links](Artwork.md#manual-per-item-links): an item whose only cover
-is one you linked by hand is still hidden by this filter, even though
-`has:artwork` matches it. That is deliberate — this filter hides the tiles
-that would paint a placeholder, and the grid tile itself resolves covers by
-name too.
+A cover you [linked by hand](Artwork.md#manual-per-item-links) keeps the item
+visible. The name-matching pass above can't see a link — the image is usually
+named nothing like the item and may not even live in the artwork folder — so
+links are consulted separately, before it. That keeps this filter honest about
+what the grid draws: it hides the tiles that would paint a placeholder, and a
+hand-linked tile paints its cover.
 
 Set per-collection in Settings → Appearance.
 

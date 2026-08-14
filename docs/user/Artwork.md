@@ -120,7 +120,9 @@ attaches them to the matching item. The set is then browsable in the
 
 The "primary" artwork (the one painted on the tile) is the first match
 found by the un-suffixed base filename — see the previous section.
-Suffix-based matches are gallery-only.
+Suffix-based matches are gallery-only. A
+[per-item link](#manual-per-item-links) on a cover type outranks all of this:
+where you have picked an image by hand, that is the one the tile paints.
 
 ### Custom artwork types
 
@@ -198,24 +200,24 @@ type)` pair. The interaction summary:
 
 A link on a cover type — `front`, `box`, `screenshot`, `title`, `fanart`,
 `marquee`, and the scraped `box-3d` / `mixrbv1` / `mixrbv2` variants — makes
-the item count as having artwork for the *Has artwork* and *Missing artwork*
-[smart playlists](Smart-Playlists.md), the `has:artwork` / `missing:artwork`
-[search tokens](Search-Sort-Filter.md#structured-tokens), the Collection
-Health missing-artwork count, and the [wizard's](#artwork-assignment-wizard)
-queue. Saving or clearing a link moves the item immediately — no scan needed.
+the item count as having artwork everywhere: the *Has artwork* and *Missing
+artwork* [smart playlists](Smart-Playlists.md), the `has:artwork` /
+`missing:artwork` [search tokens](Search-Sort-Filter.md#structured-tokens), the
+Collection Health missing-artwork count, the
+[wizard's](#artwork-assignment-wizard) queue, and the **hide missing artwork**
+view filter. It is also what the item paints — the grid tile and the cover-flow
+card show a hand-linked cover, not the placeholder, and show it ahead of
+anything auto-discovery found for that item. Saving or clearing a link takes
+effect immediately; no scan needed.
 
-Three things that don't count:
+Two things that don't count:
 
 - A link whose file you have since deleted. Kartend checks that the target
   still exists, so a broken link doesn't claim a cover that can't be shown;
   the item falls back to whatever auto-discovery finds for it.
 - A link on `logo`, or on a [custom type](#custom-artwork-types). Those are
-  gallery slots, never covers.
-- The **hide missing artwork** view filter, which goes by file name only —
-  see [its note](Search-Sort-Filter.md#hide-missing-artwork). An item whose
-  only cover is a manual link is still hidden by that filter, and its grid
-  tile still shows the placeholder; the link appears in the sidebar gallery
-  and on the detail page.
+  gallery slots, never covers — they show in the sidebar gallery and on the
+  detail page, and leave the tile to auto-discovery.
 
 Manual links live in the database (`item_artwork` table), keyed by
 `(collection_uuid, source_path, artwork_type)`. They survive rescans,

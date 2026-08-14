@@ -22,6 +22,10 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "applicationcontext.h"
+#include "artworkutils.h"
+#include "iartworkmanager.h"
+#include "itemwidget.h"
 #include "itemwidgetfactory.h"
 
 class TestItemWidgetFactory : public QObject {
@@ -46,6 +50,13 @@ private slots:
   void subTile_iconExpandsCollectionVariable();
   void subTile_emptyWhenNeitherSourceResolves();
   void subTile_guardsOutOfRangeAndMissingInputs();
+
+  // Hand-linked cover precedence on the grid tile (Kartend-1js9j)
+  void manualCover_paintsTileForAnItemNoNameLookupCanAnswer();
+  void manualCover_outranksAnAutoDiscoveredCover();
+  void manualCover_outranksTheSessionArtworkCache();
+  void manualCover_emptyMapLeavesAutoDiscoveryUntouched();
+  void manualCover_unlinkedItemStillFallsThroughToTheNameCascade();
 
   // Pending range-request bookkeeping
   void prefetchRangeAt_requestsUnloadedChunkOnce();
@@ -97,6 +108,54 @@ struct RangeHarness {
     }
     factory.setFileData(&filePaths, &fileNames);
   }
+};
+
+/// Records what configureArtworkForWidget decided to paint. The artwork
+/// pipeline itself is out of scope here — the question is which PATH the
+/// factory hands it, which is the whole of the Kartend-1js9j precedence fix.
+class RecordingArtworkManager : public IArtworkManager {
+public:
+  void cancelAllArtworkLoading() override {}
+  void clearWidgetReferences() override {}
+  void clearPendingArtworkForWidget(ItemWidget * /*widget*/) override {}
+  void clearLoadedArtworkState() override {}
+  void updateViewportArtwork() override {}
+  void scheduleViewportUpdate() override {}
+  void stopSilentLoading() override {}
+  void startEarlyDentryPrewarm(int /*collectionIndex*/) override {}
+  void addPendingArtwork(ItemWidget * /*widget*/, const QString &artworkPath) override {
+    lastPath = artworkPath;
+    ++calls;
+  }
+  void cycleArtworkType(ItemWidget * /*w*/, const QString & /*p*/, int /*i*/) override {}
+  [[nodiscard]] QString artworkTypeOverrideFor(const QString & /*fullPath*/) const override {
+    return typeOverride;
+  }
+  [[nodiscard]] bool hasArtworkForWidget(ItemWidget * /*widget*/) const override { return false; }
+  [[nodiscard]] TimerUtils::Coordinator *getTimerCoordinator() const override { return nullptr; }
+  void updateUserActivity() override {}
+
+  QString lastPath;
+  QString typeOverride;
+  int calls = 0;
+};
+
+/// Factory wired far enough to run configureArtworkForWidget: a context with
+/// an artwork directory, a real (unparented) ItemWidget to configure, and the
+/// recording artwork manager reachable through the ApplicationContext.
+struct ArtworkHarness {
+  explicit ArtworkHarness(const QString &artworkDir, const QString &mediaDir) {
+    ctx.managers.seedArtworkRoles(&artwork);
+    context.config.artworkDirectory = artworkDir;
+    context.config.mediaDirectory = mediaDir;
+    factory.setApplicationContext(&ctx);
+    factory.setCollectionContext(context);
+  }
+  ApplicationContext ctx;
+  RecordingArtworkManager artwork;
+  CollectionContext context;
+  ItemWidgetFactory factory;
+  ItemWidget widget;
 };
 
 } // namespace
@@ -365,6 +424,119 @@ void TestItemWidgetFactory::subTile_guardsOutOfRangeAndMissingInputs() {
   QCOMPARE(ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(&collections, 7, QString(),
                                                                      parentArt),
            QString());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hand-linked cover precedence on the grid tile (Kartend-1js9j)
+//
+// configureArtworkForWidget used to resolve a cover from three name-based
+// sources only — the session artwork cache, the shift+middle-click type
+// override, and the ArtworkUtils name cascade — so a cover the user had linked
+// by hand rendered in the sidebar gallery while the tile painted a placeholder.
+// These cases pin the precedence: the link wins, and everything else is
+// untouched when no link exists.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestItemWidgetFactory::manualCover_paintsTileForAnItemNoNameLookupCanAnswer() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QTemporaryDir elsewhere;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid() && elsewhere.isValid());
+  // Named nothing like the item and stored outside the artwork directory —
+  // the shape the name cascade can never resolve, and the one the issue is
+  // about.
+  const QString linked = makeImageFile(elsewhere, QStringLiteral("hand-picked.png"));
+
+  ArtworkHarness h(artRoot.path(), mediaRoot.path());
+  const QString item = QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Overture.flac"));
+  h.factory.setManualCoverPaths({{item, linked}});
+
+  h.factory.configureArtworkForWidget(&h.widget, item);
+  QCOMPARE(h.artwork.calls, 1);
+  QCOMPARE(h.artwork.lastPath, linked);
+}
+
+void TestItemWidgetFactory::manualCover_outranksAnAutoDiscoveredCover() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QTemporaryDir elsewhere;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid() && elsewhere.isValid());
+  // Auto-discovery WOULD answer for this item: an image named after it, in
+  // the artwork directory.
+  makeImageFile(artRoot, QStringLiteral("Overture.png"));
+  const QString linked = makeImageFile(elsewhere, QStringLiteral("hand-picked.png"));
+  ArtworkUtils::clearDirectoryCache();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artRoot.path()});
+
+  ArtworkHarness h(artRoot.path(), mediaRoot.path());
+  const QString item = QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Overture.flac"));
+  h.factory.setManualCoverPaths({{item, linked}});
+
+  h.factory.configureArtworkForWidget(&h.widget, item);
+  // Manual beats auto — the precedence rule the rest of Kartend already obeys.
+  QCOMPARE(h.artwork.lastPath, linked);
+  ArtworkUtils::clearDirectoryCache();
+}
+
+void TestItemWidgetFactory::manualCover_outranksTheSessionArtworkCache() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QTemporaryDir elsewhere;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid() && elsewhere.isValid());
+  const QString cached = makeImageFile(artRoot, QStringLiteral("Overture.png"));
+  const QString linked = makeImageFile(elsewhere, QStringLiteral("hand-picked.png"));
+
+  ArtworkHarness h(artRoot.path(), mediaRoot.path());
+  const QString item = QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Overture.flac"));
+  // The startup viewport cache is name-based auto-discovery that happens to be
+  // precomputed, so it must not shadow a link either — it is consulted first
+  // in the function, which is why the manual check has to precede it.
+  h.factory.setCachedArtworkPaths({{item, cached}});
+  h.factory.setManualCoverPaths({{item, linked}});
+
+  h.factory.configureArtworkForWidget(&h.widget, item);
+  QCOMPARE(h.artwork.lastPath, linked);
+}
+
+void TestItemWidgetFactory::manualCover_emptyMapLeavesAutoDiscoveryUntouched() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid());
+  const QString autoArt = makeImageFile(artRoot, QStringLiteral("Overture.png"));
+  ArtworkUtils::clearDirectoryCache();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artRoot.path()});
+
+  ArtworkHarness h(artRoot.path(), mediaRoot.path());
+  const QString item = QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Overture.flac"));
+  // No links anywhere — the overwhelmingly common library. The name cascade
+  // must still be what answers.
+  h.factory.configureArtworkForWidget(&h.widget, item);
+  QCOMPARE(h.artwork.lastPath, autoArt);
+  ArtworkUtils::clearDirectoryCache();
+}
+
+void TestItemWidgetFactory::manualCover_unlinkedItemStillFallsThroughToTheNameCascade() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QTemporaryDir elsewhere;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid() && elsewhere.isValid());
+  const QString autoArt = makeImageFile(artRoot, QStringLiteral("Nocturne.png"));
+  const QString linked = makeImageFile(elsewhere, QStringLiteral("hand-picked.png"));
+  ArtworkUtils::clearDirectoryCache();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artRoot.path()});
+
+  ArtworkHarness h(artRoot.path(), mediaRoot.path());
+  const QString linkedItem =
+      QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Overture.flac"));
+  const QString otherItem =
+      QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Nocturne.flac"));
+  // A non-empty map is per ITEM, not per collection: a sibling with no row of
+  // its own must not inherit the link, and must not lose its own auto cover.
+  h.factory.setManualCoverPaths({{linkedItem, linked}});
+
+  h.factory.configureArtworkForWidget(&h.widget, otherItem);
+  QCOMPARE(h.artwork.lastPath, autoArt);
+  ArtworkUtils::clearDirectoryCache();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

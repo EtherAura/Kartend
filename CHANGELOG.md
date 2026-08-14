@@ -251,8 +251,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Links on `logo` and on custom artwork types stay gallery-only, since those
   are never used as an item's cover. One case still waits for a scan —
   clearing a link on an item that also has a name-matched cover reports it as
-  missing artwork until that collection is next scanned. The **hide missing
-  artwork** view filter is unchanged and still goes by file name alone.
+  missing artwork until that collection is next scanned.
+
+- **A cover you assign by hand now shows on the item's tile.** Assigning one
+  put it in the sidebar gallery and on the detail page, but the grid went on
+  painting the procedural placeholder, and the cover-flow card the same — the
+  two surfaces that actually show you a cover were the two that never looked at
+  your links. Picking an image by hand is how you fix what automatic matching
+  gets wrong, so it was the one case where the fix did not visibly take. Tiles
+  and cards now show a hand-linked cover, and show it ahead of anything matched
+  by file name, which is the order the rest of Kartend has always used. The new
+  cover appears as soon as you save the link rather than waiting for you to
+  leave the collection and come back. The **hide missing artwork** filter
+  follows: an item kept off the grid because nothing in the artwork folder
+  answers to its name comes back the moment you link a cover for it, so the
+  filter no longer hides an item that would render one. A link to a file you
+  have since deleted still shows nothing, and links on `logo` or a custom
+  artwork type remain gallery-only.
 
 - **Collections that keep artwork in matching subfolders now find it even
   when the content folder is a symbolic link.** With **Include Artwork

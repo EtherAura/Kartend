@@ -133,11 +133,13 @@ scanned; the grid, which looks at the folder directly, updates sooner.
 A cover you [linked by hand](Artwork.md#manual-per-item-links) counts too,
 and counts immediately — links are stored in the database rather than found
 on disk, so saving or clearing one moves the item in and out of this rule
-straight away rather than waiting for a scan. The link has to still point at
-a file that exists; one whose target you have since deleted doesn't count,
-and the item falls back to whatever auto-discovery finds for it. Links on
-types that are never used as a cover — `logo`, and any custom type you've
-added — are gallery-only and don't count here.
+straight away rather than waiting for a scan. It is also what the tile paints:
+a hand-linked cover shows on the item's tile and its cover-flow card, ahead of
+anything auto-discovery found, so this rule and the grid agree. The link has to
+still point at a file that exists; one whose target you have since deleted
+doesn't count, and the item falls back to whatever auto-discovery finds for it.
+Links on types that are never used as a cover — `logo`, and any custom type
+you've added — are gallery-only and don't count here.
 
 > **Note** — clearing a link is the one case that can lag. If the item also
 > has an auto-discovered cover, it reports as missing artwork until that

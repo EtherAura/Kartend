@@ -139,6 +139,14 @@ public:
   bool removeItemArtwork(const QString &collectionUuid, const QString &path,
                          const QString &artworkType) override;
 
+  /// Whole-library manual-cover map for the render surfaces (Kartend-1js9j).
+  /// One `item_artwork` pass on the main-thread connection, folded through
+  /// ItemArtworkStore::resolveCoverPath — the same rule the scan and the
+  /// write-through use, so the tile cannot disagree with the column. Returns an
+  /// empty map on database failure (logged), which degrades to the pre-existing
+  /// name-based lookup rather than blanking any tile.
+  [[nodiscard]] QHash<QString, QString> loadManualCoverPaths() const override;
+
   /// External-writer cache invalidation hook. Drops the (uuid, path)
   /// entry from `m_metadataCache`. Called from the main thread by the
   /// BatchScrapeRunner write worker after its own connection commits a

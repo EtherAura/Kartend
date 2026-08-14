@@ -234,6 +234,7 @@ bool DatabaseManager::saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwo
   }
   m_metadataCache.invalidateItem(artwork.collectionUuid, artwork.path);
   writeThroughItemCoverPath(artwork.collectionUuid, artwork.path, previousManual);
+  emit itemArtworkLinksChanged(artwork.collectionUuid, artwork.path);
   return true;
 }
 
@@ -248,7 +249,20 @@ bool DatabaseManager::removeItemArtwork(const QString &collectionUuid, const QSt
   }
   m_metadataCache.invalidateItem(collectionUuid, path);
   writeThroughItemCoverPath(collectionUuid, path, previousManual);
+  emit itemArtworkLinksChanged(collectionUuid, path);
   return true;
+}
+
+QHash<QString, QString> DatabaseManager::loadManualCoverPaths() const {
+  if (!m_db.isOpen()) {
+    return {};
+  }
+  auto result = ItemArtworkStore::loadManualCoverPaths(const_cast<QSqlDatabase &>(m_db));
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    return {};
+  }
+  return result.value();
 }
 
 void DatabaseManager::invalidateMetadataCacheItem(const QString &collectionUuid,

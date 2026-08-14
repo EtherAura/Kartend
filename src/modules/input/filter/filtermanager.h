@@ -120,6 +120,20 @@ public:
   /// (visible) and the caller should prewarm + retry (Kartend-l66sn).
   [[nodiscard]] bool artworkKeySetSettled() const;
 
+  /// Absolute item path -> hand-linked cover, from
+  /// IDatabaseManager::loadManualCoverPaths() (Kartend-1js9j).
+  ///
+  /// The hide-missing-artwork key set is name-based, so it answered "artless"
+  /// for an item whose cover was hand-linked rather than named after it — and
+  /// once the grid tile started painting that link, the filter was hiding an
+  /// item that renders a real cover. Consulting this map first moves the
+  /// predicate to match what the tile draws. Unlike the key set it needs no
+  /// warm directory cache: a link is a database fact, existence-checked when
+  /// the map was built, so it is authoritative even while the cascade is cold.
+  void setManualCoverPaths(const QHash<QString, QString> &manualCovers) {
+    m_manualCoverPaths = manualCovers;
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Filter operations
   // ─────────────────────────────────────────────────────────────────────────
@@ -256,6 +270,10 @@ private:
   // Whether the cascade backing m_artworkKeySet was fully cached when the
   // set was built; stamped by ensureArtworkKeySet per generation.
   mutable bool m_artworkKeySetSettled = false;
+  // fullPath -> hand-linked cover (see setManualCoverPaths). Empty for every
+  // library where nobody has linked a cover, which is the case
+  // mediaItemHasArtwork short-circuits on before it resolves any path.
+  QHash<QString, QString> m_manualCoverPaths;
 };
 
 #endif

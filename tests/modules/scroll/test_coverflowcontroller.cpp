@@ -85,6 +85,11 @@ private slots:
   void retry_deactivationClearsPendingAndTimer();
   // Kartend-t4rjw
   void retry_warmRootWithColdCoverSubdirIsNotTreatedAsArtless();
+  // Kartend-1js9j — hand-linked covers on the card face
+  void manualLink_paintsCardFaceWithoutWaitingOnTheDirectoryCache();
+  void manualLink_outranksAnAutoDiscoveredCover();
+  void manualLink_emptyMapLeavesAutoDiscoveryUntouched();
+
   // Kartend-5dhlv
   void subcollectionCard_fallsBackToNamedImageInParentArtworkDir();
   void subcollectionCard_collectionIconStillWins();
@@ -314,6 +319,79 @@ void TestCoverFlowController::retry_warmRootWithColdCoverSubdirIsNotTreatedAsArt
 // subcollection following the naming convention (the mechanism that predates
 // the key, and the only one Grid honoured before Kartend-kb2vx) showed the
 // placeholder in cover flow alone.
+// ----- Hand-linked covers on the card face (Kartend-1js9j) -----
+
+void TestCoverFlowController::manualLink_paintsCardFaceWithoutWaitingOnTheDirectoryCache() {
+  QTemporaryDir artDir;
+  QTemporaryDir mediaDir;
+  QTemporaryDir elsewhere;
+  QVERIFY(artDir.isValid() && mediaDir.isValid() && elsewhere.isValid());
+  // The linked image lives OUTSIDE the artwork directory and is named nothing
+  // like the item — exactly the case name-based discovery can never answer,
+  // and the case that used to leave the card on a placeholder while the
+  // sidebar gallery showed the cover.
+  const QString linked = touchFile(elsewhere.filePath(QStringLiteral("hand-picked.png")));
+  QVERIFY(!linked.isEmpty());
+
+  CoverFlowHarness h(artDir.path(), mediaDir.path());
+  const QString item = mediaDir.filePath(QStringLiteral("Overture.flac"));
+  h.store.filePaths() << item;
+  h.controller.setManualCoverPaths({{item, linked}});
+  h.controller.ensureWidget();
+
+  h.controller.rebuildCards();
+  QCOMPARE(h.controller.widget()->cardCount(), 1);
+  QCOMPARE(h.controller.widget()->cardAt(0).artworkPath, linked);
+  // A link is a database fact, so it resolves on the very first build against
+  // a stone-cold DirectoryCache — the slot never enters the pending-artwork
+  // retry and the timer stays disarmed.
+  QCOMPARE(h.controller.pendingArtworkCount(), 0);
+  QVERIFY(!h.controller.artworkRetryActive());
+}
+
+void TestCoverFlowController::manualLink_outranksAnAutoDiscoveredCover() {
+  QTemporaryDir artDir;
+  QTemporaryDir mediaDir;
+  QTemporaryDir elsewhere;
+  QVERIFY(artDir.isValid() && mediaDir.isValid() && elsewhere.isValid());
+  // Auto-discovery WOULD find this one: it is named after the item and sits in
+  // the artwork directory.
+  const QString autoArt = touchFile(artDir.filePath(QStringLiteral("Overture.png")));
+  const QString linked = touchFile(elsewhere.filePath(QStringLiteral("hand-picked.png")));
+  QVERIFY(!autoArt.isEmpty() && !linked.isEmpty());
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artDir.path()});
+
+  CoverFlowHarness h(artDir.path(), mediaDir.path());
+  const QString item = mediaDir.filePath(QStringLiteral("Overture.flac"));
+  h.store.filePaths() << item;
+  h.controller.setManualCoverPaths({{item, linked}});
+  h.controller.ensureWidget();
+
+  h.controller.rebuildCards();
+  // Manual beats auto — the precedence the sidebar gallery, loadItemDetail and
+  // items.artwork_path all already apply.
+  QCOMPARE(h.controller.widget()->cardAt(0).artworkPath, linked);
+}
+
+void TestCoverFlowController::manualLink_emptyMapLeavesAutoDiscoveryUntouched() {
+  QTemporaryDir artDir;
+  QTemporaryDir mediaDir;
+  QVERIFY(artDir.isValid() && mediaDir.isValid());
+  const QString autoArt = touchFile(artDir.filePath(QStringLiteral("Overture.png")));
+  QVERIFY(!autoArt.isEmpty());
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artDir.path()});
+
+  CoverFlowHarness h(artDir.path(), mediaDir.path());
+  const QString item = mediaDir.filePath(QStringLiteral("Overture.flac"));
+  h.store.filePaths() << item;
+  // No links anywhere in the library — the overwhelmingly common case. The
+  // name cascade must still be what answers.
+  h.controller.ensureWidget();
+
+  h.controller.rebuildCards();
+  QCOMPARE(h.controller.widget()->cardAt(0).artworkPath, autoArt);
+}
+
 void TestCoverFlowController::subcollectionCard_fallsBackToNamedImageInParentArtworkDir() {
   QTemporaryDir artDir;
   QTemporaryDir mediaDir;

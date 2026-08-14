@@ -76,6 +76,9 @@ private slots:
   void resolveCoverPathSkipsALinkWhoseFileIsGone();
   void resolveCoverPathIgnoresGalleryOnlyTypes();
   void resolveCoverPathFollowsCoverTypePriority();
+  void loadManualCoverPathsMapsEveryHandLinkedItem();
+  void loadManualCoverPathsSkipsGalleryOnlyAndBrokenLinks();
+  void loadManualCoverPathsIsEmptyWithoutLinks();
 };
 
 void TestItemArtwork::standardTypesAreOrderedAndStable() {
@@ -508,6 +511,109 @@ void TestItemArtwork::resolveCoverPathFollowsCoverTypePriority() {
       ItemArtworkStore::resolveCoverPath(
           {{QStringLiteral("box"), box}, {QStringLiteral("screenshot"), screenshot}}, QString()),
       box);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// loadManualCoverPaths — the bulk form the RENDER surfaces read (Kartend-1js9j).
+// The grid tile, the cover-flow card and the hideMissingArtwork predicate all
+// consult this map instead of asking the database per item, so it has to agree
+// with resolveCoverPath row for row.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestItemArtwork::loadManualCoverPathsMapsEveryHandLinkedItem() {
+  const QString conn = QStringLiteral("test_itemartwork_manualmap");
+  QSqlDatabase db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  auto guard = qScopeGuard([&db, &conn]() { closeAndRemove(db, conn); });
+
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString frontArt = QDir(dir.path()).filePath(QStringLiteral("hand-picked.png"));
+  const QString boxArt = QDir(dir.path()).filePath(QStringLiteral("second.png"));
+  QVERIFY(touchFile(frontArt));
+  QVERIFY(touchFile(boxArt));
+
+  const auto link = [&db](const QString &path, const QString &type, const QString &file) {
+    ItemArtwork row;
+    row.collectionUuid = QStringLiteral("uuid-a");
+    row.path = path;
+    row.artworkType = type;
+    row.manualPath = file;
+    QVERIFY(!ItemArtworkStore::save(db, row).isError());
+  };
+  // Two items, one of them linked on two cover types so the priority fold is
+  // exercised through the bulk path and not just the single-item one.
+  link(QStringLiteral("/media/Overture.flac"), QStringLiteral("box"), boxArt);
+  link(QStringLiteral("/media/Overture.flac"), QStringLiteral("front"), frontArt);
+  link(QStringLiteral("/media/Nocturne.flac"), QStringLiteral("box"), boxArt);
+
+  auto result = ItemArtworkStore::loadManualCoverPaths(db);
+  QVERIFY(!result.isError());
+  const QHash<QString, QString> covers = result.value();
+  QCOMPARE(covers.size(), 2);
+  // `front` outranks `box` for the item that carries both — same order
+  // resolveCoverPath applies, which is what the tile has to paint.
+  QCOMPARE(covers.value(QStringLiteral("/media/Overture.flac")), frontArt);
+  QCOMPARE(covers.value(QStringLiteral("/media/Nocturne.flac")), boxArt);
+}
+
+void TestItemArtwork::loadManualCoverPathsSkipsGalleryOnlyAndBrokenLinks() {
+  const QString conn = QStringLiteral("test_itemartwork_manualmap_skips");
+  QSqlDatabase db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  auto guard = qScopeGuard([&db, &conn]() { closeAndRemove(db, conn); });
+
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString logoArt = QDir(dir.path()).filePath(QStringLiteral("badge.png"));
+  QVERIFY(touchFile(logoArt));
+
+  const auto link = [&db](const QString &path, const QString &type, const QString &file) {
+    ItemArtwork row;
+    row.collectionUuid = QStringLiteral("uuid-a");
+    row.path = path;
+    row.artworkType = type;
+    row.manualPath = file;
+    QVERIFY(!ItemArtworkStore::save(db, row).isError());
+  };
+  // Gallery-only types never supply a cover, so neither of these items may
+  // appear — a tile that showed one would contradict what the DB predicates
+  // count. The scraper writes exactly this shape for non-standard types.
+  link(QStringLiteral("/media/Logo.flac"), QStringLiteral("logo"), logoArt);
+  link(QStringLiteral("/media/Custom.flac"), QStringLiteral("wheel"), logoArt);
+  // A cover-type link whose file has been deleted since is skipped too, so the
+  // map can never pin a cover the render path cannot load.
+  link(QStringLiteral("/media/Gone.flac"), QStringLiteral("front"),
+       QDir(dir.path()).filePath(QStringLiteral("deleted.png")));
+
+  auto result = ItemArtworkStore::loadManualCoverPaths(db);
+  QVERIFY(!result.isError());
+  QVERIFY(result.value().isEmpty());
+}
+
+void TestItemArtwork::loadManualCoverPathsIsEmptyWithoutLinks() {
+  const QString conn = QStringLiteral("test_itemartwork_manualmap_empty");
+  QSqlDatabase db = openMemoryDb(conn);
+  QVERIFY(db.isOpen());
+  auto guard = qScopeGuard([&db, &conn]() { closeAndRemove(db, conn); });
+
+  // The overwhelmingly common library. The consumers branch on isEmpty() to
+  // stay off the hot path entirely, so "no rows" must really mean an empty map
+  // and not a map of empty values.
+  auto result = ItemArtworkStore::loadManualCoverPaths(db);
+  QVERIFY(!result.isError());
+  QVERIFY(result.value().isEmpty());
+
+  // A row saved with a cleared manual path (the links dialog's "clear" writes
+  // NULL rather than deleting) must not count either.
+  ItemArtwork row;
+  row.collectionUuid = QStringLiteral("uuid-a");
+  row.path = QStringLiteral("/media/Overture.flac");
+  row.artworkType = QStringLiteral("front");
+  QVERIFY(!ItemArtworkStore::save(db, row).isError());
+  auto cleared = ItemArtworkStore::loadManualCoverPaths(db);
+  QVERIFY(!cleared.isError());
+  QVERIFY(cleared.value().isEmpty());
 }
 
 QTEST_MAIN(TestItemArtwork)

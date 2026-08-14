@@ -437,3 +437,94 @@ void TestFilterManager::testUnifiedSortMapRemapsFilteredIndices() {
   QCOMPARE(spy.at(0).at(0).toInt(), 3);
   QCOMPARE(spy.at(0).at(1).toInt(), 3);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hand-linked covers (Kartend-1js9j). The key set is built from artwork FILE
+// NAMES, so it has no way to know an item was linked to an image that is named
+// nothing like it. Once the grid tile and the cover-flow card started painting
+// those links, a key-set-only predicate hid items that visibly render a cover.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestFilterManager::testHideMissingArtworkKeepsHandLinkedItems() {
+  QTemporaryDir artDir;
+  QTemporaryDir elsewhere;
+  QVERIFY(artDir.isValid() && elsewhere.isValid());
+  // Alpha is covered the ordinary way; Beta's cover was picked by hand and
+  // lives outside the artwork directory under an unrelated name; Gamma has
+  // nothing at all.
+  QFile art(artDir.filePath(QStringLiteral("Alpha.png")));
+  QVERIFY(art.open(QIODevice::WriteOnly));
+  art.write("x");
+  art.close();
+  const QString linked = elsewhere.filePath(QStringLiteral("hand-picked.png"));
+  QFile linkedFile(linked);
+  QVERIFY(linkedFile.open(QIODevice::WriteOnly));
+  linkedFile.write("x");
+  linkedFile.close();
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+
+  static const QStringList paths = {
+      QStringLiteral("/items/Alpha.bin"),
+      QStringLiteral("/items/Beta.bin"),
+      QStringLiteral("/items/Gamma.bin"),
+  };
+  FilterManager mgr;
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  mgr.setHideMissingArtworkFilter(true, artDir.path());
+  mgr.setManualCoverPaths({{QStringLiteral("/items/Beta.bin"), linked}});
+
+  mgr.clearFilter();
+  QVERIFY(mgr.artworkKeySetSettled());
+  // Beta survives on its link; only the genuinely artless Gamma is pruned.
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 1}));
+
+  // Clearing the links puts Beta back where the key set alone would have it,
+  // so the predicate tracks the map rather than latching a verdict.
+  mgr.setManualCoverPaths({});
+  mgr.clearFilter();
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+}
+
+void TestFilterManager::testHideMissingArtworkHandLinkAnswersEvenOnAColdCascade() {
+  QTemporaryDir artDir;
+  QTemporaryDir elsewhere;
+  QVERIFY(artDir.isValid() && elsewhere.isValid());
+  const QString linked = elsewhere.filePath(QStringLiteral("hand-picked.png"));
+  QFile linkedFile(linked);
+  QVERIFY(linkedFile.open(QIODevice::WriteOnly));
+  linkedFile.write("x");
+  linkedFile.close();
+  // No prewarm: the cold-cascade fail-open path (Kartend-l66sn) is active.
+  ArtworkUtils::DirectoryCache::instance().clear();
+
+  static const QStringList paths = {
+      QStringLiteral("/items/Alpha.bin"),
+      QStringLiteral("/items/Beta.bin"),
+  };
+  FilterManager mgr;
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  mgr.setHideMissingArtworkFilter(true, artDir.path());
+  mgr.setManualCoverPaths({{QStringLiteral("/items/Beta.bin"), linked}});
+
+  // Everything is visible while the cascade is cold — but Beta is visible for
+  // a stronger reason than Alpha, and stays visible once the cascade settles
+  // and the pass turns authoritative.
+  mgr.clearFilter();
+  QVERIFY(!mgr.artworkKeySetSettled());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 1}));
+
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+  mgr.clearFilter();
+  QVERIFY(mgr.artworkKeySetSettled());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{1}));
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+}
