@@ -400,6 +400,7 @@ void appendFileMapsAndListCanonical(int collectionIndex, const CollectionConfig 
                                     QHash<QString, QString> &fileToArtworkDir,
                                     QHash<QString, QString> &fileToMediaDir,
                                     QHash<QString, int> &fileToCollectionIndex, bool dedup,
+                                    const QHash<QString, QString> *storedAbsByKey = nullptr,
                                     QSet<QString> *seenCanonicalPaths = nullptr,
                                     QHash<QString, QString> *canonicalPathCache = nullptr);
 

@@ -329,9 +329,16 @@ private:
   // Date/Size sort modes can skip per-file stats (Kartend-m9r1s). Entries are
   // omitted when the stored value is unusable (invalid timestamp, file_size
   // never persisted) — callers must stat for missing keys.
+  // @p storedAbsByKey, when given, receives key -> items.path for every row
+  // whose stored absolute path is NOT the media dir joined with the returned
+  // key. Only the collapsed multi-disc item does that today (Kartend-yxahw);
+  // for every other row the join is exact and nothing is inserted, so callers
+  // can treat a miss as "rejoin normally".
   QStringList loadItemsFromDatabaseByUuid(const QString &collectionUuid,
                                           QHash<QString, QDateTime> *timestamps = nullptr,
-                                          QHash<QString, qint64> *sizes = nullptr);
+                                          QHash<QString, qint64> *sizes = nullptr,
+                                          QHash<QString, QString> *storedAbsByKey = nullptr,
+                                          const QString &mediaDirForOverrides = QString());
 
   // Load-or-scan hybrid used by the four load slots. Unidirectional bridge
   // into the scan subsystem: when a rescan is needed it routes through
@@ -344,7 +351,8 @@ private:
   // missing-key contract (Kartend-m9r1s).
   QStringList loadOrScanCollection(int collectionIndex, const CollectionConfig &collection,
                                    QHash<QString, QDateTime> &timestamps,
-                                   QHash<QString, qint64> *sizes = nullptr);
+                                   QHash<QString, qint64> *sizes = nullptr,
+                                   QHash<QString, QString> *storedAbsByKey = nullptr);
 
   // The scan subsystem (needsRescan, scanMediaDirectory, the scan-and-save
   // pipelines, prepareCollectionForItemsInsert, the scanned_items staging)

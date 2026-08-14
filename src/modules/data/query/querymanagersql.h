@@ -32,8 +32,19 @@ constexpr const char *DELETE_COLLECTION_BY_UUID = "DELETE FROM collections WHERE
 // single-column DISTINCT became a C++-side seen-set in
 // loadItemsFromDatabaseByUuid: DISTINCT over three columns would stop
 // collapsing rows that share a path but differ only in metadata.
+// Returns BOTH forms (Kartend-yxahw): column 0 is the media-dir-relative
+// browse key that loadItems' subfolder filtering needs — it tests
+// startsWith("<subfolder>/") and !contains('/'), which are meaningless on an
+// absolute path — and column 1 is the stored absolute path.
+//
+// They differ for exactly one row shape today: the collapsed multi-disc item,
+// whose path is a generated playlist under <appDataDir>/multi-disc/<uuid>/
+// while its rel_path places it beside its discs for folder browsing.
+// Re-deriving the absolute path by joining rel_path onto the media directory
+// — which is what every consumer used to do — produced a file that does not
+// exist for that row.
 constexpr const char *LOAD_ITEMS_BY_UUID =
-    "SELECT COALESCE(rel_path, path), last_modified, file_size FROM items "
+    "SELECT COALESCE(rel_path, path), path, last_modified, file_size FROM items "
     "WHERE collection_uuid = ? ORDER BY name COLLATE NOCASE";
 constexpr const char *UPDATE_COLLECTION_SCAN_METADATA =
     "UPDATE collections SET last_scanned = ?, dir_signature = ? WHERE uuid = ?";

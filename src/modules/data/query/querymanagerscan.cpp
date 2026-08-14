@@ -19,7 +19,8 @@
 QStringList QueryManager::loadOrScanCollection(int collectionIndex,
                                                const CollectionConfig &collection,
                                                QHash<QString, QDateTime> &timestamps,
-                                               QHash<QString, qint64> *sizes) {
+                                               QHash<QString, qint64> *sizes,
+                                               QHash<QString, QString> *storedAbsByKey) {
   QStringList filePaths;
   if (collection.mediaDirectory.trimmed().isEmpty()) {
     return filePaths;
@@ -62,7 +63,8 @@ QStringList QueryManager::loadOrScanCollection(int collectionIndex,
     // Kartend-m9r1s: pull last_modified/file_size out of the same SELECT so
     // the Date/Size sort modes downstream reuse them instead of statting
     // every file again.
-    filePaths = loadItemsFromDatabaseByUuid(uuid, &timestamps, sizes);
+    filePaths = loadItemsFromDatabaseByUuid(uuid, &timestamps, sizes, storedAbsByKey,
+                                            collection.mediaDirectory);
   }
 
   return filePaths;

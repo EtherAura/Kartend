@@ -65,7 +65,8 @@ void QueryManagerInternal::appendFileMapsAndListCanonical(
     const QString &mappingArtworkDir, const QStringList &filePaths, QStringList &allFilePaths,
     QHash<QString, QString> &allFileNames, QHash<QString, QString> &fileToArtworkDir,
     QHash<QString, QString> &fileToMediaDir, QHash<QString, int> &fileToCollectionIndex, bool dedup,
-    QSet<QString> *seenCanonicalPaths, QHash<QString, QString> *canonicalPathCache) {
+    const QHash<QString, QString> *storedAbsByKey, QSet<QString> *seenCanonicalPaths,
+    QHash<QString, QString> *canonicalPathCache) {
   const QString mediaDir = expandedCollection.mediaDirectory;
   QDir mediaQDir(mediaDir);
 
@@ -99,7 +100,12 @@ void QueryManagerInternal::appendFileMapsAndListCanonical(
   }
 
   for (const QString &file : filePaths) {
-    const QString absPath = mediaQDir.absoluteFilePath(file);
+    // The join reconstructs the stored path for every ordinary row; the
+    // collapsed multi-disc item is the one shape where it cannot, so its true
+    // path is supplied instead (Kartend-yxahw). A miss means "join normally".
+    const QString absPath = storedAbsByKey
+                                ? storedAbsByKey->value(file, mediaQDir.absoluteFilePath(file))
+                                : mediaQDir.absoluteFilePath(file);
     const QString keyPath = canonicalKeyPath(absPath, dedup, canonicalPathCache);
 
     if (dedup) {
