@@ -1761,6 +1761,16 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+1"/>
+        <source>Group multi-disc releases into one item</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Files whose names differ only by a disc marker — (Disc 1), (CD 2), (Side A) — become a single item that plays every part in order, backed by a playlist Kartend generates. The playlist is kept in Kartend&apos;s own data directory, never written beside your files. Metadata is merged across the parts, with the first disc taking precedence. Turning this off brings the individual files back and leaves nothing behind. Changing it rescans the collection.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+6"/>
         <source>Scrapers</source>
         <translation type="unfinished"></translation>
@@ -1858,12 +1868,12 @@ Kartend will now exit. Restart the application to apply the new configuration.</
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/ui/dialogs/settings/behavior/configurationpanel.cpp" line="+305"/>
+        <location filename="../src/ui/dialogs/settings/behavior/configurationpanel.cpp" line="+308"/>
         <source>never</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-111"/>
+        <location line="-112"/>
         <source>Free-form category label (e.g. Games, Movies, Music). Subcollections inherit the nearest tagged ancestor when left blank. The toolbar type filter shows only subcollection tiles whose effective type matches.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1918,12 +1928,12 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/behavior/configurationpanel.cpp" line="-270"/>
+        <location filename="../src/ui/dialogs/settings/behavior/configurationpanel.cpp" line="-273"/>
         <source>Automatic (match by type)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+52"/>
+        <location line="+53"/>
         <source>Add DAT files</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1943,7 +1953,7 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+68"/>
+        <location line="+69"/>
         <source> · %1 present · %2 missing</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5926,7 +5936,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 <context>
     <name>LauncherImportController</name>
     <message numerus="yes">
-        <location filename="../src/core/launcherimportcontroller.cpp" line="+200"/>
+        <location filename="../src/core/launcherimportcontroller.cpp" line="+201"/>
         <source>%1: re-synced — %2 added or updated, %3 removed, %n game(s) total.</source>
         <translation type="unfinished">
             <numerusform></numerusform>
@@ -5998,7 +6008,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         </translation>
     </message>
     <message>
-        <location line="+36"/>
+        <location line="+73"/>
         <source>Launcher sync is already running.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7160,7 +7170,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow.cpp" line="+501"/>
+        <location filename="../src/core/mainwindow.cpp" line="+504"/>
         <source>Import Kart</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7582,7 +7592,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+21"/>
         <source>Sync Launcher Collections</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8097,7 +8107,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../src/modules/input/scroll/coverflowcontroller.cpp" line="+525"/>
+        <location filename="../src/modules/input/scroll/coverflowcontroller.cpp" line="+517"/>
         <source>Cover</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8207,7 +8217,12 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+206"/>
+        <location line="+116"/>
+        <source>%1 would expand to &quot;%2&quot;, which the launcher would read as an option rather than a value.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+139"/>
         <source>Launcher executable not found: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8227,7 +8242,12 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+19"/>
+        <location line="+15"/>
+        <source>%1 is empty for launcher-import entries — they launch through a shortcut and have no media file on disk.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+22"/>
         <source>Unresolved placeholder in argument: %1</source>
         <translation type="unfinished"></translation>
     </message>
