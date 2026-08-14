@@ -369,6 +369,9 @@ QLineEdit *ConfigurationPanel::mediaDirLineEdit() const {
 QLineEdit *ConfigurationPanel::fileExtensionsLineEdit() const {
   return ui->fileExtensionsLineEdit;
 }
+QCheckBox *ConfigurationPanel::groupMultiDiscCheckBox() const {
+  return ui->groupMultiDiscCheckBox;
+}
 QComboBox *ConfigurationPanel::collectionTypeComboBox() const {
   return ui->collectionTypeComboBox;
 }

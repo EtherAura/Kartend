@@ -32,6 +32,8 @@
 #include "appearancelayoutpanel.h"
 #include "collection/hierarchyhelpers.h"
 #include "collectiontreewidget.h"
+#include <QCheckBox>
+
 #include "configurationpanel.h"
 #include "errordialog.h"
 #include "extensionutils.h"
@@ -94,11 +96,22 @@ void SettingsDialog::handleSaveCollection(int editedIndex, bool refreshTree) {
   bool newIncludeSubfolders = ui->subfoldersPanel
                                   ? ui->subfoldersPanel->isContentSubfoldersIncluded()
                                   : originalCollection.folderBrowsing.includeContentSubfolders;
+  // Multi-disc grouping decides whether a release is one row or several, so it
+  // changes database content as surely as the extension list does
+  // (Kartend-3ywd0). ScanService::buildExtSignature already counts it as
+  // scan-affecting; only this comparison was missing it, so ticking the box
+  // saved the setting and left the view untouched until the user happened to
+  // press F5 — and its own help text promises "Changing it rescans the
+  // collection".
+  bool newGroupMultiDisc = ui->configurationPanel->groupMultiDiscCheckBox()
+                               ? ui->configurationPanel->groupMultiDiscCheckBox()->isChecked()
+                               : originalCollection.groupMultiDisc;
 
   bool databaseFieldsChanged =
       (newName != originalCollection.name) || (newMediaDir != originalCollection.mediaDirectory) ||
       (newExtensions != originalCollection.extensions) ||
-      (newIncludeSubfolders != originalCollection.folderBrowsing.includeContentSubfolders);
+      (newIncludeSubfolders != originalCollection.folderBrowsing.includeContentSubfolders) ||
+      (newGroupMultiDisc != originalCollection.groupMultiDisc);
 
   if (databaseFieldsChanged) {
     m_rescanRequired.insert(editedIndex);
