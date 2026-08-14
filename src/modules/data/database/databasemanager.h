@@ -260,6 +260,35 @@ private:
   [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid) const;
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
 
+  /// The cover the item's MANUAL links currently resolve to, or empty when it
+  /// has none that still exist on disk (Kartend-jkty9). Reads `item_artwork`
+  /// straight off `m_db` rather than through `m_metadataCache`, because the
+  /// callers below run either side of a write and must not observe a
+  /// pre-write row. Same rule the scan uses — ItemArtworkStore::resolveCoverPath
+  /// over the cover types, existence-checked.
+  [[nodiscard]] QString manualCoverPathForItem(const QString &collectionUuid,
+                                               const QString &path) const;
+
+  /// Write a manual-link change straight through to `items.artwork_path`, the
+  /// column every DB-side artwork predicate reads (Kartend-jkty9).
+  ///
+  /// Manual links are a DATABASE fact, not a filesystem one: a link made now
+  /// must not wait for the collection's next scan to be noticed, or the Artwork
+  /// Wizard's own assignments never clear its queue and the item stays in the
+  /// Missing-artwork playlist while its links dialog shows a cover.
+  ///
+  /// @p previousManual is the value manualCoverPathForItem() returned BEFORE
+  /// the write. When the links now resolve to a cover, the column takes it.
+  /// When they resolve to nothing, the column is cleared ONLY if it was holding
+  /// @p previousManual — an auto-discovered cover recorded by the last scan is
+  /// left alone, since clearing a link doesn't remove the file that answers to
+  /// the item's name. The one gap that leaves: clearing a link on an item that
+  /// ALSO has auto-discovered art reports it as missing artwork until the next
+  /// scan re-derives the column (the auto answer isn't knowable here — this
+  /// layer has no collection config, so no artwork directory to search).
+  void writeThroughItemCoverPath(const QString &collectionUuid, const QString &path,
+                                 const QString &previousManual);
+
   /// Queues a media.db write to run on the query worker's thread/connection
   /// instead of the GUI-thread connection, so frequent automatic writes
   /// (launch / session / history) don't block the UI on the scan's write lock

@@ -133,6 +133,33 @@ QHash<QString, QString> pathsByName(QSqlDatabase &db) {
   return out;
 }
 
+// The collection uuid the scan stamped on its items — the key `item_artwork`
+// rows are filed under. The test database holds exactly one collection.
+QString scannedUuid(QSqlDatabase &db) {
+  QSqlQuery q(db);
+  if (q.exec(QStringLiteral("SELECT collection_uuid FROM items LIMIT 1")) && q.next()) {
+    return q.value(0).toString();
+  }
+  return {};
+}
+
+// Hand-link @p manualPath to the item at @p itemPath, exactly as the Artwork
+// links dialog and the Artwork Wizard do (Kartend-jkty9).
+bool linkArtwork(QSqlDatabase &db, const QString &uuid, const QString &itemPath,
+                 const QString &artworkType, const QString &manualPath) {
+  QSqlQuery q(db);
+  if (!q.prepare(QStringLiteral("INSERT INTO item_artwork (collection_uuid, path, artwork_type, "
+                                "manual_path, updated_at) VALUES (?,?,?,?,?)"))) {
+    return false;
+  }
+  q.addBindValue(uuid);
+  q.addBindValue(itemPath);
+  q.addBindValue(artworkType);
+  q.addBindValue(manualPath);
+  q.addBindValue(QStringLiteral("2026-08-13T00:00:00Z"));
+  return q.exec();
+}
+
 // needsRescan() short-circuits on an unchanged directory mtime, and artwork
 // appearing or vanishing never touches the MEDIA directory — so every rescan
 // that only changes the artwork folder has to be forced.
@@ -171,6 +198,15 @@ private slots:
   void collapsedMultiDiscItem_storesPerDiscCover();
   void exactCoverOutranksDiscFallback();
   void inMemorySavePipeline_populatesArtworkPath();
+
+  // Manual per-item links (Kartend-jkty9)
+  void manualLink_makesAnArtlessItemCount();
+  void manualLink_outranksAutoDiscoveredCover();
+  void staleManualLink_doesNotCount();
+  void staleManualLink_fallsBackToAutoDiscoveredCover();
+  void manualLink_countsWithoutAnArtworkDirectory();
+  void galleryOnlyTypeLink_doesNotCount();
+  void frontLinkOutranksBoxLink();
 };
 
 void TestScanArtwork::initTestCase() {
@@ -470,6 +506,219 @@ void TestScanArtwork::inMemorySavePipeline_populatesArtworkPath() {
 
   QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Cantata")),
            QDir(artwork.path()).filePath(QStringLiteral("Cantata.png")));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Manual per-item links (Kartend-jkty9)
+//
+// Auto-discovery is only one of the two ways an item gets a cover; the other is
+// a link the user made by hand, stored in `item_artwork`. Nothing joined the
+// two, so hand-linking a cover — including through the Artwork Wizard, whose
+// own queue is built from this column — left the item reported as missing
+// artwork everywhere.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The headline case, and the wizard's own loop: an item no auto-discovered
+// cover answers for, given one by hand, must stop counting as missing.
+void TestScanArtwork::manualLink_makesAnArtlessItemCount() {
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Unnamed.bin")), "m"));
+  // Deliberately named nothing like the item — auto-discovery cannot find it.
+  const QString picked = QDir(artwork.path()).filePath(QStringLiteral("scan0042.png"));
+  QVERIFY(writeFile(picked, "px"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+  QVERIFY(artworkByName(fx.db()).value(QStringLiteral("Unnamed")).isEmpty());
+
+  QVERIFY(linkArtwork(fx.db(), scannedUuid(fx.db()),
+                      pathsByName(fx.db()).value(QStringLiteral("Unnamed")),
+                      QStringLiteral("front"), picked));
+  forceRescan(fx.db());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Unnamed")), picked);
+}
+
+// The docs promise a manual link overrides auto-discovery, and the details pane
+// already renders it that way — so the column has to record the link, not the
+// name match it displaces.
+void TestScanArtwork::manualLink_outranksAutoDiscoveredCover() {
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Overture.bin")), "m"));
+  const QString autoCover = QDir(artwork.path()).filePath(QStringLiteral("Overture.png"));
+  const QString chosen = QDir(artwork.path()).filePath(QStringLiteral("better-scan.png"));
+  QVERIFY(writeFile(autoCover, "px"));
+  QVERIFY(writeFile(chosen, "px"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+  QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Overture")), autoCover);
+
+  QVERIFY(linkArtwork(fx.db(), scannedUuid(fx.db()),
+                      pathsByName(fx.db()).value(QStringLiteral("Overture")),
+                      QStringLiteral("front"), chosen));
+  forceRescan(fx.db());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Overture")), chosen);
+}
+
+// The reason the existence check lives in the scan rather than in a JOIN: a
+// link points at an arbitrary path the user chose and can go stale. Counting
+// the row's mere existence would report a cover for a file that is gone, which
+// is precisely the DB-vs-render disagreement Kartend-guyc5 removed.
+void TestScanArtwork::staleManualLink_doesNotCount() {
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Ghost.bin")), "m"));
+  const QString vanished = QDir(artwork.path()).filePath(QStringLiteral("deleted-by-user.png"));
+  QVERIFY(writeFile(vanished, "px"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+  QVERIFY(linkArtwork(fx.db(), scannedUuid(fx.db()),
+                      pathsByName(fx.db()).value(QStringLiteral("Ghost")), QStringLiteral("front"),
+                      vanished));
+  QVERIFY(QFile::remove(vanished));
+
+  forceRescan(fx.db());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  QVERIFY(artworkByName(fx.db()).value(QStringLiteral("Ghost")).isEmpty());
+}
+
+// A stale link must not swallow the auto-discovered cover either — the item
+// still paints that cover, so the column has to keep reporting it.
+void TestScanArtwork::staleManualLink_fallsBackToAutoDiscoveredCover() {
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Etude.bin")), "m"));
+  const QString autoCover = QDir(artwork.path()).filePath(QStringLiteral("Etude.png"));
+  const QString vanished = QDir(artwork.path()).filePath(QStringLiteral("gone.png"));
+  QVERIFY(writeFile(autoCover, "px"));
+  QVERIFY(writeFile(vanished, "px"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+  QVERIFY(linkArtwork(fx.db(), scannedUuid(fx.db()),
+                      pathsByName(fx.db()).value(QStringLiteral("Etude")), QStringLiteral("front"),
+                      vanished));
+  QVERIFY(QFile::remove(vanished));
+
+  forceRescan(fx.db());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Etude")), autoCover);
+}
+
+// A link is an absolute path of the user's choosing, so it does not depend on
+// the collection having an artwork directory at all. The pass used to bail out
+// before reading anything when that setting was empty.
+void TestScanArtwork::manualLink_countsWithoutAnArtworkDirectory() {
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir elsewhere;
+  QVERIFY(media.isValid());
+  QVERIFY(elsewhere.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Solo.bin")), "m"));
+  const QString picked = QDir(elsewhere.path()).filePath(QStringLiteral("cover.png"));
+  QVERIFY(writeFile(picked, "px"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), QString());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+  QVERIFY(artworkByName(fx.db()).value(QStringLiteral("Solo")).isEmpty());
+
+  QVERIFY(linkArtwork(fx.db(), scannedUuid(fx.db()),
+                      pathsByName(fx.db()).value(QStringLiteral("Solo")), QStringLiteral("front"),
+                      picked));
+  forceRescan(fx.db());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Solo")), picked);
+}
+
+// "Has artwork" means "has a COVER". `logo` is not in the cover cascade — it is
+// never auto-discovered as one — so hand-linking one must not make an
+// otherwise-artless item disappear from the missing-artwork worklist.
+void TestScanArtwork::galleryOnlyTypeLink_doesNotCount() {
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Badged.bin")), "m"));
+  const QString logo = QDir(artwork.path()).filePath(QStringLiteral("badge.png"));
+  QVERIFY(writeFile(logo, "px"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+  QVERIFY(linkArtwork(fx.db(), scannedUuid(fx.db()),
+                      pathsByName(fx.db()).value(QStringLiteral("Badged")), QStringLiteral("logo"),
+                      logo));
+
+  forceRescan(fx.db());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  QVERIFY(artworkByName(fx.db()).value(QStringLiteral("Badged")).isEmpty());
+}
+
+// Two hand-linked cover types on one item resolve in the same priority order
+// auto-discovery walks the typed subdirs in, so the column agrees with the
+// gallery's idea of which slot is the primary cover.
+void TestScanArtwork::frontLinkOutranksBoxLink() {
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Twin.bin")), "m"));
+  const QString frontArt = QDir(artwork.path()).filePath(QStringLiteral("picked-front.png"));
+  const QString boxArt = QDir(artwork.path()).filePath(QStringLiteral("picked-box.png"));
+  QVERIFY(writeFile(frontArt, "px"));
+  QVERIFY(writeFile(boxArt, "px"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+  const QString uuid = scannedUuid(fx.db());
+  const QString itemPath = pathsByName(fx.db()).value(QStringLiteral("Twin"));
+  // Inserted box-first so a resolver that just took the first row it read
+  // would answer with the wrong one.
+  QVERIFY(linkArtwork(fx.db(), uuid, itemPath, QStringLiteral("box"), boxArt));
+  QVERIFY(linkArtwork(fx.db(), uuid, itemPath, QStringLiteral("front"), frontArt));
+
+  forceRescan(fx.db());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Twin")), frontArt);
 }
 
 QTEST_MAIN(TestScanArtwork)

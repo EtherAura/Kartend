@@ -494,7 +494,7 @@ bool ScanService::scanAndSaveItemsToDatabase(int collectionIndex,
   // collapse on purpose: the rows that exist now are the rows that will become
   // items, so a collapsed release resolves art the same way its tile will.
   if (!isScanCancelled()) {
-    (void)ScanArtwork::resolveStagedArtwork(m_db, m_txnDepth, collection.artworkDirectory);
+    (void)ScanArtwork::resolveStagedArtwork(m_db, m_txnDepth, collection.artworkDirectory, uuid);
   }
 
   // Phase 2: Apply staged results to persistent DB.
@@ -781,7 +781,7 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
 
     // Staged-artwork resolution (Kartend-guyc5): same pass, same seam as the
     // streaming pipeline — after the collapse, before the apply.
-    (void)ScanArtwork::resolveStagedArtwork(m_db, m_txnDepth, collection.artworkDirectory);
+    (void)ScanArtwork::resolveStagedArtwork(m_db, m_txnDepth, collection.artworkDirectory, uuid);
 
     int legacyId = -1;
     if (!prepareCollectionForItemsInsert(collection, uuid, extSignature, legacyId)) {

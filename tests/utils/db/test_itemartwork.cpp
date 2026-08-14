@@ -71,6 +71,11 @@ private slots:
   void resolveArtworkPathMissingOverrideReturnsEmpty();
   void resolveArtworkPathCustomTypeOnlyHonoursOverride();
   void resolveArtworkPathTildeOnlyExpandsHomePrefix();
+  void resolveCoverPathFallsBackToAutoDiscoveryWithNoLinks();
+  void resolveCoverPathPrefersAManualCoverLink();
+  void resolveCoverPathSkipsALinkWhoseFileIsGone();
+  void resolveCoverPathIgnoresGalleryOnlyTypes();
+  void resolveCoverPathFollowsCoverTypePriority();
 };
 
 void TestItemArtwork::standardTypesAreOrderedAndStable() {
@@ -429,6 +434,80 @@ void TestItemArtwork::resolveArtworkPathTildeOnlyExpandsHomePrefix() {
            home + "/artwork/box/Guide.png");
   QVERIFY(ItemArtworkStore::resolveArtworkPath(QString(), "Guide", "~artwork", "box").isEmpty());
 #endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// resolveCoverPath — the one rule that decides what `items.artwork_path` holds
+// (Kartend-jkty9). The scan pass and the save-time write-through are both
+// callers of this; drift between them would put the DB-side predicates back
+// into disagreement with each other.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestItemArtwork::resolveCoverPathFallsBackToAutoDiscoveryWithNoLinks() {
+  // The overwhelmingly common case — an item the user has never hand-linked.
+  QCOMPARE(ItemArtworkStore::resolveCoverPath({}, QStringLiteral("/art/Overture.png")),
+           QStringLiteral("/art/Overture.png"));
+  QVERIFY(ItemArtworkStore::resolveCoverPath({}, QString()).isEmpty());
+}
+
+void TestItemArtwork::resolveCoverPathPrefersAManualCoverLink() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString picked = QDir(dir.path()).filePath(QStringLiteral("picked.png"));
+  QVERIFY(touchFile(picked));
+
+  const QHash<QString, QString> links{{QStringLiteral("front"), picked}};
+  // A link outranks auto-discovery, matching what the sidebar gallery renders.
+  QCOMPARE(ItemArtworkStore::resolveCoverPath(links, QStringLiteral("/art/auto.png")), picked);
+  // And it supplies a cover for an item auto-discovery found nothing for.
+  QCOMPARE(ItemArtworkStore::resolveCoverPath(links, QString()), picked);
+}
+
+void TestItemArtwork::resolveCoverPathSkipsALinkWhoseFileIsGone() {
+  const QHash<QString, QString> links{
+      {QStringLiteral("front"), QStringLiteral("/nowhere/deleted.png")}};
+  // Counting the row's mere existence would report a cover no render path can
+  // resolve — the whole reason the check lives here rather than in a JOIN.
+  QVERIFY(ItemArtworkStore::resolveCoverPath(links, QString()).isEmpty());
+  // A stale link must not swallow the auto-discovered cover either.
+  QCOMPARE(ItemArtworkStore::resolveCoverPath(links, QStringLiteral("/art/auto.png")),
+           QStringLiteral("/art/auto.png"));
+}
+
+void TestItemArtwork::resolveCoverPathIgnoresGalleryOnlyTypes() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString logo = QDir(dir.path()).filePath(QStringLiteral("badge.png"));
+  QVERIFY(touchFile(logo));
+
+  // `logo` is absent from ArtworkUtils::coverSubdirPriority(), so it is never
+  // auto-discovered as a cover and a link on it is gallery-only.
+  QVERIFY(
+      ItemArtworkStore::resolveCoverPath({{QStringLiteral("logo"), logo}}, QString()).isEmpty());
+  QVERIFY(ItemArtworkStore::resolveCoverPath({{QStringLiteral("mycustomtype"), logo}}, QString())
+              .isEmpty());
+}
+
+void TestItemArtwork::resolveCoverPathFollowsCoverTypePriority() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString front = QDir(dir.path()).filePath(QStringLiteral("front.png"));
+  const QString box = QDir(dir.path()).filePath(QStringLiteral("box.png"));
+  const QString screenshot = QDir(dir.path()).filePath(QStringLiteral("shot.png"));
+  QVERIFY(touchFile(front));
+  QVERIFY(touchFile(box));
+  QVERIFY(touchFile(screenshot));
+
+  QCOMPARE(ItemArtworkStore::resolveCoverPath({{QStringLiteral("box"), box},
+                                               {QStringLiteral("front"), front},
+                                               {QStringLiteral("screenshot"), screenshot}},
+                                              QString()),
+           front);
+  // With the primary slot unlinked the next cover type in the cascade answers.
+  QCOMPARE(
+      ItemArtworkStore::resolveCoverPath(
+          {{QStringLiteral("box"), box}, {QStringLiteral("screenshot"), screenshot}}, QString()),
+      box);
 }
 
 QTEST_MAIN(TestItemArtwork)

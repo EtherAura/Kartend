@@ -11,6 +11,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
+#include "artworkutils.h"
 #include "errorutils.h"
 #include "extensionutils.h"
 #include "pathutils.h"
@@ -270,6 +271,32 @@ QString resolveArtworkPath(const QString &overridePath, const QString &baseName,
     return {};
   }
   return findStandardArtwork(baseName, artworkDirectory, artworkType);
+}
+
+QString resolveCoverPath(const QHash<QString, QString> &manualByType,
+                         const QString &autoDiscovered) {
+  // The empty map is the overwhelmingly common case (no hand-linked artwork on
+  // this item at all), and it must cost nothing beyond the branch — this runs
+  // once per staged row on every scan.
+  if (!manualByType.isEmpty()) {
+    // ArtworkUtils owns the definition of "a type that can supply a cover", so
+    // adding a cover subdir there automatically makes a manual link on it
+    // count. Types outside the list (logo, custom types) are gallery-only.
+    for (const QString &type : ArtworkUtils::coverSubdirPriority()) {
+      const QString link = manualByType.value(type).trimmed();
+      if (link.isEmpty()) {
+        continue;
+      }
+      const QString expanded = expandTilde(link);
+      // Same stat resolveArtworkPath applies. A link whose target was deleted
+      // is skipped, not returned: the fallback below then reports whatever
+      // auto-discovery still finds, which is what the item actually renders.
+      if (QFile::exists(expanded)) {
+        return expanded;
+      }
+    }
+  }
+  return autoDiscovered;
 }
 
 } // namespace ItemArtworkStore

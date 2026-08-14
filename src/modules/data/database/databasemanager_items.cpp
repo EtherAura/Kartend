@@ -28,9 +28,11 @@
 #include <utility>
 
 #include <QCoreApplication>
+#include <QHash>
 #include <QMetaObject>
 #include <QPointer>
 #include <QSqlError>
+#include <QSqlQuery>
 
 #include "errorutils.h"
 #include "historystore.h"
@@ -141,7 +143,89 @@ QList<ItemArtworkStore::ItemArtwork> DatabaseManager::loadItemArtwork(const QStr
   return result.value();
 }
 
+QString DatabaseManager::manualCoverPathForItem(const QString &collectionUuid,
+                                                const QString &path) const {
+  if (collectionUuid.isEmpty() || path.isEmpty() || !m_db.isOpen()) {
+    return {};
+  }
+  auto rows =
+      ItemArtworkStore::loadAllForItem(const_cast<QSqlDatabase &>(m_db), collectionUuid, path);
+  if (rows.isError()) {
+    ErrorUtils::logError(rows.error());
+    return {};
+  }
+  QHash<QString, QString> manualByType;
+  for (const auto &row : rows.value()) {
+    if (!row.manualPath.isEmpty()) {
+      manualByType.insert(row.artworkType, row.manualPath);
+    }
+  }
+  // No auto-discovered fallback here on purpose: this answers "what do the
+  // manual links alone resolve to", which is what the write-through needs to
+  // tell a link-driven column value from a scan-driven one.
+  return ItemArtworkStore::resolveCoverPath(manualByType, QString());
+}
+
+void DatabaseManager::writeThroughItemCoverPath(const QString &collectionUuid, const QString &path,
+                                                const QString &previousManual) {
+  if (collectionUuid.isEmpty() || path.isEmpty() || !m_db.isOpen()) {
+    return;
+  }
+  const QString current = manualCoverPathForItem(collectionUuid, path);
+  if (current == previousManual) {
+    return; // the edit didn't change which cover the links resolve to
+  }
+
+  QSqlQuery q(m_db);
+  if (current.isEmpty()) {
+    // The links no longer resolve to anything. Only retract the column when it
+    // was holding the link we just lost — a cover the scan auto-discovered for
+    // this item is still on disk and still renders, so it must survive.
+    if (previousManual.isEmpty()) {
+      return;
+    }
+    if (!q.prepare(QStringLiteral("UPDATE items SET artwork_path = '' "
+                                  "WHERE collection_uuid = ? AND path = ? AND artwork_path = ?"))) {
+      ErrorUtils::logError(
+          ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::DatabaseQueryFailed,
+                                            "Failed to prepare artwork-path retraction",
+                                            "DatabaseManager::writeThroughItemCoverPath")
+              .withDetails(q.lastError().text()));
+      return;
+    }
+    q.addBindValue(collectionUuid);
+    q.addBindValue(path);
+    q.addBindValue(previousManual);
+  } else {
+    if (!q.prepare(QStringLiteral("UPDATE items SET artwork_path = ? "
+                                  "WHERE collection_uuid = ? AND path = ?"))) {
+      ErrorUtils::logError(
+          ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::DatabaseQueryFailed,
+                                            "Failed to prepare artwork-path write-through",
+                                            "DatabaseManager::writeThroughItemCoverPath")
+              .withDetails(q.lastError().text()));
+      return;
+    }
+    q.addBindValue(current);
+    q.addBindValue(collectionUuid);
+    q.addBindValue(path);
+  }
+  if (!q.exec()) {
+    // Non-fatal: the link itself is saved, and the collection's next scan
+    // re-derives the column from the same rule. Only the immediate predicate
+    // answer is degraded.
+    ErrorUtils::logError(ErrorUtils::ErrorContext::warning(
+                             ErrorUtils::ErrorCode::DatabaseQueryFailed,
+                             "Failed to write item artwork path through from a manual link",
+                             "DatabaseManager::writeThroughItemCoverPath")
+                             .withDetails(q.lastError().text()));
+  }
+}
+
 bool DatabaseManager::saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwork) {
+  // Snapshot BEFORE the write so the write-through can tell whether the column
+  // is currently holding a manual link or an auto-discovered cover.
+  const QString previousManual = manualCoverPathForItem(artwork.collectionUuid, artwork.path);
   auto result = ItemArtworkStore::save(m_db, artwork);
   if (result.isError()) {
     ErrorUtils::logError(result.error());
@@ -149,11 +233,13 @@ bool DatabaseManager::saveItemArtwork(const ItemArtworkStore::ItemArtwork &artwo
     return false;
   }
   m_metadataCache.invalidateItem(artwork.collectionUuid, artwork.path);
+  writeThroughItemCoverPath(artwork.collectionUuid, artwork.path, previousManual);
   return true;
 }
 
 bool DatabaseManager::removeItemArtwork(const QString &collectionUuid, const QString &path,
                                         const QString &artworkType) {
+  const QString previousManual = manualCoverPathForItem(collectionUuid, path);
   auto result = ItemArtworkStore::remove(m_db, collectionUuid, path, artworkType);
   if (result.isError()) {
     ErrorUtils::logError(result.error());
@@ -161,6 +247,7 @@ bool DatabaseManager::removeItemArtwork(const QString &collectionUuid, const QSt
     return false;
   }
   m_metadataCache.invalidateItem(collectionUuid, path);
+  writeThroughItemCoverPath(collectionUuid, path, previousManual);
   return true;
 }
 

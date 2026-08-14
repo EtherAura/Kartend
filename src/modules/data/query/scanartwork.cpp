@@ -15,6 +15,7 @@
 #include "artworkutils.h"
 #include "dbtxn.h"
 #include "errorutils.h"
+#include "itemartwork.h"
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -61,31 +62,93 @@ void reportQueryFailure(const QString &what, const QSqlQuery &query) {
   return byKey.value(ArtworkUtils::baseMatchKey(fileName));
 }
 
+/// Every per-item MANUAL artwork link in @p collectionUuid that could supply a
+/// cover, as item path -> (artwork_type -> manual_path).
+///
+/// Read in ONE query rather than per staged row: `item_artwork` only holds rows
+/// the user created by hand, so this is empty for most libraries and a handful
+/// of rows for the rest — far cheaper than a correlated lookup per item, and it
+/// keeps the row loop below free of SQL. Types outside the cover cascade
+/// (`logo`, custom types) are filtered out in SQL so gallery-only links never
+/// reach resolveCoverPath.
+[[nodiscard]] QHash<QString, QHash<QString, QString>>
+loadManualCoverLinks(QSqlDatabase &db, const QString &collectionUuid) {
+  QHash<QString, QHash<QString, QString>> byPath;
+  if (collectionUuid.isEmpty()) {
+    return byPath;
+  }
+  const QStringList coverTypes = ArtworkUtils::coverSubdirPriority();
+  if (coverTypes.isEmpty()) {
+    return byPath;
+  }
+
+  QStringList placeholders;
+  placeholders.reserve(coverTypes.size());
+  for (int i = 0; i < coverTypes.size(); ++i) {
+    placeholders.append(QStringLiteral("?"));
+  }
+  QSqlQuery q(db);
+  if (!q.prepare(QStringLiteral("SELECT path, artwork_type, manual_path FROM item_artwork "
+                                "WHERE collection_uuid = ? AND manual_path IS NOT NULL "
+                                "AND manual_path != '' AND artwork_type IN (") +
+                 placeholders.join(QStringLiteral(",")) + QStringLiteral(")"))) {
+    reportQueryFailure(QStringLiteral("Failed to prepare manual artwork-link read"), q);
+    return byPath;
+  }
+  q.addBindValue(collectionUuid);
+  for (const QString &type : coverTypes) {
+    q.addBindValue(type);
+  }
+  if (!q.exec()) {
+    // Degrade to auto-discovery only rather than failing the scan: a missing
+    // manual layer under-reports a few items, an aborted pass under-reports
+    // every one of them.
+    reportQueryFailure(QStringLiteral("Failed to read manual artwork links"), q);
+    return byPath;
+  }
+  while (q.next()) {
+    const QString path = q.value(0).toString();
+    if (path.isEmpty()) {
+      continue;
+    }
+    byPath[path].insert(q.value(1).toString(), q.value(2).toString());
+  }
+  return byPath;
+}
+
 } // namespace
 
-int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artworkDirectory) {
-  if (!db.isOpen() || artworkDirectory.trimmed().isEmpty()) {
+int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artworkDirectory,
+                         const QString &collectionUuid) {
+  if (!db.isOpen()) {
     return 0;
   }
 
+  // The manual layer is read FIRST because it decides whether there is any work
+  // at all for a collection with no artwork directory: a link is an absolute
+  // path the user picked, so it resolves without one.
+  const QHash<QString, QHash<QString, QString>> manualLinks =
+      loadManualCoverLinks(db, collectionUuid);
+
+  QHash<QString, QString> byKey;
   const QStringList lookupDirs = ArtworkUtils::artworkLookupDirectories(artworkDirectory);
-  if (lookupDirs.isEmpty()) {
-    return 0;
+  if (!artworkDirectory.trimmed().isEmpty() && !lookupDirs.isEmpty()) {
+    // REFRESH, not warm. A blocking walk because this pass has to give a
+    // COMPLETE answer — a cold cascade would silently record "artless" for a
+    // fully-arted library — and an unconditional one because a listing cached
+    // earlier in the session predates whatever the user has done to the artwork
+    // directory since, cached negatives included. It is bounded work: one walk
+    // of the flat root plus the typed cover subdirs, once per scan, never per
+    // item, and it leaves the cache warm and current for the grid that follows.
+    ArtworkUtils::DirectoryCache::instance().refreshDirectories(lookupDirs);
+    byKey = ArtworkUtils::buildArtworkPathMap(artworkDirectory);
   }
-  // REFRESH, not warm. A blocking walk because this pass has to give a
-  // COMPLETE answer — a cold cascade would silently record "artless" for a
-  // fully-arted library — and an unconditional one because a listing cached
-  // earlier in the session predates whatever the user has done to the artwork
-  // directory since, cached negatives included. It is bounded work: one walk of
-  // the flat root plus the typed cover subdirs, once per scan, never per item,
-  // and it leaves the cache warm and current for the grid that follows.
-  ArtworkUtils::DirectoryCache::instance().refreshDirectories(lookupDirs);
 
-  const QHash<QString, QString> byKey = ArtworkUtils::buildArtworkPathMap(artworkDirectory);
-  if (byKey.isEmpty()) {
-    // No cover anywhere in the cascade. Every staged row stays NULL, which the
-    // apply writes over whatever the previous scan recorded — so a library
-    // whose artwork directory was emptied clears rather than keeps ghosts.
+  if (byKey.isEmpty() && manualLinks.isEmpty()) {
+    // No cover anywhere in the cascade and nothing hand-linked. Every staged
+    // row stays NULL, which the apply writes over whatever the previous scan
+    // recorded — so a library whose artwork directory was emptied clears
+    // rather than keeps ghosts.
     return 0;
   }
 
@@ -128,7 +191,13 @@ int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artwork
       if (rowId > lastRowId) {
         lastRowId = rowId;
       }
-      QString artwork = resolveForPath(byKey, sel.value(1).toString());
+      const QString path = sel.value(1).toString();
+      // One rule, shared with the save-time write-through: a manual link on a
+      // cover type wins when its file still exists, else the auto-discovered
+      // cover stands. The stat only happens for items the user hand-linked —
+      // manualLinks is empty for the rest, and resolveCoverPath short-circuits.
+      QString artwork =
+          ItemArtworkStore::resolveCoverPath(manualLinks.value(path), resolveForPath(byKey, path));
       if (!artwork.isEmpty()) {
         hits.append({rowId, std::move(artwork)});
       }

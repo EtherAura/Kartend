@@ -194,6 +194,29 @@ type)` pair. The interaction summary:
 | Standard | Override wins | Auto-discovery resumes |
 | Custom | Override wins | Slot disappears from the gallery |
 
+### Where a link counts as "having artwork"
+
+A link on a cover type — `front`, `box`, `screenshot`, `title`, `fanart`,
+`marquee`, and the scraped `box-3d` / `mixrbv1` / `mixrbv2` variants — makes
+the item count as having artwork for the *Has artwork* and *Missing artwork*
+[smart playlists](Smart-Playlists.md), the `has:artwork` / `missing:artwork`
+[search tokens](Search-Sort-Filter.md#structured-tokens), the Collection
+Health missing-artwork count, and the [wizard's](#artwork-assignment-wizard)
+queue. Saving or clearing a link moves the item immediately — no scan needed.
+
+Three things that don't count:
+
+- A link whose file you have since deleted. Kartend checks that the target
+  still exists, so a broken link doesn't claim a cover that can't be shown;
+  the item falls back to whatever auto-discovery finds for it.
+- A link on `logo`, or on a [custom type](#custom-artwork-types). Those are
+  gallery slots, never covers.
+- The **hide missing artwork** view filter, which goes by file name only —
+  see [its note](Search-Sort-Filter.md#hide-missing-artwork). An item whose
+  only cover is a manual link is still hidden by that filter, and its grid
+  tile still shows the placeholder; the link appears in the sidebar gallery
+  and on the detail page.
+
 Manual links live in the database (`item_artwork` table), keyed by
 `(collection_uuid, source_path, artwork_type)`. They survive rescans,
 collection renames, and reorderings.
@@ -245,10 +268,10 @@ collection renames.
 
 > **Tip** — pair with the **Missing artwork**
 > [smart-playlist kind](Smart-Playlists.md#filter-kinds) for a persistent
-> worklist tile. Both it and the wizard's own pile are built from the
-> covers auto-discovered on the collection's last scan, so an item leaves
-> the list after the next scan of that collection rather than the moment
-> you assign it.
+> worklist tile. Both it and the wizard's own pile count an assigned link
+> straight away, so an item drops out of the worklist — and out of the
+> wizard's queue the next time you run it — the moment you pick a cover for
+> it. Auto-discovered covers still settle on the collection's next scan.
 
 ## Sidebar gallery
 

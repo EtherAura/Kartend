@@ -233,6 +233,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A cover you assign by hand now counts as artwork, and the artwork wizard
+  stops offering you items you have already done.** Kartend finds covers two
+  ways: by matching file names in a collection's artwork folder, and by the
+  per-item links you set yourself through **Edit artwork links…** or the
+  **Assign Missing Artwork…** wizard. Only the first counted. So the *Has
+  artwork* and *Missing artwork* smart playlists, the `has:artwork` and
+  `missing:artwork` search terms and the missing-artwork count in Collection
+  Health all reported a hand-linked item as having nothing — and the wizard,
+  whose worklist is built the same way, handed you back every item you had
+  just assigned the next time you opened it, with no way to work through a
+  large library short of renaming files. Links now count everywhere those do,
+  and they count the moment you save one rather than at the collection's next
+  scan, so the worklist shrinks as you go. A link only counts while the image
+  it points at is still there: delete that file and the item goes back to
+  whatever its name matches, rather than claiming a cover nothing can show.
+  Links on `logo` and on custom artwork types stay gallery-only, since those
+  are never used as an item's cover. One case still waits for a scan —
+  clearing a link on an item that also has a name-matched cover reports it as
+  missing artwork until that collection is next scanned. The **hide missing
+  artwork** view filter is unchanged and still goes by file name alone.
+
 - **Collections that keep artwork in matching subfolders now find it even
   when the content folder is a symbolic link.** With **Include Artwork
   Subfolders** on, Kartend looks for an item's cover in the artwork subfolder

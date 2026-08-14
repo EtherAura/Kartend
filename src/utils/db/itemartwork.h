@@ -1,6 +1,7 @@
 #ifndef ITEMARTWORK_H
 #define ITEMARTWORK_H
 
+#include <QHash>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -101,6 +102,34 @@ loadAllForItem(QSqlDatabase &db, const QString &collectionUuid, const QString &p
 [[nodiscard]] QString resolveArtworkPath(const QString &overridePath, const QString &baseName,
                                          const QString &artworkDirectory,
                                          const QString &artworkType);
+
+/// The cover an item resolves to once its MANUAL links are taken into account
+/// — the value `items.artwork_path` is meant to hold (Kartend-jkty9).
+///
+/// @p manualByType maps artwork_type -> `item_artwork.manual_path` for ONE
+/// item (types with no row, or a NULL/empty path, simply aren't in it), and
+/// @p autoDiscovered is the cover the name-based cascade found for that item
+/// (`ArtworkUtils::findArtworkForFileCached`, or the bulk
+/// `buildArtworkPathMap` form of it) — empty when nothing matched.
+///
+/// Precedence follows what the artwork docs promise and what the details pane
+/// already renders: a manual link WINS over auto-discovery. Cover types are
+/// consulted in `ArtworkUtils::coverSubdirPriority()` order, so a hand-linked
+/// `front` outranks a hand-linked `box`; a link on any other type (`logo`, a
+/// custom type) is gallery-only and never answers here.
+///
+/// EXISTENCE IS CHECKED, exactly as `resolveArtworkPath` checks it: the link
+/// is tilde-expanded and stat'd, and a link whose file has since been deleted
+/// is skipped rather than returned. Without that a link to a long-gone file
+/// would report "has artwork" forever, while every render path that resolves
+/// it live shows nothing — the DB-vs-render disagreement Kartend-guyc5 removed.
+/// Callers therefore pay one stat per manual link (not per item): the map is
+/// empty for every item the user has never hand-linked.
+///
+/// Falls back to @p autoDiscovered when no manual cover link resolves, so
+/// clearing a link restores the auto-discovered answer instead of blanking it.
+[[nodiscard]] QString resolveCoverPath(const QHash<QString, QString> &manualByType,
+                                       const QString &autoDiscovered);
 
 } // namespace ItemArtworkStore
 

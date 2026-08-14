@@ -60,8 +60,8 @@ literally except for `tag:` which case-folds.
 |-------|---------|
 | `played:true` / `played:false` | Items that have / haven't been launched at least once (uses `launch_history`). |
 | `favorite:true` / `favorite:false` | Items present (or absent) in the reserved Favorites playlist. |
-| `missing:artwork` | Items no cover was found for in the collection's artwork folder when it was last scanned. |
-| `has:artwork` | Inverse of `missing:artwork` — items a cover was found for. Per-item [artwork links](Artwork.md) don't count; auto-discovered covers do, typed cover subfolders included. |
+| `missing:artwork` | Items with no cover at all — none found in the collection's artwork folder when it was last scanned, and none [linked by hand](Artwork.md#manual-per-item-links). |
+| `has:artwork` | Inverse of `missing:artwork` — items with a cover. Auto-discovered covers count, typed cover subfolders included, and so does a hand-linked one (immediately, and only while its file still exists). |
 | `tag:NAME` | Items whose tag list contains `NAME` (case-insensitive). Repeat to AND multiple tags: `tag:rewatch tag:holiday`. |
 
 Tokens you type but Kartend doesn't recognise (typos, unsupported
@@ -223,6 +223,13 @@ This one checks your artwork folder as it is now, not as it was at the
 last scan — so it can disagree with `missing:artwork` and the *Missing
 artwork* smart playlist for a short while after you add or delete covers,
 until that collection is scanned again.
+
+It also goes purely by file name, so it does not see
+[per-item links](Artwork.md#manual-per-item-links): an item whose only cover
+is one you linked by hand is still hidden by this filter, even though
+`has:artwork` matches it. That is deliberate — this filter hides the tiles
+that would paint a placeholder, and the grid tile itself resolves covers by
+name too.
 
 Set per-collection in Settings → Appearance.
 

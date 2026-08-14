@@ -63,7 +63,7 @@ immediately and opens populated with its current matches.
 | **Most played** | Show top (1–1000, default 50) | The N items with the highest cumulative play count, then by total play seconds. |
 | **Never launched** | Show first (1–1000, default 50) | The first N items with zero recorded launches. Ordered the same way the rest of the grid is by default. |
 | **By extension** | Extensions (csv, lowercase, leading dot optional) | Every item whose file extension is in the list. Empty list = no matches. Example: `pdf,epub,cbz`. |
-| **Has artwork** | *(none)* | Every item whose cover was auto-discovered in `artworkDirectory` when the collection was last scanned. Per-item [links](Artwork.md) don't count. |
+| **Has artwork** | *(none)* | Every item with a cover — one auto-discovered in `artworkDirectory` when the collection was last scanned, or one you [linked by hand](Artwork.md#manual-per-item-links). |
 | **Missing artwork** | *(none)* | The complement of *Has artwork* — items no cover was found for on the last scan. Useful as a worklist for the [Artwork Wizard](Artwork.md#artwork-assignment-wizard). |
 | **Recently added** | Window (1–3650 days, default 30) | Items whose `date_added` falls within the last N days, newest first. |
 | **By collection** | Collection (picker) | Every item belonging to the chosen collection. The collection is referenced by UUID so renames don't break the filter. Empty selection yields zero matches. |
@@ -130,9 +130,19 @@ artwork folder as of that scan. Add or remove a cover without touching the
 media folder and this rule catches up the next time that collection is
 scanned; the grid, which looks at the folder directly, updates sooner.
 
-Per-item [artwork links](Artwork.md) are *not* counted here — a manually
-linked cover renders on the tile but does not make the item match *Has
-artwork*.
+A cover you [linked by hand](Artwork.md#manual-per-item-links) counts too,
+and counts immediately — links are stored in the database rather than found
+on disk, so saving or clearing one moves the item in and out of this rule
+straight away rather than waiting for a scan. The link has to still point at
+a file that exists; one whose target you have since deleted doesn't count,
+and the item falls back to whatever auto-discovery finds for it. Links on
+types that are never used as a cover — `logo`, and any custom type you've
+added — are gallery-only and don't count here.
+
+> **Note** — clearing a link is the one case that can lag. If the item also
+> has an auto-discovered cover, it reports as missing artwork until that
+> collection is next scanned, at which point the auto-discovered cover takes
+> over again.
 
 ### Recently added
 

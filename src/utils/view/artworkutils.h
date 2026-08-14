@@ -388,6 +388,24 @@ private:
                                                    const QString &artworkDirectory);
 
 /**
+ * @brief The artwork-type ids that can supply an item's PRIMARY COVER, in
+ * priority order (`front`, `box`, `box-3d`, … `marquee`).
+ *
+ * Each id doubles as a subdirectory name under the artwork root — the scrape
+ * pipeline writes every media type into its own `{artwork}/<type>/` folder
+ * rather than dropping a copy at the flat root, so `artworkLookupDirectories`
+ * walks exactly these, in this order, after the root itself.
+ *
+ * `front` is the canonical cover; the rest are fallbacks for items with no
+ * dedicated front cover. Types absent from this list (`logo`, and any custom
+ * type a collection defines) are gallery-only — they are never auto-discovered
+ * as a cover, and a MANUAL link on one does not make an item "have artwork"
+ * (Kartend-jkty9). That is the single definition of "a cover type"; do not
+ * spell the list out a second time.
+ */
+[[nodiscard]] const QStringList &coverSubdirPriority();
+
+/**
  * @brief The directory cascade a cached artwork lookup probes for one item:
  * @p artworkDirectory itself, then each typed cover subdir (`front/`, `box/`,
  * …) in coverSubdirPriority order.

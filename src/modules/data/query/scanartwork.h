@@ -43,6 +43,23 @@ QT_END_NAMESPACE
  * spirit of the streaming walk, and only rows that actually resolve are
  * written.
  *
+ * MANUAL LINKS COUNT TOO (Kartend-jkty9). Auto-discovery is only one of the two
+ * ways an item gets a cover; the other is a per-item link the user set by hand
+ * (the Artwork links dialog, or the Artwork Wizard), stored in `item_artwork`.
+ * Those were invisible to every DB-side predicate, so hand-linking a cover left
+ * the item in the missing-artwork playlist and back in the wizard's queue next
+ * time it ran. This pass now resolves both and stores the winner:
+ * ItemArtworkStore::resolveCoverPath prefers a manual link on a cover type
+ * (ArtworkUtils::coverSubdirPriority order) whose file still EXISTS, and falls
+ * back to the auto-discovered cover otherwise. The existence check lives here,
+ * on a background scan thread, precisely so the predicates stay pure SQL.
+ *
+ * Because the links are a DB fact rather than a filesystem one, they must not
+ * wait for a scan to be noticed: DatabaseManager::saveItemArtwork /
+ * removeItemArtwork re-run the same rule for the one edited item and write the
+ * column through immediately. This pass and that write-through are two callers
+ * of ONE rule, not two rules.
+ *
  * STALENESS. The column is a cache of a filesystem answer, valid as of the last
  * scan — the same contract as `file_size` and `last_modified` beside it.
  * Artwork dropped in (or deleted) without the media directory changing does not
@@ -60,23 +77,31 @@ namespace ScanArtwork {
 /// DirectoryCache and folded via ArtworkUtils::buildArtworkPathMap, so the
 /// stored path is the one findArtworkForFileCached would return for the same
 /// item, disc-marked fallback included. There is deliberately no second
-/// resolver here to drift from it.
+/// resolver here to drift from it. The collection's per-item MANUAL links are
+/// then layered on top through ItemArtworkStore::resolveCoverPath, which is
+/// also what the save-time write-through uses.
 ///
-/// A no-op returning 0 when the connection is closed or the collection has no
-/// artwork directory. Rows that resolve nothing are left NULL, which is what
-/// the apply then writes — so art deleted since the previous scan clears the
-/// column rather than lingering.
+/// A no-op returning 0 when the connection is closed, or when the collection
+/// has neither an artwork directory NOR any manual link to honour — a manual
+/// link is an absolute path of the user's choosing, so it resolves for a
+/// collection with no artwork directory configured at all. Rows that resolve
+/// nothing are left NULL, which is what the apply then writes — so art deleted
+/// since the previous scan clears the column rather than lingering.
 ///
 /// @param db the scan worker's connection (the staging table is TEMP, so it
 ///        must be the same connection that staged the rows).
 /// @param txnDepth QueryManager's shared transaction-depth counter — the whole
 ///        pass runs in one guarded transaction on it.
-/// @param artworkDirectory the collection's artwork directory; empty skips.
+/// @param artworkDirectory the collection's artwork directory; empty disables
+///        auto-discovery but not manual links.
+/// @param collectionUuid the collection whose `item_artwork` rows apply; empty
+///        disables the manual-link layer (auto-discovery still runs).
 /// @return the number of staged rows a cover was stored for (0 on failure,
 ///         which leaves the staged rows unmodified and the scan otherwise
 ///         unaffected — an unresolved column is a degraded predicate, never a
 ///         broken library).
-int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artworkDirectory);
+int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artworkDirectory,
+                         const QString &collectionUuid);
 
 } // namespace ScanArtwork
 

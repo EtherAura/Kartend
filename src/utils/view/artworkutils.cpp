@@ -62,14 +62,9 @@ QImage composeArtworkCard(const QImage &source, int targetWidthLogical, int targ
   return result;
 }
 
-namespace {
-/// Subdirectories under the artwork root that can supply an item's
-/// primary cover, in display-priority order. The scrape pipeline
-/// writes each media type into its own `{artwork}/<type>/` subdir and
-/// no longer drops a copy at the flat root, so the grid tile and the
-/// details-pane preview resolve the cover by walking these in order.
-/// `front` is the canonical cover; the rest are sensible fallbacks
-/// for items ScreenScraper has no dedicated front cover for.
+// Declared in the header (Kartend-jkty9) so the artwork-type ids that can
+// supply a cover are readable outside this TU — ItemArtworkStore needs exactly
+// this list to decide which MANUAL links count as a cover.
 const QStringList &coverSubdirPriority() {
   static const QStringList kDirs = {
       QStringLiteral("front"),   QStringLiteral("box"),     QStringLiteral("box-3d"),
@@ -78,6 +73,8 @@ const QStringList &coverSubdirPriority() {
   };
   return kDirs;
 }
+
+namespace {
 
 /// Small dedicated pool for the background prewarm walk (mirrors
 /// ArtworkLoadDispatcher's dedicated-pool pattern). schedulePrewarm used to
