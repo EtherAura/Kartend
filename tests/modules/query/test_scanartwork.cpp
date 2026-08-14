@@ -20,6 +20,8 @@
 // scanAndSaveItemsToDatabase) and the in-memory one (saveItemsToDatabase).
 #include <memory>
 
+#include <chrono>
+#include <filesystem>
 #include <QByteArray>
 #include <QDateTime>
 #include <QDir>
@@ -32,6 +34,7 @@
 #include <QStandardPaths>
 #include <QString>
 #include <QStringList>
+
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -199,6 +202,10 @@ private slots:
   void exactCoverOutranksDiscFallback();
   void inMemorySavePipeline_populatesArtworkPath();
 
+  // Artwork-only refresh, no media rescan (Kartend-d1l99)
+  void coverAddedWithoutMediaChange_isPickedUpWithoutRescan();
+  void coverRemovedWithoutMediaChange_isClearedWithoutRescan();
+
   // Manual per-item links (Kartend-jkty9)
   void manualLink_makesAnArtlessItemCount();
   void manualLink_outranksAutoDiscoveredCover();
@@ -218,6 +225,92 @@ void TestScanArtwork::initTestCase() {
 
 // The headline regression: a cover sitting next to the library, named for the
 // item, must be recorded on the item's row.
+
+namespace {
+/// The directory fingerprint has one-second granularity, so a file written in
+/// the same second as the last fingerprint would compare equal and the refresh
+/// would not fire. Tests must not depend on wall-clock luck: push the artwork
+/// directory's mtime forward explicitly.
+void advanceDirMtime(const QString &dir) {
+  const auto path = std::filesystem::path(dir.toStdString());
+  std::filesystem::last_write_time(path, std::filesystem::last_write_time(path) +
+                                             std::chrono::seconds(5));
+}
+
+/// needsRescan compares the media directory's mtime (millisecond precision)
+/// against last_scanned (stored as an ISO string, second precision). A test
+/// that scans a freshly-created directory does everything inside one second,
+/// so the media dir always reads as newer and every call rescans. Backdating
+/// it removes that artifact without weakening what is under test — the point
+/// here is that an ARTWORK-only change is noticed, not how the media side
+/// decides.
+void backdateDirMtime(const QString &dir) {
+  const auto path = std::filesystem::path(dir.toStdString());
+  std::filesystem::last_write_time(path, std::filesystem::last_write_time(path) -
+                                             std::chrono::minutes(5));
+}
+} // namespace
+
+void TestScanArtwork::coverAddedWithoutMediaChange_isPickedUpWithoutRescan() {
+  // The bug: needsRescan watches the MEDIA directory, so dropping a cover into
+  // the artwork directory changed nothing in the database. missing:artwork
+  // kept listing an item whose tile was visibly painted, because the grid
+  // resolves live and the predicate reads the column.
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Overture.bin")), "m"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+  QVERIFY2(artworkByName(fx.db()).value(QStringLiteral("Overture")).isEmpty(),
+           "precondition: the item starts artless");
+  backdateDirMtime(media.path()); // see the helper: removes the same-second artifact
+
+  // The user drops a cover in. The media directory is untouched, so a media
+  // rescan is neither needed nor wanted.
+  QVERIFY(writeFile(QDir(artwork.path()).filePath(QStringLiteral("Overture.png")), "px"));
+  advanceDirMtime(artwork.path());
+
+  // Returns false: no media rescan happened, which is the point.
+  QCOMPARE(fx.service()->ensureCollectionScanned(0, cfg), false);
+  QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Overture")),
+           QDir(artwork.path()).filePath(QStringLiteral("Overture.png")));
+}
+
+void TestScanArtwork::coverRemovedWithoutMediaChange_isClearedWithoutRescan() {
+  // The half a staged pass gets for free and this one does not: staged rows
+  // start NULL, so they can only gain art. An items row already holds the last
+  // answer, so a deleted cover has to be actively cleared or the predicate
+  // keeps counting a ghost.
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Overture.bin")), "m"));
+  const QString cover = QDir(artwork.path()).filePath(QStringLiteral("Overture.png"));
+  QVERIFY(writeFile(cover, "px"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+  QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Overture")), cover);
+  backdateDirMtime(media.path()); // as above
+
+  QVERIFY(QFile::remove(cover));
+  advanceDirMtime(artwork.path());
+
+  QCOMPARE(fx.service()->ensureCollectionScanned(0, cfg), false);
+  QVERIFY2(artworkByName(fx.db()).value(QStringLiteral("Overture")).isEmpty(),
+           "a deleted cover must clear the column, not leave a ghost");
+}
+
 void TestScanArtwork::flatCover_landsInArtworkPath() {
   ArtworkScanFixture fx;
   QVERIFY2(fx.opened(), "failed to open + seed the test SQLite database");

@@ -21,6 +21,7 @@
 // (maybeAbsolutizeItemPaths, clearCollectionFromDatabaseByUuid) are also
 // declared there.
 #include "scanservice.h"
+#include "scanartwork.h"
 #include "scanservice_internal.h"
 
 #include "batchsizes.h"
@@ -766,6 +767,55 @@ bool ScanService::stageFilesystemScan(const CollectionConfig &collection,
   return true;
 }
 
+void ScanService::storeArtworkSignature(const QString &uuid, const CollectionConfig &collection) {
+  const QString artworkDir =
+      PathUtils::validateAndExpandPath(collection.artworkDirectory, collection.name);
+  // An empty or missing artwork directory fingerprints as an empty string,
+  // which is also the "never fingerprinted" value — so a collection that gains
+  // an artwork directory later still gets its first refresh.
+  const QString signature =
+      artworkDir.trimmed().isEmpty()
+          ? QString()
+          : QueryManagerInternal::seedDirSignatureFromFilesystem(artworkDir, true);
+
+  QSqlQuery &update = m_cache.get(QuerySQL::UPDATE_COLLECTION_ARTWORK_SIGNATURE);
+  update.bindValue(0, signature);
+  update.bindValue(1, uuid);
+  (void)execAndLog(update, "Failed to store artwork signature",
+                   "ScanService::storeArtworkSignature");
+}
+
+void ScanService::maybeRefreshArtwork(const QString &uuid, const CollectionConfig &collection) {
+  const QString artworkDir =
+      PathUtils::validateAndExpandPath(collection.artworkDirectory, collection.name);
+  if (artworkDir.trimmed().isEmpty() || !QFileInfo(artworkDir).isDir()) {
+    return; // nothing to fingerprint; manual links alone are written at save time
+  }
+
+  QSqlQuery &read = m_cache.get(QuerySQL::COLLECTION_ARTWORK_SIGNATURE);
+  read.bindValue(0, uuid);
+  if (!read.exec() || !read.next()) {
+    return; // no row yet: the first scan will fingerprint it
+  }
+  const QString stored = read.value(0).toString();
+
+  // Same validity test the media side uses, against the artwork root. A stored
+  // signature that still matches means nothing has been added, removed or
+  // touched in there since the last pass.
+  if (!stored.trimmed().isEmpty() &&
+      QueryManagerInternal::dirSignatureStillValid(artworkDir, true, stored)) {
+    return;
+  }
+
+  int txnDepth = 0;
+  const int changed = ScanArtwork::refreshArtworkForItems(m_db, txnDepth, artworkDir, uuid);
+  storeArtworkSignature(uuid, collection);
+  if (changed > 0) {
+    qCDebug(lcQueryManager).nospace()
+        << "artwork refresh updated " << changed << " row(s) in '" << collection.name << "'";
+  }
+}
+
 bool ScanService::ensureCollectionScanned(int collectionIndex, const CollectionConfig &collection) {
   if (collection.mediaDirectory.trimmed().isEmpty()) {
     return false;
@@ -797,6 +847,9 @@ bool ScanService::ensureCollectionScanned(int collectionIndex, const CollectionC
   }
 
   if (!needsRescan(collectionIndex, collection)) {
+    // No media-side work, but the ARTWORK directory may still have moved
+    // underneath us — needsRescan does not watch it, by design (Kartend-d1l99).
+    maybeRefreshArtwork(uuid, collection);
     return false;
   }
 
@@ -813,6 +866,12 @@ bool ScanService::ensureCollectionScanned(int collectionIndex, const CollectionC
   int itemsApplied = 0;
   const bool success =
       scanAndSaveItemsToDatabase(collectionIndex, collection, &itemsScanned, &itemsApplied);
+  if (success) {
+    // The staged pass just resolved artwork for every row, so the rows are
+    // current — record the fingerprint that made them so, or the next load
+    // would run a redundant refresh (Kartend-d1l99).
+    storeArtworkSignature(uuid, collection);
+  }
 
   // Remember a failed scan so the next reload-driven pass skips it instead of
   // retrying forever (see the m_failedScanUuids guard above). A user-cancelled

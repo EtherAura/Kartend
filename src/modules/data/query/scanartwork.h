@@ -103,6 +103,32 @@ namespace ScanArtwork {
 int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artworkDirectory,
                          const QString &collectionUuid);
 
+/// Re-resolves artwork for a collection's EXISTING items rows, without a scan
+/// (Kartend-d1l99).
+///
+/// resolveStagedArtwork answers "what art does this newly scanned library
+/// have"; this answers "the artwork directory changed, what does it have NOW".
+/// Nothing used to ask the second question: needsRescan watches the media
+/// directory and the settings signature, and dropping a cover into (or
+/// deleting one from) the artwork directory moves neither. So the DB-side
+/// predicates — Missing artwork, collection health, smart playlists — kept the
+/// previous answer while the grid, which resolves live, had already updated.
+///
+/// A full rescan would answer it too, and is a heavy reply to one new png: it
+/// rewalks the media tree, restages every row and rewrites them. This walks
+/// the artwork directory once and touches only the item rows whose resolved
+/// cover actually CHANGED.
+///
+/// CLEARS AS WELL AS SETS, which is the half a staged pass gets for free.
+/// Staged rows start NULL, so resolveStagedArtwork only ever writes hits; an
+/// items row already holds last scan's answer, so a cover the user deleted has
+/// to be actively nulled or the predicate keeps a ghost.
+///
+/// @return the number of rows whose artwork_path changed (0 on failure, which
+///         leaves every row as it was).
+int refreshArtworkForItems(QSqlDatabase &db, int &txnDepth, const QString &artworkDirectory,
+                           const QString &collectionUuid);
+
 } // namespace ScanArtwork
 
 #endif // SCANARTWORK_H

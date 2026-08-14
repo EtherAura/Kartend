@@ -12,6 +12,13 @@ constexpr const char *COLLECTION_INFO =
     "SELECT last_scanned, name, ext_signature, dir_signature FROM collections "
     "WHERE uuid = ?";
 constexpr const char *ITEM_PATH_CHECK = "SELECT path FROM items WHERE collection_uuid = ? LIMIT 1";
+// Kartend-d1l99: the artwork directory's own fingerprint, kept apart from
+// dir_signature because a change here warrants an artwork-only refresh, not
+// the full media rewalk dir_signature gates.
+constexpr const char *COLLECTION_ARTWORK_SIGNATURE =
+    "SELECT artwork_signature FROM collections WHERE uuid = ?";
+constexpr const char *UPDATE_COLLECTION_ARTWORK_SIGNATURE =
+    "UPDATE collections SET artwork_signature = ? WHERE uuid = ?";
 constexpr const char *ITEMS_MODIFIED_COUNT =
     "SELECT COUNT(*) FROM items WHERE collection_uuid = ? AND last_modified > "
     "?";

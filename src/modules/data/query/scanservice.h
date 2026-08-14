@@ -138,6 +138,14 @@ private:
   // item-count-by-uuid probe, and the self-contained includeContentSubfolders
   // dir-signature validation arm (returns true when a full rescan is needed).
   [[nodiscard]] bool collectionHasItems(const QString &uuid);
+
+  // Artwork-side refresh (Kartend-d1l99). needsRescan deliberately watches only
+  // the media directory, so these two carry the artwork directory's own
+  // fingerprint: maybeRefreshArtwork re-resolves the collection's item rows
+  // when it has moved, and storeArtworkSignature records the current one after
+  // any pass that leaves those rows current.
+  void maybeRefreshArtwork(const QString &uuid, const CollectionConfig &collection);
+  void storeArtworkSignature(const QString &uuid, const CollectionConfig &collection);
   [[nodiscard]] bool subfolderDirNeedsRescan(const QString &uuid,
                                              const CollectionConfig &collection,
                                              const QString &storedDirSignature,

@@ -235,7 +235,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 28;
+  constexpr int CURRENT_SCHEMA_VERSION = 29;
   const int version = getUserVersion(db, origin);
 
   // A failed version read (already logged with its SQL error by
@@ -1083,9 +1083,32 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 28;
+  }
+
+  if (mutableVersion < 29) {
+    // v29 (Kartend-d1l99): collections.artwork_signature — the artwork
+    // directory's own mtime/size fingerprint, stored beside dir_signature.
+    // Nothing used to notice a cover being dropped into (or deleted from) the
+    // artwork directory: needsRescan watches the MEDIA directory and the
+    // settings signature, and neither moves. So items.artwork_path kept the
+    // previous answer and every DB-side predicate — Missing artwork,
+    // collection health, smart playlists — under-reported against a grid that
+    // resolves live and had already updated.
+    //
+    // Deliberately its own column rather than a term folded into
+    // dir_signature: that one gates a full media rewalk, and one new png does
+    // not warrant walking the library. This gates the artwork-only refresh
+    // pass instead. Empty means "never fingerprinted", which the first pass
+    // fills in.
+    if (!runBlock(db, 29, origin, [&]() -> bool {
+          return ensureColumn(db, "collections", "artwork_signature", "TEXT DEFAULT ''", origin);
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v29 block stays a pure copy-paste.
-    mutableVersion = 28; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v30 block stays a pure copy-paste.
+    mutableVersion = 29; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 
