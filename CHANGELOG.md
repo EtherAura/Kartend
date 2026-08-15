@@ -682,6 +682,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not next to your media — so it looked for the art at the top of the artwork
   folder instead of in the one matching where the release actually sits. It
   now looks where the release is (Kartend-srg3i).
+- **Hide missing artwork no longer hides items that have artwork.** For a
+  collection whose artwork folders mirror its media folders, turning on **hide
+  missing artwork** made items in subfolders disappear — including ones whose
+  cover was sitting in the matching artwork subfolder and visibly painted on
+  the tile. The filter only ever looked at the top of the artwork folder, so
+  anything filed deeper counted as missing. It now looks in the same folder
+  the tile does (Kartend-7f76f).
 
 ## [0.0.18] - 2026-07-29
 
