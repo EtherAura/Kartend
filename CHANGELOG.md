@@ -673,6 +673,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a linked item now, and opens the image you linked rather than hunting for
   one by name, which is also what it does when the item's collection has no
   artwork folder configured at all (Kartend-ni68u).
+- **A grouped multi-disc release filed in a subfolder now finds its cover.**
+  With **Group multi-disc releases into one item** on, a release whose discs
+  sit in a subfolder of a collection that mirrors its artwork folders showed
+  the placeholder, even with `Recital (Disc 1).png` filed right beside the
+  discs. Grouping gives the release a playlist of its own to play, and the
+  cover search followed that playlist — which lives in Kartend's data folder,
+  not next to your media — so it looked for the art at the top of the artwork
+  folder instead of in the one matching where the release actually sits. It
+  now looks where the release is (Kartend-srg3i).
 
 ## [0.0.18] - 2026-07-29
 
