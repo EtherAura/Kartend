@@ -82,7 +82,17 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collection
     }
     // Store artwork directory for preview overlay to use
     widget->setArtworkDirectory(artworkDir);
-    if (!artworkDir.isEmpty()) {
+    // A hand-linked cover counts here exactly as it does on the tile
+    // (Kartend-ni68u). It is checked BEFORE the name cascade and before the
+    // artworkDir guard: a link makes an item count even when its collection
+    // has no artwork directory at all, which is the case the cascade below
+    // cannot see. ScrollManager::showArtworkPreview routes the button to the
+    // linked path, so the preview this flag promises is the one that opens.
+    const QString manualCover =
+        m_manualCoverPaths.isEmpty() ? QString() : m_manualCoverPaths.value(fullPath);
+    if (!manualCover.isEmpty()) {
+      widget->setHasArtwork(true);
+    } else if (!artworkDir.isEmpty()) {
       QString fileName = QFileInfo(fullPath).fileName();
       QString artworkPath = ArtworkUtils::findArtworkForFileCached(fileName, artworkDir);
       // Cold-cache fallback: findArtworkForFileCached returns empty on the
@@ -270,14 +280,20 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
   // the virtual-scroll hot path; the isEmpty() guard makes it free for the
   // libraries with no hand-linked artwork at all.
   //
-  // LIST MODE is deliberately left to the name-based cascade below: its
-  // hasArtwork flag drives a preview BUTTON whose overlay
-  // (SelectionDisplayManager::showArtworkPreview) resolves the image by name
-  // all over again, so flagging a link-only item here would offer a button
-  // that opens nothing.
-  if (!m_manualCoverPaths.isEmpty() && !(widget && widget->isListMode())) {
+  // LIST MODE takes the flag, not the pixmap: the row shows a preview BUTTON
+  // rather than the cover. It used to be excluded here entirely, because the
+  // overlay behind that button resolved the image by NAME and would have
+  // opened nothing for a link-only item; ScrollManager::showArtworkPreview now
+  // routes a linked item to the exact path instead, so the button opens the
+  // cover the flag promises (Kartend-ni68u). Mirrors the list branch of
+  // createMediaWidget, so a reconfigure pass agrees with first paint.
+  if (!m_manualCoverPaths.isEmpty()) {
     const QString manualCover = m_manualCoverPaths.value(fullPath);
     if (!manualCover.isEmpty()) {
+      if (widget && widget->isListMode()) {
+        widget->setHasArtwork(true);
+        return;
+      }
       if (auto *art = artworkMgr()) {
         art->addPendingArtwork(widget, manualCover);
         return;

@@ -58,6 +58,11 @@ private slots:
   void manualCover_emptyMapLeavesAutoDiscoveryUntouched();
   void manualCover_unlinkedItemStillFallsThroughToTheNameCascade();
 
+  // Hand-linked covers in LIST MODE (Kartend-ni68u)
+  void manualCover_listRowFlagsArtworkInsteadOfQueueingAPixmap();
+  void manualCover_listRowCountsWithoutAnArtworkDirectory();
+  void manualCover_unlinkedListRowStillFallsThroughToTheNameCascade();
+
   // Pending range-request bookkeeping
   void prefetchRangeAt_requestsUnloadedChunkOnce();
   void prefetchRangeAt_guardsInvalidAndLoadedInputs();
@@ -536,6 +541,78 @@ void TestItemWidgetFactory::manualCover_unlinkedItemStillFallsThroughToTheNameCa
 
   h.factory.configureArtworkForWidget(&h.widget, otherItem);
   QCOMPARE(h.artwork.lastPath, autoArt);
+  ArtworkUtils::clearDirectoryCache();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hand-linked covers in LIST MODE (Kartend-ni68u)
+//
+// A list row shows a preview BUTTON, not the cover, so the link has to set the
+// hasArtwork flag rather than queue a pixmap into the hidden image label. List
+// mode was excluded from the manual-cover check entirely while the overlay
+// behind that button still resolved by name; ScrollManager::showArtworkPreview
+// now routes a linked item to its exact path, so the flag is honest.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestItemWidgetFactory::manualCover_listRowFlagsArtworkInsteadOfQueueingAPixmap() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QTemporaryDir elsewhere;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid() && elsewhere.isValid());
+  // Same shape as the grid case: named nothing like the item, stored outside
+  // the artwork directory, so only the link can answer.
+  const QString linked = makeImageFile(elsewhere, QStringLiteral("hand-picked.png"));
+
+  ArtworkHarness h(artRoot.path(), mediaRoot.path());
+  h.widget.setListMode(true);
+  const QString item = QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Overture.flac"));
+  h.factory.setManualCoverPaths({{item, linked}});
+
+  h.factory.configureArtworkForWidget(&h.widget, item);
+  QVERIFY2(h.widget.hasArtwork(), "a hand-linked cover must give the list row its preview button");
+  QCOMPARE(h.artwork.calls, 0); // the flag, never a decode into a hidden label
+}
+
+void TestItemWidgetFactory::manualCover_listRowCountsWithoutAnArtworkDirectory() {
+  QTemporaryDir mediaRoot;
+  QTemporaryDir elsewhere;
+  QVERIFY(mediaRoot.isValid() && elsewhere.isValid());
+  const QString linked = makeImageFile(elsewhere, QStringLiteral("hand-picked.png"));
+
+  // No artwork directory at all — the case the name cascade cannot even try,
+  // and the reason the link is checked before that guard rather than inside it.
+  ArtworkHarness h(QString(), mediaRoot.path());
+  h.widget.setListMode(true);
+  const QString item = QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Overture.flac"));
+  h.factory.setManualCoverPaths({{item, linked}});
+
+  h.factory.configureArtworkForWidget(&h.widget, item);
+  QVERIFY2(h.widget.hasArtwork(), "a link must count even with no artwork directory configured");
+  QCOMPARE(h.artwork.calls, 0);
+}
+
+void TestItemWidgetFactory::manualCover_unlinkedListRowStillFallsThroughToTheNameCascade() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QTemporaryDir elsewhere;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid() && elsewhere.isValid());
+  makeImageFile(artRoot, QStringLiteral("Nocturne.png"));
+  const QString linked = makeImageFile(elsewhere, QStringLiteral("hand-picked.png"));
+  ArtworkUtils::clearDirectoryCache();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories({artRoot.path()});
+
+  ArtworkHarness h(artRoot.path(), mediaRoot.path());
+  h.widget.setListMode(true);
+  const QString linkedItem =
+      QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Overture.flac"));
+  const QString otherItem =
+      QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Nocturne.flac"));
+  // A sibling with no row of its own must neither inherit the link nor lose
+  // the auto-discovered cover it already had before this change.
+  h.factory.setManualCoverPaths({{linkedItem, linked}});
+
+  h.factory.configureArtworkForWidget(&h.widget, otherItem);
+  QVERIFY2(h.widget.hasArtwork(), "an unlinked list row must still find its auto-discovered cover");
   ArtworkUtils::clearDirectoryCache();
 }
 

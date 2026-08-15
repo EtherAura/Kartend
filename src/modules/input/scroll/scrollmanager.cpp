@@ -705,18 +705,29 @@ void ScrollManager::updateListHeader() {
 
 // Forwarder: artwork preview overlay lives on SelectionDisplayManager.
 void ScrollManager::onArtworkPreviewRequested(const QString &filePath, const QString &artworkDir) {
-  if (m_selectionDisplay) {
-    m_selectionDisplay->showArtworkPreview(filePath, artworkDir);
-  }
+  showArtworkPreview(filePath, artworkDir);
 }
 
 // Public entry point used by InteractionManager for expand-mode activation.
 // Identical behavior to onArtworkPreviewRequested but exposed as a public
 // API for callers that don't go through the widget signal chain.
 void ScrollManager::showArtworkPreview(const QString &filePath, const QString &artworkDir) {
-  if (m_selectionDisplay) {
-    m_selectionDisplay->showArtworkPreview(filePath, artworkDir);
+  if (!m_selectionDisplay) {
+    return;
   }
+  // A hand-linked cover wins here for the same reason it wins on the tile
+  // (Kartend-1js9j): showArtworkPreview resolves by NAME under artworkDir, so
+  // a link-only item — or one whose link points somewhere else entirely —
+  // would open the auto-discovered cover or nothing at all. Routing through
+  // the exact-path entry point is what lets LIST MODE flag those rows at all
+  // (Kartend-ni68u); without it the button opens an empty overlay.
+  if (!m_manualCoverPaths.isEmpty()) {
+    const QString manualCover = m_manualCoverPaths.value(filePath);
+    if (!manualCover.isEmpty() && m_selectionDisplay->showPreviewAtPath(manualCover, false)) {
+      return;
+    }
+  }
+  m_selectionDisplay->showArtworkPreview(filePath, artworkDir);
 }
 
 // Video-first preview entry point. Used by expand-mode and
