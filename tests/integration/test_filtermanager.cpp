@@ -387,6 +387,116 @@ void TestFilterManager::testHideMissingArtworkResolvesSubdirAndFullNameKeys() {
   ArtworkUtils::DirectoryCache::instance().clear();
 }
 
+// Kartend-7f76f: with includeArtworkSubfolders on, the render path resolves an
+// item's cover under <artwork>/<the item's media subfolder>. The predicate
+// built one key set from the artwork ROOT, so it saw nothing for any item in a
+// subfolder — it failed OPEN, which meant hideMissingArtwork quietly did
+// nothing at all for a mirrored collection rather than hiding the wrong rows.
+void TestFilterManager::testHideMissingArtworkMirrorsSubfolderIntoArtworkTree() {
+  QTemporaryDir mediaDir;
+  QTemporaryDir artDir;
+  QVERIFY(mediaDir.isValid());
+  QVERIFY(artDir.isValid());
+  QVERIFY(QDir(mediaDir.path()).mkpath(QStringLiteral("Live")));
+  QVERIFY(QDir(artDir.path()).mkpath(QStringLiteral("Live")));
+
+  // Recital is arted under the MIRRORED subdirectory; Encore, beside it, is
+  // not. Overture sits at the media root and is arted at the artwork root, so
+  // the flat case has to keep working through the very same pass.
+  const QStringList covers = {
+      QStringLiteral("Live/Recital.png"),
+      QStringLiteral("Overture.png"),
+  };
+  for (const QString &name : covers) {
+    QFile art(QDir(artDir.path()).filePath(name));
+    QVERIFY(art.open(QIODevice::WriteOnly));
+    art.write("x");
+    art.close();
+  }
+  // Warm both cascades — the root's and the mirrored subdirectory's. A cold
+  // directory fails open, which would pass this test for the wrong reason.
+  ArtworkUtils::DirectoryCache::instance().clear();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(QDir(artDir.path()).filePath(QStringLiteral("Live"))));
+
+  const QStringList paths = {
+      QDir(mediaDir.path()).filePath(QStringLiteral("Live/Recital.bin")),
+      QDir(mediaDir.path()).filePath(QStringLiteral("Live/Encore.bin")),
+      QDir(mediaDir.path()).filePath(QStringLiteral("Overture.bin")),
+  };
+
+  CollectionContext ctx;
+  ctx.config.mediaDirectory = mediaDir.path();
+  ctx.config.artworkDirectory = artDir.path();
+  ctx.config.folderBrowsing.includeArtworkSubfolders = true;
+  ctx.config.hideMissingArtwork = true;
+
+  FilterManager mgr;
+  mgr.setContext(ctx);
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  mgr.clearFilter();
+
+  // Recital survives on its mirrored cover and Overture on the root one;
+  // Encore is the only genuinely artless item and the only one pruned.
+  QVERIFY(mgr.isFiltered());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 2}));
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+}
+
+// The mirroring branch must not change collections that do not mirror: with
+// the flag off, a subfolder item is still answered by the artwork ROOT.
+void TestFilterManager::testHideMissingArtworkWithoutMirroringStillUsesTheRoot() {
+  QTemporaryDir mediaDir;
+  QTemporaryDir artDir;
+  QVERIFY(mediaDir.isValid());
+  QVERIFY(artDir.isValid());
+  QVERIFY(QDir(mediaDir.path()).mkpath(QStringLiteral("Live")));
+  QVERIFY(QDir(artDir.path()).mkpath(QStringLiteral("Live")));
+
+  // Named for the subfolder item but filed at the ROOT — which is exactly
+  // where a non-mirroring collection is supposed to look.
+  QFile art(QDir(artDir.path()).filePath(QStringLiteral("Recital.png")));
+  QVERIFY(art.open(QIODevice::WriteOnly));
+  art.write("x");
+  art.close();
+  // A decoy under the mirrored directory, for an item that has nothing at the
+  // root: it must NOT be consulted while the flag is off.
+  QFile decoy(QDir(artDir.path()).filePath(QStringLiteral("Live/Encore.png")));
+  QVERIFY(decoy.open(QIODevice::WriteOnly));
+  decoy.write("x");
+  decoy.close();
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+
+  const QStringList paths = {
+      QDir(mediaDir.path()).filePath(QStringLiteral("Live/Recital.bin")),
+      QDir(mediaDir.path()).filePath(QStringLiteral("Live/Encore.bin")),
+  };
+
+  CollectionContext ctx;
+  ctx.config.mediaDirectory = mediaDir.path();
+  ctx.config.artworkDirectory = artDir.path();
+  ctx.config.folderBrowsing.includeArtworkSubfolders = false;
+  ctx.config.hideMissingArtwork = true;
+
+  FilterManager mgr;
+  mgr.setContext(ctx);
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  mgr.clearFilter();
+
+  QVERIFY(mgr.isFiltered());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+}
+
 void TestFilterManager::testActualIndexRoundTripAcrossPrefixBands() {
   static const QList<CollectionConfig> collections = [] {
     QList<CollectionConfig> out;

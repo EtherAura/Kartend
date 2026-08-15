@@ -45,6 +45,11 @@ private slots:
   // the render surfaces paint from before it consults the key set.
   void testHideMissingArtworkKeepsHandLinkedItems();
   void testHideMissingArtworkHandLinkAnswersEvenOnAColdCascade();
+
+  // A mirroring collection keeps each subfolder's art under the matching
+  // artwork subdirectory, which is where the render path looks (Kartend-7f76f).
+  void testHideMissingArtworkMirrorsSubfolderIntoArtworkTree();
+  void testHideMissingArtworkWithoutMirroringStillUsesTheRoot();
 };
 
 #endif // KARTEND_TESTS_TEST_FILTERMANAGER_H
