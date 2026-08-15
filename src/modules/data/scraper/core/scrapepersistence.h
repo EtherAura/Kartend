@@ -61,14 +61,16 @@ struct ApplyResult {
 /// (collectionUuid, sourcePath, artworkDirectory, baseName).
 ///
 /// Layout used for each media asset:
-///   * `front`             → primary cover at
-///                           `{artworkDirectory}/{baseName}.png`
-///                           (the slot the grid auto-discovers)
-///   * `box` / `screenshot` / `title` / `marquee` / `fanart` / `logo`
-///                         → standard-type subdir at
+///   * `front` / `box` / `screenshot` / `title` / `marquee` /
+///     `fanart` / `logo`   → standard-type subdir at
 ///                           `{artworkDirectory}/{type}/{baseName}.png`
 ///                           (auto-discovered via
 ///                           ItemArtworkStore::findStandardArtwork).
+///                           `front` is the cross-provider primary-cover
+///                           tag and a standard type in its own right, so
+///                           it lands in `{artworkDirectory}/front/` like
+///                           any other — NOT at the flat artwork root, and
+///                           not under `box/`.
 ///   * any other type      → same per-type subdir layout PLUS an
 ///                           `item_artwork` row whose `manualPath`
 ///                           points at the file, so the sidebar
@@ -94,8 +96,9 @@ struct ApplyResult {
 ///   - images  → `{artworkDirectory}/<type>/{baseName}.<ext>`
 ///   - videos  → `{artworkDirectory}/video/{baseName}.<ext>`
 ///   - manuals → `{artworkDirectory}/manual/{baseName}.<ext>`
-///   - the `"front"` primary cover ALSO mirrors to
-///     `{artworkDirectory}/{baseName}.<ext>` for the grid tile.
+/// Nothing is copied to the flat artwork root: the grid tile and the
+/// details-pane preview resolve the primary cover straight out of the
+/// typed subdirectories (see ArtworkUtils::findArtworkForFile).
 /// Subdirectories are created on demand; callers don't have to
 /// pre-create them. The collection only needs `artworkDirectory`
 /// set — kinds organise themselves underneath.

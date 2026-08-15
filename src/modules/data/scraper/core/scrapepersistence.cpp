@@ -252,7 +252,8 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
   // ── Media writes ─────────────────────────────────────────────────
   // Single-root layout: everything lives under {artworkDirectory}/.
   // The on-disk subdir is derived from the asset's MediaKind:
-  //   image → <type>/   (or "box" for the cross-provider "front" tag)
+  //   image → <type>/   ("front", the cross-provider primary-cover tag,
+  //                      is a standard type of its own and gets front/)
   //   video → video/
   //   manual → manual/
   // File extensions are inferred from each asset's source URL with
