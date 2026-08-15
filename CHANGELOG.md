@@ -628,6 +628,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was Discard, which throws away the edits the button was meant to keep.
   Cancel still asks, which is where the question is genuinely open
   (Kartend-1g46b).
+- **Artwork filed in folders that mirror your media now counts as artwork.**
+  Where a collection's artwork folder repeats the shape of its media folder —
+  a cover in `Artwork/Concertos/` for a recording in `Media/Concertos/` — the
+  grid painted those covers, but nothing that asks the library whether an item
+  *has* artwork agreed. The *Has artwork* and *Missing artwork* smart
+  playlists, the `has:artwork` and `missing:artwork` search terms, the
+  missing-artwork count in Collection Health and the artwork wizard's worklist
+  all called every item in a subfolder artless, because a scan looked only at
+  the top of the artwork folder while the grid looked inside the matching one.
+  A scan now looks where the grid looks, folder by folder, so what the library
+  records matches what you can see. Collections whose artwork sits in one flat
+  folder resolve exactly as they did (Kartend-35wqh).
+- **A cover you assign by hand now gives its row an artwork preview in List
+  view.** Hand-linked covers already counted everywhere else, but a List row
+  showed no preview button unless a file named after the item happened to
+  exist as well — so for an item whose link was the only cover it had, the
+  row looked bare next to the same item's tile in Grid. The button appears for
+  a linked item now, and opens the image you linked rather than hunting for
+  one by name, which is also what it does when the item's collection has no
+  artwork folder configured at all (Kartend-ni68u).
 
 ## [0.0.18] - 2026-07-29
 
