@@ -73,7 +73,7 @@ jobs:
     # reusable workflow would rename it to `script-lint / <job>`.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./.github/actions/script-lint
 
@@ -128,7 +128,7 @@ jobs:
             extra_packages: libsdl2-dev
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install dependencies
         uses: ./.github/actions/install-deps
@@ -294,7 +294,7 @@ jobs:
     # sanitizers jobs' headroom (Kartend-wym32).
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install dependencies
         # Deliberately omit libzstd-dev. KARTEND_ENABLE_ZSTD=OFF below makes
@@ -367,7 +367,7 @@ jobs:
     # other install-deps jobs (Kartend-wym32).
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install dependencies
         # Deliberately omit libarchive-dev. KARTEND_ENABLE_LIBARCHIVE=OFF
@@ -417,7 +417,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The instrumented (ASan/UBSan) build plus the full test-binary set
       # outgrew the runner's root disk ("No space left on device" at link).
@@ -519,7 +519,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Same instrumented-build disk profile as the ASan job above
       # (Kartend-dbkuy) — TSan binaries are just as large.
@@ -609,7 +609,7 @@ jobs:
     timeout-minutes: 150
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history so the diff-scope step below can resolve the merge
           # base against the PR's target branch (origin/$GITHUB_BASE_REF...HEAD).
@@ -871,7 +871,7 @@ jobs:
         build_type: ${{ github.event_name == 'pull_request' && fromJSON('["Release"]') || fromJSON('["Release", "Debug"]') }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Kartend-t2w4i: MSVC compiler cache. sccache supports MSVC;
       # mozilla/sccache-action installs the binary and wires the GitHub Actions
@@ -1005,7 +1005,7 @@ jobs:
 
       - name: Upload preview artifact
         if: matrix.build_type == 'Release'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.ZIP_NAME }}
           path: ${{ env.ZIP_NAME }}
@@ -1025,7 +1025,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install build tools + Qt runtime libs
         # No apt qt6-* packages here — they would collide with the
@@ -1113,7 +1113,7 @@ jobs:
             cmake_extra: -DKARTEND_PORTABLE_RELEASE=ON
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install build deps
         run: brew install ninja ccache zstd

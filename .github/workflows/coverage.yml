@@ -77,7 +77,7 @@ jobs:
       KARTEND_COVERAGE_RATCHET_SLACK: '3'
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Kartend-5qmjp: full history so diff-cover can compare a PR's changed
           # lines against the merge base (a shallow clone has no common ancestor).
@@ -295,7 +295,7 @@ jobs:
                   --ignore-errors inconsistent,source
 
       - name: Upload coverage artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-report
           path: |
