@@ -808,7 +808,9 @@ void ScanService::maybeRefreshArtwork(const QString &uuid, const CollectionConfi
   }
 
   int txnDepth = 0;
-  const int changed = ScanArtwork::refreshArtworkForItems(m_db, txnDepth, artworkDir, uuid);
+  const int changed = ScanArtwork::refreshArtworkForItems(
+      m_db, txnDepth, artworkDir, uuid, collection.mediaDirectory,
+      collection.folderBrowsing.includeArtworkSubfolders);
   storeArtworkSignature(uuid, collection);
   if (changed > 0) {
     qCDebug(lcQueryManager).nospace()

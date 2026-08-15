@@ -206,6 +206,10 @@ private slots:
   void coverAddedWithoutMediaChange_isPickedUpWithoutRescan();
   void coverRemovedWithoutMediaChange_isClearedWithoutRescan();
 
+  // Mirrored artwork trees (Kartend-35wqh)
+  void mirroredSubfolderCover_landsInArtworkPath();
+  void mirroredLayout_rootStaysEmptyWhenOnlySubfolderHasArt();
+
   // Manual per-item links (Kartend-jkty9)
   void manualLink_makesAnArtlessItemCount();
   void manualLink_outranksAutoDiscoveredCover();
@@ -309,6 +313,65 @@ void TestScanArtwork::coverRemovedWithoutMediaChange_isClearedWithoutRescan() {
   QCOMPARE(fx.service()->ensureCollectionScanned(0, cfg), false);
   QVERIFY2(artworkByName(fx.db()).value(QStringLiteral("Overture")).isEmpty(),
            "a deleted cover must clear the column, not leave a ghost");
+}
+
+void TestScanArtwork::mirroredSubfolderCover_landsInArtworkPath() {
+  // The render side mirrors an item's media-relative subfolder into the
+  // artwork directory before looking. The scan side used to build ONE map from
+  // the artwork root and resolve every row against it, so for a mirrored tree
+  // the grid painted covers while artwork_path stayed NULL for every subfolder
+  // item — missing:artwork, the smart-playlist rules, Collection Health and
+  // the review queue all called those items artless.
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(QDir(media.path()).mkpath(QStringLiteral("Concertos")));
+  QVERIFY(QDir(artwork.path()).mkpath(QStringLiteral("Concertos")));
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Concertos/Brandenburg.bin")), "m"));
+  const QString cover = QDir(artwork.path()).filePath(QStringLiteral("Concertos/Brandenburg.png"));
+  QVERIFY(writeFile(cover, "px"));
+
+  CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  cfg.folderBrowsing.includeContentSubfolders = true; // so the nested item is scanned
+  cfg.folderBrowsing.includeArtworkSubfolders = true; // the mirroring this is about
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Brandenburg")), cover);
+}
+
+void TestScanArtwork::mirroredLayout_rootStaysEmptyWhenOnlySubfolderHasArt() {
+  // Guards the shortcut that hid the bug: the pass used to give up early when
+  // the ROOT map came back empty. Under mirroring an empty root says nothing
+  // about the subfolders, so a library with all its art in folders resolved as
+  // entirely artless. A root item with no cover must still resolve to nothing,
+  // and the subfolder item must still find its own.
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Stray.bin")), "m"));
+  QVERIFY(QDir(media.path()).mkpath(QStringLiteral("Suites")));
+  QVERIFY(QDir(artwork.path()).mkpath(QStringLiteral("Suites")));
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Suites/Cello.bin")), "m"));
+  const QString cover = QDir(artwork.path()).filePath(QStringLiteral("Suites/Cello.png"));
+  QVERIFY(writeFile(cover, "px"));
+
+  CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  cfg.folderBrowsing.includeContentSubfolders = true;
+  cfg.folderBrowsing.includeArtworkSubfolders = true;
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  const auto byName = artworkByName(fx.db());
+  QCOMPARE(byName.value(QStringLiteral("Cello")), cover);
+  QVERIFY2(byName.value(QStringLiteral("Stray")).isEmpty(),
+           "a root item with no cover must stay artless even when a subfolder has art");
 }
 
 void TestScanArtwork::flatCover_landsInArtworkPath() {

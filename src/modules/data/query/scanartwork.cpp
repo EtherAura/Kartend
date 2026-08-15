@@ -116,10 +116,53 @@ loadManualCoverLinks(QSqlDatabase &db, const QString &collectionUuid) {
   return byPath;
 }
 
+/// Lazily builds one artwork path map per DIRECTORY, so a mirrored layout
+/// resolves each subfolder against its own artwork subdirectory instead of
+/// against the collection root (Kartend-35wqh).
+///
+/// One map per distinct directory, never one per item: a collection with 5000
+/// rows across 40 folders walks 40 directories, not 5000. The maps are held
+/// for the duration of the pass because rows arrive grouped by rowid, not by
+/// folder, so the same directory recurs throughout.
+class MirroredArtworkMaps {
+public:
+  MirroredArtworkMaps(QString artworkDirectory, QString mediaDirectory, bool mirrorSubfolders)
+      : m_artworkDirectory(std::move(artworkDirectory)),
+        m_mediaDirectory(std::move(mediaDirectory)), m_mirrorSubfolders(mirrorSubfolders) {}
+
+  /// The path map covering @p itemPath's own artwork directory.
+  const QHash<QString, QString> &forItem(const QString &itemPath) {
+    const QString dir = ArtworkUtils::mirroredArtworkDirectory(m_artworkDirectory, m_mediaDirectory,
+                                                               itemPath, m_mirrorSubfolders);
+    auto it = m_byDirectory.find(dir);
+    if (it != m_byDirectory.end()) {
+      return it.value();
+    }
+
+    QHash<QString, QString> built;
+    const QStringList lookupDirs = ArtworkUtils::artworkLookupDirectories(dir);
+    if (!dir.trimmed().isEmpty() && !lookupDirs.isEmpty()) {
+      // Refresh rather than warm, for the reason the callers document: a
+      // listing cached earlier in the session predates whatever the user has
+      // done to the artwork tree since.
+      ArtworkUtils::DirectoryCache::instance().refreshDirectories(lookupDirs);
+      built = ArtworkUtils::buildArtworkPathMap(dir);
+    }
+    return m_byDirectory.insert(dir, std::move(built)).value();
+  }
+
+private:
+  QString m_artworkDirectory;
+  QString m_mediaDirectory;
+  bool m_mirrorSubfolders;
+  QHash<QString, QHash<QString, QString>> m_byDirectory;
+};
+
 } // namespace
 
 int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artworkDirectory,
-                         const QString &collectionUuid) {
+                         const QString &collectionUuid, const QString &mediaDirectory,
+                         bool includeArtworkSubfolders) {
   if (!db.isOpen()) {
     return 0;
   }
@@ -130,27 +173,18 @@ int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artwork
   const QHash<QString, QHash<QString, QString>> manualLinks =
       loadManualCoverLinks(db, collectionUuid);
 
-  QHash<QString, QString> byKey;
-  const QStringList lookupDirs = ArtworkUtils::artworkLookupDirectories(artworkDirectory);
-  if (!artworkDirectory.trimmed().isEmpty() && !lookupDirs.isEmpty()) {
-    // REFRESH, not warm. A blocking walk because this pass has to give a
-    // COMPLETE answer — a cold cascade would silently record "artless" for a
-    // fully-arted library — and an unconditional one because a listing cached
-    // earlier in the session predates whatever the user has done to the artwork
-    // directory since, cached negatives included. It is bounded work: one walk
-    // of the flat root plus the typed cover subdirs, once per scan, never per
-    // item, and it leaves the cache warm and current for the grid that follows.
-    ArtworkUtils::DirectoryCache::instance().refreshDirectories(lookupDirs);
-    byKey = ArtworkUtils::buildArtworkPathMap(artworkDirectory);
-  }
-
-  if (byKey.isEmpty() && manualLinks.isEmpty()) {
-    // No cover anywhere in the cascade and nothing hand-linked. Every staged
-    // row stays NULL, which the apply writes over whatever the previous scan
-    // recorded — so a library whose artwork directory was emptied clears
-    // rather than keeps ghosts.
-    return 0;
-  }
+  // ONE MAP PER ARTWORK DIRECTORY, resolved per row. A single map built from
+  // the collection root was correct only for a flat layout; under mirroring
+  // the render side looks in <artwork>/<item's media-relative subfolder>, so
+  // the scan recorded NULL for every subfolder item while the grid painted it
+  // (Kartend-35wqh). Each directory is still walked once — REFRESH, not warm,
+  // because this pass has to give a COMPLETE answer and a cold cascade would
+  // silently record "artless" for a fully-arted library.
+  //
+  // No early return on "no art anywhere" any more: that check needed a map
+  // built up front, and under mirroring an empty ROOT says nothing about the
+  // subfolders. The per-row work for an artless collection is a hash lookup.
+  MirroredArtworkMaps maps(artworkDirectory, mediaDirectory, includeArtworkSubfolders);
 
   KartendDb::DbTransaction txn(db, txnDepth, "ScanArtwork::resolveStagedArtwork");
   if (!txn.activeOrReport(QStringLiteral("Failed to start staged-artwork transaction"),
@@ -196,8 +230,8 @@ int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artwork
       // cover type wins when its file still exists, else the auto-discovered
       // cover stands. The stat only happens for items the user hand-linked —
       // manualLinks is empty for the rest, and resolveCoverPath short-circuits.
-      QString artwork =
-          ItemArtworkStore::resolveCoverPath(manualLinks.value(path), resolveForPath(byKey, path));
+      QString artwork = ItemArtworkStore::resolveCoverPath(
+          manualLinks.value(path), resolveForPath(maps.forItem(path), path));
       if (!artwork.isEmpty()) {
         hits.append({rowId, std::move(artwork)});
       }
@@ -225,7 +259,8 @@ int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artwork
 }
 
 int refreshArtworkForItems(QSqlDatabase &db, int &txnDepth, const QString &artworkDirectory,
-                           const QString &collectionUuid) {
+                           const QString &collectionUuid, const QString &mediaDirectory,
+                           bool includeArtworkSubfolders) {
   if (!db.isOpen() || collectionUuid.trimmed().isEmpty()) {
     return 0;
   }
@@ -233,15 +268,11 @@ int refreshArtworkForItems(QSqlDatabase &db, int &txnDepth, const QString &artwo
   const QHash<QString, QHash<QString, QString>> manualLinks =
       loadManualCoverLinks(db, collectionUuid);
 
-  QHash<QString, QString> byKey;
-  const QStringList lookupDirs = ArtworkUtils::artworkLookupDirectories(artworkDirectory);
-  if (!artworkDirectory.trimmed().isEmpty() && !lookupDirs.isEmpty()) {
-    // Same reasoning as the staged pass: refresh rather than warm, because a
-    // listing cached earlier in the session is exactly what this pass exists
-    // to disbelieve — the user just changed that directory.
-    ArtworkUtils::DirectoryCache::instance().refreshDirectories(lookupDirs);
-    byKey = ArtworkUtils::buildArtworkPathMap(artworkDirectory);
-  }
+  // Per-directory maps, mirroring the render side exactly as the staged pass
+  // does (Kartend-35wqh). Refresh rather than warm, because a listing cached
+  // earlier in the session is exactly what this pass exists to disbelieve —
+  // the user just changed that directory.
+  MirroredArtworkMaps maps(artworkDirectory, mediaDirectory, includeArtworkSubfolders);
 
   // NO EARLY RETURN when both are empty. The staged pass can bail there
   // because its rows are already NULL; these rows hold the previous scan's
@@ -289,8 +320,8 @@ int refreshArtworkForItems(QSqlDatabase &db, int &txnDepth, const QString &artwo
       }
       const QString path = sel.value(1).toString();
       const QString existing = sel.value(2).toString();
-      const QString resolved =
-          ItemArtworkStore::resolveCoverPath(manualLinks.value(path), resolveForPath(byKey, path));
+      const QString resolved = ItemArtworkStore::resolveCoverPath(
+          manualLinks.value(path), resolveForPath(maps.forItem(path), path));
       if (resolved == existing) {
         continue; // untouched: the overwhelming majority on any given refresh
       }

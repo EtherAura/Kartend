@@ -100,8 +100,15 @@ namespace ScanArtwork {
 ///         which leaves the staged rows unmodified and the scan otherwise
 ///         unaffected — an unresolved column is a degraded predicate, never a
 ///         broken library).
+/// @param mediaDirectory the collection's media directory, and
+///        @param includeArtworkSubfolders its mirroring flag. Both are needed
+///        because the RENDER side mirrors an item's media-relative subfolder
+///        into the artwork directory before looking, and a resolver that does
+///        not do the same records NULL for every item in a subfolder while the
+///        grid paints it (Kartend-35wqh).
 int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artworkDirectory,
-                         const QString &collectionUuid);
+                         const QString &collectionUuid, const QString &mediaDirectory,
+                         bool includeArtworkSubfolders);
 
 /// Re-resolves artwork for a collection's EXISTING items rows, without a scan
 /// (Kartend-d1l99).
@@ -127,7 +134,8 @@ int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artwork
 /// @return the number of rows whose artwork_path changed (0 on failure, which
 ///         leaves every row as it was).
 int refreshArtworkForItems(QSqlDatabase &db, int &txnDepth, const QString &artworkDirectory,
-                           const QString &collectionUuid);
+                           const QString &collectionUuid, const QString &mediaDirectory,
+                           bool includeArtworkSubfolders);
 
 } // namespace ScanArtwork
 
