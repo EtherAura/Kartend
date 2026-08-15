@@ -209,6 +209,7 @@ private slots:
   // Mirrored artwork trees (Kartend-35wqh)
   void mirroredSubfolderCover_landsInArtworkPath();
   void mirroredLayout_rootStaysEmptyWhenOnlySubfolderHasArt();
+  void collapsedMultiDiscInSubfolder_storesMirroredDiscCover();
 
   // Manual per-item links (Kartend-jkty9)
   void manualLink_makesAnArtlessItemCount();
@@ -372,6 +373,37 @@ void TestScanArtwork::mirroredLayout_rootStaysEmptyWhenOnlySubfolderHasArt() {
   QCOMPARE(byName.value(QStringLiteral("Cello")), cover);
   QVERIFY2(byName.value(QStringLiteral("Stray")).isEmpty(),
            "a root item with no cover must stay artless even when a subfolder has art");
+}
+
+void TestScanArtwork::collapsedMultiDiscInSubfolder_storesMirroredDiscCover() {
+  // Kartend-srg3i: the two fixes have to compose. A collapsed release whose
+  // discs live in a SUBFOLDER of a mirroring collection found nothing — the
+  // collapsed row looked at the artwork ROOT while its art sat under the
+  // mirrored subfolder. Resolving per directory (Kartend-35wqh) is what lets
+  // the disc-marked fallback (Kartend-knub1) reach it.
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(QDir(media.path()).mkpath(QStringLiteral("Live")));
+  QVERIFY(QDir(artwork.path()).mkpath(QStringLiteral("Live")));
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Live/Recital (Disc 1).bin")), "1"));
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Live/Recital (Disc 2).bin")), "2"));
+  const QString cover = QDir(artwork.path()).filePath(QStringLiteral("Live/Recital (Disc 1).png"));
+  QVERIFY(writeFile(cover, "px"));
+
+  CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  cfg.groupMultiDisc = true;
+  cfg.folderBrowsing.includeContentSubfolders = true;
+  cfg.folderBrowsing.includeArtworkSubfolders = true;
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  const QHash<QString, QString> stored = artworkByName(fx.db());
+  QCOMPARE(stored.size(), 1); // the two discs collapsed into one row
+  QCOMPARE(stored.value(QStringLiteral("Recital")), cover);
 }
 
 void TestScanArtwork::flatCover_landsInArtworkPath() {

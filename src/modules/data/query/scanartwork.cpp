@@ -2,6 +2,7 @@
 // filled here rather than resolved inside the DB-side predicates.
 #include "scanartwork.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QHash>
 #include <QList>
@@ -116,6 +117,29 @@ loadManualCoverLinks(QSqlDatabase &db, const QString &collectionUuid) {
   return byPath;
 }
 
+/// The path a row's artwork lookup should MIRROR from, which is not always the
+/// path it plays.
+///
+/// rel_path is the media-relative path the scan recorded, and for a collapsed
+/// multi-disc release it is the only thing that still knows where the release
+/// lives: the collapsed row's own path points at a playlist Kartend generated
+/// in its data directory, outside the media tree entirely, so mirroring from
+/// it yields a "../.." relative path and no subfolder at all (Kartend-srg3i).
+/// Reconstructing <media>/<rel_path> gives the helper the media-relative
+/// subfolder it needs while leaving the row's real path — the one the name
+/// cascade matches on — untouched.
+///
+/// Falls back to the item path when rel_path is missing (rows staged before
+/// the column existed) or absolute (an item from outside the media directory,
+/// which has no media-relative subfolder to mirror anyway).
+QString mirrorSourcePath(const QString &mediaDirectory, const QString &path,
+                         const QString &relPath) {
+  if (relPath.isEmpty() || mediaDirectory.isEmpty() || QDir::isAbsolutePath(relPath)) {
+    return path;
+  }
+  return QDir(mediaDirectory).absoluteFilePath(relPath);
+}
+
 /// Lazily builds one artwork path map per DIRECTORY, so a mirrored layout
 /// resolves each subfolder against its own artwork subdirectory instead of
 /// against the collection root (Kartend-35wqh).
@@ -130,10 +154,12 @@ public:
       : m_artworkDirectory(std::move(artworkDirectory)),
         m_mediaDirectory(std::move(mediaDirectory)), m_mirrorSubfolders(mirrorSubfolders) {}
 
-  /// The path map covering @p itemPath's own artwork directory.
-  const QHash<QString, QString> &forItem(const QString &itemPath) {
+  /// The path map covering the artwork directory that @p mirrorSource's
+  /// subfolder mirrors to. Pass the row's mirror source (see mirrorSourcePath),
+  /// not necessarily the path it plays.
+  const QHash<QString, QString> &forItem(const QString &mirrorSource) {
     const QString dir = ArtworkUtils::mirroredArtworkDirectory(m_artworkDirectory, m_mediaDirectory,
-                                                               itemPath, m_mirrorSubfolders);
+                                                               mirrorSource, m_mirrorSubfolders);
     auto it = m_byDirectory.find(dir);
     if (it != m_byDirectory.end()) {
       return it.value();
@@ -193,7 +219,7 @@ int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artwork
   }
 
   QSqlQuery sel(db);
-  if (!sel.prepare(QStringLiteral("SELECT rowid, path FROM scanned_items "
+  if (!sel.prepare(QStringLiteral("SELECT rowid, path, rel_path FROM scanned_items "
                                   "WHERE rowid > ? ORDER BY rowid LIMIT ?"))) {
     reportQueryFailure(QStringLiteral("Failed to prepare staged-artwork read"), sel);
     return 0; // guard dtor rolls back
@@ -226,12 +252,13 @@ int resolveStagedArtwork(QSqlDatabase &db, int &txnDepth, const QString &artwork
         lastRowId = rowId;
       }
       const QString path = sel.value(1).toString();
+      const QString mirrorSource = mirrorSourcePath(mediaDirectory, path, sel.value(2).toString());
       // One rule, shared with the save-time write-through: a manual link on a
       // cover type wins when its file still exists, else the auto-discovered
       // cover stands. The stat only happens for items the user hand-linked —
       // manualLinks is empty for the rest, and resolveCoverPath short-circuits.
       QString artwork = ItemArtworkStore::resolveCoverPath(
-          manualLinks.value(path), resolveForPath(maps.forItem(path), path));
+          manualLinks.value(path), resolveForPath(maps.forItem(mirrorSource), path));
       if (!artwork.isEmpty()) {
         hits.append({rowId, std::move(artwork)});
       }
@@ -285,7 +312,7 @@ int refreshArtworkForItems(QSqlDatabase &db, int &txnDepth, const QString &artwo
   }
 
   QSqlQuery sel(db);
-  if (!sel.prepare(QStringLiteral("SELECT rowid, path, artwork_path FROM items "
+  if (!sel.prepare(QStringLiteral("SELECT rowid, path, artwork_path, rel_path FROM items "
                                   "WHERE collection_uuid = ? AND rowid > ? "
                                   "ORDER BY rowid LIMIT ?"))) {
     reportQueryFailure(QStringLiteral("Failed to prepare artwork refresh read"), sel);
@@ -320,8 +347,9 @@ int refreshArtworkForItems(QSqlDatabase &db, int &txnDepth, const QString &artwo
       }
       const QString path = sel.value(1).toString();
       const QString existing = sel.value(2).toString();
+      const QString mirrorSource = mirrorSourcePath(mediaDirectory, path, sel.value(3).toString());
       const QString resolved = ItemArtworkStore::resolveCoverPath(
-          manualLinks.value(path), resolveForPath(maps.forItem(path), path));
+          manualLinks.value(path), resolveForPath(maps.forItem(mirrorSource), path));
       if (resolved == existing) {
         continue; // untouched: the overwhelming majority on any given refresh
       }
