@@ -20,14 +20,17 @@ Three modes, picked from the **Mode** combo in Settings:
 |------|-------|-----------------|
 | **Item Artwork (follows selection)** | `0` | The cover artwork of the currently-selected item. Updates as you move the selection. |
 | **Collection Icon** | `1` | The current collection's icon (the same image used on its subcollection tile). Doesn't change when you move the selection — only when you switch collections. |
-| **Video / Attract Loop** | `2` | A looping, muted video. Source is the selected item's preview video (the same file used in the [sidebar video preview](Video-Previews.md)), with a fallback to the current collection's `backgroundVideo` when the item has none. |
+| **Video / Attract Loop** | `2` | A looping, muted video. Source is the selected item's preview video, looked for first in any
+configured video directory and then in `<artworkDirectory>/video/` (the same file used in the [sidebar video preview](Video-Previews.md)), with a fallback to the current collection's `backgroundVideo` when the item has none. |
 
 The window is:
 
 - **Frameless** — no title bar or borders
 - **Always-on-top** of its own screen
-- **Click-through** — input goes to whatever's behind it (it ignores
-  mouse and keyboard focus)
+- **Focus-refusing** — it never steals keyboard focus and never
+  activates when shown, so it can't interrupt what you're doing in the
+  main window. It is not click-through: a click on the marquee lands on
+  the marquee and goes nowhere
 - **Aspect-ratio-fit** — pixmap or video is letterboxed to fit the
   screen without distortion
 
@@ -44,8 +47,10 @@ The window is:
 5. Pick the **Mode**.
 6. Save and watch the marquee window appear on the chosen screen.
 
-If you later unplug the marquee monitor, Kartend falls back to the
-primary screen and logs a warning. The setting itself is preserved so
+If the configured screen is missing, Kartend falls back to the primary
+screen and logs a warning — but that check only runs at startup and
+when you save Settings. Unplugging the monitor mid-session leaves the
+window on the vanished screen until the next save or restart. The setting itself is preserved so
 re-plugging the monitor restores the marquee to its original screen on
 the next save.
 
@@ -72,7 +77,7 @@ macOS it tends to be the model name, and on Windows it's the
 
 ## Tips
 
-### Video mode falls back to artwork
+### Video mode shows nothing when there is no video
 
 If the selected item has no preview video *and* the current collection
 has no `backgroundVideo` set, the marquee displays nothing in video
@@ -124,4 +129,4 @@ main grid scrolls. This is the intended kiosk behavior.
   doubles as the persisted `marqueeMode` integer.
 - Screen fallback logic: when `marqueeScreenName` doesn't match any
   live screen, the controller pins the window to `primaryScreen()`
-  and emits a warning to the `kartend.marquee` logging category.
+  and emits a plain `qWarning` (there is no dedicated marquee logging category).

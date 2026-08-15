@@ -20,46 +20,52 @@ and returns focus to the grid.
 
 | Aspect | Behavior |
 |--------|----------|
-| Match | Case-insensitive substring on the displayed item name |
+| Match | **Per-token prefix**, case-insensitive. Each word you type gets an implicit `*` and the words are ANDed, so `key note` finds `Keynote Session` but `ynote` finds nothing. |
+| Fields | The item's stored **name and path**. Metadata, custom fields and manual paths are not searched. |
 | Live | Filters as you type, debounced |
-| Scope | Current collection only — does not search across the library |
-| Subcollections | Searched too if `showAllSubcollectionItems=true`; otherwise just direct items |
-| Title cleanup | Search runs against the **displayed** name (after `titleExclusionPatterns` strips), so `A Film (US)` displayed as `A Film` matches `a film` search |
+| Scope | Set by the search-mode toggle — see below. Defaults to the current collection. |
+| Title cleanup | Search runs against the **stored** name, not the displayed one. `titleExclusionPatterns` is applied for display only, after results come back, so `A Film (US)` shown as `A Film` still matches a search for `US`. |
 
-Press `Enter` while in the search bar to move focus to the filtered
-grid; selection lands on the first match. From there `Ctrl+A` selects
-the entire search text (e.g. to replace) and arrow keys move within
-the filtered results.
+`Escape` in the search bar clears the text but keeps focus there;
+press it again to return to the grid. `Ctrl+A` selects the entire
+search text. There is no Return binding — results are already live.
 
 ### Search modes
 
-The action embedded inside the search bar (LeadingPosition) toggles
-between modes:
+The action embedded inside the search bar toggles **how wide** the
+search reaches. It is a scope selector, not a field selector — no mode
+searches metadata.
 
-| Mode | Matches against |
-|------|-----------------|
-| **Name** (default) | Display name only |
-| **All** | Display name + custom fields + manual paths + extended metadata |
+| Mode | Scope |
+|------|-------|
+| **Current collection** (default) | Direct items in the open collection |
+| **Current + subcollections** | Also items in every collection nested beneath it |
+| **All collections** | The whole library |
 
-Press `/` to focus, then click the mode action to cycle. There's no
-keyboard shortcut to cycle modes today.
+Click the mode action to cycle, or press `/` again while the search bar
+is already focused and empty — that also cycles.
 
-The available modes depend on the collection: a collection with no
-custom fields and no manuals has only Name mode active.
+The available modes depend on what's actually there: the cycle is built
+from whether the collection has subcollections, whether it has real
+direct items, and whether any other root collection has items. A flat,
+only collection therefore offers one mode.
+
+Searching from the Home / root view always covers all collections.
 
 ### Structured search tokens
 
 The search bar also recognises `key:value` filter tokens alongside the
 plain-text query. Tokens combine — `played:true tag:soundtrack stage`
 matches items that have been launched at least once, carry the
-`soundtrack` tag, and contain `stage` in their name (or extended
-metadata, in All mode). Keys are case-insensitive; values are taken
-literally except for `tag:` which case-folds.
+`soundtrack` tag, and have a name or path with a word starting
+`stage`. Keys are case-insensitive, and so are the values for every
+token except the `tag:` name, which is matched case-insensitively as a
+whole word.
 
 | Token | Matches |
 |-------|---------|
-| `played:true` / `played:false` | Items that have / haven't been launched at least once (uses `launch_history`). |
-| `favorite:true` / `favorite:false` | Items present (or absent) in the reserved Favorites playlist. |
+| `played:true` / `played:false` | Items that have / haven't been launched at least once. Reads the item's own `play_count`, not the launch-history log, so it still works with history recording turned off. |
+| `favorite:true` / `favorite:false` | Items present (or absent) in the reserved Favorites playlist. `favourite:` is accepted as an alias. |
 | `missing:artwork` | Items with no cover at all — none found in the collection's artwork folder when it was last scanned, and none [linked by hand](Artwork.md#manual-per-item-links). |
 | `has:artwork` | Inverse of `missing:artwork` — items with a cover. Auto-discovered covers count, typed cover subfolders included, and so does a hand-linked one (immediately, and only while its file still exists). |
 | `tag:NAME` | Items whose tag list contains `NAME` (case-insensitive). Repeat to AND multiple tags: `tag:rewatch tag:holiday`. |
@@ -90,7 +96,8 @@ items. Decoding artwork doesn't block the filter — you'll see the
 filtered count update instantly while tiles continue to materialize.
 
 For very large collections, the **debounce delay** prevents searching
-on every keystroke. The debounce is small (sub-100 ms) so it's
+on every keystroke. The debounce adapts to your typing speed within
+80–250 ms (120 ms baseline), so it's
 imperceptible.
 
 ### Loading indicator
@@ -100,7 +107,8 @@ semi-transparent overlay with a soft pulse fades in over the items
 grid. It hides as soon as the filtered set is ready. Pre-filter
 tiles fade behind the overlay so you don't see partial results
 flicker as the index narrows. The overlay has no setting — it
-appears whenever search needs more than a frame to settle.
+is shown at every search dispatch, then dismissed when results land —
+so a fast search flashes it briefly rather than skipping it.
 
 ## Sort
 
@@ -108,24 +116,40 @@ A single global sort mode applies to all collections (lives in
 `[General]`). Switch it via the **Sort** menu — see
 [Toolbar & Menus → Sort](Toolbar-and-Menus.md#sort).
 
+`sortMode` is stored as an **integer**, not a name. Writing
+`sortMode=DateDescending` into the INI reads back as `0` (Name A→Z),
+silently.
+
 | Mode | INI value | What it sorts by |
 |------|-----------|------------------|
-| Name (A → Z) | `NameAscending` | Display name, ascending |
-| Name (Z → A) | `NameDescending` | Display name, descending |
-| Date (Newest First) | `DateDescending` | File mtime, descending |
-| Date (Oldest First) | `DateAscending` | File mtime, ascending |
-| Size (Largest First) | `SizeDescending` | File size, descending |
-| Size (Smallest First) | `SizeAscending` | File size, ascending |
-| Random | `Random` | Pseudo-random per session |
+| Name (A → Z) | `0` | Stored name, ascending |
+| Name (Z → A) | `1` | Stored name, descending |
+| Collection (A → Z) | `2` | Owning collection name, ascending |
+| Collection (Z → A) | `3` | Owning collection name, descending |
+| Artwork first | `4` | Items with a cover before items without |
+| Artwork last | `5` | The inverse |
+| Random | `6` | Shuffled — see below |
+| Date (Newest First) | `7` | File mtime, descending |
+| Date (Oldest First) | `8` | File mtime, ascending |
+| Size (Largest First) | `9` | File size, descending |
+| Size (Smallest First) | `10` | File size, ascending |
+
+Name is the tie-break for the date and size modes.
+
+Modes `2`–`5` are not in the Sort menu — Collection and Artwork
+ordering are reachable by clicking the List view's column headers. They
+persist like any other sort mode.
 
 ### Random mode
 
-`Random` shuffles items within each collection. The shuffle is
-re-rolled every time you re-enter the collection (or click **Soft
-Refresh / F5**) — which means the order changes each time, but the
-order is stable while you're inside one viewing session.
+`Random` shuffles items within each collection. The permutation is
+computed once and cached against the collection's item set, filter and
+sort mode, so it is stable — re-entering the collection or pressing
+`F5` reproduces the *same* order, not a new one.
 
-If you want a different shuffle, exit and re-enter, or hit `F5`.
+The shuffle re-rolls when that cache is invalidated: after a scan, and
+after anything that changes usage data (launching an item, toggling a
+favorite, resetting stats). There is no "reshuffle now" gesture.
 
 ### Exclude subfolders from sort
 
@@ -136,7 +160,7 @@ want subcollections sandwiched between media items.
 
 ```ini
 [General]
-sortMode=DateDescending
+sortMode=7
 excludeSubfoldersFromSort=true
 ```
 
@@ -202,7 +226,9 @@ titleExclusionEnabled=true
 ```
 
 `A Film (US) [!] (Rev 1).mkv` displays as `A Film`. The underlying file
-is unchanged; only the tile text and search index use the cleaned name.
+is unchanged, and so is the search index — cleanup is applied to the
+tile text only, after results come back. Searching for a fragment you
+stripped from the display still finds the item.
 
 | Setting | INI key | Notes |
 |---------|---------|-------|
@@ -262,7 +288,8 @@ items inside the current subcollection only
 ```
 
 The filtered count updates live in the toolbar's item position label
-(`42 / 1000`).
+(`42 / 1000`). The left number is the **selected item's position**, not
+a count of matches; the right one is the filtered total.
 
 ### Clearing all filters
 
@@ -344,7 +371,11 @@ For per-type filtering, file a feature request.
 - Title pattern stripping: `TitleFilter`
   ([src/utils/text/titlefilter.h](../../src/utils/text/titlefilter.h)),
   per-collection.
-- Sort: applied in `QueryManager` at SQL level for `sortMode`.
+- Sort: `QueryManager` builds the `ORDER BY` for the name, date, size
+  and collection modes. `Random` is materialised into
+  `sorted_items_cache` by a Fisher-Yates shuffle in C++, and
+  `ArtworkFirst` / `ArtworkLast` fall through to `ORDER BY name` in SQL
+  and are re-sorted in `ScrollDataStore`.
 - Filter pipeline: `FilterManager`
   ([src/modules/input/filter/](../../src/modules/input/filter/))
   owns the active filter set; `ScrollManager` consumes the filtered

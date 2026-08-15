@@ -6,8 +6,8 @@ quotas, resume-after-crash — see [Scraper](Scraper.md).
 
 Kartend stores the credentials you enter for online metadata scrapers
 (usernames, passwords, API keys) in the operating system's secure
-credential store whenever it can. The plaintext fields in
-`~/.config/Kartend/settings.ini` then contain only an `@keychain`
+credential store whenever it can. The credential fields in
+`~/.config/kartend/kartend.cfg` then contain only an `@keychain`
 sentinel — the real secret never touches your config file.
 
 If the secure store is unavailable (the dependency wasn't found at build
@@ -18,27 +18,41 @@ also live in this fallback state until you re-save the credential.
 
 ## What it is and why it matters
 
-Without keychain integration, scraper credentials persist in
-`settings.ini` as readable text:
+Credentials live in the `[Scrapers]` group of `kartend.cfg`, one key
+per field, named `<providerId>/<fieldName>`. Without keychain
+integration they persist as readable text:
 
 ```ini
-[ScraperOverrides/ScreenScraper]
-sspassword=mySecretPassword
+[Scrapers]
+screenscraper/dev_id=myDevId
+screenscraper/dev_password=myDevPassword
+screenscraper/user_id=myUserId
+screenscraper/user_password=mySecretPassword
 ```
 
-The INI file is mode 0600 on Unix and lives in the user-local config
-directory, but plaintext-on-disk is still a smaller security boundary
-than the OS keychain would give. With keychain integration enabled and a
-secret-service backend running, the same setting becomes:
+The INI file is clamped to mode 0600 on Unix after every save that may
+have touched it, and it lives in the user-local config directory — but
+plaintext-on-disk is still a smaller security boundary than the OS
+keychain would give. With keychain integration enabled and a
+secret-service backend running, the same stanza becomes:
 
 ```ini
-[ScraperOverrides/ScreenScraper]
-sspassword=@keychain
+[Scrapers]
+screenscraper/dev_id=@keychain
+screenscraper/dev_password=@keychain
+screenscraper/user_id=@keychain
+screenscraper/user_password=@keychain
 ```
 
-The real password lives inside the OS keychain entry
-`io.github.EtherAura.Kartend.scrapers` and is unlocked by your normal
+The real values live inside the OS keychain under the service name
+`io.github.EtherAura.Kartend.scrapers`, keyed by that same
+`<providerId>/<fieldName>` string, and are unlocked by your normal
 desktop-session credentials.
+
+If a value reads `@keychain` but the lookup fails — the backend went
+away, or the entry was wiped externally — Kartend treats the credential
+as *missing* and logs a warning. It deliberately never hands the
+literal string `@keychain` to a provider as if it were a password.
 
 ## Installing the dependency
 
@@ -71,19 +85,21 @@ Manager on Windows.
 ## Migrating from plaintext
 
 If you upgraded Kartend from a version without keychain support, your
-existing credentials will be in plaintext under
-`~/.config/Kartend/settings.ini`. The migration happens on the next save
-of the Settings dialog:
+existing credentials will be in plaintext in the `[Scrapers]` group of
+`~/.config/kartend/kartend.cfg`. Migration needs no retyping: every
+save of the Settings dialog rewrites the whole `[Scrapers]` group and
+pushes each credential back through the keychain write path, so a
+legacy plaintext value is promoted automatically.
 
 1. Open **Settings → Scrapers**.
-2. Re-enter the same credential (or just click **Save** if Kartend
-   pre-fills it — the dialog reads the plaintext value, you only need
-   to push it back through the save path).
-3. Save the dialog. Kartend writes the secret to the keychain and
-   replaces the INI value with the `@keychain` sentinel.
+2. Save the dialog. Kartend writes the secrets to the keychain and
+   replaces the INI values with the `@keychain` sentinel.
+
+The same pass sweeps the other direction: a credential you removed in
+the dialog has its keychain entry deleted rather than left orphaned.
 
 You can verify the migration worked by inspecting
-`~/.config/Kartend/settings.ini`: the credential fields should now
+`~/.config/kartend/kartend.cfg`: the `[Scrapers]` fields should now
 contain only `@keychain`, no plaintext.
 
 ## Falling back to plaintext
@@ -97,22 +113,34 @@ lookup fails and write the credential plainly.
 
 ## Troubleshooting
 
-`kartend.scraper.http` logs at info level capture the SSL config on the
-first scraper request, but the keychain layer logs at warning level only
-when something goes wrong. To see the keychain code path:
+**Look at the banner first.** When a keychain write fails, Kartend
+records the reason in `[Scrapers] credentialDemotionReason` and shows a
+non-modal warning banner in **Settings → Scrapers** naming the failure.
+The marker is recomputed on every save, so once the keychain is working
+again the next save clears it by itself — you don't need to reset
+anything. That banner exists precisely so you don't have to read logs
+for this.
+
+If you do want the log, the keychain layer logs under the
+`kartend.settingsmanager` category (not a scraper category — the code
+lives in the settings manager):
 
 ```
-QT_LOGGING_RULES="kartend.scraper.http=true" kartend
+QT_LOGGING_RULES="kartend.settingsmanager=true" kartend
 ```
 
 If your platform has a working keychain backend but Kartend keeps using
 the plaintext fallback, check:
 
-- `KARTEND_HAVE_QTKEYCHAIN` is defined in your build (run `kartend
-  --version` or look at the configure log).
+- `KARTEND_HAVE_QTKEYCHAIN` was defined at build time. Look at the CMake
+  configure log — `kartend --version` prints only the version string and
+  reports nothing about build flags.
 - A Secret Service / Keychain daemon is reachable from the session that
   Kartend runs in. On Linux this means having `gnome-keyring-daemon` or
   `kwalletd6` running.
 - The keychain is unlocked. Some distributions auto-lock the keychain on
-  screensaver — the lookup blocks for up to 5 seconds before Kartend
-  gives up and uses the plaintext fallback.
+  screensaver. Kartend puts a 5-second watchdog around each lookup
+  (QtKeychain has no timeout of its own). On a **write**, hitting that
+  timeout demotes the credential to plaintext and raises the banner; on
+  a **read**, it treats the credential as missing — it does not fall
+  back to a plaintext value.

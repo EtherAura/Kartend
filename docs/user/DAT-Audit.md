@@ -12,7 +12,7 @@ collections, video libraries, and more). If you have a `.dat` / `.xml` catalogue
 for your collection, the audit tells you at a glance how complete and how
 correctly-named it is.
 
-Open it from **File → DAT Audit…**, or from a collection's settings page
+Open it from **Tools → DAT Audit…**, or from a collection's settings page
 (**Audit collection…**) to start pre-aimed at that collection. The window has a
 sidebar with three sections — **Audit**, **DAT Library**, and **Download** —
 matching the rest of the app's look.
@@ -120,7 +120,8 @@ Not every cataloguer offers an in-app download. For those — and for packs you
 already have — the **DAT Library** page has **Import DAT zip…** and **Import DAT
 folder…**: point Kartend at a downloaded DAT archive, a folder of DATs, or a
 single `.dat`, and it copies them into the library and runs the match review,
-exactly like a download. Any Logiqx-style catalogue works.
+exactly like a download. Three dialects are parsed: Logiqx XML, MAME listxml, and ClrMamePro
+text.
 
 ## Folder structure detection
 
@@ -152,7 +153,10 @@ so the next audit only re-reads archives that changed.
 - **Rename** wrong-named files to their canonical names, in place.
 - **Relocate** present entries into a clean managed-output folder (copies;
   originals untouched).
-- **Quarantine** unknown files into a side folder (moved, never deleted).
+- **Quarantine** unknown *and wrong-content* files into a side folder
+  (moved, never deleted). Note the scope: a file whose hash doesn't
+  match its DAT entry is quarantined too, not just an unrecognised one,
+  and an archive whose members are all bad is quarantined whole.
 
 Every action is previewed first and undoable afterwards. Files inside
 archives are reported but not modified — fixing rewrites loose files only.

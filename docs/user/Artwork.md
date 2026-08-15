@@ -27,12 +27,16 @@ artworkDirectory/Some Movie (2021).webp  ← also matches
 artworkDirectory/Some Movie (2021).jpeg  ← also matches
 ```
 
-Recognized extensions: `.png`, `.jpg`, `.jpeg`, `.webp`. Match is
+Recognized extensions: `.png`, `.jpg`, `.jpeg`, `.bmp`, `.gif`,
+`.webp`, and `.avif` where your Qt build has an AVIF image plugin.
+Match is
 case-sensitive on case-sensitive filesystems (the typical Linux setup).
 
-If multiple matches exist (`.png` *and* `.jpg`), the first one found
-wins; you can force a specific image by deleting the others or by
-[manually linking](#manual-per-item-links) the preferred one.
+If multiple matches exist (`.png` *and* `.jpg`), one of them wins and
+which one is not defined — the cached directory index keeps whichever
+the filesystem listed first. Don't rely on extension precedence: delete
+the ones you don't want, or [link the preferred one by
+hand](#manual-per-item-links).
 
 ### Artwork for multi-disc releases
 
@@ -100,29 +104,50 @@ Beyond the single "tile face" image, Kartend supports multiple artwork
 *types* per item — covers, posters, screenshots, marquees, and the
 like.
 
-Standard types Kartend looks for at scan time:
+Types are **subdirectories of `artworkDirectory`**, not filename
+suffixes. An image for type `screenshot` belonging to item `A Title`
+lives at `<artworkDirectory>/screenshot/A Title.png`. There is no
+`-screenshot` suffix convention anywhere in Kartend.
 
-| Type id | Conventional filename suffix |
-|---------|------------------------------|
-| `boxfront` | `A Title-boxfront.png` |
-| `boxback` | `…-boxback.png` |
-| `cartridge` | `…-cartridge.png` |
-| `screenshot` | `…-screenshot.png` |
-| `backdrop` | `…-backdrop.png` |
-| `marquee` | `…-marquee.png` |
-| `label` | `…-label.png` |
-| `clearlogo` | `…-clearlogo.png` |
-| `bezel` | `…-bezel.png` |
+```
+<artworkDirectory>/
+├── A Title.png          ← flat root: the plain cover
+├── front/A Title.png
+├── box/A Title.png
+├── screenshot/A Title.png
+├── marquee/A Title.png
+└── logo/A Title.png
+```
 
-Kartend scans the artwork directory for every standard suffix and
-attaches them to the matching item. The set is then browsable in the
-[sidebar gallery](#sidebar-gallery).
+Two lists matter, and they are not the same list.
 
-The "primary" artwork (the one painted on the tile) is the first match
-found by the un-suffixed base filename — see the previous section.
-Suffix-based matches are gallery-only. A
-[per-item link](#manual-per-item-links) on a cover type outranks all of this:
-where you have picked an image by hand, that is the one the tile paints.
+**Cover types** — the ones that can supply the image painted on a grid
+tile or cover-flow card, in the order the search tries them:
+
+`front` · `box` · `box-3d` · `mixrbv1` · `mixrbv2` · `screenshot` ·
+`title` · `fanart` · `marquee`
+
+**Gallery types** — what the sidebar gallery offers, in display order:
+
+`front` · `box` · `screenshot` · `title` · `marquee` · `fanart` ·
+`logo`
+
+`logo` is the difference: it is a gallery type but not a cover type, so
+a logo never becomes the tile face and a hand-linked logo does not make
+an item count as "has artwork".
+
+The **primary** artwork — the one painted on the tile — is the first
+hit of this cascade:
+
+1. A [per-item manual link](#manual-per-item-links) on any cover type.
+2. `<artworkDirectory>/<Base name>.<ext>` — the flat root.
+3. Each cover-type subdirectory in the order listed above.
+4. The [disc-marker fallback](#artwork-for-multi-disc-releases).
+
+So a typed-subdirectory image *can* be the tile face — that is
+deliberate, and it is what lets hand-dropped gallery art surface on the
+grid rather than sitting unused. It is only reached when nothing
+matched at the flat root.
 
 ### Custom artwork types
 
@@ -137,8 +162,14 @@ customArtworkTypes=cover,quick-reference,catalog
 > **Where to find this** — Settings Dialog → **Paths & Extensions** tab
 > → **Custom Artwork Types** (free-form text list).
 
-Custom types **do not** auto-discover. They show up as empty slots in
-the gallery; populate them via per-item manual links (next section).
+Custom types **do not** auto-discover — there is no
+`<artworkDirectory>/<custom type>/` search for them. They also do not
+appear in the sidebar gallery until they have something to show: the
+gallery is built from the item's actual artwork links, so an unlinked
+custom type is invisible there. Where it *does* appear is the
+[Artwork links dialog](#manual-per-item-links), which seeds its rows
+from the collection's declared type list — that is where you populate
+one.
 
 ## Manual per-item links
 
@@ -147,9 +178,9 @@ art to a custom type, use **manual links**.
 
 ### Opening the dialog
 
-Right-click an item → **Edit artwork links…** opens the **Artwork
-links** dialog. It's also reachable from the
-[detail page](Item-Metadata.md#detail-page) action bar.
+Open the **Artwork links** dialog from the sidebar gallery's edit
+affordance, or from the **Edit** button in the horizontal details pane.
+There is no item-context-menu entry for it.
 
 ### What it shows
 
@@ -202,7 +233,7 @@ A link on a cover type — `front`, `box`, `screenshot`, `title`, `fanart`,
 `marquee`, and the scraped `box-3d` / `mixrbv1` / `mixrbv2` variants — makes
 the item count as having artwork everywhere: the *Has artwork* and *Missing
 artwork* [smart playlists](Smart-Playlists.md), the `has:artwork` /
-`missing:artwork` [search tokens](Search-Sort-Filter.md#structured-tokens), the
+`missing:artwork` [search tokens](Search-Sort-Filter.md#structured-search-tokens), the
 Collection Health missing-artwork count, the
 [wizard's](#artwork-assignment-wizard) queue, and the **hide missing artwork**
 view filter. It is also what the item paints — the grid tile and the cover-flow
@@ -229,10 +260,11 @@ through the dialog — there's no "rename source" workflow today.
 ## Artwork assignment wizard
 
 For collections with a lot of items missing artwork, the per-item
-"Browse… → Save" loop gets tedious. The **Artwork Wizard** (File →
+"Browse… → Save" loop gets tedious. The **Artwork Wizard** (Tools →
 **Assign Missing Artwork…**) walks the missing pile one item at a
-time and ranks candidate images from the collection's artwork
-directory by fuzzy name match.
+time and ranks candidate images from the artwork directory's **root**
+(it does not look inside the typed subdirectories) by fuzzy name
+match.
 
 ```
 ┌────────────────────────────────────────────────────────────┐
@@ -246,16 +278,16 @@ directory by fuzzy name match.
 │   3. ▣ Some_Movie.jpg                   (score 62)         │
 │   …                                                        │
 │                                                            │
-│ [ Browse… ]  [ Skip ]  [ Stop ]               [ Assign ]   │
+│ [ Browse… ]  [ Skip ]  [ Close ]        [ Pick selected ]  │
 └────────────────────────────────────────────────────────────┘
 ```
 
 | Action | Effect |
 |--------|--------|
-| **Assign** | Save the highlighted candidate as the item's manual artwork link and advance to the next item. |
-| **Browse…** | Open a file picker rooted at `artworkDirectory` for cases where no candidate fits. |
+| **Pick selected** | Save the highlighted candidate as the item's manual `front` link and advance to the next item. |
+| **Browse…** | Open a file picker for cases where no candidate fits. Unlike the Artwork links dialog, it does not start in `artworkDirectory`. |
 | **Skip** | Leave the item alone and advance. |
-| **Stop** | Close the wizard. Already-assigned items keep their new links. |
+| **Close** | Close the wizard. Already-assigned items keep their new links. |
 
 Candidates are ranked by a subsequence-based fuzzy score:
 case-insensitive, consecutive characters score higher, word-boundary
@@ -298,11 +330,13 @@ launching.
 
 ### Video tile in the gallery
 
-If the item has a preview video (auto-discovered in the collection's
-`videoDirectory` — see [Video Previews](Video-Previews.md)), the
-gallery includes a special **video tile** with a play-icon badge.
-Clicking it expands the video player in the sidebar. The video tile is
-always last in the gallery order.
+If the item has a preview video — looked for in
+`<artworkDirectory>/video/` (see [Video Previews](Video-Previews.md)) —
+the gallery includes a special **video tile** with a play-icon badge.
+Clicking it expands the video player in the sidebar. The video tile
+comes **first** in the gallery order: the gallery is video-first by
+design, on the reasoning that a moving preview tells you more about an
+item than a still does.
 
 ## Placeholders
 
@@ -429,9 +463,13 @@ extensions=mkv,mp4,webm
 ```
 ~/Videos/Films/A Film/
 ~/Videos/Films/A Film/A Film.mkv
-~/Videos/Films/A Film/cover.png
-~/Videos/Films/A Film/poster.png
+~/Videos/Films/A Film/A Film.png          ← must match the item's name
+~/Videos/Films/A Film/screenshot/A Film.png
 ```
+
+Matching is always on the item's base filename. There is no
+`cover.png` / `folder.jpg` convention — a file called `cover.png` is
+just an artwork entry named `cover`, and nothing will look for it.
 
 ```ini
 [Films]
@@ -443,15 +481,19 @@ extensions=mkv,mp4
 
 ### Multiple artwork types in a flat directory
 
+Types are subdirectories, so a "flat" directory holds only the plain
+covers; the extra types go one level down:
+
 ```
-~/Videos/Films/_art/A Film.png
-~/Videos/Films/_art/A Film-poster.png
-~/Videos/Films/_art/A Film-screenshot.png
-~/Videos/Films/_art/A Film-banner.png
+~/Videos/Films/_art/A Film.png              ← tile face
+~/Videos/Films/_art/screenshot/A Film.png
+~/Videos/Films/_art/fanart/A Film.png
+~/Videos/Films/_art/logo/A Film.png
 ```
 
-The first one (no suffix) is the tile face; the suffixed images all
-appear in the gallery.
+All four appear in the gallery. Filename suffixes such as
+`A Film-poster.png` do nothing — that file indexes under the name
+`A Film-poster` and is never associated with `A Film`.
 
 ### Adding a custom "manual" artwork type
 
@@ -476,22 +518,37 @@ Toggleable per-collection; combines with search and other filters.
 ## For developers
 
 - Loading: [src/modules/media/artwork/](../../src/modules/media/artwork/)
-  (`ArtworkManager` orchestrates), with worker functions in
-  `artworkutils.cpp`. The pool is `QtConcurrent`-backed.
+  — `ArtworkManager` orchestrates, `ArtworkLoadDispatcher` owns the
+  dedicated `QtConcurrent` pool, `ViewportArtworkScheduler` owns
+  viewport prioritisation. The pure lookup helpers live outside the
+  module in
+  [src/utils/view/artworkutils.cpp](../../src/utils/view/artworkutils.cpp).
 - Cache: [src/modules/data/cache/](../../src/modules/data/cache/) (`CacheManager`)
   hosts the in-memory LRU and disk persistence.
-- Per-item manual links table: `item_artwork(collection_uuid, source_path,
-  artwork_type, artwork_file)` in SQLite. See
+- Per-item manual links table: `item_artwork(collection_uuid, path,
+  artwork_type, manual_path)` in SQLite, unique on the first three. See
   [src/utils/db/itemartwork.h](../../src/utils/db/itemartwork.h).
 - Sidebar gallery layout: `DetailsPane` in
-  [src/ui/widgets/panes/](../../src/ui/widgets/panes/). The gallery tabs are
-  constructed dynamically from the union of standard types found and
-  the collection's `customArtworkTypes` list.
-- Cycle-on-middle-click: handled in `MouseManager::handleMiddleClick`
-  with the modifier check using `GeneralSettings::artworkCycleModifier`.
+  [src/ui/widgets/panes/](../../src/ui/widgets/panes/). It is a flat row
+  of entries, not tabs: the standard half comes from probing
+  `{artwork}/<type>/` per `ItemArtworkStore::standardTypes()`, the
+  custom half from the item's actual `item_artwork` rows. The
+  collection's `customArtworkTypes` list feeds the links *dialog*, not
+  the gallery.
+- Cycle-on-middle-click: the button and modifier check are in
+  `EventManager`'s mouse filter
+  ([eventmanagermouse.cpp](../../src/modules/input/event/eventmanagermouse.cpp)),
+  which emits `artworkTypeCycleRequested`. The modifier must equal
+  `GeneralSettings::artworkCycleModifier` exactly.
 - Subfolder artwork generator: a standalone Python script,
   [.scripts/subfolder_art_generator.py](../../.scripts/subfolder_art_generator.py)
   — see [docs/dev/subfolder-artwork.md](../dev/subfolder-artwork.md).
-- Adding a new standard artwork type: extend the standard-types list
-  in `artworkutils.h`, add the suffix-match logic, expose in the
-  gallery widget. Custom types don't require code changes.
+- Adding a new standard artwork type: extend
+  `ItemArtworkStore::standardTypes()` in
+  [src/utils/db/itemartwork.cpp](../../src/utils/db/itemartwork.cpp)
+  (gallery + links dialog), and add it to
+  `ArtworkUtils::coverSubdirPriority()` in
+  [src/utils/view/artworkutils.cpp](../../src/utils/view/artworkutils.cpp)
+  only if it should be able to become a tile face. Both strings double
+  as on-disk subdirectory names, so renaming one needs a migration.
+  Custom types don't require code changes.

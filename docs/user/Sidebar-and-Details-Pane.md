@@ -135,7 +135,7 @@ per-item manual links. See [Artwork](Artwork.md) for the type model.
 | **Custom fields** | User-defined key/value pairs from the [Edit Metadata Dialog](Item-Metadata.md#edit-metadata-dialog). |
 | **Play count** | From `play_count` in the database (Statistics dialog drives this too). |
 | **Last played** | From `last_played`. Format: `5 minutes ago`, `Yesterday`, etc. |
-| **Time played** | Sum from `launch_history` (only populated if [runtime detection](Splash-and-Now-Playing.md#runtime-detection) is enabled). |
+| **Time played** | Sum from `launch_history` (only populated if [runtime detection](Splash-and-Now-Playing.md#what-runtime-detection-turns-on) is enabled). |
 
 #### Video preview player
 

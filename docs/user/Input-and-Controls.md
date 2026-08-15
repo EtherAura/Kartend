@@ -2,9 +2,9 @@
 
 Kartend handles keyboard, mouse, and gamepad input concurrently — they
 all drive the same selection model and you can switch between them
-mid-session without any mode change. Every navigation key is rebindable;
-gamepad button assignments are user-configurable; mouse modifier
-combinations can be reassigned.
+mid-session without any mode change. The core navigation keys are
+rebindable from the Settings Dialog; gamepad button assignments are
+user-configurable; the mouse artwork-cycle modifier can be reassigned.
 
 > **Where to find this** — Settings Dialog → **General** tab →
 > **Keyboard Bindings**, **Gamepad Config**, **Mouse**. Underlying INI
@@ -48,9 +48,9 @@ combinations can be reassigned.
 
 | Key | Action |
 |-----|--------|
-| `Ctrl+A` | Select all search text |
-| `Escape` | Clear the search and return focus to the grid |
-| `Enter` | Move selection into the filtered results (focus jumps to grid) |
+| `Ctrl+A` | Select all search text (this is `QLineEdit`'s own binding — Kartend simply lets keystrokes through to the field) |
+| `Escape` | With text present: clears the text but **keeps focus in the search bar**, so you can retype immediately. Press it a second time to return focus to the grid. |
+| `Enter` | Nothing. There is no binding for Return in the search bar — results update as you type, so there is nothing to submit. Press `Escape` twice, or click a tile, to get back to the grid. |
 
 Typing while the *grid* is focused does not auto-focus the search — you
 have to press `/` first. This avoids accidentally search-typing when
@@ -88,10 +88,24 @@ the action you want to rebind, then press the new key. The dialog
 captures the next key event and stores its `Qt::Key` code. Press
 `Escape` to cancel a capture in progress.
 
-Keys that are *not* rebindable today: the `Ctrl+1..4` view shortcuts,
+**Eight actions have a capture field:** the four navigation
+directions, Confirm, Back, Search, and Home view.
+
+The remaining bindable keys — `keyJumpFirst`, `keyJumpLast`,
+`keyAlphabeticBack`, `keyAlphabeticForward`, `keyItemDetails` — are
+real INI keys with no field in the dialog. To change them, edit
+`kartend.cfg` by hand and restart. See
+[Configuration Reference → Keyboard bindings](Configuration-Reference.md#keyboard-bindings).
+
+Keys that are *not* bindable at all: the `Ctrl+1..4` view shortcuts,
 view toggles (`F8`–`F11`), zoom (`Ctrl+=` / `Ctrl+-` / `Ctrl+0`),
 quit (`Ctrl+Q`), settings (`Ctrl+,`), and refresh (`F5` / `Ctrl+F5`).
 File a feature request if you need any of these to move.
+
+> **Modifiers are ignored on bound keys.** The dispatcher compares the
+> key code only, so `Ctrl+I` opens the detail page just as `I` does,
+> and `Alt+/` focuses search just as `/` does. Bear this in mind if you
+> rebind an action onto a key you also use in a chord.
 
 ### Key repeat
 
@@ -123,23 +137,41 @@ linearly through hundreds of rows.
 
 | Action | Effect |
 |--------|--------|
-| Middle-click on item | Toggle the video preview in the sidebar (turns the preview on or off without changing selection) |
-| Modifier + middle-click on item | Cycle the artwork type shown in the sidebar gallery (e.g. boxfront → backdrop → label → boxfront…). The modifier is configurable. |
+| Middle-click on item | Open the **media preview overlay** — the same video-first preview expand-mode uses, falling back to artwork when the item has no video. Selection is not changed. |
+| Modifier + middle-click on item | Cycle the artwork type shown on the tile (front → box → screenshot → … , skipping types with no image). The modifier is configurable. |
 
 The artwork-cycle modifier is set globally:
 
 | Setting | INI key | Default |
 |---------|---------|---------|
-| Artwork cycle modifier | `artworkCycleModifier` | `Shift` |
+| Artwork cycle modifier | `artworkCycleModifier` | Shift |
 
-Choices are `Shift`, `Control`, `Alt`, `Meta`. Pick the one that doesn't
-conflict with your window manager's middle-click bindings.
+Choose from Shift / Ctrl / Alt / Meta in **Settings → General →
+Controls**. Pick the one that doesn't conflict with your window
+manager's middle-click bindings.
 
-### Hold scroll (click-and-hold dragging)
+> **Don't hand-edit this one.** The INI stores the numeric
+> `Qt::KeyboardModifier` value, not a name: `33554432` Shift,
+> `67108864` Ctrl, `134217728` Alt, `268435456` Meta. Writing
+> `artworkCycleModifier=Shift` reads back as `0`, which disables the
+> chord entirely. Use the dropdown.
 
-Press and hold the mouse button on a tile to start **hold scroll**.
-Move the cursor while holding and selection follows the cursor — useful
-for rapidly skimming through a large collection.
+The held modifier must match the configured one **exactly** —
+Ctrl+Shift+middle-click with Shift configured is not a match, and falls
+through to the plain middle-click preview instead.
+
+### Hold scroll (click-and-hold)
+
+Press and hold the mouse button on a tile for `clickHoldDelayMs` to
+start **hold scroll**: the selection then advances on its own at a
+fixed cadence, so you can skim a large collection without repeated
+clicks.
+
+The direction is chosen once, when the hold starts, from where the
+selected tile sits relative to the centre of the viewport — a tile in
+the lower half scrolls down, one in the upper half scrolls up. It is
+**not** cursor-following: moving the mouse during the hold does
+nothing.
 
 | Setting | INI key | Default |
 |---------|---------|---------|
@@ -147,19 +179,25 @@ for rapidly skimming through a large collection.
 | Hold-scroll repeat (Grid / Cover Flow / Horizontal) | `clickHoldRepeatIntervalMs` | `320` ms |
 | Hold-scroll repeat (List) | `listClickHoldRepeatIntervalMs` | `80` ms |
 
-Move the cursor outside the viewport to cancel without launching.
+Release the button to stop. Moving the cursor outside the viewport does
+not cancel it.
 
 ### Wheel
 
+The wheel moves the **selection**, not the viewport. The viewport then
+animates to re-centre on the newly selected item, which reads as
+scrolling — but the selection is what actually changes, which is why a
+wheel tick also stops [attract mode](Attract-Mode.md#what-stops-attract).
+
 | Action | Effect |
 |--------|--------|
-| Wheel up / down | Scroll the viewport |
-| `Ctrl + wheel` | (No action by default — reserved) |
-| `Shift + wheel` | (No action by default — reserved) |
+| Wheel up / down | Move the selection by `mouseWheelRows` rows (one item in List and Cover Flow; one column in Horizontal) |
+| `Ctrl + wheel` | Same as a plain wheel — modifiers are not read on the wheel path |
+| `Shift + wheel` | Same as a plain wheel |
 
 | Setting | INI key | Default |
 |---------|---------|---------|
-| Rows scrolled per wheel tick | `mouseWheelRows` | `1` |
+| Rows scrolled per wheel tick | `mouseWheelRows` | `1` (clamped 1–100) |
 | Global scroll speed multiplier | `scrollVelocityMultiplier` | `1.0` (range 0.25–5.0) |
 
 ### Hover
@@ -188,7 +226,7 @@ you clicked:
 - **Refresh** — soft-reload the collection
 - *(separator)*
 - **Edit metadata…** — open the [Edit Metadata Dialog](Item-Metadata.md#edit-metadata-dialog) (notes, tags, rating, source URL, custom fields)
-- **Pin item** / **Hide item** / **Mark continue later** — toggle the per-item [state flags](Item-Metadata.md#state-flags); the labels flip to **Unpin** / **Unhide** / **Clear continue later** when the flag is already set
+- **Pin to top** / **Hide** / **Mark as continue later** — toggle the per-item [state flags](Item-Metadata.md#state-flags); the labels flip to **Unpin** / **Unhide** / **Clear continue-later marker** when the flag is already set
 - **Preview launch command…** — open the [Launch Preview](Launchers.md#launch-command-preview-dry-run) for this item
 - **Set manual file…** — pick a manual / PDF / etc. for this item
 - **Clear manual override** — appears only if a manual is set
@@ -196,7 +234,7 @@ you clicked:
   than one launcher; opens the [Launcher Chooser](Launchers.md#multi-launcher-chooser)
 - **Clear launcher override** — appears only if a per-item override exists
 - *(separator)*
-- **Add to Playlist ▶** — submenu with each existing playlist + **New
+- **Add to playlist ▶** — submenu with each existing playlist + **New
   playlist…**
 - **Add to Favorites** *(or **Remove from Favorites**)* — toggles
   membership in the built-in [Favorites](Playlists-and-Favorites.md#favorites)
@@ -209,14 +247,14 @@ you clicked:
 
 ### On a playlist tile
 
-- **Rename Playlist…**
-- **Delete Playlist** — hidden for reserved playlists like Favorites
+- **Rename playlist…**
+- **Delete playlist…** — hidden for reserved playlists like Favorites
 
 ### Inside a playlist (right-click on its items)
 
 All media-item entries above, plus:
 
-- **Remove from Playlist**
+- **Remove from playlist**
 
 ## Gamepad
 
@@ -250,9 +288,12 @@ D-pad and left stick can be enabled / disabled independently. Held
 input repeats at the same cadence as keyboard repeat
 (`keyboardRepeatIntervalMs`).
 
-Other buttons (face buttons, shoulder buttons, triggers, stick clicks)
-are passed through but unbound by default. Open Settings to bind them
-to confirm/back/sidebar.
+X, Back, Start, Guide, the shoulder buttons and the stick clicks are
+all read and dispatched, but resolve to no action until you bind them
+to confirm / back / sidebar in Settings.
+
+**Triggers are not readable.** Only the left stick's X and Y axes are
+sampled, so the analogue triggers can't be bound to anything today.
 
 ### Rebinding gamepad buttons
 
@@ -267,12 +308,16 @@ supported — connect or disconnect mid-session and the backend reattaches.
 
 ## Binding visualizer
 
-**Help → Binding Visualizer…** opens an interactive reference that
-shows every keyboard and gamepad mapping currently in effect, grouped
-by surface (Navigation, Selection, Search, etc.). The killer feature
-is **press-to-identify**: tap a key or gamepad button while the
-dialog is open and the matching row highlights so you can answer
-"what does this do?" without scanning the table.
+**Help → Binding Visualizer…** opens an interactive reference for the
+**rebindable** bindings — the ones that live in `kartend.cfg` and can
+therefore differ from install to install. It covers three groups,
+Navigation, Actions and Search, and does **not** list the fixed
+application shortcuts (`F1`, `F5`, `F8`–`F11`, `Ctrl+1..4`, zoom,
+quit, settings, and the rest); those are in the tables above and never
+change. The killer feature is **press-to-identify**: tap a key or
+gamepad button while the dialog is open and the matching row
+highlights, so you can answer "what does this do?" without scanning
+the table.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -280,18 +325,22 @@ dialog is open and the matching row highlights so you can answer
 │ Press a key or button to identify the mapped action.     │
 │                                                          │
 │ ▾ Navigation                                             │
-│     Move selection up         ↑     /  Pad Up            │
-│     Move selection down       ↓     /  Pad Down          │
-│     Move selection left       ←     /  Pad Left          │
-│     Move selection right      →     /  Pad Right         │
-│ ▾ Selection                                              │
+│     Move selection up         ↑     /  (none)            │
+│     Move selection down       ↓     /  (none)            │
+│     Move selection left       ←     /  (none)            │
+│     Move selection right      →     /  (none)            │
+│ ▾ Actions                                                │
 │     Launch / confirm          Enter /  A                 │
 │     Back / cancel             Esc   /  B          ← lit  │
 │ ▾ Search                                                 │
-│     Focus search bar          /     /  —                 │
-│ …                                                        │
+│     Focus search bar          /     /  (none)            │
 └──────────────────────────────────────────────────────────┘
 ```
+
+Only Confirm, Back and Toggle-sidebar carry a gamepad button in the
+table — directional movement comes from the D-pad and left stick as a
+pair rather than from a single named button, so those rows show
+**(none)** in the gamepad column.
 
 Useful when you've rebound a few keys and forgotten which is which,
 or when handing the input to someone unfamiliar with the layout.
@@ -353,6 +402,8 @@ Zoom ................ Ctrl+= / Ctrl+- / Ctrl+0
   [src/utils/app/collection/generalsettings.h](../../src/utils/app/collection/generalsettings.h).
 - Repeat-interval logic for List view's special-case faster cadence:
   see `keyboardmanager*.cpp` for the view-aware path.
-- Hold-scroll: `MouseManager::startHoldScroll()` / `holdScrollTimer`.
+- Hold-scroll: `MouseManager::startMouseHoldScrolling()` /
+  `stopMouseHoldScrolling()`, driven by `m_clickHoldTimer` (the initial
+  delay) and `m_mouseHoldTimer` (the repeat).
 - Search-bar focus management: `EventManager` filters keystrokes that
   shouldn't reach the search line edit.

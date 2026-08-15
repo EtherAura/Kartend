@@ -59,8 +59,8 @@ immediately and opens populated with its current matches.
 
 | Kind | Parameter | Selects |
 |------|-----------|---------|
-| **Recently launched** | Show top (1–1000, default 50) | The N most-recently-launched items, newest first. Backed by `launch_history`. |
-| **Most played** | Show top (1–1000, default 50) | The N items with the highest cumulative play count, then by total play seconds. |
+| **Recently launched** | Show top (1–1000, default 50) | The N most-recently-launched items, newest first. Reads the item's own `last_played` timestamp, not the launch-history log. |
+| **Most played** | Show top (1–1000, default 50) | The N items with the highest launch count, ties broken by most-recently-played. |
 | **Never launched** | Show first (1–1000, default 50) | The first N items with zero recorded launches. Ordered the same way the rest of the grid is by default. |
 | **By extension** | Extensions (csv, lowercase, leading dot optional) | Every item whose file extension is in the list. Empty list = no matches. Example: `pdf,epub,cbz`. |
 | **Has artwork** | *(none)* | Every item with a cover — one auto-discovered in `artworkDirectory` when the collection was last scanned, or one you [linked by hand](Artwork.md#manual-per-item-links). |
@@ -70,7 +70,7 @@ immediately and opens populated with its current matches.
 | **By title search** | Substring | Every item whose name contains the given substring (case-insensitive, `LIKE %?%`). Empty substring yields zero matches. |
 | **Favorite** | *(none)* | Every item present in the reserved Favorites playlist. |
 | **Pinned** | *(none)* | Items toggled pinned via [item state flags](Item-Metadata.md#state-flags). |
-| **Hidden** | *(none)* | Items toggled hidden. Useful as a "review the hidden pile" view since the regular grid filters these out by default. |
+| **Hidden** | *(none)* | Items toggled hidden. Note that hidden items are de-emphasised in the regular grid, not filtered out of it, so this is a way to see them together rather than a way to see them at all. |
 | **Continue later** | *(none)* | Items toggled continue-later — the in-progress queue. |
 
 > **Counted vs uncounted** — *Recently launched*, *Most played*,
@@ -80,29 +80,34 @@ immediately and opens populated with its current matches.
 
 ### Recently launched
 
-Driven by the `launch_history` table. Items that have never been
-launched don't appear. Re-launching an item promotes it to the top of
-the result the next time the playlist is opened.
+Driven by each item's own `last_played` timestamp, newest first. Items
+that have never been launched don't appear. Re-launching an item
+promotes it to the top of the result the next time the playlist is
+opened.
 
-If [launch history is disabled](History-and-Statistics.md), this
-playlist returns no results — `launch_history` stops collecting new
-rows when `[General] historyEnabled=false`.
+This is **not** affected by `[General] historyEnabled`. That setting
+gates the `launch_history` log — the chronological record you browse in
+the History dialog. The per-item `last_played` and `play_count` stamps
+are written on every launch regardless, which is exactly why the
+launch-based playlists keep working with history recording turned
+off.
 
 ### Most played
 
-Sorted by total launch count first, then by total play time. **Total
-play time is only collected when runtime detection is enabled**
-(see [Splash & Now Playing](Splash-and-Now-Playing.md#now-playing)).
-Without runtime detection the secondary sort is a no-op and ties
-resolve in insertion order.
+Sorted by launch count first, then — for ties — by how recently the
+item was last played. Total *play time* is tracked separately (and only
+when runtime detection is on, see
+[Splash & Now Playing](Splash-and-Now-Playing.md#now-playing-overlay)),
+but this rule does not read it.
 
 ### Never launched
 
-The complement of *Recently launched*: items with **zero** rows in
-`launch_history`. Useful for "what's left in my backlog?" tiles.
+The complement of *Recently launched*: items whose `play_count` is
+zero or unset. Useful for "what's left in my backlog?" tiles.
 
-If you turn history collection off after building it up, items keep
-their existing counts — they don't suddenly become "never launched".
+Turning history collection off doesn't affect this rule at all: it
+reads `play_count`, which keeps incrementing on every launch whatever
+`historyEnabled` is set to.
 
 ### By extension
 
@@ -219,7 +224,7 @@ re-evaluation in the meantime.
 
 ## Limitations
 
-- **One rule per playlist** — there's no AND / OR composition today. If
+- **One rule per playlist in the editor** — the dialog builds a single rule. The stored format and the evaluator already support AND / OR sets of rules, so a `smart_filter` written by hand or by another tool is honoured; there is just no UI for building one yet. If
   you want "Never played PDFs", combine extension filtering with a
   separate workflow (e.g., a custom field, or the structured search
   tokens described in [Search](Search-Sort-Filter.md#structured-search-tokens)).

@@ -28,9 +28,10 @@ If you've never built one, start with the
 | **Placeholder Artwork** | no | Custom image for missing-artwork items. |
 | **Header Logo** | no | Logo overlay painted at the top of the collection's grid. |
 
-> **Where to find this** — Settings Dialog → tabs **Basic**,
-> **Paths & Extensions**, **Launcher**, **Appearance**, **Sidebar**,
-> **Colors**, **Text & Fonts**, **List View**.
+> **Where to find this** — Settings Dialog → the per-collection
+> categories **Configuration**, **Artwork**, **Appearance**,
+> **Launcher**, **Subfolders**, **Details Pane**. These are a category
+> list down the left side of the dialog, not tabs.
 
 A collection can also have no media directory of its own — a
 [shell collection](Shell-Collections.md) used to group other
@@ -55,25 +56,31 @@ The Settings Dialog's left-hand tree is the control surface.
   For a step-by-step alternative, **File → New Library Wizard…** walks
   the same fields across multiple pages with installed-launcher
   detection. See [Getting Started → New Library Wizard](Getting-Started.md#new-library-wizard).
-- **Rename** — double-click the name field on the **Basic** tab, or use
-  the tree's right-click → **Rename**. Renaming updates `name`, the INI
+- **Rename** — right-click the tree row → **Rename** and edit the label
+  in place. Renaming updates `name`, the INI
   section header, and any linked-parent references in the
   `additionalParents` array of collections that use this one as an
   alias parent.
 - **Duplicate** — right-click → **Duplicate**. Opens the Duplicate
   Collection dialog: choose the new name and the parent (sibling /
-  child / root). All non-path settings (appearance, launcher config,
-  etc.) are copied; paths are intentionally left blank so you can point
-  the duplicate at a different folder.
-- **Delete** — right-click → **Delete** with a confirmation prompt. The
-  collection's children are reparented to its parent (or to root) — they
-  are not deleted alongside it.
+  child / root). It is a **full copy** — appearance, launcher config,
+  *and* the media / artwork paths. Point the duplicate at a different
+  folder afterwards if that's what you wanted; nothing is blanked for
+  you.
+- **Delete** — right-click → **Delete** with a confirmation prompt.
+  Deleting a collection deletes **its entire subtree**. The prompt says
+  so and gives the count ("Remove \"Films\" and all 3 nested
+  collection(s)?"); read it before confirming. Children are not
+  reparented, and the action cannot be undone.
 
 > **Caveat** — deleting a collection drops its INI section but does
 > *not* clear per-item state from the database (custom fields, manual
 > file links, launcher overrides, history). Re-adding a collection at
-> the same name reattaches that history. Remove the database file at
-> `~/.local/share/kartend/kartend.db` if you want a clean slate.
+> the same name **and the same media directory** reattaches that
+> history — the identity key is a hash of both, so re-adding under the
+> same name pointing somewhere else starts clean. Remove the database
+> file at `~/.local/share/kartend/media.db` if you want a clean slate
+> for everything.
 
 ## Hierarchies (parents and subcollections)
 
@@ -136,8 +143,10 @@ additionalParents\size=1
 launcherPath=/usr/bin/mpv
 ```
 
-> **Where to find this** — Settings Dialog → **Basic** tab → **Linked
-> Parents** (multi-select picker). Persisted as a QSettings array under
+> **Where to find this** — Settings Dialog → **Configuration** →
+> **Linked Parents** (multi-select picker). The picker excludes this
+> collection and all of its descendants, so you can't build a cycle
+> through the UI. Persisted as a QSettings array under
 > the `additionalParents` key — each entry has a `\<n>\name` subkey
 > plus a `\size` count:
 > ```
@@ -176,7 +185,8 @@ Type, or `[General] collectionTypeFilter=Video`) shows only collections
 whose `type` matches. Useful for switching modes ("show me only video,
 hide everything else") without rearranging the hierarchy.
 
-Pair with **Hide Subcollection Tiles** (`hideSubcollectionTiles=true`)
+Pair with **Hide Subcollection Tiles** (`hideSubcollectionTiles=true`,
+a **global** `[General]` setting, not a per-collection one)
 to flatten the view further — type filter + hide-subs makes Kartend
 behave like a flat library of media items, ignoring the tree.
 
@@ -204,7 +214,7 @@ create a Kartend subcollection for each subfolder. Enable **Include
 Content Subfolders** (`includeContentSubfolders=true`) and Kartend
 renders folders as virtual collection tiles right alongside media items.
 
-Related toggles (all per-collection, on the **Paths & Extensions** tab):
+Related toggles (all per-collection, on the **Subfolders** panel):
 
 | Setting | INI key | Effect |
 |---------|---------|--------|
@@ -232,7 +242,7 @@ grid:
 | Field | INI key | Notes |
 |-------|---------|-------|
 | Header Logo Image | `headerLogoImage` | Path to PNG / JPG / WEBP / SVG |
-| Header Logo Position | `headerLogoPosition` | `topleft` / `topcenter` / `topright` |
+| Header Logo Position | `headerLogoPosition` | `topcenter` (default) / `topleft` / `topright` |
 
 Distinct from the **Collection Icon** (`collectionIcon`) which is shown
 on the *tile* of this collection when it's a subcollection of another.
@@ -422,9 +432,7 @@ Every collection key, grouped by purpose:
 | `type` | string | empty | Media-type tag (used by the type filter and to pick a scraper). |
 | `scraperProviderId` | string | empty | Pinned metadata scraper id (`tmdb`, `screenscraper`, `musicbrainz`, `openlibrary`). Empty = resolve from `type`. |
 | `mediaDirectory` | path | empty | Folder of items. Empty = parent-only. |
-| `artworkDirectory` | path | empty | Folder of cover images. |
-| `videoDirectory` | path | empty | Folder of preview videos. |
-| `manualDirectory` | path | empty | Folder of per-item manuals. |
+| `artworkDirectory` | path | empty | Root of the media-asset tree: covers at the top level, preview videos under `video/`, manuals under `manual/`, other artwork types in their own named subfolders. The former `videoDirectory` / `manualDirectory` keys are retired — Kartend no longer reads them and strips them from the INI on the next save. |
 | `extensions` | csv | empty | File extensions to scan. Empty = all. |
 | `collectionIcon` | path | empty | Tile icon when this collection is a subcollection. Absolute or `~`-prefixed, `%collection%` expands; takes priority over the artwork-directory convention below. |
 | `placeholderArtwork` | path | empty | Image for missing-artwork tiles. |
@@ -463,7 +471,7 @@ the section structure at load time and are not INI keys.
 | `titleExclusionPatterns` | csv (regex) | empty | Patterns stripped from displayed titles. |
 | `titleExclusionEnabled` | bool | `false` | Toggle the pattern list. |
 | `headerLogoImage` | path | empty | Logo painted across the top of the grid. |
-| `headerLogoPosition` | enum | `topleft` | `topleft` / `topcenter` / `topright`. |
+| `headerLogoPosition` | enum | `topcenter` | `topleft` / `topcenter` / `topright`. |
 
 The remaining keys (appearance, sidebar styling, colors, list view) are
 covered in [Themes & Appearance](Themes-and-Appearance.md),
