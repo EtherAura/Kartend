@@ -155,9 +155,11 @@ ErrorUtils::Result<void> doExportKart(const CollectionConfig &cfg,
 
 } // namespace
 
-// collectSuspiciousKartPaths now lives in kartsuspiciouspaths.cpp so the
-// preflight unit tests can link it without pulling in the whole manager
-// translation unit. The declaration stays in kartmanager.h.
+// The launcher-trust collectors (collectLauncherTrustFindings,
+// collectSuspiciousKartPaths, collectInTreeLauncherPaths, …) live in
+// kartsuspiciouspaths.cpp so the preflight unit tests can link them without
+// pulling in the whole manager translation unit. Their declarations are in
+// kartlaunchertrust.h, which both this header and kartpreflight.h include.
 
 KartManager::KartManager(QObject *parent) : QObject(parent) {}
 
@@ -218,6 +220,26 @@ QSet<QString> KartManager::previouslyTrustedLauncherPaths() const {
     }
   }
   return out;
+}
+
+QList<SuspiciousKartPath> KartManager::launcherConfirmationRows(const CollectionConfig &cfg,
+                                                                const QString &extractedRoot,
+                                                                bool onlyBundledPayloads) const {
+  // Kartend-kxqqf: the gate is "does this bundle want to run something?",
+  // not "is the path it names on a list?". A launcher living in an
+  // allowlisted directory still arrives with a bundle-chosen core and
+  // bundle-chosen arguments, which is enough to run anything; the allowlist
+  // survives only as the reason label on the row.
+  const auto findings =
+      collectLauncherTrustFindings(cfg, previouslyTrustedLauncherPaths(), extractedRoot);
+  if (!onlyBundledPayloads) {
+    return importConfirmationRows(findings, collectSuspiciousAssetPaths(cfg));
+  }
+  QList<KartLauncherFinding> bundled;
+  for (const KartLauncherFinding &f : findings) {
+    if (f.reason == LauncherTrustReason::BundledExecutable) bundled.append(f);
+  }
+  return importConfirmationRows(bundled, {});
 }
 
 void KartManager::setupReferences(const KartManagerSetup &setup) {
@@ -287,6 +309,24 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
                              "Imported .kart references a path outside the safe-prefix allowlist",
                              "KartManager::finalizeImport")
                              .withDetails(QString("Field: %1, Path: %2").arg(field, path)));
+  }
+
+  // Kartend-kxqqf: the allowlist above says nothing about the two fields that
+  // make an import dangerous — the core the launcher loads and the arguments
+  // it is handed. Log every launcher field that tripped a danger signal, with
+  // the extraction root in hand so a bundle-shipped payload is recognised.
+  const auto trustFindings =
+      collectLauncherTrustFindings(cfg, previouslyTrustedLauncherPaths(), result.destDir);
+  for (const KartLauncherFinding &finding : trustFindings) {
+    if (!isElevatedLauncherTrustReason(finding.reason)) continue;
+    ErrorUtils::logError(
+        ErrorUtils::ErrorContext::warning(
+            ErrorUtils::ErrorCode::InvalidFilePath,
+            "Imported .kart carries a launcher configuration that can execute arbitrary code",
+            "KartManager::finalizeImport")
+            .withDetails(
+                QString("Field: %1, Reason: %2, Value: %3")
+                    .arg(finding.field, launcherTrustReasonLabel(finding.reason), finding.value)));
   }
 
   if (registerCollection) {
@@ -436,11 +476,11 @@ ErrorUtils::Result<QString> KartManager::importKart(const QString &kartPath, con
   // path). It still consults a wired confirmer so a malicious .kart prompts
   // the user before the manifest's launcher path is registered.
   if (m_setup.suspiciousPathConfirmer) {
-    const auto suspicious = collectSuspiciousKartPaths(extracted.value().manifest.collectionConfig,
-                                                       previouslyTrustedLauncherPaths());
-    if (!suspicious.isEmpty() && !m_setup.suspiciousPathConfirmer(suspicious)) {
+    const auto rows = launcherConfirmationRows(extracted.value().manifest.collectionConfig,
+                                               extracted.value().destDir);
+    if (!rows.isEmpty() && !m_setup.suspiciousPathConfirmer(rows)) {
       return ErrorUtils::ErrorContext::warning(ErrorUtils::ErrorCode::OperationCancelled,
-                                               "Import cancelled at suspicious-path confirmation",
+                                               "Import cancelled at launcher confirmation",
                                                "KartManager::importKart");
     }
   }
@@ -560,11 +600,12 @@ void KartManager::importInteractive() {
     return;
   }
 
-  // Preflight pass — surface launcher/path issues before the user picks a
-  // destination, so cancelling here costs nothing on disk. The hook is
-  // wired by the UI layer (MainWindow); in headless contexts we proceed
-  // unconditionally and rely on the existing post-extract suspicious-path
-  // gate for safety.
+  // Preflight pass — surface the bundle's launcher configuration and any
+  // path issues before the user picks a destination, so cancelling here
+  // costs nothing on disk. The hook is wired by the UI layer (MainWindow);
+  // in headless contexts we proceed unconditionally and rely on the
+  // post-extract launcher gate for safety.
+  bool preflightConfirmed = false;
   if (m_setup.preflightConfirmer) {
     QSet<QString> existingNames;
     if (m_setup.getCollections) {
@@ -580,6 +621,7 @@ void KartManager::importInteractive() {
       // Treat as a clean user cancellation — no error toast.
       return;
     }
+    preflightConfirmed = true;
   }
 
   const QString suggested = QDir::homePath() + "/" +
@@ -592,7 +634,7 @@ void KartManager::importInteractive() {
                                                   QFileDialog::DontResolveSymlinks);
   if (destDir.isEmpty()) return;
 
-  runImport(kartPath, destDir);
+  runImport(kartPath, destDir, preflightConfirmed);
 }
 
 void KartManager::exportCollectionInteractive(int collectionIndex) {
@@ -619,7 +661,8 @@ void KartManager::exportCollectionInteractive(int collectionIndex) {
   runExport(collectionIndex, outPath);
 }
 
-void KartManager::runImport(const QString &kartPath, const QString &destDir) {
+void KartManager::runImport(const QString &kartPath, const QString &destDir,
+                            bool preflightConfirmed) {
   // Un-parented and shared_ptr-owned on purpose — the worker task holds its
   // own reference so a timed-out teardown join can abandon it safely (see
   // the m_activeReader member doc and ~KartManager).
@@ -640,7 +683,7 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
   auto *watcher = new QFutureWatcher<ErrorUtils::Result<KartReader::ExtractResult>>(this);
   m_activeWatcher = watcher; // Kartend audit jpit3: ~KartManager joins on this.
   connect(watcher, &QFutureWatcher<ErrorUtils::Result<KartReader::ExtractResult>>::finished, this,
-          [this, watcher]() {
+          [this, watcher, preflightConfirmed]() {
             const auto extracted = watcher->result();
             watcher->deleteLater();
             m_activeWatcher = nullptr;
@@ -651,20 +694,26 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir) {
               showWarning(tr("Import Kart"), extracted.error().message);
               return;
             }
-            // Kartend-s6mj: ask the user before importing a .kart whose
-            // launcher / icon / placeholder paths fall outside the safe
-            // allowlist. The pre-extracted manifest's collectionConfig
+            // Kartend-s6mj / Kartend-kxqqf: ask the user before importing a
+            // .kart that carries a launcher configuration at all — the
+            // program, the core and the arguments are the bundle's choice,
+            // and the drag-and-drop route reaches here without passing the
+            // preflight dialog. The pre-extracted manifest's collectionConfig
             // already carries the un-finalized fields (finalizeImport
-            // overwrites only the *Directory paths, not launcher /
-            // icon / placeholder), so the suspicious set is stable
-            // here.
-            const auto suspicious = collectSuspiciousKartPaths(
-                extracted.value().manifest.collectionConfig, previouslyTrustedLauncherPaths());
-            if (!suspicious.isEmpty() && m_setup.suspiciousPathConfirmer) {
-              if (!m_setup.suspiciousPathConfirmer(suspicious)) {
+            // overwrites only the *Directory paths, not launcher / icon /
+            // placeholder), so the row set is stable here; the extraction
+            // root is passed so a bundle-shipped payload is recognised too
+            // (Kartend-f8y08). A menu import already showed these rows in the
+            // preflight dialog and got its answer, so it re-asks only about
+            // the one escalation that needs the extracted tree to see.
+            const auto rows = launcherConfirmationRows(extracted.value().manifest.collectionConfig,
+                                                       extracted.value().destDir,
+                                                       /*onlyBundledPayloads=*/preflightConfirmed);
+            if (!rows.isEmpty() && m_setup.suspiciousPathConfirmer) {
+              if (!m_setup.suspiciousPathConfirmer(rows)) {
                 auto ctx = ErrorUtils::ErrorContext::warning(
                     ErrorUtils::ErrorCode::OperationCancelled,
-                    "Import cancelled at suspicious-path confirmation", "KartManager::runImport");
+                    "Import cancelled at launcher confirmation", "KartManager::runImport");
                 emit importFailed(ctx);
                 emit kartProgressFailed();
                 return;

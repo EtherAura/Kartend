@@ -24,7 +24,7 @@ kartend [options]
 | `--on-conflict <policy>` | takes value | Conflict policy for `--import-kart`: `skip` (default) / `overwrite` / `merge`. |
 | `--export-kart <name>` | takes value | Export the named collection headlessly. Implies exit on completion. |
 | `--export-out <path>` | takes value | Output path for `--export-kart`. **Required** when exporting. |
-| `--allow-untrusted-launcher` | flag | Permit `--import-kart` to register a launcher path that points *inside* the extracted kart tree — i.e. a package that bundles its own executable. Off by default: a headless import has no one to ask, so it refuses rather than silently wiring up a stranger's binary. |
+| `--allow-untrusted-launcher` | flag | Permit `--import-kart` to register a launcher setting that points *inside* the extracted kart tree — a package that ships the thing it wants run, whether that is named as the launcher, as the core, or as a path argument. Off by default: a headless import has no one to ask, so it refuses rather than silently wiring up a stranger's file. |
 
 Standard Qt options (`--platform`, `--style`, `--stylesheet`, etc.) are
 also accepted but rarely used in practice. See the Qt documentation

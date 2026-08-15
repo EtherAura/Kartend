@@ -683,3 +683,132 @@ void TestKartManager::testHeadlessImportAcceptsInTreeLauncherWhenOptedIn() {
                                          /*allowUntrustedLauncher=*/true);
   QVERIFY2(res.isOk(), qPrintable(res.isError() ? res.error().message : QString()));
 }
+
+namespace {
+
+/// Build a .kart whose launcher block is the shape the allowlist used to wave
+/// through: a program in an allowed directory, with the arguments doing the
+/// actual work. Nothing is bundled and nothing is outside the allowlist.
+QString buildKartWithLauncherConfiguration(QTemporaryDir &kartHome, const QString &launcherPath,
+                                           const QString &parameters) {
+  auto src = buildSyntheticCollection(QStringLiteral("Configured"), QStringLiteral("clip.bin"),
+                                      QByteArray("bytes"));
+  src->cfg.launcher.launcherPath = launcherPath;
+  src->cfg.launcher.launchParameters = parameters;
+  auto prep = KartWriter::prepareFromCollection(src->cfg, QStringLiteral("configured-uuid"), {});
+  if (prep.isError()) return QString();
+  prep.value().preferredCompression = KartCompression::zstdAvailable()
+                                          ? KartFormat::Compression_Zstd
+                                          : KartFormat::Compression_Zlib;
+  const QString kartPath = QDir(kartHome.path()).filePath(QStringLiteral("configured.kart"));
+  KartWriter::Writer writer;
+  if (writer.writeKart(kartPath, prep.value()).isError()) return QString();
+  return kartPath;
+}
+
+} // namespace
+
+void TestKartManager::testAsyncImportConfirmsBundleLauncherConfiguration() {
+  // Kartend-kxqqf: the drop path reaches runImport without passing the
+  // preflight dialog, so the confirmation hook is the only thing standing
+  // between a bundle's launcher block and the collection list. A program in
+  // an allowlisted directory whose arguments carry the payload used to
+  // produce an empty concern set and import in silence.
+  QTemporaryDir kartHome;
+  QVERIFY(kartHome.isValid());
+  const QString kartPath = buildKartWithLauncherConfiguration(
+      kartHome, QStringLiteral("/usr/bin/mpv"), QStringLiteral("-c payload"));
+  QVERIFY(!kartPath.isEmpty());
+
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
+  ApplicationContext appCtx;
+  ApplicationManager appManager;
+  appManager.initialize(&appCtx);
+  kart::KartManager *kartMgr = appManager.getKartManager();
+  QVERIFY(kartMgr != nullptr);
+
+  QList<CollectionConfig> collections;
+  QList<QList<kart::SuspiciousKartPath>> prompts;
+  kart::KartManagerSetup setup;
+  setup.ctx = &appCtx;
+  setup.getCollections = [&collections]() -> QList<CollectionConfig> * { return &collections; };
+  setup.getLauncherPresets = []() -> QList<LauncherPreset> { return {}; };
+  setup.getParentWindow = []() -> QWidget * { return nullptr; };
+  setup.getPlaylistManager = []() -> IPlaylistManager * { return nullptr; };
+  // Declining must abort the import outright.
+  setup.suspiciousPathConfirmer = [&prompts](const QList<kart::SuspiciousKartPath> &rows) {
+    prompts.append(rows);
+    return false;
+  };
+  kartMgr->setupReferences(setup);
+
+  QSignalSpy importedSpy(kartMgr, &kart::KartManager::collectionImported);
+  QSignalSpy failedSpy(kartMgr, &kart::KartManager::importFailed);
+
+  QTemporaryDir dest;
+  QVERIFY(dest.isValid());
+  kartMgr->importKartAsync(kartPath, dest.path());
+  QVERIFY2(failedSpy.wait(30000), "a declined launcher confirmation must end the import");
+
+  QCOMPARE(prompts.size(), 1);
+  QVERIFY2(!prompts.first().isEmpty(), "the prompt must list what the bundle wants to run");
+  bool sawParameters = false;
+  bool sawLauncherPath = false;
+  for (const auto &[field, value] : prompts.first()) {
+    if (field.startsWith(QStringLiteral("launcher.launchParameters"))) {
+      sawParameters = true;
+      QCOMPARE(value, QStringLiteral("-c payload")); // shown verbatim
+    }
+    if (field.startsWith(QStringLiteral("launcher.launcherPath"))) sawLauncherPath = true;
+  }
+  QVERIFY2(sawParameters, "launch parameters must appear in the confirmation");
+  QVERIFY2(sawLauncherPath, "the launcher path must appear even though it is allowlisted");
+  QCOMPARE(importedSpy.count(), 0);
+  QVERIFY2(collections.isEmpty(), "a declined import must register nothing");
+}
+
+void TestKartManager::testAsyncImportSkipsConfirmerWithoutLauncherConfiguration() {
+  // The other half: a bundle that asks to run nothing imports without a
+  // prompt. Without this the warning would fire on every import and stop
+  // meaning anything.
+  auto src = buildSyntheticCollection(QStringLiteral("No Launcher"), QStringLiteral("clip.bin"),
+                                      QByteArray("bytes"));
+  auto prep = KartWriter::prepareFromCollection(src->cfg, QStringLiteral("nolauncher-uuid"), {});
+  QVERIFY2(prep.isOk(), qPrintable(prep.isError() ? prep.error().message : QString()));
+  prep.value().preferredCompression = KartCompression::zstdAvailable()
+                                          ? KartFormat::Compression_Zstd
+                                          : KartFormat::Compression_Zlib;
+  QTemporaryDir kartHome;
+  QVERIFY(kartHome.isValid());
+  const QString kartPath = QDir(kartHome.path()).filePath(QStringLiteral("nolauncher.kart"));
+  KartWriter::Writer writer;
+  QVERIFY(writer.writeKart(kartPath, prep.value()).isOk());
+
+  ApplicationContext appCtx;
+  ApplicationManager appManager;
+  appManager.initialize(&appCtx);
+  kart::KartManager *kartMgr = appManager.getKartManager();
+  QVERIFY(kartMgr != nullptr);
+
+  QList<CollectionConfig> collections;
+  int promptCount = 0;
+  kart::KartManagerSetup setup;
+  setup.ctx = &appCtx;
+  setup.getCollections = [&collections]() -> QList<CollectionConfig> * { return &collections; };
+  setup.getLauncherPresets = []() -> QList<LauncherPreset> { return {}; };
+  setup.getParentWindow = []() -> QWidget * { return nullptr; };
+  setup.getPlaylistManager = []() -> IPlaylistManager * { return nullptr; };
+  setup.suspiciousPathConfirmer = [&promptCount](const QList<kart::SuspiciousKartPath> &) {
+    ++promptCount;
+    return true;
+  };
+  kartMgr->setupReferences(setup);
+
+  QSignalSpy importedSpy(kartMgr, &kart::KartManager::collectionImported);
+  QTemporaryDir dest;
+  QVERIFY(dest.isValid());
+  kartMgr->importKartAsync(kartPath, dest.path());
+  QVERIFY2(importedSpy.wait(30000), "a launcher-less bundle must import");
+  QCOMPARE(promptCount, 0);
+}

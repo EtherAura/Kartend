@@ -32,6 +32,24 @@ Kartend launches user-configured external processes. The launch module includes:
 - TOCTOU mitigation with re-validation before execution
 - Argument list passing (no shell interpolation)
 
+Argument-list passing protects a launcher the *user* configured. It does not
+help when the launcher configuration itself is untrusted input, which is the
+case for an imported `.kart` package: the package names both the program and
+its arguments, so choosing a shell as the program defeats the absence of one.
+Import therefore treats the whole launcher block — launcher path, core path
+and launch parameters, primary and additional — as untrusted regardless of
+where the paths point. Every field the package supplies is listed to the user
+verbatim and requires explicit confirmation before the collection is
+registered, on every import route including drag-and-drop; the safe-prefix
+allowlist only ranks the severity of each row, and the preflight dialog's
+all-clear is reachable only for a package that carries no launcher block at
+all. Values that name a shell or interpreter, carry an inline-command flag, or
+resolve inside the extracted package tree are called out specifically. The
+headless import has no one to ask, so it refuses a package-shipped launcher,
+core or path argument unless `--allow-untrusted-launcher` is passed.
+Extraction never sets an execute bit on payload files, which is enforced by
+test.
+
 SQL queries use parameterized binding throughout — including the dynamically
 sized `IN (...)` clauses, which build `?` placeholder lists and bind each value.
 The only string-interpolated SQL is table/column identifiers from compile-time

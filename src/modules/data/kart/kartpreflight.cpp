@@ -4,7 +4,7 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 
-#include "kartmanager.h"
+#include "kartlaunchertrust.h"
 
 namespace KartPreflight {
 
@@ -103,9 +103,17 @@ PreflightReport buildReport(const KartManifest::Manifest &manifest,
     pushIssue(label, alt.launcherPath, check);
   }
 
-  // Suspicious externally-controlled paths reuse the existing allowlist so
-  // the preflight report subsumes the prompt the legacy hook used to fire.
-  out.suspiciousPaths = kart::collectSuspiciousKartPaths(cfg, trustedLauncherPaths);
+  // Kartend-kxqqf: the launcher block an imported bundle carries decides what
+  // gets executed on the first Launch click, so every field of it is reported
+  // — not just the ones an allowlist happens to dislike. The extraction root
+  // isn't known yet at preflight time (nothing has been written to disk),
+  // hence the empty third argument: the bundled-payload escalation is applied
+  // again post-extract by the import gate.
+  out.launcherTrust = kart::collectLauncherTrustFindings(cfg, trustedLauncherPaths, QString());
+
+  // Icon / placeholder paths keep the plain allowlist treatment; the launcher
+  // fields they used to share this list with now come through launcherTrust.
+  out.suspiciousPaths = kart::collectSuspiciousAssetPaths(cfg);
 
   // Name-conflict probe — case-insensitive compare against the supplied set
   // of lowercase names.

@@ -57,6 +57,8 @@ private slots:
   void cleanReportShowsAllClearAndHidesTree();
   void issuesGroupIntoCountedTreeSections();
   void summaryRendersBundleFactsAndEscapesHtml();
+  void launcherConfigurationSuppressesTheAllClear();
+  void elevatedLauncherFindingRaisesTheBanner();
 };
 
 void TestKartPreflightDialog::cleanReportShowsAllClearAndHidesTree() {
@@ -130,6 +132,56 @@ void TestKartPreflightDialog::summaryRendersBundleFactsAndEscapesHtml() {
   QLabel *summary2 = labelContaining(dlg2, QStringLiteral("Documentaries"));
   QVERIFY(summary2);
   QVERIFY(!summary2->text().contains(QStringLiteral("Type")));
+}
+
+void TestKartPreflightDialog::launcherConfigurationSuppressesTheAllClear() {
+  // Kartend-kxqqf: a bundle that brings a launcher configuration is
+  // executable content. Even when nothing about it looks unusual, the dialog
+  // must show it rather than answer "no validation issues" — the banner it
+  // used to show for exactly this bundle.
+  KartPreflight::PreflightReport r = makeCleanReport();
+  r.launcherTrust.append({QStringLiteral("launcher.launcherPath"), QStringLiteral("/usr/bin/mpv"),
+                          kart::LauncherTrustReason::BundleSupplied});
+  r.launcherTrust.append({QStringLiteral("launcher.launchParameters"),
+                          QStringLiteral("--fullscreen %media%"),
+                          kart::LauncherTrustReason::BundleSupplied});
+
+  KartPreflightDialog dlg(r);
+  QVERIFY(!labelContaining(dlg, QStringLiteral("No validation issues")));
+  QVERIFY(labelContaining(dlg, QStringLiteral("brings its own launcher configuration")));
+
+  auto *tree = dlg.findChild<QTreeWidget *>();
+  QVERIFY(tree);
+  QVERIFY(tree->isVisibleTo(&dlg));
+  QTreeWidgetItem *group = topLevelItemNamed(tree, QStringLiteral("Launcher configuration"));
+  QVERIFY(group);
+  QCOMPARE(group->text(1), QStringLiteral("2"));
+  QCOMPARE(group->childCount(), 2);
+  QCOMPARE(group->child(0)->text(0), QStringLiteral("launcher.launcherPath"));
+  QCOMPARE(group->child(0)->text(1),
+           kart::launcherTrustReasonLabel(kart::LauncherTrustReason::BundleSupplied));
+  // The value is shown verbatim — the point of the section is that the user
+  // can read what will run.
+  QCOMPARE(group->child(1)->text(2), QStringLiteral("--fullscreen %media%"));
+}
+
+void TestKartPreflightDialog::elevatedLauncherFindingRaisesTheBanner() {
+  // A danger signal escalates the wording; the allowlist-clean case above
+  // stays calmer, so the loud banner keeps its meaning.
+  KartPreflight::PreflightReport r = makeCleanReport();
+  r.launcherTrust.append({QStringLiteral("launcher.launcherPath"),
+                          QStringLiteral("/usr/bin/python3"),
+                          kart::LauncherTrustReason::InterpreterProgram});
+
+  KartPreflightDialog dlg(r);
+  QVERIFY(!labelContaining(dlg, QStringLiteral("No validation issues")));
+  QVERIFY(labelContaining(dlg, QStringLiteral("asks to run something unusual")));
+  auto *tree = dlg.findChild<QTreeWidget *>();
+  QVERIFY(tree);
+  QTreeWidgetItem *group = topLevelItemNamed(tree, QStringLiteral("Launcher configuration"));
+  QVERIFY(group);
+  QCOMPARE(group->child(0)->text(1),
+           kart::launcherTrustReasonLabel(kart::LauncherTrustReason::InterpreterProgram));
 }
 
 QTEST_MAIN(TestKartPreflightDialog)

@@ -84,6 +84,16 @@ private slots:
   // Kartend-u8wf0: the same import succeeds when the caller opts in via
   // allowUntrustedLauncher=true (the CLI's --allow-untrusted-launcher).
   void testHeadlessImportAcceptsInTreeLauncherWhenOptedIn();
+
+  // Kartend-kxqqf: the drag-and-drop import path never opens the preflight
+  // dialog, so the confirmation hook is the whole gate there. A bundle whose
+  // launcher lives in an allowlisted directory but whose arguments carry the
+  // payload must still prompt — with the values shown verbatim — and
+  // declining must register nothing.
+  void testAsyncImportConfirmsBundleLauncherConfiguration();
+  // Kartend-kxqqf: the inverse — a bundle that asks to run nothing imports
+  // without a prompt, so the warning keeps its meaning.
+  void testAsyncImportSkipsConfirmerWithoutLauncherConfiguration();
 };
 
 #endif

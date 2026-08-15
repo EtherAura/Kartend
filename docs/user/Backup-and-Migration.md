@@ -188,32 +188,46 @@ The dialog shows:
 | Section | Contents |
 |---------|----------|
 | Bundle summary | Collection name, collection type, item count, launcher count, and whether the bundle carries artwork overrides or per-item metadata |
-| Launchers | Resolved launcher paths referenced by the bundle and whether they exist on this machine |
+| Launcher configuration | Every launcher setting the bundle brings — launcher path, core path and launch parameters, for the primary launcher and each additional one — with the value shown exactly as it will be used |
 | Concerns | Warnings flagged by the preflight check (see below) |
 
 Validation surfaces these concerns when present:
 
+- **Launcher configuration** — listed whenever the bundle carries one,
+  because a `.kart` chooses both the program to start and the arguments
+  it is started with. Each row says why it is there: *Chosen by the
+  bundle* for the ordinary case, or one of *Outside the safe allowlist*
+  (`$HOME`, `/usr/bin`, `/usr/local/bin`, `/opt`), *Shell or
+  interpreter*, *Runs an inline command* and *Shipped inside the bundle*
+  when the setting reads as unusual. The last of those covers launcher
+  paths, cores and path-like arguments alike.
 - **Missing launcher** — a referenced launcher executable isn't on
   this machine
-- **Suspicious paths** — launcher, icon and placeholder paths in the
-  bundle's manifest that fall outside the safe-prefix allowlist
-  (`$HOME`, `/usr/bin`, `/usr/local/bin`, `/opt`)
-
+- **Suspicious paths** — icon and placeholder paths in the bundle's
+  manifest that fall outside the safe-prefix allowlist
 - **Name conflict** — a collection with the same name already exists
   (the merge dialog handles this if you proceed)
+
+A bundle that carries a launcher configuration also asks you to confirm
+it explicitly before the collection is registered, on every import route
+— including drag-and-drop, which does not open the preflight dialog. The
+confirmation lists the same rows and defaults to **Cancel**.
 
 > **A clean preflight is not a safety guarantee.**
 >
 > The preflight check is an **advisory summary, not a sandbox**. It
-> reports what it recognises, it does not inspect every manifest field,
-> and passing it means "nothing known-suspicious was spotted" — not
-> "this bundle has been vetted".
+> reports what it recognises, and passing it means "nothing
+> known-suspicious was spotted" — not "this bundle has been vetted".
+> The all-clear banner is only ever shown for a bundle that asks to run
+> nothing at all; a bundle with any launcher setting is always shown to
+> you rather than approved on your behalf.
 >
 > The extractor does independently refuse unsafe *payload* file paths:
 > `..` traversal, absolute paths and symlink escapes are rejected
 > regardless of the dialog choice. That protects where the bundle's
-> files land. It does not constrain what the bundle asks Kartend to
-> **run** — see the warning at the top of this page.
+> files land. What the bundle asks Kartend to **run** is your decision
+> to make at the confirmation above — see the warning at the top of this
+> page.
 >
 > Prefer an empty destination directory, so an import cannot land on
 > top of files you already have.

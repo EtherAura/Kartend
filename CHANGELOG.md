@@ -233,6 +233,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Importing a `.kart` package now shows you what it will run, and asks
+  before it registers it.** A package brings its own launcher settings —
+  the program to start, the core to load and the arguments to pass — and
+  those were chosen by whoever built the package, not by you. Kartend
+  weighed only the folder the program sits in against a short list of
+  ordinary locations, so a package naming something that lives in one of
+  them was registered in silence, and the preflight review reported no
+  validation issues while never having looked at the arguments at all.
+  The arguments are the half that decides what a program actually does.
+  Preflight now lists every launcher setting a package carries, each value
+  written out exactly as it will be used, and an import carrying any of
+  them asks you to confirm before it is registered — including a
+  drag-and-drop import, which never showed the review in the first place.
+  Ordinary-looking settings are listed quietly; ones that read as unusual
+  are called out, whether that is a program whose arguments are themselves
+  instructions, an argument carrying a command of its own, or a file the
+  package shipped for itself. That last case is now recognised for cores
+  and arguments too rather than only for the program, which matters
+  because a core is read into the player rather than started as a program
+  of its own. The all-clear banner is now reserved for a package that asks
+  to run nothing at all, so it can no longer vouch for settings nothing
+  examined. A package you exported yourself imports exactly as before —
+  you simply get to see what is in it first (Kartend-kxqqf,
+  Kartend-f8y08).
+
 - **A cover you assign by hand now counts as artwork, and the artwork wizard
   stops offering you items you have already done.** Kartend finds covers two
   ways: by matching file names in a collection's artwork folder, and by the

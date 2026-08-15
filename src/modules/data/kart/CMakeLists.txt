@@ -4,6 +4,7 @@ target_sources(kartend_data PRIVATE
   kartdb.cpp
   kartdb.h
   kartformat.h
+  kartlaunchertrust.h
   kartmanager.cpp
   kartmanager.h
   kartmanifest.cpp
