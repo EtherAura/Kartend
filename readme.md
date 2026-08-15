@@ -150,6 +150,16 @@ are all in [docs/dev/building.md](docs/dev/building.md).
 
 <sub>Config lives at <code>~/.config/kartend/kartend.cfg</code> — editable in Settings, or by hand.</sub>
 
+## How this is built
+
+Kartend is developed with AI assistance. Commits co-authored by a model
+carry a `Co-Authored-By` trailer — currently around two thirds of the
+history — so `git log` shows you exactly which ones.
+
+Every change goes through the same gates regardless of origin: the test
+suite, clang-format, clang-tidy, the layering linter, and CI. The
+reasoning behind a change lives in its commit message.
+
 ## License
 
 [GPL-3.0-only](LICENSE).
