@@ -187,18 +187,38 @@ existing collection.
 
 ## Limits
 
-| Constant | Value | Purpose |
-|----------|-------|---------|
-| `KartFormat::MAGIC_SIZE` | 8 | Magic byte count |
-| `KartFormat::CURRENT_VERSION` | 1 | In-band schema version |
-| `KartFormat::SHA256_SIZE` | 32 | Hash byte count |
-| `KartFormat::MAX_PATH_LEN` | 4096 | Per-entry path cap |
-| `KartFormat::MAX_MANIFEST_SIZE` | 64 MiB | Manifest cap |
-| `KartFormat::MAX_ENTRY_SIZE` | 8 GiB | Per-entry payload cap |
+| Constant | Value | Purpose | Enforced |
+|----------|-------|---------|----------|
+| `KartFormat::MAGIC_SIZE` | 8 | Magic byte count | parse |
+| `KartFormat::CURRENT_VERSION` | 2 | In-band schema version | parse |
+| `KartFormat::SHA256_SIZE` | 32 | Hash byte count | parse |
+| `KartFormat::MAX_PATH_LEN` | 4096 | Per-entry path cap | parse |
+| `KartFormat::MAX_MANIFEST_SIZE` | 64 MiB | Manifest cap | parse |
+| `KartFormat::MAX_ENTRY_SIZE` | 8 GiB | Per-entry payload cap | parse (declared) |
+| `KartFormat::MAX_ENTRY_COUNT` | 200000 | Total entry-count cap | extract |
+| `KartFormat::MAX_MANIFEST_ITEMS` | 200000 | Manifest array ceiling | parse |
+| `KartFormat::MAX_TOTAL_EXTRACTED_BYTES` | 2 TiB | Aggregate payload backstop | extract |
 
-All caps are enforced at parse time; the reader returns a
-structured error when a header advertises a value above the cap
-rather than allocating an attacker-controlled buffer.
+Header-declared caps (`MAX_PATH_LEN`, `MAX_MANIFEST_SIZE`,
+`MAX_ENTRY_SIZE`) are checked at parse time: the reader returns a
+structured error when a header advertises a value above the cap rather
+than allocating an attacker-controlled buffer.
+
+`MAX_ENTRY_COUNT` and `MAX_TOTAL_EXTRACTED_BYTES` are **enforced during
+extraction, against bytes actually written** — not against declared
+sizes. That is the stronger property, and the distinction matters: a
+header may under-declare an entry's size, so the streaming zstd path
+re-checks real decompressed bytes per block and in total.
+
+`MAX_TOTAL_EXTRACTED_BYTES` (2 TiB) is a deliberately generous sanity
+backstop, **not** a disk-fill guard — it exceeds most target volumes,
+and there is no free-space clamp on this path (contrast the DAT
+downloader, which clamps to free space minus a reserve).
+
+When adding a decompression branch, keep the streaming/chunked shape the
+zstd path uses: bound the output against bytes actually produced, before
+allocating, rather than trusting any size the input declares about
+itself.
 
 ## Version compatibility
 

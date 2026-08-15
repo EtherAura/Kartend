@@ -63,6 +63,7 @@ private slots:
   void testWriterEmitsProgress();
   void testWriterCanCancel();
   void testPrepareFromCollectionScansDirs();
+  void testExtractedPayloadIsNeverExecutable();
 };
 
 void TestKartWriter::testExtensionShouldCompress() {
@@ -419,6 +420,47 @@ void TestKartWriter::testPrepareFromCollectionScansDirs() {
   QCOMPARE(it.manifestItem.artworkPath, QString("artwork/Sonic.png"));
   QCOMPARE(it.manifestItem.videoPath, QString("video/Sonic.mp4"));
   QCOMPARE(it.manifestItem.manualPath, QString("manual/Sonic.pdf"));
+}
+
+// Security regression (Kartend-f8y08): a hostile .kart can name one of its own
+// bundled payloads as the collection's launcherPath. What actually blocks that
+// today is LaunchManager::validateLauncherPath refusing a non-executable
+// launcher — the GUI import path does NOT run the in-tree launcher check that
+// importKartHeadless does. That makes "extraction never grants the exec bit" a
+// load-bearing security property rather than an incidental one, so pin it here:
+// if extraction ever starts restoring permissions (e.g. to support a bundled
+// helper script) this test must fail and force the in-tree check to be wired up
+// on the GUI path first.
+void TestKartWriter::testExtractedPayloadIsNeverExecutable() {
+#ifndef Q_OS_UNIX
+  QSKIP("POSIX permission bits");
+#else
+  QTemporaryDir src;
+  const QString mediaSrc = writeFile(QDir(src.path()), "payload.bin", QByteArray(64, 'Z'));
+  // Author side: mark the SOURCE executable — the shape a malicious bundle
+  // would ship. The extracted copy must not inherit it.
+  QVERIFY(QFile::setPermissions(mediaSrc, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner |
+                                              QFile::ReadUser | QFile::WriteUser | QFile::ExeUser));
+  QVERIFY(QFileInfo(mediaSrc).isExecutable());
+
+  auto params = makeMinimalParams(mediaSrc, "payload.bin");
+  QTemporaryDir outDir;
+  const QString kartPath = QDir(outDir.path()).filePath("exec.kart");
+  KartWriter::Writer w;
+  auto wr = w.writeKart(kartPath, params);
+  QVERIFY2(wr.isOk(), qPrintable(wr.error().message));
+
+  QTemporaryDir extractDir;
+  KartReader::Extractor r;
+  auto rd = r.extractTo(kartPath, extractDir.path());
+  QVERIFY2(rd.isOk(), qPrintable(rd.error().message));
+
+  const QFileInfo extracted(QDir(extractDir.path()).filePath("media/payload.bin"));
+  QVERIFY(extracted.exists());
+  QVERIFY2(!extracted.isExecutable(),
+           "extracted .kart payload must never be executable — the launcher "
+           "exec-bit check is what currently blocks a self-bundled launcher");
+#endif
 }
 
 QTEST_MAIN(TestKartWriter)

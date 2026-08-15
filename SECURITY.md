@@ -16,13 +16,28 @@ You will receive an acknowledgment within 48 hours. Security issues will be prio
 
 ## Security Considerations
 
+Kartend opens **no listening socket** — it has no server, no local IPC endpoint,
+and no D-Bus service. Its only network use is outbound HTTPS from the scraper
+client and DAT/artwork downloads. There is no remote attack surface to reach.
+
 Kartend launches user-configured external processes. The launch module includes:
 - Executable path validation and permission checks
-- Sensitive directory blacklisting (system paths, `/root`, etc.)
+- Pseudo-filesystem blocklist for the launcher executable — `/proc`, `/sys`, and
+  `/dev` are rejected both as written and after symlink canonicalization
+  (`LaunchManager::validateLauncherPath`). This is a targeted guard against
+  paths like `/proc/self/exe`, **not** a general "system directory" or
+  privileged-path blocklist: `/root`, `/etc`, and `/usr` are not on it, because
+  a launcher the user's own account can execute is by definition already within
+  that account's reach.
 - TOCTOU mitigation with re-validation before execution
 - Argument list passing (no shell interpolation)
 
-SQL queries use parameterized binding throughout; FTS input is sanitized.
+SQL queries use parameterized binding throughout — including the dynamically
+sized `IN (...)` clauses, which build `?` placeholder lists and bind each value.
+The only string-interpolated SQL is table/column identifiers from compile-time
+constants, which SQL cannot parameterize. FTS input is sanitized to an allowlist
+(letters, digits, underscore; everything else becomes a separator) before being
+bound as a parameter.
 
 ## Bundled Scraper Credentials — Security Theater
 
