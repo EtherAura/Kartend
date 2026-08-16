@@ -10,6 +10,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "artworkutils.h"
 #include "dbmigrations.h"
 #include "itemartwork.h"
 
@@ -75,6 +76,7 @@ private slots:
   void resolveCoverPathPrefersAManualCoverLink();
   void resolveCoverPathSkipsALinkWhoseFileIsGone();
   void resolveCoverPathIgnoresGalleryOnlyTypes();
+  void resolveCoverPathIgnoresScrapeWrittenNonStandardTypes();
   void resolveCoverPathFollowsCoverTypePriority();
   void loadManualCoverPathsMapsEveryHandLinkedItem();
   void loadManualCoverPathsSkipsGalleryOnlyAndBrokenLinks();
@@ -489,6 +491,32 @@ void TestItemArtwork::resolveCoverPathIgnoresGalleryOnlyTypes() {
       ItemArtworkStore::resolveCoverPath({{QStringLiteral("logo"), logo}}, QString()).isEmpty());
   QVERIFY(ItemArtworkStore::resolveCoverPath({{QStringLiteral("mycustomtype"), logo}}, QString())
               .isEmpty());
+}
+
+void TestItemArtwork::resolveCoverPathIgnoresScrapeWrittenNonStandardTypes() {
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString mix = QDir(dir.path()).filePath(QStringLiteral("composite.png"));
+  QVERIFY(touchFile(mix));
+
+  // Kartend-u67w0: the scraper records an item_artwork row for every
+  // non-standard image it downloads (mixrbv1/2, box-3d). Those rows are
+  // bookkeeping for the sidebar gallery, not user intent — they must not
+  // displace the auto-discovered cover, and they never supply one on their
+  // own (the files themselves still auto-discover via their subdirs).
+  const QHash<QString, QString> scrapeRows{{QStringLiteral("mixrbv1"), mix},
+                                           {QStringLiteral("mixrbv2"), mix},
+                                           {QStringLiteral("box-3d"), mix}};
+  QCOMPARE(ItemArtworkStore::resolveCoverPath(scrapeRows, QStringLiteral("/art/front/auto.png")),
+           QStringLiteral("/art/front/auto.png"));
+  QVERIFY(ItemArtworkStore::resolveCoverPath(scrapeRows, QString()).isEmpty());
+
+  // The manual fold is exactly the standard cover types, in cover order.
+  for (const QString &type : ItemArtworkStore::manualCoverTypes()) {
+    QVERIFY(ItemArtworkStore::isStandardType(type));
+    QVERIFY(ArtworkUtils::coverSubdirPriority().contains(type));
+  }
+  QCOMPARE(ItemArtworkStore::manualCoverTypes().first(), QStringLiteral("front"));
 }
 
 void TestItemArtwork::resolveCoverPathFollowsCoverTypePriority() {

@@ -139,15 +139,29 @@ an item count as "has artwork".
 The **primary** artwork — the one painted on the tile — is the first
 hit of this cascade:
 
-1. A [per-item manual link](#manual-per-item-links) on any cover type.
-2. `<artworkDirectory>/<Base name>.<ext>` — the flat root.
-3. Each cover-type subdirectory in the order listed above.
-4. The [disc-marker fallback](#artwork-for-multi-disc-releases).
+1. A [per-item manual link](#manual-per-item-links) on a **standard**
+   cover type (`front` · `box` · `screenshot` · `title` · `fanart` ·
+   `marquee`). Links on other types — including the scraper's
+   bookkeeping records for `mixrbv1/2` and `box-3d` files — are
+   gallery-only and never drive the tile.
+2. `<artworkDirectory>/front/<Base name>.<ext>` — the front cover.
+3. `<artworkDirectory>/<Base name>.<ext>` — the flat root.
+4. Each remaining cover-type subdirectory in the order listed above.
+5. The [disc-marker fallback](#artwork-for-multi-disc-releases).
+
+The front cover outranks the flat root on purpose: older scrapes
+mirrored their best-available cover to the flat root, and when an item
+had no front cover at the time, that mirror is a composite (`mixrbv`)
+image. Front-first means a real front cover — scraped later or filed
+by hand — always becomes the tile. A cover you drop at the flat root
+yourself still beats every *other* type, so hand-curated flat
+libraries keep working; to override a scraped front cover, use a
+[manual link](#manual-per-item-links) instead (it wins over
+everything).
 
 So a typed-subdirectory image *can* be the tile face — that is
 deliberate, and it is what lets hand-dropped gallery art surface on the
-grid rather than sitting unused. It is only reached when nothing
-matched at the flat root.
+grid rather than sitting unused.
 
 ### Custom artwork types
 

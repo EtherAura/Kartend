@@ -46,6 +46,8 @@ private slots:
   void testFindArtworkForFile_resolvesFromFrontSubdir();
   void testFindArtworkForFile_fallsBackThroughCoverSubdirs();
   void testFindArtworkForFile_prefersFrontOverScreenshot();
+  void testFindArtworkForFile_prefersFrontOverFlatRoot();
+  void testFindArtworkForFile_flatRootBeatsNonFrontSubdirs();
 
   // Pure cycle algorithm ---------------------------------------
   void testNextArtworkType_emptyAvailable();
@@ -223,6 +225,35 @@ void TestArtworkManager::testFindArtworkForFile_prefersFrontOverScreenshot() {
                .isEmpty());
   const QString path = ArtworkManager::findArtworkForFile("game.rom", tmp.path());
   QCOMPARE(path, front);
+}
+
+void TestArtworkManager::testFindArtworkForFile_prefersFrontOverFlatRoot() {
+  // Kartend-u67w0: pre-b73642f8 scrapes mirrored their best-available cover
+  // to the flat root; for items with no box-2D at the time that mirror is a
+  // mixrbv COMPOSITE. A real front cover — whenever it exists — must beat
+  // the root file, or the stale composite stays the tile forever.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QVERIFY(!writeArtworkFile(tmp.path(), QStringLiteral("game.png")).isEmpty());
+  const QString front = writeArtworkFile(QDir(tmp.path()).filePath(QStringLiteral("front")),
+                                         QStringLiteral("game.png"));
+  QVERIFY(!front.isEmpty());
+  const QString path = ArtworkManager::findArtworkForFile("game.rom", tmp.path());
+  QCOMPARE(path, front);
+}
+
+void TestArtworkManager::testFindArtworkForFile_flatRootBeatsNonFrontSubdirs() {
+  // Only `front/` moved above the root (Kartend-u67w0): a hand-dropped
+  // root cover still outranks the box / mix / screenshot fallbacks.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString root = writeArtworkFile(tmp.path(), QStringLiteral("game.png"));
+  QVERIFY(!root.isEmpty());
+  QVERIFY(!writeArtworkFile(QDir(tmp.path()).filePath(QStringLiteral("mixrbv1")),
+                            QStringLiteral("game.png"))
+               .isEmpty());
+  const QString path = ArtworkManager::findArtworkForFile("game.rom", tmp.path());
+  QCOMPARE(path, root);
 }
 
 // ─── Pure cycle algorithm ─────────────────────────────────────

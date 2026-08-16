@@ -193,7 +193,8 @@ private slots:
   void artlessItem_leavesArtworkPathEmpty();
   void fullNameCover_landsInArtworkPath();
   void typedCoverSubdir_landsInArtworkPath();
-  void flatRootOutranksTypedCoverSubdir();
+  void frontSubdirOutranksFlatRoot();
+  void flatRootOutranksNonFrontCoverSubdirs();
   void noArtworkDirectory_leavesEveryArtworkPathEmpty();
   void coverAddedBetweenScans_appearsAfterRescan();
   void coverRemovedBetweenScans_clearsAfterRescan();
@@ -214,6 +215,7 @@ private slots:
   // Manual per-item links (Kartend-jkty9)
   void manualLink_makesAnArtlessItemCount();
   void manualLink_outranksAutoDiscoveredCover();
+  void scrapeMixrbvRow_doesNotOutrankFrontCover();
   void staleManualLink_doesNotCount();
   void staleManualLink_fallsBackToAutoDiscoveredCover();
   void manualLink_countsWithoutAnArtworkDirectory();
@@ -492,7 +494,13 @@ void TestScanArtwork::typedCoverSubdir_landsInArtworkPath() {
 
 // Cascade priority has to match the render path's, or an item would be filed
 // against one cover and painted with another.
-void TestScanArtwork::flatRootOutranksTypedCoverSubdir() {
+//
+// Kartend-u67w0: the `front/` cover outranks a flat-root file. Pre-b73642f8
+// scrapes mirrored their best-available cover to the root, and for items that
+// had no box-2D at the time that mirror is a mixrbv COMPOSITE — root-first
+// froze those stale mirrors as the tile even after a later scrape filled
+// `front/`.
+void TestScanArtwork::frontSubdirOutranksFlatRoot() {
   ArtworkScanFixture fx;
   QVERIFY(fx.opened());
 
@@ -504,6 +512,31 @@ void TestScanArtwork::flatRootOutranksTypedCoverSubdir() {
   QVERIFY(writeFile(QDir(artwork.path()).filePath(QStringLiteral("Prelude.png")), "flat"));
   QVERIFY(QDir(artwork.path()).mkpath(QStringLiteral("front")));
   QVERIFY(writeFile(QDir(artwork.path()).filePath(QStringLiteral("front/Prelude.png")), "sub"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  const QString stored = artworkByName(fx.db()).value(QStringLiteral("Prelude"));
+  QCOMPARE(stored, QDir(artwork.path()).filePath(QStringLiteral("front/Prelude.png")));
+  const QHash<QString, QString> paths = pathsByName(fx.db());
+  QCOMPARE(stored, renderTimeArtwork(paths.value(QStringLiteral("Prelude")), artwork.path()));
+}
+
+// The flat root keeps outranking every NON-front subdir: a cover the user
+// drops at the root by hand must still beat the box / mix / screenshot
+// fallbacks (only the scraped front cover moved above it — Kartend-u67w0).
+void TestScanArtwork::flatRootOutranksNonFrontCoverSubdirs() {
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Prelude.bin")), "m"));
+  QVERIFY(writeFile(QDir(artwork.path()).filePath(QStringLiteral("Prelude.png")), "flat"));
+  QVERIFY(QDir(artwork.path()).mkpath(QStringLiteral("mixrbv1")));
+  QVERIFY(writeFile(QDir(artwork.path()).filePath(QStringLiteral("mixrbv1/Prelude.png")), "mix"));
 
   const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
   QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
@@ -762,6 +795,40 @@ void TestScanArtwork::manualLink_outranksAutoDiscoveredCover() {
   QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
 
   QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Overture")), chosen);
+}
+
+// Kartend-u67w0: the scraper writes an item_artwork row for every
+// NON-standard image it downloads (box-3d, mixrbv1, mixrbv2, …) so the
+// sidebar gallery can find those files. Those bookkeeping rows must not act
+// as hand-linked covers — an item with a real front cover was painting the
+// scraped mixrbv COMPOSITE instead, because the row outranked auto-discovery.
+void TestScanArtwork::scrapeMixrbvRow_doesNotOutrankFrontCover() {
+  ArtworkScanFixture fx;
+  QVERIFY(fx.opened());
+
+  QTemporaryDir media;
+  QTemporaryDir artwork;
+  QVERIFY(media.isValid());
+  QVERIFY(artwork.isValid());
+  QVERIFY(writeFile(QDir(media.path()).filePath(QStringLiteral("Aria.bin")), "m"));
+  QVERIFY(QDir(artwork.path()).mkpath(QStringLiteral("front")));
+  QVERIFY(QDir(artwork.path()).mkpath(QStringLiteral("mixrbv1")));
+  const QString front = QDir(artwork.path()).filePath(QStringLiteral("front/Aria.png"));
+  const QString mix = QDir(artwork.path()).filePath(QStringLiteral("mixrbv1/Aria.png"));
+  QVERIFY(writeFile(front, "cover"));
+  QVERIFY(writeFile(mix, "composite"));
+
+  const CollectionConfig cfg = makeConfig(media.path(), artwork.path());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  // The row the scrape's DB phase writes for a non-standard image type.
+  QVERIFY(linkArtwork(fx.db(), scannedUuid(fx.db()),
+                      pathsByName(fx.db()).value(QStringLiteral("Aria")), QStringLiteral("mixrbv1"),
+                      mix));
+  forceRescan(fx.db());
+  QVERIFY(fx.service()->ensureCollectionScanned(0, cfg));
+
+  QCOMPARE(artworkByName(fx.db()).value(QStringLiteral("Aria")), front);
 }
 
 // The reason the existence check lives in the scan rather than in a JOIN: a

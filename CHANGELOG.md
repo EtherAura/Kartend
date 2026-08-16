@@ -233,6 +233,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A real front cover now beats the composite image on the tile.** Two
+  separate leftovers of older scrapes conspired to keep the multi-panel
+  composite (`mixrbv`) image on grid tiles and cover-flow cards even
+  when a proper front cover exists. First, older scrapes kept a copy of
+  "the best cover available at the time" directly in the artwork
+  folder — often the composite — and the artwork folder was always
+  searched before `front/`; the search now looks in `front/` first.
+  Second, every scrape records where it saved its non-standard images
+  (`mixrbv1`, `box-3d`, …) so the sidebar gallery can list them — and
+  that bookkeeping record was mistaken for a hand-linked cover, which
+  outranks everything. Those records no longer drive the tile: only a
+  link on a standard cover type (what the links dialog and the Artwork
+  Wizard create) does. Everything else keeps its old rank: a cover you
+  drop directly into the artwork folder still beats the box, mix and
+  screenshot fallbacks, a hand-set link still beats everything, and the
+  composite still shows for items that genuinely have nothing better.
+  If you *want* a composite as an item's tile face, link it on the
+  Front Cover type.
+
 - **Importing a `.kart` package now shows you what it will run, and asks
   before it registers it.** A package brings its own launcher settings —
   the program to start, the core to load and the arguments to pass — and

@@ -238,8 +238,9 @@ public:
    * drift from findArtworkForFileCached.
    *
    * Priority reproduces that cascade exactly: @p directories are folded in
-   * order and the first positive entry for a key wins, so the flat root
-   * outranks `front/`, which outranks `box/`, and so on. Disc-marked art
+   * order and the first positive entry for a key wins, so `front/` outranks
+   * the flat root, which outranks `box/`, and so on (Kartend-u67w0, order
+   * defined by artworkLookupDirectories). Disc-marked art
    * (findDiscFallbackInDirectory) is folded in a SECOND pass over the same
    * order, so it can only answer for a key no exact name claimed anywhere —
    * the same "a fallback, never a substitute" rule the per-item lookup obeys.
@@ -339,8 +340,12 @@ private:
  * 2. baseName.{PNG,JPG,JPEG,WEBP,GIF,BMP} (uppercase)
  * 3. fullName.{extensions} (same pattern)
  *
- * Only when that EXACT cascade comes up empty across the flat root and every
- * typed cover subdir does the disc fallback run (Kartend-knub1): art named
+ * Directories are walked in the shared cover-lookup order (see
+ * artworkLookupDirectories): `front/` first, then the flat root, then the
+ * remaining typed cover subdirs (Kartend-u67w0).
+ *
+ * Only when that EXACT cascade comes up empty across every one of those
+ * directories does the disc fallback run (Kartend-knub1): art named
  * "<baseName> (Disc 1).png" answers for "<baseName>", which is how a
  * collapsed multi-disc item — named for the release, with the disc tag
  * stripped — finds art filed per disc. That step reads the DirectoryCache
@@ -361,8 +366,9 @@ private:
  * Preferred for bulk operations like showAllSubcollectionItems.
  *
  * Same two-stage rule as findArtworkForFile: the exact-name cascade over the
- * flat root and the typed cover subdirs first, then the disc-marked fallback
- * over the same directories (Kartend-knub1).
+ * shared cover-lookup order (`front/`, then the flat root, then the remaining
+ * typed subdirs — Kartend-u67w0) first, then the disc-marked fallback over the
+ * same directories (Kartend-knub1).
  *
  * @param fileName The media filename to find artwork for.
  * @param artworkDirectory The directory to search in.
@@ -393,22 +399,33 @@ private:
  *
  * Each id doubles as a subdirectory name under the artwork root — the scrape
  * pipeline writes every media type into its own `{artwork}/<type>/` folder
- * rather than dropping a copy at the flat root, so `artworkLookupDirectories`
- * walks exactly these, in this order, after the root itself.
+ * rather than dropping a copy at the flat root. `artworkLookupDirectories`
+ * walks exactly these, in this order, with the flat root spliced in after
+ * `front` (Kartend-u67w0): the front cover beats a root-level file, the root
+ * beats every other subdir. `front` must therefore stay the first entry.
  *
  * `front` is the canonical cover; the rest are fallbacks for items with no
  * dedicated front cover. Types absent from this list (`logo`, and any custom
  * type a collection defines) are gallery-only — they are never auto-discovered
  * as a cover, and a MANUAL link on one does not make an item "have artwork"
- * (Kartend-jkty9). That is the single definition of "a cover type"; do not
- * spell the list out a second time.
+ * (Kartend-jkty9). That is the single definition of "a cover type" for
+ * SUBDIRECTORY AUTO-DISCOVERY; do not spell the list out a second time.
+ *
+ * The MANUAL-link fold uses the narrower ItemArtworkStore::manualCoverTypes()
+ * (this list ∩ standard types): the scraper writes `item_artwork` rows for its
+ * non-standard cover variants (`box-3d`, `mixrbv1`, `mixrbv2`), and those
+ * bookkeeping rows must not outrank an auto-discovered front cover
+ * (Kartend-u67w0).
  */
 [[nodiscard]] const QStringList &coverSubdirPriority();
 
 /**
- * @brief The directory cascade a cached artwork lookup probes for one item:
- * @p artworkDirectory itself, then each typed cover subdir (`front/`, `box/`,
- * …) in coverSubdirPriority order.
+ * @brief The directory cascade an artwork lookup probes for one item, in
+ * priority order: the `front/` subdir, then @p artworkDirectory itself, then
+ * the remaining typed cover subdirs (`box/`, `box-3d/`, …) in
+ * coverSubdirPriority order (Kartend-u67w0 — a scraped front cover must beat
+ * the stale pre-b73642f8 root mirrors, which are often mixrbv composites,
+ * while a root-level file still beats every non-front fallback).
  *
  * This is the authoritative spelling of "where a cover for this item could
  * live" — findArtworkForFileCached walks exactly these, in this order, and

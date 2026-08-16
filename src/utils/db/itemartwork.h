@@ -49,6 +49,22 @@ inline constexpr const char *Logo = "logo";
 /// order is the canonical sidebar gallery display order.
 [[nodiscard]] const QStringList &standardTypes();
 
+/// The artwork types whose MANUAL link can supply an item's primary cover, in
+/// priority order: `ArtworkUtils::coverSubdirPriority()` restricted to
+/// standard types (`front`, `box`, `screenshot`, `title`, `fanart`,
+/// `marquee`).
+///
+/// Restricted on purpose (Kartend-u67w0): the scraper records an
+/// `item_artwork` row for every NON-standard image it downloads (`box-3d`,
+/// `mixrbv1`, `mixrbv2`, `wheel`, …) so the sidebar gallery can find those
+/// files. Those rows are bookkeeping, not user intent — letting them into the
+/// cover fold made a scraped `mixrbv` COMPOSITE outrank the item's real
+/// `front/` cover on every tile. Genuine hand-links (the links dialog, the
+/// Artwork Wizard) target standard types, so they keep beating auto-discovery.
+/// A non-standard file the user really wants as the tile face can be linked on
+/// `front` — that is the supported override.
+[[nodiscard]] const QStringList &manualCoverTypes();
+
 /// True when `artworkType` is one of the standard ids returned by
 /// `standardTypes()`. Comparison is case-sensitive — IDs are normalized to
 /// lowercase by convention.
@@ -113,10 +129,11 @@ loadAllForItem(QSqlDatabase &db, const QString &collectionUuid, const QString &p
 /// `buildArtworkPathMap` form of it) — empty when nothing matched.
 ///
 /// Precedence follows what the artwork docs promise and what the details pane
-/// already renders: a manual link WINS over auto-discovery. Cover types are
-/// consulted in `ArtworkUtils::coverSubdirPriority()` order, so a hand-linked
-/// `front` outranks a hand-linked `box`; a link on any other type (`logo`, a
-/// custom type) is gallery-only and never answers here.
+/// already renders: a manual link WINS over auto-discovery. Types are
+/// consulted in `manualCoverTypes()` order, so a hand-linked `front` outranks
+/// a hand-linked `box`; a link on any other type (`logo`, a custom type, and
+/// the scraper-written non-standard cover variants `box-3d` / `mixrbv1` /
+/// `mixrbv2` — see manualCoverTypes) is gallery-only and never answers here.
 ///
 /// EXISTENCE IS CHECKED, exactly as `resolveArtworkPath` checks it: the link
 /// is tilde-expanded and stat'd, and a link whose file has since been deleted
@@ -141,9 +158,11 @@ loadAllForItem(QSqlDatabase &db, const QString &collectionUuid, const QString &p
 ///
 /// Deliberately NOT scoped to a collection. `item_artwork` holds only rows
 /// somebody created — the user through the links dialog, the Artwork Wizard —
-/// plus the scraper's NON-standard types, and those are excluded here because
-/// the query asks only for the cover types (ArtworkUtils::coverSubdirPriority,
-/// the same list `resolveCoverPath` consults). Keys are absolute item paths and
+/// plus the scraper's NON-standard types, and those are excluded because the
+/// query asks only for `manualCoverTypes()` (the same list `resolveCoverPath`
+/// consults — restricted to STANDARD cover types precisely so the scraper's
+/// `box-3d` / `mixrbv*` bookkeeping rows stay out, Kartend-u67w0). Keys are
+/// absolute item paths and
 /// so are unique library-wide: scoping by collection uuid could only make the
 /// map smaller, never change an answer, and it would make the map a
 /// per-collection-switch rebuild instead of the once-per-edit rebuild it is.

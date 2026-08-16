@@ -40,7 +40,7 @@ private slots:
   void nonexistentDirectory_cachedAsEmpty();
   void baseNameLookup_doesNotDoubleStripDottedStems();
   void schedulePrewarm_queuesEvenWhenAWalkIsAlreadyInFlight();
-  void artworkLookupDirectories_listsRootThenTypedCoverSubdirs();
+  void artworkLookupDirectories_listsFrontThenRootThenSubdirs();
   void areDirectoriesCached_falseWhileAnyCascadeEntryIsCold();
 
   void discMarkedArtwork_answersToTheReleaseBaseTitle();
@@ -224,20 +224,21 @@ void TestDirectoryCache::schedulePrewarm_queuesEvenWhenAWalkIsAlreadyInFlight() 
 // place that spelling lives, so callers reasoning about the lookup as a whole
 // (is it warm? what should be prewarmed?) agree with what findCachedWithKeys
 // really probes.
-void TestDirectoryCache::artworkLookupDirectories_listsRootThenTypedCoverSubdirs() {
+void TestDirectoryCache::artworkLookupDirectories_listsFrontThenRootThenSubdirs() {
   QCOMPARE(ArtworkUtils::artworkLookupDirectories(QString()), QStringList());
 
   QTemporaryDir root;
   QVERIFY(root.isValid());
   const QStringList dirs = ArtworkUtils::artworkLookupDirectories(root.path());
 
-  // The flat root leads — it is probed first — and every entry after it is a
-  // distinct subdirectory of it.
-  QVERIFY(dirs.size() > 1);
-  QCOMPARE(dirs.first(), root.path());
-  QVERIFY(dirs.contains(QDir(root.path()).absoluteFilePath(QStringLiteral("front"))));
+  // `front/` leads (Kartend-u67w0 — the scraped front cover outranks a
+  // flat-root file), the root itself is second, and every other entry is a
+  // distinct subdirectory of the root.
+  QVERIFY(dirs.size() > 2);
+  QCOMPARE(dirs.first(), QDir(root.path()).absoluteFilePath(QStringLiteral("front")));
+  QCOMPARE(dirs.at(1), root.path());
   QCOMPARE(QSet<QString>(dirs.cbegin(), dirs.cend()).size(), dirs.size());
-  for (const QString &dir : dirs.mid(1)) {
+  for (const QString &dir : dirs) {
     QVERIFY(dir.startsWith(root.path()));
   }
 }
@@ -449,8 +450,8 @@ void TestDirectoryCache::pathMap_agreesWithThePerItemCascade() {
   writeFile(root.filePath(QStringLiteral("Named.bin.png")));
   writeFile(root.filePath(QStringLiteral("Recital (Disc 2).png")));
   writeFile(root.filePath(QStringLiteral("Recital (Disc 1).png")));
-  // Both a flat-root cover AND a typed-subdir one: the flat root must win in
-  // the map exactly as it does in the cascade.
+  // Both a flat-root cover AND a front/ one: `front/` must win in the map
+  // exactly as it does in the cascade (Kartend-u67w0).
   writeFile(root.filePath(QStringLiteral("Both.png")));
   writeFile(root.filePath(QStringLiteral("front/Both.png")));
 
@@ -472,7 +473,7 @@ void TestDirectoryCache::pathMap_agreesWithThePerItemCascade() {
   }
   // Spot-check the two answers that are easy to get subtly wrong.
   QCOMPARE(map.value(ArtworkUtils::baseMatchKey(QStringLiteral("Both"))),
-           root.filePath(QStringLiteral("Both.png")));
+           root.filePath(QStringLiteral("front/Both.png")));
   QCOMPARE(map.value(ArtworkUtils::baseMatchKey(QStringLiteral("Recital"))),
            root.filePath(QStringLiteral("Recital (Disc 1).png")));
   QVERIFY(!map.contains(ArtworkUtils::baseMatchKey(QStringLiteral("Absent"))));

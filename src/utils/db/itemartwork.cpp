@@ -43,10 +43,11 @@ constexpr const char *DELETE_ONE_SQL =
     "WHERE collection_uuid = ? AND path = ? AND artwork_type = ?";
 
 /// Bulk manual-cover query (Kartend-1js9j). The artwork_type IN (...) list is
-/// filled from ArtworkUtils::coverSubdirPriority() at call time so the set of
-/// cover types stays defined in exactly one place; gallery-only rows (logo,
-/// the scraper's non-standard types) never reach the fold. ORDER BY path lets
-/// the fold stream one item at a time.
+/// filled from manualCoverTypes() at call time so the set of cover-capable
+/// manual types stays defined in exactly one place; gallery-only rows (logo,
+/// custom types, and the scraper's non-standard cover variants — see
+/// manualCoverTypes) never reach the fold. ORDER BY path lets the fold stream
+/// one item at a time.
 QString selectManualCoversSql(int coverTypeCount) {
   QString placeholders;
   placeholders.reserve(coverTypeCount * 2);
@@ -94,6 +95,23 @@ const QStringList &standardTypes() {
 
 bool isStandardType(const QString &artworkType) {
   return standardTypes().contains(artworkType);
+}
+
+const QStringList &manualCoverTypes() {
+  // coverSubdirPriority ∩ standardTypes, in coverSubdirPriority order — see
+  // the header for why the scraper-written non-standard cover variants
+  // (box-3d / mixrbv1 / mixrbv2) are excluded from the MANUAL fold while
+  // still participating in subdirectory auto-discovery (Kartend-u67w0).
+  static const QStringList types = [] {
+    QStringList filtered;
+    for (const QString &type : ArtworkUtils::coverSubdirPriority()) {
+      if (isStandardType(type)) {
+        filtered.append(type);
+      }
+    }
+    return filtered;
+  }();
+  return types;
 }
 
 QString standardTypeDisplayName(const QString &artworkType) {
@@ -299,10 +317,12 @@ QString resolveCoverPath(const QHash<QString, QString> &manualByType,
   // this item at all), and it must cost nothing beyond the branch — this runs
   // once per staged row on every scan.
   if (!manualByType.isEmpty()) {
-    // ArtworkUtils owns the definition of "a type that can supply a cover", so
-    // adding a cover subdir there automatically makes a manual link on it
-    // count. Types outside the list (logo, custom types) are gallery-only.
-    for (const QString &type : ArtworkUtils::coverSubdirPriority()) {
+    // manualCoverTypes owns the definition of "a type whose MANUAL link can
+    // supply the cover". Types outside the list (logo, custom types, the
+    // scraper's non-standard cover variants) are gallery-only here — even
+    // when a caller hands us an unfiltered row map, this walk is the gate
+    // (Kartend-u67w0: DatabaseManager's write-through passes every row).
+    for (const QString &type : manualCoverTypes()) {
       const QString link = manualByType.value(type).trimmed();
       if (link.isEmpty()) {
         continue;
@@ -325,7 +345,7 @@ ErrorUtils::Result<QHash<QString, QString>> loadManualCoverPaths(QSqlDatabase &d
                                  "ItemArtworkStore::loadManualCoverPaths");
   }
 
-  const QStringList &coverTypes = ArtworkUtils::coverSubdirPriority();
+  const QStringList &coverTypes = manualCoverTypes();
   QSqlQuery q(db);
   if (!q.prepare(selectManualCoversSql(static_cast<int>(coverTypes.size())))) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed,

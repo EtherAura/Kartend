@@ -66,19 +66,20 @@ void reportQueryFailure(const QString &what, const QSqlQuery &query) {
 /// Every per-item MANUAL artwork link in @p collectionUuid that could supply a
 /// cover, as item path -> (artwork_type -> manual_path).
 ///
-/// Read in ONE query rather than per staged row: `item_artwork` only holds rows
-/// the user created by hand, so this is empty for most libraries and a handful
-/// of rows for the rest — far cheaper than a correlated lookup per item, and it
-/// keeps the row loop below free of SQL. Types outside the cover cascade
-/// (`logo`, custom types) are filtered out in SQL so gallery-only links never
-/// reach resolveCoverPath.
+/// Read in ONE query rather than per staged row: cover-capable rows are the
+/// hand-linked few, so this is empty for most libraries and a handful of rows
+/// for the rest — far cheaper than a correlated lookup per item, and it keeps
+/// the row loop below free of SQL. Types outside manualCoverTypes (`logo`,
+/// custom types, and the scraper's non-standard cover variants like `mixrbv1`
+/// — Kartend-u67w0) are filtered out in SQL so gallery-only rows never reach
+/// resolveCoverPath.
 [[nodiscard]] QHash<QString, QHash<QString, QString>>
 loadManualCoverLinks(QSqlDatabase &db, const QString &collectionUuid) {
   QHash<QString, QHash<QString, QString>> byPath;
   if (collectionUuid.isEmpty()) {
     return byPath;
   }
-  const QStringList coverTypes = ArtworkUtils::coverSubdirPriority();
+  const QStringList coverTypes = ItemArtworkStore::manualCoverTypes();
   if (coverTypes.isEmpty()) {
     return byPath;
   }

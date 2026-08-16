@@ -66,6 +66,9 @@ QImage composeArtworkCard(const QImage &source, int targetWidthLogical, int targ
 // supply a cover are readable outside this TU — ItemArtworkStore needs exactly
 // this list to decide which MANUAL links count as a cover.
 const QStringList &coverSubdirPriority() {
+  // `front` MUST stay the first entry: artworkLookupDirectories splices it
+  // above the flat root (Kartend-u67w0), so position 0 doubles as "the one
+  // subdir that outranks a root-level file".
   static const QStringList kDirs = {
       QStringLiteral("front"),   QStringLiteral("box"),     QStringLiteral("box-3d"),
       QStringLiteral("mixrbv1"), QStringLiteral("mixrbv2"), QStringLiteral("screenshot"),
@@ -586,8 +589,9 @@ QHash<QString, QString> DirectoryCache::collectPositivePaths(const QStringList &
   {
     QReadLocker locker(&m_lock);
     // Pass 1 — exact names, in cascade order. `contains` is the priority rule:
-    // the first directory that carries a key keeps it, so the flat root
-    // outranks front/, which outranks box/, matching findCachedWithKeys.
+    // the first directory that carries a key keeps it, so front/ outranks the
+    // flat root, which outranks box/ (Kartend-u67w0), matching
+    // findCachedWithKeys.
     for (const QString &dir : directories) {
       const auto dirIt = m_cache.constFind(dir);
       if (dirIt == m_cache.constEnd()) {
@@ -651,8 +655,9 @@ QString searchWithName(const QDir &artworkDir, const QString &name, const QStrin
   return ExtensionUtils::findFileWithExtensions(artworkDir, name, extensions);
 }
 
-/// The disc-marked fallback pass over one item's whole lookup cascade — flat
-/// root first, then the typed cover subdirs in priority order (Kartend-knub1).
+/// The disc-marked fallback pass over one item's whole lookup cascade, in the
+/// shared cover-lookup order — `front/`, then the flat root, then the
+/// remaining typed subdirs (Kartend-knub1, order per Kartend-u67w0).
 ///
 /// Runs only after the caller's EXACT pass has missed every one of those
 /// directories, so an item's own art always outranks a disc's no matter which
@@ -662,15 +667,8 @@ QString findDiscFallbackCascade(const QString &baseName, const QString &artworkD
   if (baseName.isEmpty() || artworkDirectory.isEmpty()) {
     return {};
   }
-  QString result =
-      DirectoryCache::instance().findDiscFallbackInDirectory(baseName, artworkDirectory);
-  if (!result.isEmpty()) {
-    return result;
-  }
-  const QDir artRoot(artworkDirectory);
-  for (const QString &subdir : coverSubdirPriority()) {
-    result = DirectoryCache::instance().findDiscFallbackInDirectory(
-        baseName, artRoot.absoluteFilePath(subdir));
+  for (const QString &dir : artworkLookupDirectories(artworkDirectory)) {
+    const QString result = DirectoryCache::instance().findDiscFallbackInDirectory(baseName, dir);
     if (!result.isEmpty()) {
       return result;
     }
@@ -694,32 +692,22 @@ QString findArtworkForFile(const QString &fileName, const QString &artworkDirect
   const QString fullName = QFileInfo(fileName).fileName();
   const QStringList &bases = ExtensionUtils::imageBaseExtensions();
 
-  // Try baseName first, then fullName, at the flat artwork root.
-  // Scrapes no longer write a flat-root copy, but a user may still
-  // drop a cover there by hand, and pre-existing libraries keep the
-  // old mirror files — so the flat root stays the first lookup.
-  QString result = searchWithName(artworkDir, baseName, bases);
-  if (!result.isEmpty()) {
-    return result;
-  }
-  result = searchWithName(artworkDir, fullName, bases);
-  if (!result.isEmpty()) {
-    return result;
-  }
-  // Fallback: walk the typed cover subdirs in priority order
-  // (`front` → box → box-3d → … ). This is where scrapes now put
-  // the cover, and it also lets hand-dropped gallery art surface on
-  // the grid tile.
-  for (const QString &subdir : coverSubdirPriority()) {
-    QDir coverDir(artworkDir.absoluteFilePath(subdir));
-    if (!coverDir.exists()) {
+  // Walk the shared cover-lookup order (see artworkLookupDirectories):
+  // `front/` first — the scraped front cover always wins (Kartend-u67w0) —
+  // then the flat root, where hand-dropped covers and pre-b73642f8 mirror
+  // files live, then the remaining typed subdirs as fallbacks. Each
+  // directory probes baseName first, then fullName (art literally named
+  // "Title.iso.png" backing item "Title.iso").
+  for (const QString &dirPath : artworkLookupDirectories(artworkDirectory)) {
+    QDir dir(dirPath);
+    if (!dir.exists()) {
       continue;
     }
-    result = searchWithName(coverDir, baseName, bases);
+    QString result = searchWithName(dir, baseName, bases);
     if (!result.isEmpty()) {
       return result;
     }
-    result = searchWithName(coverDir, fullName, bases);
+    result = searchWithName(dir, fullName, bases);
     if (!result.isEmpty()) {
       return result;
     }
@@ -763,54 +751,36 @@ QString findCachedWithKeys(const QString &baseName, const QString &fullName,
     perfTimer.start();
   }
 
-  QString result = DirectoryCache::instance().findInDirectory(baseName, artworkDirectory);
-  if (!result.isEmpty()) {
-    if (lcPerfTrace().isDebugEnabled() && perfTimer.elapsed() > 2) {
-      qCDebug(lcPerfTrace) << "findArtworkForFileCached: ms=" << perfTimer.elapsed()
-                           << "dir=" << artworkDirectory;
-    }
-    return result;
-  }
-
-  // Try with full filename as fallback
-  if (fullName != baseName) {
-    result = DirectoryCache::instance().findInDirectory(fullName, artworkDirectory);
+  // Walk the shared cover-lookup order (see artworkLookupDirectories):
+  // `front/` first (Kartend-u67w0), then the flat root, then the remaining
+  // typed subdirs. Every directory goes through the same DirectoryCache so
+  // repeat hits stay cheap — including cached NEGATIVES (Kartend-bjrw1), so
+  // a sparsely-arted tile's whole-cascade sweep collapses to hash lookups on
+  // re-materialization.
+  QString result;
+  for (const QString &dir : artworkLookupDirectories(artworkDirectory)) {
+    result = DirectoryCache::instance().findInDirectory(baseName, dir);
     if (!result.isEmpty()) {
-      return result;
-    }
-  }
-
-  // Fall back to the typed cover subdirs in priority order
-  // (`front` → box → box-3d → … ) — scrapes write the cover there
-  // rather than at the flat root. Each subdir goes through the same
-  // DirectoryCache so repeat hits stay cheap — including cached NEGATIVES
-  // (Kartend-bjrw1), so a sparsely-arted tile's 9-subdir sweep collapses to
-  // hash lookups on re-materialization. The root QDir is resolved once per
-  // call instead of once per subdir (path normalization isn't free at
-  // per-tile-per-scroll frequency).
-  const QDir artRoot(artworkDirectory);
-  for (const QString &subdir : coverSubdirPriority()) {
-    const QString coverDir = artRoot.absoluteFilePath(subdir);
-    result = DirectoryCache::instance().findInDirectory(baseName, coverDir);
-    if (!result.isEmpty()) {
-      return result;
+      break;
     }
     if (fullName != baseName) {
-      result = DirectoryCache::instance().findInDirectory(fullName, coverDir);
+      result = DirectoryCache::instance().findInDirectory(fullName, dir);
       if (!result.isEmpty()) {
-        return result;
+        break;
       }
     }
   }
 
-  // Same last resort as findArtworkForFile: disc-marked art answering for the
-  // release title (Kartend-knub1). Pure hash lookups against listings the
-  // exact pass above has already warmed or queued.
-  result = findDiscFallbackCascade(baseName, artworkDirectory);
+  if (result.isEmpty()) {
+    // Same last resort as findArtworkForFile: disc-marked art answering for
+    // the release title (Kartend-knub1). Pure hash lookups against listings
+    // the exact pass above has already warmed or queued.
+    result = findDiscFallbackCascade(baseName, artworkDirectory);
+  }
 
   if (lcPerfTrace().isDebugEnabled() && perfTimer.elapsed() > 2) {
     qCDebug(lcPerfTrace) << "findArtworkForFileCached: ms=" << perfTimer.elapsed()
-                         << "dir=" << artworkDirectory << "(fallback)";
+                         << "dir=" << artworkDirectory;
   }
   return result;
 }
@@ -820,12 +790,26 @@ QStringList artworkLookupDirectories(const QString &artworkDirectory) {
   if (artworkDirectory.isEmpty()) {
     return {};
   }
+  // THE cover-lookup order — every cascade (findArtworkForFile, the cached
+  // twin, the disc fallback, collectPositivePaths' first-hit-wins fold) walks
+  // this exact sequence: `front/` first, THEN the flat root, then the
+  // remaining typed subdirs (Kartend-u67w0).
+  //
+  // front-before-root is deliberate: scrapes before the flat-root mirror was
+  // retired (b73642f8) copied their best-available cover to the root, and for
+  // items that had no box-2D at the time that mirror is a mixrbv COMPOSITE.
+  // Root-first froze those stale mirrors as the tile forever, even after a
+  // later scrape filled `front/`. Root-before-everything-else is equally
+  // deliberate: a cover the user drops at the root by hand must still beat
+  // every non-front fallback (box, mix, screenshot, …).
   QStringList directories;
-  directories.reserve(1 + coverSubdirPriority().size());
-  directories.append(artworkDirectory);
+  const QStringList &subdirs = coverSubdirPriority();
+  directories.reserve(1 + subdirs.size());
   const QDir artRoot(artworkDirectory);
-  for (const QString &subdir : coverSubdirPriority()) {
-    directories.append(artRoot.absoluteFilePath(subdir));
+  directories.append(artRoot.absoluteFilePath(subdirs.first()));
+  directories.append(artworkDirectory);
+  for (qsizetype i = 1; i < subdirs.size(); ++i) {
+    directories.append(artRoot.absoluteFilePath(subdirs.at(i)));
   }
   return directories;
 }
