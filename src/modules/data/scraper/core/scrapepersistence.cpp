@@ -198,9 +198,42 @@ QString mergeCustomFields(const QString &existingJson, const QHash<QString, QStr
 
 } // namespace
 
+QSet<QString> handLinkedArtworkTypes(IDatabaseManager *databaseManager,
+                                     const QString &collectionUuid, const QString &sourcePath,
+                                     const QString &artworkDirectory) {
+  QSet<QString> protectedTypes;
+  if (!databaseManager || collectionUuid.isEmpty() || sourcePath.isEmpty()) {
+    return protectedTypes;
+  }
+  const QDir artRoot(artworkDirectory);
+  for (const auto &row : databaseManager->loadItemArtwork(collectionUuid, sourcePath)) {
+    if (row.artworkType.isEmpty() || row.manualPath.isEmpty()) {
+      continue;
+    }
+    // Same rule resolveCoverPath uses to decide a link still counts: the file
+    // has to be there. A link whose image the user deleted protects nothing.
+    if (!QFileInfo::exists(row.manualPath)) {
+      continue;
+    }
+    // Inside the directory this scrape writes into, so it is the scrape's own
+    // previous output rather than a hand-picked file — see the header for why
+    // presence of a row cannot decide this on its own.
+    if (!artworkDirectory.isEmpty()) {
+      const QString owned = QDir::cleanPath(artRoot.absoluteFilePath(row.artworkType));
+      const QString linked = QDir::cleanPath(QFileInfo(row.manualPath).absolutePath());
+      if (linked == owned) {
+        continue;
+      }
+    }
+    protectedTypes.insert(row.artworkType);
+  }
+  return protectedTypes;
+}
+
 MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString &baseName,
                                  const QList<PendingMediaWrite> &media, RescrapeMode rescrapeMode,
-                                 const std::shared_ptr<std::atomic<bool>> &cancelToken) {
+                                 const std::shared_ptr<std::atomic<bool>> &cancelToken,
+                                 const QSet<QString> &protectedTypes) {
   MediaWriteResult result;
   // Per-asset re-scrape gate. Returns true if the destFile should be
   // written; false if the existing file already satisfies the policy.
@@ -288,6 +321,24 @@ MediaWriteResult writeMediaFiles(const QString &artworkDirectory, const QString 
       if (write.bytes.isEmpty() || write.asset.type.isEmpty()) {
         ++result.mediaSkipped;
         recordFailure(QStringLiteral("%1: empty bytes or type").arg(write.asset.type));
+        continue;
+      }
+      // A cover the user linked by hand outranks a scraped one, in EVERY
+      // rescrape mode — Overwrite included, which is the default and so the
+      // mode nearly every scrape actually runs in (Kartend-yibgw). Checked
+      // ahead of the rescrape gate because that gate keys on the destination
+      // file, and a link usually points somewhere else entirely: by the time
+      // evaluateAsset saw "no file there", the user's choice was already lost
+      // for any type whose row this write would then replace.
+      if (protectedTypes.contains(write.asset.type)) {
+        // A benign policy skip, exactly like the rescrape-gate ones below:
+        // firstFailures is the human-readable reason channel, writeFailures is
+        // for genuine I/O failures the batch summary counts. This is not one.
+        ++result.mediaSkipped;
+        if (result.firstFailures.size() < kMaxReportedFailures) {
+          result.firstFailures.append(
+              QStringLiteral("%1: kept the cover you linked by hand").arg(write.asset.type));
+        }
         continue;
       }
       const MediaKind kind = kindForType(write.asset.type);
@@ -625,7 +676,9 @@ ApplyResult applyScrapedItem(IDatabaseManager *databaseManager, const QString &c
   // split (the right-click single-item path + the test suite).
   // BatchScrapeRunner uses the underlying primitives directly so the
   // file-I/O phase can run on a worker thread.
-  const MediaWriteResult writes = writeMediaFiles(artworkDirectory, baseName, media, rescrapeMode);
+  const MediaWriteResult writes = writeMediaFiles(
+      artworkDirectory, baseName, media, rescrapeMode, /*cancelToken=*/{},
+      handLinkedArtworkTypes(databaseManager, collectionUuid, sourcePath, artworkDirectory));
   const bool sidecarWritten = writeMetadataSidecar(artworkDirectory, baseName, scraped,
                                                    rescrapeMode) == SidecarWriteOutcome::Written;
   ApplyResult result;

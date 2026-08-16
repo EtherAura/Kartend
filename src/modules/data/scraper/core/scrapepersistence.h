@@ -7,6 +7,7 @@
 #include <QByteArray>
 #include <QList>
 #include <QPair>
+#include <QSet>
 #include <QString>
 
 #include "errorutils.h"
@@ -170,11 +171,39 @@ struct MediaWriteResult {
 /// assets so a cancelled/destructing owner stops the write fan-out
 /// promptly instead of finishing every remaining multi-MB asset; the
 /// partial result reflects only what was written.
+///
+/// @p protectedTypes names artwork types the user has hand-linked for
+/// this item (see handLinkedArtworkTypes). Assets of those types are
+/// skipped in EVERY rescrape mode, RescrapeMode::Overwrite included —
+/// a hand-picked cover outranks auto-discovery everywhere else in
+/// Kartend, and a scrape is auto-discovery (Kartend-yibgw). Passed in
+/// rather than read here because this function must stay free of any
+/// QSqlDatabase to remain worker-thread safe.
 [[nodiscard]] MediaWriteResult
 writeMediaFiles(const QString &artworkDirectory, const QString &baseName,
                 const QList<PendingMediaWrite> &media,
                 RescrapeMode rescrapeMode = RescrapeMode::Overwrite,
-                const std::shared_ptr<std::atomic<bool>> &cancelToken = {});
+                const std::shared_ptr<std::atomic<bool>> &cancelToken = {},
+                const QSet<QString> &protectedTypes = {});
+
+/// The artwork types this item has a HAND-LINKED cover for, which a scrape
+/// must not overwrite (Kartend-yibgw).
+///
+/// A row alone does not prove a hand link: the scrape writes `item_artwork`
+/// rows itself for non-standard types, so a re-scrape would otherwise be
+/// blocked forever by its own previous output. A row counts as hand-linked
+/// when its `manual_path` still exists on disk AND points OUTSIDE
+/// `{artworkDirectory}/{type}/` — the directory the scrape owns and writes
+/// into. A user who linked a file sitting in that directory loses nothing by
+/// it being refreshed: auto-discovery finds the same file either way.
+///
+/// Returns an empty set when @p databaseManager is null. MAIN-THREAD ONLY —
+/// it reads the database; call it before dispatching the file-I/O phase to a
+/// worker and pass the result down.
+[[nodiscard]] QSet<QString> handLinkedArtworkTypes(IDatabaseManager *databaseManager,
+                                                   const QString &collectionUuid,
+                                                   const QString &sourcePath,
+                                                   const QString &artworkDirectory);
 
 /// Outcome of writeMetadataSidecar — distinguishes a deliberate skip (empty
 /// scrape, or a FillMissing run that found an existing sidecar) from a real

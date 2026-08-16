@@ -121,7 +121,7 @@ when an item already has metadata:
 
 | Mode | What it does | When to use |
 |------|--------------|-------------|
-| **Overwrite** | Always replace existing files and DB rows | Migrating from one provider to another |
+| **Overwrite** | Always replace existing files and DB rows — except artwork types you linked by hand, which are never replaced | Migrating from one provider to another |
 | **Fill missing** *(default)* | Only download / write fields and assets that are missing | Day-to-day catalog top-ups |
 | **Update changed** | Download every field anyway, write only if bytes differ | "I think the source data changed but I want to compare first" — intentionally the slowest mode |
 | **Skip** | Skip the whole item if any metadata exists | Strictly additive scrapes |
@@ -148,11 +148,13 @@ A successful scrape can produce:
 - **Metadata sidecar** — alongside the database row, a readable JSON
   copy is written to `<artworkDirectory>/metadata/<base name>.json`.
 
-> **Manual artwork links are not protected from a scrape.** There is no
-> check that skips an asset because you linked one by hand — whether an
-> existing file is replaced depends only on the re-scrape mode. Under
-> **Overwrite** it is replaced. If you have hand-curated covers, use
-> **Fill missing** rather than relying on the link to defend them.
+> **A cover you linked by hand is left alone.** If an item has a manual
+> link for an artwork type — set through **Item Artwork Links** or the
+> **Assign Missing Artwork…** wizard — a scrape skips that type and
+> counts it as skipped, in every re-scrape mode including **Overwrite**.
+> Other types on the same item still scrape normally. The link stops
+> counting once the image it points at is gone, so deleting that file
+> (or clearing the link) lets the next scrape fill the type again.
 
 ## Performance and pacing
 
@@ -250,7 +252,7 @@ metadata yourself.
 | "Scrape stopped — quota exhausted" (ScreenScraper) | Daily quota hit | Wait for the reset, or add user credentials to raise the cap |
 | Items skipped silently in batch | `Fill missing` or `Skip` mode is honoring the **Skip recent** window | Lower `skipRecentScrapeDays`, or switch to `Overwrite` |
 | Wrong title matched for a ROM | DAT lookup not configured or hash didn't match the DAT entry | Add a more complete DAT file, or override the title with [Item Metadata](Item-Metadata.md) |
-| Tile still shows the old cover after a scrape | A manual artwork link takes priority over auto-discovery when painting the tile, even though the scrape did replace the file on disk | Clear the link in [Item Artwork Links](Artwork.md) |
+| Tile still shows the old cover after a scrape | A cover you linked by hand wins over a scraped one — the scrape leaves that artwork type alone and reports it as skipped | Clear the link in [Item Artwork Links](Artwork.md), then scrape again |
 | `Resume / Discard` prompt every launch | A previous scrape didn't finish | Pick Discard once to clear the snapshot |
 
 ## Where to next
