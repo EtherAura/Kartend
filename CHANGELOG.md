@@ -689,6 +689,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the tile. The filter only ever looked at the top of the artwork folder, so
   anything filed deeper counted as missing. It now looks in the same folder
   the tile does (Kartend-7f76f).
+- **A scrape no longer replaces a cover you chose yourself.** The scraper
+  documentation said a cover you had linked by hand was left alone; nothing
+  actually checked, so a scrape overwrote it — and the mode that overwrites
+  is the one most scrapes run in. If an item has a cover you linked through
+  **Item Artwork Links** or the **Assign Missing Artwork…** wizard, a scrape
+  now skips that artwork type and says so in its summary, whichever re-scrape
+  mode you picked. Other artwork types on the same item still scrape as
+  before, and re-scraping something the scraper itself fetched earlier is
+  unaffected. The link stops protecting the type once the image it points at
+  is gone (Kartend-yibgw).
 
 ## [0.0.18] - 2026-07-29
 
