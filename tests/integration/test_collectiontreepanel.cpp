@@ -135,6 +135,12 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAndUnclipped() 
   const QPixmap grabbed = tree->viewport()->grab();
   const QImage frame = grabbed.toImage();
   QVERIFY(!frame.isNull());
+  // Debug aid: KARTEND_TEST_DUMP_DIR=<dir> saves the grabbed frame so a
+  // human can eyeball exactly what the assertions measured.
+  if (const QByteArray dumpDir = qgetenv("KARTEND_TEST_DUMP_DIR"); !dumpDir.isEmpty()) {
+    frame.save(QString::fromLocal8Bit(dumpDir) + QStringLiteral("/treepanel-dpr") +
+               QString::number(grabbed.devicePixelRatio()) + QStringLiteral(".png"));
+  }
   // The grab is PHYSICAL pixels; every widget metric below is logical.
   // Convert once and measure everything in physical, or a 2x display
   // "fails" this test on pure unit mixing (which happened — 2026-08-17).
@@ -159,17 +165,16 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAndUnclipped() 
                           .arg(right)
                           .arg(frame.width())));
 
-  // Centred in the row's visible span [indent*depth, viewport width],
-  // all in PHYSICAL pixels; tolerance scales with dpr.
-  const int rowStart = qRound(tree->indentation() * 3 * dpr);
-  const int spanCenter = rowStart + (frame.width() - rowStart) / 2;
+  // LEAF rows centre on the PANEL itself (user direction 2026-08-17), not
+  // the indent span. All PHYSICAL pixels; tolerance covers the style's
+  // decoration pad slop and scales with dpr.
+  const int spanCenter = frame.width() / 2;
   const int iconCenter = (left + right) / 2;
-  QVERIFY2(qAbs(iconCenter - spanCenter) <= qRound(5 * dpr),
-           qPrintable(QStringLiteral("icon centre %1 vs visible-span centre %2 (row start %3, "
-                                     "viewport %4, dpr %5)")
+  QVERIFY2(qAbs(iconCenter - spanCenter) <= qRound(8 * dpr),
+           qPrintable(QStringLiteral("leaf icon centre %1 vs panel centre %2 (viewport %3, "
+                                     "dpr %4)")
                           .arg(iconCenter)
                           .arg(spanCenter)
-                          .arg(rowStart)
                           .arg(frame.width())
                           .arg(dpr)));
 

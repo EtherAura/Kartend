@@ -10,7 +10,9 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QRegularExpression>
+#include <QApplication>
 #include <QStyle>
+#include <QStyledItemDelegate>
 #include <QStyleOption>
 #include <QTimer>
 #include <QToolButton>
@@ -37,6 +39,9 @@ constexpr int kRoleExpansionKey = Qt::UserRole + 1; // QString; UUID or reserved
 constexpr int kRoleParentCollection = Qt::UserRole + 2; // int; -1 for roots/playlists
 constexpr int kRoleName = Qt::UserRole + 3; // QString; cfg.name (text may be blank in icons-only)
 constexpr int kRoleIsCategory = Qt::UserRole + 4; // bool; row has children (incl. group header)
+constexpr int kRoleBakedPixmap = Qt::UserRole + 5; // QPixmap; painted by TreeIconDelegate
+/// Symmetric horizontal margin the icons keep from the panel edges.
+constexpr int kPanelChrome = 8;
 
 /// Expansion-memory key for the synthetic Playlists group row. UUIDs are
 /// derived from name+mediaDirectory, so a literal that can't collide.
@@ -47,7 +52,52 @@ const QString kPlaylistsGroupKey = QStringLiteral("::playlists-group::");
 /// exceeds the reference may exceed the configured icon height, up to the
 /// boost cap — rows are non-uniform, so only those rows grow.
 constexpr qreal kThinAspectRef = 3.0;
-constexpr qreal kThinHeightBoost = 1.6;
+constexpr qreal kThinHeightBoost = 2.2;
+
+/// Paints the baked row pixmap directly in viewport coordinates — TRUE
+/// panel centring at any depth. Qt's decoration mechanism cannot do this:
+/// the decoration never paints left of the row's indent, so a
+/// panel-centred logo on an indented row is unreachable through QIcon
+/// (chased through three geometry rounds on 2026-08-17 before this
+/// delegate ended it). Rows without a baked pixmap (text fallback) use the
+/// default paint, which honours the category font/band roles.
+class TreeIconDelegate : public QStyledItemDelegate {
+public:
+  using QStyledItemDelegate::QStyledItemDelegate;
+
+protected:
+  void paint(QPainter *painter, const QStyleOptionViewItem &option,
+             const QModelIndex &index) const override {
+    const QPixmap pm = index.data(kRoleBakedPixmap).value<QPixmap>();
+    if (pm.isNull()) {
+      QStyledItemDelegate::paint(painter, option, index);
+      return;
+    }
+    QStyleOptionViewItem opt = option;
+    initStyleOption(&opt, index);
+    opt.icon = QIcon();
+    opt.text.clear();
+    const QWidget *widget = option.widget;
+    QStyle *style = widget ? widget->style() : QApplication::style();
+    style->drawControl(QStyle::CE_ItemViewItem, &opt, painter, widget);
+
+    const qreal pmDpr = pm.devicePixelRatio() > 0 ? pm.devicePixelRatio() : 1.0;
+    const int w = qMax(1, qRound(pm.width() / pmDpr));
+    const int h = qMax(1, qRound(pm.height() / pmDpr));
+    // The single column stretches to the viewport, so the item rect's right
+    // edge IS the panel's inner width.
+    const int panelRight = option.rect.right() + 1;
+    int x = (panelRight - w) / 2; // panel-centred
+    if (index.data(kRoleIsCategory).toBool()) {
+      // Category rows own a chevron in their branch cell — never under it.
+      x = qMax(option.rect.left(), x);
+    }
+    x = qMin(x, panelRight - kPanelChrome - w);
+    x = qMax(x, kPanelChrome);
+    const int y = option.rect.top() + (option.rect.height() - h) / 2;
+    painter->drawPixmap(QRect(x, y, w, h), pm);
+  }
+};
 
 /// QTreeWidget whose branch column can hide the connector lines while
 /// keeping the expand chevrons (user request 2026-08-17: tree lines off by
@@ -319,6 +369,7 @@ void CollectionTreeController::setupPanel() {
   if (m_tree->viewport()) {
     m_tree->viewport()->installEventFilter(this);
   }
+  m_tree->setItemDelegateForColumn(0, new TreeIconDelegate(m_tree));
   layout->addWidget(m_tree, /*stretch=*/1);
 
   connect(m_tree, &QTreeWidget::itemActivated, this,
@@ -694,24 +745,17 @@ void CollectionTreeController::refreshIcons() {
       m_tree->viewport() && m_tree->viewport()->width() > 0 ? m_tree->viewport()->width()
                                                             : m_bakedPanelWidth - 29;
   // HARD INVARIANT (user directive 2026-08-17): no icon may be wider than
-  // the sidebar. The per-row CANVAS is clamped to the space that physically
-  // exists right of the row's indentation, so by construction its right
-  // edge lands 8px inside the viewport at any depth; the logo gets a
-  // further 12px breathing margin inside it. The view's iconSize carries
-  // the LARGEST (depth-1) canvas so Qt never scales a canvas to fit.
-  const int chrome = 8;
+  // the sidebar. Leaf budgets are viewport minus the symmetric
+  // kPanelChrome margins; category budgets additionally stop short of the
+  // chevron cell plus this breathing margin. TreeIconDelegate clamps the
+  // painted position to the same margins.
   const int breathing = 12;
   m_bakedViewportWidth = viewportWidth;
-  // Height carries the thin-logo boost headroom so Qt never downscales a
-  // boosted canvas; rows without boost stay at their canvas height
-  // (non-uniform rows).
-  m_tree->setIconSize(QSize(qMax(24, viewportWidth - chrome - indentation),
-                            qRound(m_iconSize * kThinHeightBoost)));
   struct BakedIcon {
-    QIcon icon;
+    QPixmap pixmap; // painted by TreeIconDelegate in viewport coordinates
     int logicalHeight = 0;
   };
-  QHash<QString, BakedIcon> cache; // path|visibleW — style/size/tint are uniform per pass
+  QHash<QString, BakedIcon> cache; // path|maxW — style/size/tint are uniform per pass
 
   for (QTreeWidgetItemIterator it(m_tree); *it; ++it) {
     QTreeWidgetItem *item = *it;
@@ -737,20 +781,14 @@ void CollectionTreeController::refreshIcons() {
     const QString name = collections.at(index).name;
     int depth = 1; // rootIsDecorated indents even top-level rows one unit
     for (QTreeWidgetItem *p = item->parent(); p; p = p->parent()) ++depth;
-    // The decoration rect is a FIXED width (the view iconSize, sized for
-    // depth 1) and Qt centres whatever pixmap it gets inside it. A
-    // per-depth NARROWER canvas therefore gets re-centred by Qt — shifted
-    // right by half the depth difference, past the panel edge (field
-    // report 2026-08-17: clipped AND off-centre on indented rows). So:
-    // every canvas is exactly decoration-width (canvas == rect, no Qt
-    // offset), and the logo is placed manually, centred within the row's
-    // VISIBLE span — from the row's indent to the viewport edge. The
-    // canvas tail past the visible span stays transparent and clips
-    // invisibly.
-    const int decoWidth = qMax(24, viewportWidth - chrome - indentation);
-    const int canvasDevW = qMax(1, qRound(decoWidth * dpr));
-    const int visibleWidth = qMax(24, viewportWidth - chrome - indentation * depth);
-    const int maxWidth = qMax(24, visibleWidth - breathing);
+    // Width budget: LEAF rows have no chevron, so the indent column is
+    // dead space — they may span the whole panel minus the symmetric
+    // chrome margins (TreeIconDelegate centres them on the panel).
+    // Category rows stop short of their chevron cell.
+    const bool categoryRow = item->data(0, kRoleIsCategory).toBool();
+    const int maxWidth =
+        categoryRow ? qMax(24, viewportWidth - kPanelChrome - indentation * depth - breathing)
+                    : qMax(24, viewportWidth - 2 * kPanelChrome);
 
     QString parentArtworkDir;
     const int parentIndex = item->data(0, kRoleParentCollection).toInt();
@@ -761,6 +799,7 @@ void CollectionTreeController::refreshIcons() {
     QString path = CollectionUtils::resolveCollectionTileArtwork(&collections, index, name,
                                                                  parentArtworkDir);
     if (path.isEmpty()) {
+      item->setData(0, kRoleBakedPixmap, QVariant());
       item->setIcon(0, QIcon());
       item->setText(0, name);
       item->setToolTip(0, QString());
@@ -779,8 +818,7 @@ void CollectionTreeController::refreshIcons() {
       if (!sibling.isEmpty()) path = sibling;
     }
 
-    const QString cacheKey =
-        path + QLatin1Char('|') + QString::number(visibleWidth);
+    const QString cacheKey = path + QLatin1Char('|') + QString::number(maxWidth);
     auto cached = cache.find(cacheKey);
     if (cached == cache.end()) {
       QPixmap pm;
@@ -864,56 +902,41 @@ void CollectionTreeController::refreshIcons() {
       }
       if (!pm.isNull() && m_tree) {
         pm = ensureContrastAgainst(pm, m_tree->palette().color(QPalette::Base), dpr);
-        // The halo pads by 2px; shrink back into the canvas box rather than
-        // letting the compose step clip it (user: "i just dont want anything
+        // The halo pads by 2px; shrink back inside the budget rather than
+        // letting the paint clip it (user: "i just dont want anything
         // cropped").
         const int maxDevH = qRound(m_iconSize * kThinHeightBoost * dpr);
         if (pm.height() > maxDevH) {
           pm = pm.scaledToHeight(maxDevH, Qt::SmoothTransformation);
         }
-        if (pm.width() > canvasDevW) {
-          pm = pm.scaledToWidth(canvasDevW, Qt::SmoothTransformation);
+        if (pm.width() > devWidth) {
+          pm = pm.scaledToWidth(devWidth, Qt::SmoothTransformation);
         }
-      }
-      if (!pm.isNull()) {
-        // Decoration-width canvas; logo centred in the VISIBLE span (see
-        // the depth/geometry comment above).
-        QPixmap canvas(canvasDevW, qMax(qRound(m_iconSize * dpr), pm.height()));
-        canvas.fill(Qt::transparent);
-        {
-          QPainter painter(&canvas);
-          const int visibleDevW = qMin(canvas.width(), qRound(visibleWidth * dpr));
-          painter.drawPixmap(qMax(0, (visibleDevW - pm.width()) / 2),
-                             (canvas.height() - pm.height()) / 2, pm);
-        }
-        canvas.setDevicePixelRatio(dpr);
-        pm = canvas;
       }
       BakedIcon baked;
       if (!pm.isNull()) {
-        baked.icon = QIcon(pm);
+        pm.setDevicePixelRatio(dpr);
+        baked.pixmap = pm;
         baked.logicalHeight = qMax(1, qRound(pm.height() / dpr));
       }
       cached = cache.insert(cacheKey, baked);
     }
 
-    const QIcon &icon = cached.value().icon;
-    item->setIcon(0, icon);
-    // Explicit per-row height (field report 2026-08-17, "continued
-    // failure" screenshot): the view iconSize HEIGHT carries the 1.6x
-    // boost headroom, and without a size hint Qt hands that full
-    // decoration height to EVERY row — unboosted rows ballooned, the
-    // list overflowed into a scrollbar, and the panel read as sparse
-    // drift. Each row now hugs its own icon plus a 4px breathing gap;
-    // boosted rows are taller, square rows stay tight.
-    if (!icon.isNull()) {
+    const QPixmap &baked = cached.value().pixmap;
+    item->setIcon(0, QIcon()); // TreeIconDelegate paints; no decoration
+    item->setData(0, kRoleBakedPixmap, baked.isNull() ? QVariant() : QVariant(baked));
+    // Per-row height hugs the baked pixmap (+4px breathing): boosted
+    // wordmark rows are taller, square rows stay tight — the view-wide
+    // decoration height must never set row heights again (2026-08-17,
+    // "continued failure": every row ballooned to the boost headroom).
+    if (!baked.isNull()) {
       item->setSizeHint(0, QSize(0, cached.value().logicalHeight + 4));
     } else {
       item->setSizeHint(0, QSize());
     }
     // Icons-only mode: the name moves to the tooltip. Rows whose icon did
     // NOT resolve keep their text — a blank row would be unusable.
-    if (!icon.isNull() && m_iconsOnly) {
+    if (!baked.isNull() && m_iconsOnly) {
       item->setText(0, QString());
       item->setToolTip(0, name);
     } else {
