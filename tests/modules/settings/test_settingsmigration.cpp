@@ -36,6 +36,7 @@ private slots:
   void legacyIni_invokesV0ToV1Migration();
   void currentVersionIni_doesNotInvokeAnyMigration();
   void misfiledSchemaIni_recognisedViaScraperOptionsFallback();
+  void v2Ini_iconStyleNormalBecomesTinted_deliberateChoiceKept();
 
 private:
   void installFixture(const QString &fixtureName);
@@ -183,6 +184,25 @@ void TestSettingsMigration::currentVersionIni_doesNotInvokeAnyMigration() {
                           .arg(capturedMigrationMessages.join(QStringLiteral(" | ")))));
   QCOMPARE(settings.input.rememberSelection, true);
   QCOMPARE(settings.media.pixmapCacheSizeMB, 64);
+}
+
+void TestSettingsMigration::v2Ini_iconStyleNormalBecomesTinted_deliberateChoiceKept() {
+  installFixture(QStringLiteral("v2_iconstyle.ini"));
+
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections;
+  mgr.loadCollections(collections);
+  QCOMPARE(collections.size(), 3);
+
+  QHash<QString, TreeIconStyle> byName;
+  for (const CollectionConfig &cfg : collections) {
+    byName[cfg.name] = cfg.collectionTree.treeIconStyle;
+  }
+  // The old 'normal' default and a bare section both land on tinted; the
+  // deliberate monochrome choice survives.
+  QCOMPARE(byName.value(QStringLiteral("NormalCol")), TreeIconStyle::Tinted);
+  QCOMPARE(byName.value(QStringLiteral("BareCol")), TreeIconStyle::Tinted);
+  QCOMPARE(byName.value(QStringLiteral("MonoCol")), TreeIconStyle::MonochromeDark);
 }
 
 void TestSettingsMigration::misfiledSchemaIni_recognisedViaScraperOptionsFallback() {

@@ -325,7 +325,7 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   // Kartend-ob1c9: visibility + dock side survive load→save→load, and a
   // position outside the tree's left/right vocabulary (including the
   // details pane's "top"/"bottom") clamps to left instead of importing.
-  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=3\n\n"
                                 "[TreeCol]\n"
                                 "name=TreeCol\n"
                                 "mediaDirectory=/tmp/media\n"
@@ -349,7 +349,7 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   QVERIFY(reloaded[0].collectionTree.treeVisible);
   QCOMPARE(reloaded[0].collectionTree.treePosition, DetailsPanePosition::Left);
 
-  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=3\n\n"
                                 "[TreeCol]\n"
                                 "name=TreeCol\n"
                                 "mediaDirectory=/tmp/media\n"
@@ -368,7 +368,7 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   // defaults, and out-of-range values clamp to the struct bounds instead of
   // importing a collapsed or runaway panel.
   QCOMPARE(clamped[0].collectionTree.treeWidth, CollectionTreeSettings{}.treeWidth);
-  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=3\n\n"
                                 "[TreeCol]\n"
                                 "name=TreeCol\n"
                                 "mediaDirectory=/tmp/media\n"
@@ -380,7 +380,7 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   QList<CollectionConfig> widthReloaded;
   mgr.loadCollections(widthReloaded);
   QCOMPARE(widthReloaded[0].collectionTree.treeWidth, 320);
-  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=3\n\n"
                                 "[TreeCol]\n"
                                 "name=TreeCol\n"
                                 "mediaDirectory=/tmp/media\n"
@@ -406,7 +406,7 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
 
   // Icon style + tint (user request 2026-08-17): round-trip, unknown style
   // clamps to normal, absent tint reads empty (= accent default).
-  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=3\n\n"
                                 "[TreeCol]\n"
                                 "name=TreeCol\n"
                                 "mediaDirectory=/tmp/media\n"
@@ -421,7 +421,7 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   mgr.loadCollections(styledReloaded);
   QCOMPARE(styledReloaded[0].collectionTree.treeIconStyle, TreeIconStyle::Tinted);
   QCOMPARE(styledReloaded[0].collectionTree.treeIconTintColor, QStringLiteral("#e0a030"));
-  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=3\n\n"
                                 "[TreeCol]\n"
                                 "name=TreeCol\n"
                                 "mediaDirectory=/tmp/media\n"
@@ -434,7 +434,7 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   // Kartend-auh7u: justification round-trips for BOTH panels, absent keys
   // default to below-toolbar, and an unknown value clamps instead of
   // importing.
-  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=3\n\n"
                                 "[TreeCol]\n"
                                 "name=TreeCol\n"
                                 "mediaDirectory=/tmp/media\n"
@@ -452,7 +452,7 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   QCOMPARE(justifiedReloaded[0].collectionTree.treeJustification, SidebarJustification::FullHeight);
   QCOMPARE(justifiedReloaded[0].sidebar.sidebarJustification, SidebarJustification::FullHeight);
 
-  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=3\n\n"
                                 "[TreeCol]\n"
                                 "name=TreeCol\n"
                                 "mediaDirectory=/tmp/media\n"

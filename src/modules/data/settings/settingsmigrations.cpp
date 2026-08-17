@@ -82,6 +82,33 @@ const std::vector<MigrationStep> &registeredSteps() {
           "v1->v2: navigation sidebar left+full-height, details pane "
           "right+below-toolbar, stamped onto every collection section",
       },
+      MigrationStep{
+          /*from=*/2,
+          /*to=*/3,
+          [](QSettings &settings) {
+            // User decision 2026-08-17 (evening): tinted icons are the tree's
+            // new default — colour logos clash with per-collection theming.
+            // Stamp 'tinted' onto every collection section still on the old
+            // 'normal' default (or with no style key); a DELIBERATE
+            // monochrome choice is preserved. Same name-key section
+            // recognition as v1->v2.
+            const QStringList groups = settings.childGroups();
+            for (const QString &group : groups) {
+              settings.beginGroup(group);
+              if (settings.contains(QStringLiteral("name"))) {
+                const QString style =
+                    settings.value(QStringLiteral("collectionTreeIconStyle")).toString();
+                if (style.isEmpty() || style == QStringLiteral("normal")) {
+                  settings.setValue(QStringLiteral("collectionTreeIconStyle"),
+                                    QStringLiteral("tinted"));
+                }
+              }
+              settings.endGroup();
+            }
+          },
+          "v2->v3: tree icon style 'tinted' stamped over the old 'normal' "
+          "default on every collection section",
+      },
   };
   return steps;
 }

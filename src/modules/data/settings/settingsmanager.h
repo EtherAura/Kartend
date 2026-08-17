@@ -94,7 +94,7 @@ private:
   // builds wrote it into [ScraperOptions]; load tolerates both). A higher value
   // than this build understands triggers a warn-on-load; a lower value drives
   // the migration dispatcher. See settingsmigrations.*.
-  static constexpr int kSettingsSchemaVersion = 2;
+  static constexpr int kSettingsSchemaVersion = 3;
 
   // Drives the migration dispatcher for @p s when its stored schemaVersion is
   // behind this build, stamping the reached version and fsyncing on change.

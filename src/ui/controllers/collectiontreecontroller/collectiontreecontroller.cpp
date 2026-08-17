@@ -306,11 +306,8 @@ void CollectionTreeController::setupPanel() {
   m_foldMarker->setVisible(false);
   connect(m_foldMarker, &QToolButton::clicked, this, [this]() { toggleVisible(); });
 
-  m_header = new QLabel(tr("Collections"), content);
-  m_header->setObjectName(QStringLiteral("collectionTreeHeader"));
-  m_header->setMargin(8);
-  layout->addWidget(m_header);
-
+  // No "Collections" header label (user request 2026-08-17: "we all know
+  // they are collections") — the tree starts at the panel's top edge.
   m_tree = new TreeBranchView(content);
   m_tree->setProperty("kartendShowLines", false);
   m_tree->setObjectName(QStringLiteral("collectionTreeWidget"));
@@ -321,6 +318,10 @@ void CollectionTreeController::setupPanel() {
   // heights genuinely vary. The uniform-height optimisation is for views
   // with thousands of rows; this tree holds a collection list.
   m_tree->setUniformRowHeights(false);
+  // Tight indent unit (user request 2026-08-17: the default unit tripled up
+  // by depth ate a third of the panel — with less fixed margin the per-depth
+  // steps read clearly).
+  m_tree->setIndentation(16);
   // iconSize is owned by refreshIcons: it must exactly match the baked
   // canvas width or Qt centres pixmaps in the wider decoration rect and the
   // alignment jitter returns (round 8). No other call site may set it.
@@ -760,16 +761,22 @@ void CollectionTreeController::refreshIcons() {
       const int devHeight = qMax(1, qRound(m_iconSize * dpr));
       const int devWidth = qMax(1, qRound(maxWidth * dpr));
       if (path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)) {
-        // SVG renders at exactly the box we need — no raster upscaling.
-        pm = QIcon(path).pixmap(QSize(devWidth, devHeight));
+        // Render at 2x the target box, then TRIM: the scraped monochrome
+        // SVGs park the art inside padded viewBoxes, so an untrimmed render
+        // floated the logo wherever the viewBox put it (field report
+        // 2026-08-17: "alignment is still off in mono/tinted mode" — the
+        // mono styles are exactly the ones that swap to SVG sources). The
+        // oversized render keeps the post-trim downscale sharp.
+        pm = QIcon(path).pixmap(QSize(devWidth * 2, devHeight * 2));
       }
       if (pm.isNull()) {
-        pm = trimTransparentBorders(QPixmap(path));
-        if (!pm.isNull()) {
-          pm = pm.scaledToHeight(devHeight, Qt::SmoothTransformation);
-          if (pm.width() > devWidth) {
-            pm = pm.scaledToWidth(devWidth, Qt::SmoothTransformation);
-          }
+        pm = QPixmap(path);
+      }
+      pm = trimTransparentBorders(pm);
+      if (!pm.isNull()) {
+        pm = pm.scaledToHeight(devHeight, Qt::SmoothTransformation);
+        if (pm.width() > devWidth) {
+          pm = pm.scaledToWidth(devWidth, Qt::SmoothTransformation);
         }
       }
       if (!pm.isNull() && m_iconStyle != TreeIconStyle::Normal) {

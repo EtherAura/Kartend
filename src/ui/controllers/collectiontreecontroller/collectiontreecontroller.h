@@ -12,7 +12,6 @@
 #include "icollectiontreecontroller.h"
 
 class QHBoxLayout;
-class QLabel;
 class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -159,7 +158,6 @@ private:
   std::function<void()> m_persistCollections;
 
   QWidget *m_panel = nullptr;
-  QLabel *m_header = nullptr;
   QTreeWidget *m_tree = nullptr;
   /// Drag-to-resize grip on the panel's INNER edge (the side facing the
   /// content view — right edge when docked Left, left edge when Right).

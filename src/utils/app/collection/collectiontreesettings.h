@@ -57,8 +57,11 @@ struct CollectionTreeSettings {
   static constexpr int kMaxIconSize = 64;
 
   /// Icon rendering style (user request 2026-08-17): as-is, a fixed
-  /// dark/light monochrome silhouette, or tinted.
-  TreeIconStyle treeIconStyle = TreeIconStyle::Normal;
+  /// dark/light monochrome silhouette, or tinted. Tinted (accent-coloured,
+  /// luminance-preserving) became the DEFAULT the same day — colour logos
+  /// clash with per-collection theming; the v2->v3 migration stamps it
+  /// onto existing sections still on 'normal'.
+  TreeIconStyle treeIconStyle = TreeIconStyle::Tinted;
   /// Tint colour for TreeIconStyle::Tinted, as a hex string. EMPTY means
   /// "the collection's accent colour" (the same primary colour the rest of
   /// the chrome re-themes with) — the requested default.
