@@ -5419,6 +5419,34 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
 </context>
 <context>
+    <name>KartLauncherTrust</name>
+    <message>
+        <location filename="../src/modules/data/kart/kartsuspiciouspaths.cpp" line="+184"/>
+        <source>Chosen by the bundle</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Outside the safe allowlist</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Shell or interpreter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Runs an inline command</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Shipped inside the bundle</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>KartMergeDialog</name>
     <message>
         <location filename="../src/ui/dialogs/kart/kartmergedialog.cpp" line="+25"/>
@@ -5618,12 +5646,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+2"/>
-        <location line="+31"/>
+        <location line="+66"/>
         <source>Launchers</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-29"/>
+        <location line="-64"/>
         <source>Bundled metadata</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5645,17 +5673,42 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+8"/>
-        <source>No validation issues — every required launcher resolves and no externally-controlled paths are flagged.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+9"/>
-        <source>Validation concerns — review each section. You can still proceed but missing launchers or suspicious paths may require attention after import.</source>
+        <location line="+12"/>
+        <source>No validation issues — this bundle carries no launcher configuration, every required launcher resolves and no externally-controlled paths are flagged.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+11"/>
+        <source>This bundle asks to run something unusual. Review the launcher configuration below before importing — a .kart chooses both the program and the arguments it is started with, so importing one you did not make is like running a program you were sent.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+53"/>
+        <source>Icon and placeholder paths outside the safe allowlist</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-44"/>
+        <source>Validation concerns — review each section. You can still proceed but missing launchers or suspicious paths may require attention after import.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>This bundle brings its own launcher configuration — the program it will start, and the arguments it will be started with. Check that it is what you expect before importing.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <source>Launcher configuration</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>What this bundle will run when you press Launch</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
         <source>Paths that do not resolve on this machine</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5665,12 +5718,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>Externally-controlled paths outside the safe allowlist</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+4"/>
+        <location line="+5"/>
         <source>Outside allowlist</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7354,17 +7402,17 @@ Will change:
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+229"/>
-        <source>Import Kart — suspicious paths</source>
+        <location line="+231"/>
+        <source>Import Kart — launcher configuration</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>This .kart references paths outside the safe-prefix allowlist (your home directory, /usr/bin, /usr/local/bin, /opt). Continuing will register these paths and they may be executed on a later Launch click.</source>
+        <source>This .kart brings its own launcher settings. Importing it registers the program below, along with the arguments it will be started with, and a later Launch click runs them. Import a bundle you did not make only if you trust its source as much as you would trust a program it sent you.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+6"/>
         <source>Import anyway</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8107,7 +8155,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../src/modules/input/scroll/coverflowcontroller.cpp" line="+517"/>
+        <location filename="../src/modules/input/scroll/coverflowcontroller.cpp" line="+542"/>
         <source>Cover</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11904,18 +11952,18 @@ Continue?</source>
 <context>
     <name>kart::KartManager</name>
     <message>
-        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+551"/>
+        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+591"/>
         <location line="+1"/>
         <location line="+7"/>
-        <location line="+92"/>
-        <location line="+32"/>
+        <location line="+95"/>
+        <location line="+38"/>
         <source>Import Kart</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-132"/>
+        <location line="-141"/>
         <location line="+2"/>
-        <location line="+61"/>
+        <location line="+63"/>
         <location line="+2"/>
         <source>Kart files (*.kart)</source>
         <translation type="unfinished"></translation>
@@ -11929,14 +11977,14 @@ Continue?</source>
     <message>
         <location line="+11"/>
         <location line="+5"/>
-        <location line="+110"/>
+        <location line="+117"/>
         <location line="+9"/>
         <location line="+37"/>
         <source>Export Kart</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-161"/>
+        <location line="-168"/>
         <source>KartManager not wired</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11952,12 +12000,12 @@ Continue?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+18"/>
+        <location line="+19"/>
         <source>Importing Kart</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+113"/>
+        <location line="+119"/>
         <source>Exporting Kart</source>
         <translation type="unfinished"></translation>
     </message>
