@@ -12,6 +12,7 @@
 #include <QRegularExpression>
 #include <QStyle>
 #include <QStyleOption>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
@@ -248,6 +249,18 @@ void CollectionTreeController::setupPanel() {
   m_grip->installEventFilter(this);
   panelRow->addWidget(m_grip);
 
+  // The fold marker lives OUTSIDE the panel (sibling in the dock layout):
+  // it must stay visible precisely when the panel is not.
+  m_foldMarker = new QToolButton(m_panelParent);
+  m_foldMarker->setObjectName(QStringLiteral("collectionTreeFoldMarker"));
+  m_foldMarker->setAutoRaise(true);
+  m_foldMarker->setFixedWidth(14);
+  m_foldMarker->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+  m_foldMarker->setCursor(Qt::PointingHandCursor);
+  m_foldMarker->setToolTip(tr("Show collection tree"));
+  m_foldMarker->setVisible(false);
+  connect(m_foldMarker, &QToolButton::clicked, this, [this]() { toggleVisible(); });
+
   m_header = new QLabel(tr("Collections"), content);
   m_header->setObjectName(QStringLiteral("collectionTreeHeader"));
   m_header->setMargin(8);
@@ -298,6 +311,7 @@ void CollectionTreeController::setupPanel() {
   // (left + full-height since the 2026-08-17 defaults decision).
   insertPanelAt(CollectionTreeSettings{}.treePosition, CollectionTreeSettings{}.treeJustification);
   applyStateForCollection(activeCollectionIndex());
+  syncFoldMarker();
 }
 
 void CollectionTreeController::insertPanelAt(DetailsPanePosition position,
@@ -327,10 +341,29 @@ void CollectionTreeController::insertPanelAt(DetailsPanePosition position,
   QHBoxLayout *target = fullHeight ? m_fullHeightLayout : m_mainLayout;
   // The tree claims the row's extremes, so it always sits OUTSIDE a
   // full-height details pane (which inserts adjacent to the toolbar column).
+  // The fold marker docks at the very same extreme, OUTSIDE the panel, so
+  // when the panel hides the marker holds its edge. Its arrow points into
+  // the view — the direction the panel would unfold.
+  if (m_foldMarker) {
+    if (m_mainLayout->indexOf(m_foldMarker) != -1) {
+      m_mainLayout->removeWidget(m_foldMarker);
+    }
+    if (m_fullHeightLayout && m_fullHeightLayout->indexOf(m_foldMarker) != -1) {
+      m_fullHeightLayout->removeWidget(m_foldMarker);
+    }
+  }
   if (position == DetailsPanePosition::Right) {
     target->addWidget(m_panel);
+    if (m_foldMarker) {
+      target->addWidget(m_foldMarker);
+      m_foldMarker->setArrowType(Qt::LeftArrow);
+    }
   } else {
     target->insertWidget(0, m_panel);
+    if (m_foldMarker) {
+      target->insertWidget(0, m_foldMarker);
+      m_foldMarker->setArrowType(Qt::RightArrow);
+    }
   }
   m_insertedPosition = position;
   m_insertedJustification = effective;
@@ -739,6 +772,12 @@ void CollectionTreeController::onCollectionSwitched(int collectionIndex) {
   highlightCollection(collectionIndex);
 }
 
+void CollectionTreeController::syncFoldMarker() {
+  if (m_foldMarker) {
+    m_foldMarker->setVisible(m_panel && !m_panel->isVisible());
+  }
+}
+
 void CollectionTreeController::applyStateForCollection(int collectionIndex) {
   if (!m_panel || !m_ctx || !m_ctx->collection.collections) {
     return;
@@ -779,6 +818,7 @@ void CollectionTreeController::applyStateForCollection(int collectionIndex) {
   if (wasVisible != tree.treeVisible) {
     emit visibilityChanged(tree.treeVisible);
   }
+  syncFoldMarker();
 }
 
 void CollectionTreeController::highlightCollection(int collectionIndex) {
@@ -836,6 +876,7 @@ void CollectionTreeController::toggleVisible() {
     cfg->collectionTree.treeVisible = !cfg->collectionTree.treeVisible;
     m_panel->setVisible(cfg->collectionTree.treeVisible);
     emit visibilityChanged(cfg->collectionTree.treeVisible);
+    syncFoldMarker();
     if (m_persistCollections) {
       m_persistCollections();
     }
@@ -845,6 +886,7 @@ void CollectionTreeController::toggleVisible() {
   const bool next = !m_panel->isVisible();
   m_panel->setVisible(next);
   emit visibilityChanged(next);
+  syncFoldMarker();
 }
 
 void CollectionTreeController::setDockPosition(DetailsPanePosition position) {

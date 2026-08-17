@@ -26,7 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gone by default (the chevrons carry the structure); a new **Tree lines**
   option on the Sidebar page brings them back. The mouse wheel now scrolls
   the tree when the pointer is over it, instead of changing the selected
-  item in the grid. And the hairline outline that keeps low-contrast logos
+  item in the grid — and once the tree hits its top or bottom, further
+  ticks do nothing rather than leaking into the grid. When the tree is
+  hidden, a slim arrow marker stays at its dock edge; clicking it brings
+  the tree back (same per-collection memory as F6). And the hairline outline that keeps low-contrast logos
   readable in the tree is applied to item tiles and cards too — only for
   logo-like art that would blend into the card colour; photos and covers
   are never touched.

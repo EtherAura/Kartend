@@ -13,6 +13,7 @@
 
 class QHBoxLayout;
 class QLabel;
+class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QWidget;
@@ -138,6 +139,10 @@ private:
   /// because the icon prefs are per-collection. rebuildTree() itself ends by
   /// calling this, so build-time and refresh-time styling cannot drift.
   void refreshIcons();
+  /// Shows the slim edge marker exactly when the panel is hidden (user
+  /// request 2026-08-17: a hidden tree needs a visible way back). Call after
+  /// anything that changes the panel's visibility.
+  void syncFoldMarker();
   void applyStateForCollection(int collectionIndex);
   void highlightCollection(int collectionIndex);
   void onItemActivated(QTreeWidgetItem *item);
@@ -161,6 +166,10 @@ private:
   /// Width lives on cfg.collectionTree.treeWidth per collection; the drag
   /// resizes live and persists on release (user request 2026-08-17).
   QWidget *m_grip = nullptr;
+  /// Slim clickable strip shown at the panel's dock edge while the panel is
+  /// HIDDEN — the visible "unfold" affordance. Clicking toggles the tree
+  /// back on (same path as F6, so per-collection visibility persists).
+  QToolButton *m_foldMarker = nullptr;
   int m_dragStartX = 0;
   int m_dragStartWidth = 0;
   /// Active collection's icon display options (user request 2026-08-17),

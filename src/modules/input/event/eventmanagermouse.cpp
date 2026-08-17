@@ -57,7 +57,34 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   if (m_ctx && m_ctx->ui.collectionTreeWidget && targetWidget &&
       (targetWidget == m_ctx->ui.collectionTreeWidget ||
        m_ctx->ui.collectionTreeWidget->isAncestorOf(targetWidget))) {
-    return false;
+    // At the tree's scroll limit Qt re-propagates the ignored wheel up the
+    // parent chain, where it reaches the grid handler and changes the
+    // selection anyway (field report 2026-08-17). Over the tree the wheel
+    // either scrolls the tree or does nothing — swallow the tick when the
+    // tree cannot move in that direction, so propagation never starts.
+    auto *scrollArea = qobject_cast<QAbstractScrollArea *>(m_ctx->ui.collectionTreeWidget);
+    auto *wheel = static_cast<QWheelEvent *>(event);
+    bool canScroll = false;
+    if (scrollArea && wheel) {
+      const int dy =
+          wheel->angleDelta().y() != 0 ? wheel->angleDelta().y() : wheel->pixelDelta().y();
+      const int dx =
+          wheel->angleDelta().x() != 0 ? wheel->angleDelta().x() : wheel->pixelDelta().x();
+      if (const QScrollBar *bar = scrollArea->verticalScrollBar(); bar && dy != 0) {
+        canScroll = (dy > 0 && bar->value() > bar->minimum()) ||
+                    (dy < 0 && bar->value() < bar->maximum());
+      }
+      if (const QScrollBar *bar = scrollArea->horizontalScrollBar();
+          bar && !canScroll && dx != 0) {
+        canScroll = (dx > 0 && bar->value() > bar->minimum()) ||
+                    (dx < 0 && bar->value() < bar->maximum());
+      }
+    }
+    if (canScroll) {
+      return false; // deliver to the tree; it scrolls and accepts
+    }
+    event->accept();
+    return true; // limit reached: do nothing rather than leak to the grid
   }
   return m_wheelHandler && m_wheelHandler->handleEvent(obj, event);
 }
