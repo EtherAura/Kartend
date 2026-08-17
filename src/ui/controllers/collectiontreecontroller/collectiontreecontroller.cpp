@@ -258,6 +258,14 @@ void CollectionTreeController::setupPanel() {
   m_foldMarker->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
   m_foldMarker->setCursor(Qt::PointingHandCursor);
   m_foldMarker->setToolTip(tr("Show collection tree"));
+  // A bare autoRaise arrow is nearly invisible on dark themes — give the
+  // strip a full-height band so the unfold affordance is discoverable, and
+  // an accent hover so it reads as clickable.
+  m_foldMarker->setStyleSheet(
+      QStringLiteral("QToolButton#collectionTreeFoldMarker {"
+                     " border: none; background: palette(mid); }"
+                     "QToolButton#collectionTreeFoldMarker:hover {"
+                     " background: palette(highlight); }"));
   m_foldMarker->setVisible(false);
   connect(m_foldMarker, &QToolButton::clicked, this, [this]() { toggleVisible(); });
 
@@ -773,8 +781,12 @@ void CollectionTreeController::onCollectionSwitched(int collectionIndex) {
 }
 
 void CollectionTreeController::syncFoldMarker() {
+  // isHidden(), NOT !isVisible(): before the window maps, every widget's
+  // EFFECTIVE visibility is false, so the startup sync would show the
+  // marker beside a soon-visible panel (caught by TestCollectionTreePanel).
+  // isHidden() tracks the intended state independent of mapping.
   if (m_foldMarker) {
-    m_foldMarker->setVisible(m_panel && !m_panel->isVisible());
+    m_foldMarker->setVisible(m_panel && m_panel->isHidden());
   }
 }
 

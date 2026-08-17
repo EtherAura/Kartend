@@ -19,6 +19,7 @@
 #include "test_applysettingsdialog.h"
 #include "test_attractmanager.h"
 #include "test_datauditcontroller.h"
+#include "test_collectiontreepanel.h"
 #include "test_dbeventscontroller.h"
 #include "test_detailpagemanager.h"
 #include "test_detailspane_coverflow.h"
@@ -161,6 +162,11 @@ const Suite kSuites[] = {
     {"TestDbEventsController",
      [](int c, char **v) {
        TestDbEventsController t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestCollectionTreePanel",
+     [](int c, char **v) {
+       TestCollectionTreePanel t;
        return QTest::qExec(&t, c, v);
      }},
     {"TestEventManagerDetailsPane",

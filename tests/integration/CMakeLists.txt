@@ -31,6 +31,7 @@ set(INTEGRATION_TEST_SOURCES
   test_navigationmanager.cpp
   test_interactionmanager.cpp
   test_eventmanager_detailspane.cpp
+  test_collectiontreepanel.cpp
   test_detailspane_coverflow.cpp
   test_settingsdialog_changes.cpp
   test_settingsdialog_navigation.cpp
@@ -68,6 +69,7 @@ set(INTEGRATION_TEST_HEADERS
   test_navigationmanager.h
   test_interactionmanager.h
   test_eventmanager_detailspane.h
+  test_collectiontreepanel.h
   test_detailspane_coverflow.h
   test_settingsdialog_changes.h
   test_settingsdialog_navigation.h
@@ -151,6 +153,7 @@ set(INTEGRATION_TEST_CLASSES
   TestInteractionManager
   TestDbEventsController
   TestEventManagerDetailsPane
+  TestCollectionTreePanel
   TestDetailsPaneCoverflow
   TestSettingsDialogChanges
   TestSettingsDialogNavigation
