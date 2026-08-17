@@ -14,6 +14,7 @@
 #include "kartlink.h"
 #include "launchcommandbuilder.h"
 
+#include <QFileInfo>
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -130,6 +131,11 @@ void TestLaunchCommandBuilder::testDerivedPathTokens_data() {
   QTest::addColumn<QStringList>("expectedArguments");
 
   const QString file = QStringLiteral("/tmp/media/concert.mp4");
+  // %dir% is QFileInfo::absolutePath by contract — derive the expectation the
+  // same way instead of hardcoding "/tmp/media": on Windows a drive-less
+  // absolute path gains the current drive ("C:/tmp/media"), and the literal
+  // string failed this suite's first Windows run.
+  const QString dir = QFileInfo(file).absolutePath();
   // Each token names one PART of the item path. None of them places the media
   // argument, so the append-at-end fallback still fires — the trailing `file`
   // in these expectations is that fallback, not the token.
@@ -137,7 +143,7 @@ void TestLaunchCommandBuilder::testDerivedPathTokens_data() {
                         << QStringList{QStringLiteral("--title=concert"), file};
   QTest::newRow("filename") << QStringLiteral("--as %filename%")
                             << QStringList{"--as", "concert.mp4", file};
-  QTest::newRow("dir") << QStringLiteral("--cwd %dir%") << QStringList{"--cwd", "/tmp/media", file};
+  QTest::newRow("dir") << QStringLiteral("--cwd %dir%") << QStringList{"--cwd", dir, file};
   QTest::newRow("ext") << QStringLiteral("--kind %ext%") << QStringList{"--kind", "mp4", file};
   QTest::newRow("case-insensitive")
       << QStringLiteral("--title=%NAME%") << QStringList{QStringLiteral("--title=concert"), file};
@@ -145,7 +151,9 @@ void TestLaunchCommandBuilder::testDerivedPathTokens_data() {
   // sibling-file idiom stays a single argv entry even though it names two
   // tokens and the value contains a path separator.
   QTest::newRow("composed") << QStringLiteral("--sub=%dir%/%name%.srt")
-                            << QStringList{QStringLiteral("--sub=/tmp/media/concert.srt"), file};
+                            << QStringList{QStringLiteral("--sub=") + dir +
+                                               QStringLiteral("/concert.srt"),
+                                           file};
   // %filename% must survive the %name% pass. "%name%" is not a substring of
   // "%filename%" and the two must never be allowed to alias.
   QTest::newRow("filename-not-eaten-by-name")

@@ -403,9 +403,14 @@ void TestDirectoryCache::discFallback_countsAsArtworkForBulkPredicates() {
   DirectoryCache::instance().prewarmDirectories(ArtworkUtils::artworkLookupDirectories(tmp.path()));
 
   const QSet<QString> keys = ArtworkUtils::buildArtworkKeySet(tmp.path());
-  QVERIFY2(keys.contains(QStringLiteral("Recital")),
+  // Membership goes through baseMatchKey on BOTH sides in production —
+  // FilterManager queries keys.contains(baseMatchKey(...)) — and the key is
+  // lowercased on Windows/macOS (Kartend-58ddn). Literal-case contains()
+  // here failed on exactly those two platforms (first full-matrix run of
+  // this suite) while the production pairing was correct everywhere.
+  QVERIFY2(keys.contains(ArtworkUtils::baseMatchKey(QStringLiteral("Recital"))),
            "the release title resolves a cover per-item but was reported artless in bulk");
-  QVERIFY(keys.contains(QStringLiteral("Recital (Disc 1)")));
+  QVERIFY(keys.contains(ArtworkUtils::baseMatchKey(QStringLiteral("Recital (Disc 1)"))));
 }
 
 void TestDirectoryCache::discFallback_reachesTheDirectLookupOnceTheListingIsWarm() {

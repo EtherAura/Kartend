@@ -79,7 +79,7 @@ loadManualCoverLinks(QSqlDatabase &db, const QString &collectionUuid) {
   if (collectionUuid.isEmpty()) {
     return byPath;
   }
-  const QStringList coverTypes = ItemArtworkStore::manualCoverTypes();
+  const QStringList &coverTypes = ItemArtworkStore::manualCoverTypes();
   if (coverTypes.isEmpty()) {
     return byPath;
   }
@@ -175,7 +175,9 @@ public:
       ArtworkUtils::DirectoryCache::instance().refreshDirectories(lookupDirs);
       built = ArtworkUtils::buildArtworkPathMap(dir);
     }
-    return m_byDirectory.insert(dir, std::move(built)).value();
+    // No std::move: QHash::insert takes the value by const reference, and a
+    // QHash copy is an O(1) shared-data attach anyway.
+    return m_byDirectory.insert(dir, built).value();
   }
 
 private:

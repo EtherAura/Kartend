@@ -396,11 +396,17 @@ void TestKartPreflight::trust_allowlistedLauncherIsStillDisclosed() {
   // The regression this whole gate exists for: living in an allowlisted
   // directory used to mean saying nothing at all. It now means the row is
   // quiet, not absent — the user still sees what the bundle will run.
-  const auto out = kart::collectLauncherTrustFindings(
-      configWithLauncher(QStringLiteral("/usr/bin/mpv")), {}, QString());
+  // Home-rooted like suspicious_pathsInsideAllowedRoots_notFlagged: home is
+  // the one allowlisted root on every platform. "/usr/bin/mpv" reads as
+  // OutsideAllowlist on Windows (drive-less paths absolutize to
+  // "C:/usr/bin/…" and never prefix-match the POSIX roots), which failed
+  // this suite's first Windows run.
+  const QString allowlisted = QDir::cleanPath(QDir::homePath() + QStringLiteral("/apps/mpv"));
+  const auto out =
+      kart::collectLauncherTrustFindings(configWithLauncher(allowlisted), {}, QString());
   QCOMPARE(out.size(), 1);
   QCOMPARE(out.first().field, QStringLiteral("launcher.launcherPath"));
-  QCOMPARE(out.first().value, QStringLiteral("/usr/bin/mpv"));
+  QCOMPARE(out.first().value, allowlisted);
   QCOMPARE(out.first().reason, LauncherTrustReason::BundleSupplied);
   QVERIFY(!kart::isElevatedLauncherTrustReason(out.first().reason));
 }
@@ -452,8 +458,11 @@ void TestKartPreflight::trust_interpreterProgramIsElevatedInsideAllowlist() {
                             .arg(p)));
   }
   // A launcher that merely lives beside them is not an interpreter.
+  // Home-rooted so the fixture is allowlisted on Windows too (see
+  // trust_allowlistedLauncherIsStillDisclosed).
   const auto benign = kart::collectLauncherTrustFindings(
-      configWithLauncher(QStringLiteral("/usr/bin/mpv")), {}, QString());
+      configWithLauncher(QDir::cleanPath(QDir::homePath() + QStringLiteral("/apps/mpv"))), {},
+      QString());
   QCOMPARE(benign.first().reason, LauncherTrustReason::BundleSupplied);
   // ...nor is a wrapper script whose name merely ends in a shell's name.
   const auto wrapper = kart::collectLauncherTrustFindings(

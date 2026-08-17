@@ -424,7 +424,9 @@ auto FilterManager::artworkKeysFor(const QString &artworkDirectory) const -> con
   // the direction that re-runs the rebuild (Kartend-l66sn).
   built.settled = ArtworkUtils::DirectoryCache::instance().areDirectoriesCached(
       ArtworkUtils::artworkLookupDirectories(artworkDirectory));
-  return m_artworkKeySets.insert(artworkDirectory, std::move(built)).value();
+  // No std::move: QHash::insert takes the value by const reference, and the
+  // struct's QSet member makes its copy an O(1) shared-data attach anyway.
+  return m_artworkKeySets.insert(artworkDirectory, built).value();
 }
 
 auto FilterManager::artworkDirectoryForItem(const QString &fullPath) const -> QString {
