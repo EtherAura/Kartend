@@ -123,6 +123,12 @@ void ApplicationManager::destroyManagersAndClearContextSlots() {
 
   if (ctx) {
     ctx->managers.detailsPaneManager = nullptr;
+    // Kartend-ob1c9: the collection tree controller is MainWindow-owned
+    // (QObject-parented to the window), not reset here — but its ctx slot
+    // must go dark with the rest of the ManagerRefs before ANY owner tears
+    // down, so a late input-layer `ctx->collectionTreeController()` read
+    // can never dangle (the ManagerRefs INVARIANT).
+    ctx->managers.collectionTreeController = nullptr;
   }
   m_detailsPaneManager.reset();
 

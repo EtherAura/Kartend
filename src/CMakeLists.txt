@@ -230,6 +230,7 @@ target_link_libraries(kartend_media PUBLIC kartend_data kartend_chrome kartend_a
 # ---------------------------------------------------------------------------
 target_include_directories(kartend_ui PUBLIC
   ${CMAKE_BINARY_DIR}/src/kartend_ui_autogen/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/ui/controllers/collectiontreecontroller
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/controllers/detailspanemanager
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/controllers/settingsdialogcontroller
   ${CMAKE_CURRENT_SOURCE_DIR}/ui/dialogs

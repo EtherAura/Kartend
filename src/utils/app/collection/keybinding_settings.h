@@ -26,6 +26,10 @@ struct KeybindingSettings {
   // 0 = unbound so an upgrading install picks up no surprise shortcut; only
   // honored when useHomeView is enabled.
   int keyHomeView = 0;
+  // Toggles the collection tree panel (Kartend-ob1c9). Default 0 = unbound —
+  // F6 via the View-menu action is the out-of-the-box binding; this is the
+  // user's rebindable alternative, keyHomeView-style.
+  int keyToggleCollectionTree = 0;
   // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
   // settings dirty-check field-complete automatically (Kartend-6oqat).
   bool operator==(const KeybindingSettings &) const = default;

@@ -224,6 +224,13 @@ bool KeyboardManager::handleKeyPress(QKeyEvent *event, bool searchBarFocused) {
     return true;
   }
 
+  // Kartend-ob1c9: rebindable collection tree toggle (default unbound).
+  if (m_generalSettings && m_generalSettings->keybindings.keyToggleCollectionTree != 0 &&
+      key == m_generalSettings->keybindings.keyToggleCollectionTree) {
+    emit requestToggleCollectionTree();
+    return true;
+  }
+
   return false;
 }
 

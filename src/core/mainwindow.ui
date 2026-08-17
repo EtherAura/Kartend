@@ -593,6 +593,7 @@
     <addaction name="actionShowMenuBar"/>
     <addaction name="actionShowToolbar"/>
     <addaction name="actionShowSidebar"/>
+    <addaction name="actionShowCollectionTree"/>
     <addaction name="separator"/>
     <addaction name="menuLayout"/>
    </widget>
@@ -653,6 +654,17 @@
    </property>
    <property name="shortcut">
     <string>F9</string>
+   </property>
+  </action>
+  <action name="actionShowCollectionTree">
+   <property name="text">
+    <string>Show Collection Tree</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="shortcut">
+    <string>F6</string>
    </property>
   </action>
   <action name="actionShowToolbar">

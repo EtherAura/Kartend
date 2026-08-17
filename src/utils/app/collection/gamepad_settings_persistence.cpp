@@ -13,6 +13,8 @@ void load(QSettings &settings, GamepadSettings &opts) {
   opts.gamepadBackButton = settings.value(keys::kGamepadBackButton, QString("B")).toString();
   opts.gamepadToggleSidebarButton =
       settings.value(keys::kGamepadToggleSidebarButton, QString("Y")).toString();
+  opts.gamepadToggleCollectionTreeButton =
+      settings.value(keys::kGamepadToggleCollectionTreeButton, QString()).toString();
 }
 
 void save(QSettings &settings, const GamepadSettings &opts) {
@@ -21,6 +23,8 @@ void save(QSettings &settings, const GamepadSettings &opts) {
   settings.setValue(keys::kGamepadConfirmButton, opts.gamepadConfirmButton);
   settings.setValue(keys::kGamepadBackButton, opts.gamepadBackButton);
   settings.setValue(keys::kGamepadToggleSidebarButton, opts.gamepadToggleSidebarButton);
+  settings.setValue(keys::kGamepadToggleCollectionTreeButton,
+                    opts.gamepadToggleCollectionTreeButton);
 }
 
 } // namespace GamepadSettingsPersistence

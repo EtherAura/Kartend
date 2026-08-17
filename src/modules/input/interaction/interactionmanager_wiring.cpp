@@ -26,6 +26,7 @@
 
 #include "collection/validationhelpers.h"
 #include "collectiontypes.h"
+#include "icollectiontreecontroller.h"
 #include "idetailspanemanager.h"
 #include "inavigationmanager.h"
 #include "itemwidget.h"
@@ -113,6 +114,11 @@ void InteractionManager::connectKeyboardManagerSignals() {
       navMgr()->loadRootView();
     }
   });
+  connect(m_keyboardManager.get(), &KeyboardManager::requestToggleCollectionTree, this, [this]() {
+    if (ICollectionTreeController *tree = m_ctx ? m_ctx->collectionTreeController() : nullptr) {
+      tree->toggleVisible();
+    }
+  });
 }
 
 bool InteractionManager::modalInputGateActive() const {
@@ -188,6 +194,15 @@ void InteractionManager::connectGamepadManagerSignals() {
       detailsPaneMgr()->toggleSidebar();
     }
   });
+  connect(
+      m_gamepadManager.get(), &GamepadManager::requestToggleCollectionTreeAction, this, [this]() {
+        if (modalInputGateActive()) {
+          return;
+        }
+        if (ICollectionTreeController *tree = m_ctx ? m_ctx->collectionTreeController() : nullptr) {
+          tree->toggleVisible();
+        }
+      });
   connect(m_gamepadManager.get(), &GamepadManager::requestScrollAnimationStop, this, [this]() {
     if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
       m_animationManager->verticalAnimation()->stop();

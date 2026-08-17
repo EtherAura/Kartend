@@ -33,6 +33,7 @@
 #include "collection/collectionconfig.h"
 #include "gridutils.h"
 #include "iartworkmanager.h"
+#include "icollectiontreecontroller.h"
 #include "idatabasemanager.h"
 #include "idetailpagemanager.h"
 #include "idetailspane.h"
@@ -193,6 +194,19 @@ auto InteractionManager::handleGlobalKeyPress(QKeyEvent *event) -> bool {
     }
     if (navMgr()) {
       navMgr()->loadRootView();
+      return true;
+    }
+  }
+
+  // Kartend-ob1c9: rebindable collection tree toggle, keyHomeView-style —
+  // default unbound, search-bar focus wins.
+  if (m_generalSettings && m_generalSettings->keybindings.keyToggleCollectionTree != 0 &&
+      event->key() == m_generalSettings->keybindings.keyToggleCollectionTree) {
+    if (m_searchBar && m_searchBar->hasFocus()) {
+      return false;
+    }
+    if (auto *tree = m_ctx ? m_ctx->collectionTreeController() : nullptr) {
+      tree->toggleVisible();
       return true;
     }
   }

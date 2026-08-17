@@ -188,31 +188,41 @@ void TestGamepadHelpers::normalizeSdlAxis_asymmetricRangeHandledCorrectly() {
 
 void TestGamepadHelpers::resolveButtonAction_caseInsensitiveMatch() {
   QCOMPARE(resolveButtonAction(QStringLiteral("a"), QStringLiteral("A"), QStringLiteral("B"),
-                               QStringLiteral("Y")),
+                               QStringLiteral("Y"), QString()),
            ButtonAction::Confirm);
   QCOMPARE(resolveButtonAction(QStringLiteral("BACK"), QStringLiteral("A"), QStringLiteral("back"),
-                               QStringLiteral("Y")),
+                               QStringLiteral("Y"), QString()),
            ButtonAction::Back);
+  // Kartend-ob1c9: the fourth action resolves like the others.
+  QCOMPARE(resolveButtonAction(QStringLiteral("x"), QStringLiteral("A"), QStringLiteral("B"),
+                               QStringLiteral("Y"), QStringLiteral("X")),
+           ButtonAction::ToggleCollectionTree);
 }
 
 void TestGamepadHelpers::resolveButtonAction_confirmPriorityOverBack() {
   // Same physical button bound to both — confirm wins.
   QCOMPARE(resolveButtonAction(QStringLiteral("A"), QStringLiteral("A"), QStringLiteral("A"),
-                               QStringLiteral("Y")),
+                               QStringLiteral("Y"), QString()),
            ButtonAction::Confirm);
 }
 
 void TestGamepadHelpers::resolveButtonAction_backPriorityOverToggle() {
-  // Same physical button bound to back and toggle — back wins.
+  // Same physical button bound to back and toggle — back wins; and both
+  // toggles bound to one button resolve to the sidebar (declaration order
+  // is the priority order, tree last).
   QCOMPARE(resolveButtonAction(QStringLiteral("B"), QStringLiteral("A"), QStringLiteral("B"),
-                               QStringLiteral("B")),
+                               QStringLiteral("B"), QStringLiteral("B")),
            ButtonAction::Back);
+  QCOMPARE(resolveButtonAction(QStringLiteral("Y"), QStringLiteral("A"), QStringLiteral("B"),
+                               QStringLiteral("Y"), QStringLiteral("Y")),
+           ButtonAction::ToggleSidebar);
 }
 
 void TestGamepadHelpers::resolveButtonAction_unboundButtonReturnsNone() {
-  // No binding matches "Start" → silently ignored.
+  // No binding matches "Start" → silently ignored. The tree binding
+  // defaults to empty (unbound) and must stay inert.
   QCOMPARE(resolveButtonAction(QStringLiteral("Start"), QStringLiteral("A"), QStringLiteral("B"),
-                               QStringLiteral("Y")),
+                               QStringLiteral("Y"), QString()),
            ButtonAction::None);
 }
 
@@ -220,13 +230,13 @@ void TestGamepadHelpers::resolveButtonAction_emptyConfiguredBindingsIgnored() {
   // An empty configured binding shouldn't match an empty incoming button
   // (the incoming side is also trimmed first). Defensive: prevents a
   // misconfigured "" binding from greedy-matching every press.
-  QCOMPARE(resolveButtonAction(QStringLiteral("A"), QString(), QString(), QString()),
+  QCOMPARE(resolveButtonAction(QStringLiteral("A"), QString(), QString(), QString(), QString()),
            ButtonAction::None);
 }
 
 void TestGamepadHelpers::resolveButtonAction_whitespaceButtonNameIsNone() {
   QCOMPARE(resolveButtonAction(QStringLiteral("   "), QStringLiteral("A"), QStringLiteral("B"),
-                               QStringLiteral("Y")),
+                               QStringLiteral("Y"), QStringLiteral("X")),
            ButtonAction::None);
 }
 

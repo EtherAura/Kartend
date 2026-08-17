@@ -26,6 +26,7 @@
 #include "archiveoptions.h"
 #include "collectionbackground.h"
 #include "collectionfilterpreferences.h"
+#include "collectiontreesettings.h"
 #include "folderbrowsingoptions.h"
 #include "gridlayoutpreferences.h"
 #include "launcherconfig.h"
@@ -117,6 +118,11 @@ struct CollectionConfig {
   /// JSON keys (`sidebarMode`, `sidebarPosition`, `sidebarBackgroundColor`,
   /// `sidebar_font_family`, …) round-trip unchanged.
   SidebarAppearance sidebar;
+  /// Collection tree panel state (Kartend-ob1c9) — visibility + dock side
+  /// of the tree navigator, remembered per collection like the details
+  /// pane's `sidebar` block above. Accessed as
+  /// `cfg.collectionTree.treeVisible` / `.treePosition`.
+  CollectionTreeSettings collectionTree;
   ViewType viewType = ViewType::Grid; // Grid (default) or List view
   /// when true, media items whose artwork lookup returns no
   /// match are hidden from the items page. Subcollections and virtual folders
@@ -283,7 +289,8 @@ struct CollectionConfig {
            hideTitles == other.hideTitles &&
            hideSubcollectionTitles == other.hideSubcollectionTitles && filter == other.filter &&
            horizontalAlignment == other.horizontalAlignment && sidebar == other.sidebar &&
-           viewType == other.viewType && hideMissingArtwork == other.hideMissingArtwork &&
+           collectionTree == other.collectionTree && viewType == other.viewType &&
+           hideMissingArtwork == other.hideMissingArtwork &&
            groupMultiDisc == other.groupMultiDisc && background == other.background &&
            archive == other.archive && expandMode == other.expandMode &&
            watchFilesystem == other.watchFilesystem && importSource == other.importSource &&

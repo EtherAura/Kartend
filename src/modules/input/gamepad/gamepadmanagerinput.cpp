@@ -115,8 +115,11 @@ void GamepadManager::handleMappedButtonPress(const QString &buttonName) {
   const QString toggleSidebar = m_generalSettings
                                     ? m_generalSettings->gamepad.gamepadToggleSidebarButton
                                     : QStringLiteral("Y");
+  const QString toggleTree =
+      m_generalSettings ? m_generalSettings->gamepad.gamepadToggleCollectionTreeButton : QString();
 
-  switch (GamepadHelpers::resolveButtonAction(normalized, confirm, back, toggleSidebar)) {
+  switch (
+      GamepadHelpers::resolveButtonAction(normalized, confirm, back, toggleSidebar, toggleTree)) {
   case GamepadHelpers::ButtonAction::Confirm:
     emit requestEnterAction();
     return;
@@ -125,6 +128,9 @@ void GamepadManager::handleMappedButtonPress(const QString &buttonName) {
     return;
   case GamepadHelpers::ButtonAction::ToggleSidebar:
     emit requestToggleSidebarAction();
+    return;
+  case GamepadHelpers::ButtonAction::ToggleCollectionTree:
+    emit requestToggleCollectionTreeAction();
     return;
   case GamepadHelpers::ButtonAction::None:
     return;

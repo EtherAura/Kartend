@@ -56,6 +56,8 @@ QList<BindingRow> buildBindings(const GeneralSettings &gs) {
        QString()},
       {QObject::tr("Actions"), QObject::tr("Toggle sidebar"), 0,
        gs.gamepad.gamepadToggleSidebarButton},
+      {QObject::tr("Actions"), QObject::tr("Toggle collection tree"),
+       gs.keybindings.keyToggleCollectionTree, gs.gamepad.gamepadToggleCollectionTreeButton},
       {QObject::tr("Search"), QObject::tr("Open search"), gs.keybindings.keySearch, QString()},
   };
 }

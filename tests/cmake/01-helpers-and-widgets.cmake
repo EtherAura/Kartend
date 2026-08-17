@@ -143,6 +143,14 @@ kartend_add_test(NAME SearchPreset
   LINK kartend_utils
 )
 
+# CollectionTreeModel tests (Kartend-ob1c9). Pure structure builder for the
+# collection tree panel: nesting, alias-parent duplication (DAG), grouped
+# playlists, cycle/bounds hardening.
+kartend_add_test(NAME CollectionTreeModel
+  SOURCES utils/app/test_collectiontreemodel.cpp
+  LINK kartend_utils
+)
+
 # CollectionHealth tests (Kartend-lprv). Pure analyzer over fixture rows.
 kartend_add_test(NAME CollectionHealth
   SOURCES utils/db/test_collectionhealth.cpp

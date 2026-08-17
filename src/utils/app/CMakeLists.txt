@@ -7,6 +7,8 @@ target_sources(kartend_utils PRIVATE
   collection/collectionfilterpreferences_persistence.cpp
   collection/collectionhierarchycache.cpp
   collection/collectionscalars_persistence.cpp
+  collection/collectiontreemodel.cpp
+  collection/collectiontreesettings_persistence.cpp
   collection/folderbrowsingoptions_persistence.cpp
   collection/gamepad_settings_persistence.cpp
   collection/gridlayoutpreferences_persistence.cpp
@@ -55,6 +57,9 @@ target_sources(kartend_utils PRIVATE
   collection/collectionfilterpreferences_persistence.h
   collection/collectionhierarchycache.h
   collection/collectionscalars_persistence.h
+  collection/collectiontreemodel.h
+  collection/collectiontreesettings.h
+  collection/collectiontreesettings_persistence.h
   collection/enumstringhelpers.h
   collection/folderbrowsingoptions.h
   collection/folderbrowsingoptions_persistence.h

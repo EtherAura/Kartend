@@ -1259,7 +1259,7 @@ Skipped %3 items that already had artwork.</source>
 <context>
     <name>BindingVisualizerDialog</name>
     <message>
-        <location filename="../src/ui/dialogs/bindingvisualizerdialog.cpp" line="+100"/>
+        <location filename="../src/ui/dialogs/bindingvisualizerdialog.cpp" line="+102"/>
         <source>Binding visualizer</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1567,6 +1567,19 @@ Skipped %3 items that already had artwork.</source>
         <location line="+1"/>
         <source>The collection was removed, but some imported files could not be deleted:
 %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>CollectionTreeController</name>
+    <message>
+        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+52"/>
+        <source>Collections</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+92"/>
+        <source>Playlists</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -7070,7 +7083,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+16"/>
         <source>&amp;Sort</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7107,6 +7120,16 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     <message>
         <location line="+6"/>
         <source>F9</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Show Collection Tree</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>F6</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -7271,7 +7294,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow.cpp" line="+504"/>
+        <location filename="../src/core/mainwindow.cpp" line="+505"/>
         <source>Import Kart</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7445,7 +7468,7 @@ Will change:
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow_managerwiring.cpp" line="+193"/>
+        <location filename="../src/core/mainwindow_managerwiring.cpp" line="+194"/>
         <source>Extracting Archive</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7455,7 +7478,7 @@ Will change:
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+231"/>
+        <location line="+239"/>
         <source>Import Kart — launcher configuration</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7485,7 +7508,7 @@ Will change:
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow_setup.cpp" line="+116"/>
+        <location filename="../src/core/mainwindow_setup.cpp" line="+118"/>
         <source>Collection configuration problem</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7623,7 +7646,12 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>MenuController</name>
     <message>
-        <location filename="../src/core/menucontroller.cpp" line="+380"/>
+        <location filename="../src/core/menucontroller.cpp" line="+249"/>
+        <source>Collection Tree Position</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+186"/>
         <source>Fullscreen</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7765,17 +7793,19 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+41"/>
+        <location filename="../src/core/menucontroller.cpp" line="-427"/>
+        <location filename="../src/core/menucontroller_dynamicmenus.cpp" line="+41"/>
         <source>Right</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-1"/>
+        <location filename="../src/core/menucontroller_dynamicmenus.cpp" line="+1"/>
         <source>Left</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location filename="../src/core/menucontroller_dynamicmenus.cpp" line="+1"/>
         <source>Top</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8353,7 +8383,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/bindingvisualizerdialog.cpp" line="-186"/>
+        <location filename="../src/ui/dialogs/bindingvisualizerdialog.cpp" line="-188"/>
         <location line="+1"/>
         <location line="+1"/>
         <location line="+1"/>
@@ -8415,11 +8445,12 @@ The app will still load, but please fix these — collections that share an iden
         <location line="+2"/>
         <location line="+2"/>
         <location line="+2"/>
+        <location line="+2"/>
         <source>Actions</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-6"/>
+        <location line="-8"/>
         <source>Confirm / launch</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8436,6 +8467,11 @@ The app will still load, but please fix these — collections that share an iden
     <message>
         <location line="+2"/>
         <source>Toggle sidebar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Toggle collection tree</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -10531,6 +10567,11 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+6"/>
+        <source>Toggle collection tree panel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+3"/>
         <source>Search</source>
         <translation type="unfinished"></translation>
@@ -12005,7 +12046,7 @@ Continue?</source>
 <context>
     <name>kart::KartManager</name>
     <message>
-        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+667"/>
+        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+666"/>
         <location line="+1"/>
         <location line="+7"/>
         <location line="+94"/>

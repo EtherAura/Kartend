@@ -11,6 +11,7 @@ target_sources(kartend_api PRIVATE
   iartworkmanager.h
   iartworkpreviewscroll.h
   icachemanager.h
+  icollectiontreecontroller.h
   idatabasemanager.h
   idetailpagemanager.h
   idetailpageoverlay.h

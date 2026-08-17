@@ -16,6 +16,7 @@
 
 #include "applicationmanager.h"
 #include "attractmanager.h"
+#include "collectiontreecontroller.h"
 #include "detailpagemanager.h"
 #include "detailpageoverlay.h"
 #include "detailspanemanager.h"
@@ -315,7 +316,15 @@ void MainWindow::wireNavigationManager() {
 
   // Callbacks (not in context)
   navSetup.isShuttingDown = [this]() { return isShuttingDown(); };
-  navSetup.refreshTitleCounts = [this]() { refreshTitleCounts(); };
+  navSetup.refreshTitleCounts = [this]() {
+    refreshTitleCounts();
+    // Kartend-ob1c9: this callback fires on every finished navigation, after
+    // m_currentCollectionIndex settles — the tree panel re-applies the new
+    // collection's visibility/side, moves its highlight, and re-themes.
+    if (m_collectionTreeController) {
+      m_collectionTreeController->onCollectionSwitched(m_currentCollectionIndex);
+    }
+  };
   navSetup.refreshCollectionWarningBadge = [this]() {
     if (m_toolbarController) {
       m_toolbarController->refreshCollectionWarningBadge();

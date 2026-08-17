@@ -17,6 +17,7 @@
 #include <QSize>
 #include <QTimer>
 #include <QToolButton>
+#include <QTreeWidget>
 
 #include "animationmanager.h"
 #include "applicationmanager.h"
@@ -74,6 +75,7 @@
 #include "variantgroupingdialog.h"
 #include "viewportmanager.h"
 
+#include "collectiontreecontroller.h"
 #include "detailpageoverlay.h"
 #include "detailspanemanager.h"
 #include "isettingsmanager.h"
@@ -248,6 +250,7 @@ void MainWindow::setupUI() {
   initializeAppContext();
   createMenuBar();
   setupSidebar();
+  setupCollectionTree();
   setupManagerConnections();
   setupArtworkManager();
   refreshCollectionFilesystemWatcher();
@@ -524,6 +527,7 @@ void MainWindow::createMenuBar() {
   ctx.getNavigationManager = [this]() { return m_appManager->getNavigationManager(); };
   ctx.getSettingsManager = [this]() { return m_appManager->getSettingsManager(); };
   ctx.getDetailsPaneManager = [this]() { return m_appManager->getDetailsPaneManager(); };
+  ctx.getCollectionTreeController = [this]() { return m_collectionTreeController; };
   ctx.getScrollManager = [this]() { return m_appManager->getScrollManager(); };
   ctx.getArtworkManager = [this]() { return m_appManager->getArtworkManager(); };
   ctx.getDatabaseManager = [this]() { return m_appManager->getDatabaseManager(); };
@@ -718,6 +722,35 @@ void MainWindow::setupSidebar() {
                        }
                      });
   }
+}
+
+void MainWindow::setupCollectionTree() {
+  // Kartend-ob1c9: the collection tree panel. Distinct from setupSidebar()
+  // above — "sidebar" is the details pane throughout this codebase.
+  m_collectionTreeController = new CollectionTreeController(this);
+
+  CollectionTreeControllerSetup setup;
+  setup.ctx = &m_appContext;
+  setup.mainLayout = m_mainHorizontalLayout;
+  setup.panelParent = m_mainContentWidget;
+  setup.persistCollections = [this]() { requestDebouncedCollectionsSave(); };
+  m_collectionTreeController->setupReferences(setup);
+  m_collectionTreeController->setupPanel();
+  // EventManager's key-bypass reads this through ctx (see
+  // ApplicationContext::UIElements::collectionTreeWidget), and the input
+  // layer's toggle surfaces (rebindable key, gamepad) reach the panel
+  // through the role slot.
+  m_appContext.ui.collectionTreeWidget = m_collectionTreeController->treeWidget();
+  m_appContext.managers.collectionTreeController = m_collectionTreeController;
+
+  QObject::connect(m_collectionTreeController, &CollectionTreeController::visibilityChanged, this,
+                   [this](bool visible) {
+                     if (ui->actionShowCollectionTree) {
+                       ui->actionShowCollectionTree->blockSignals(true);
+                       ui->actionShowCollectionTree->setChecked(visible);
+                       ui->actionShowCollectionTree->blockSignals(false);
+                     }
+                   });
 }
 
 void MainWindow::refreshCollectionFilesystemWatcher() {

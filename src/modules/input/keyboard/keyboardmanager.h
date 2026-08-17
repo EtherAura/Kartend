@@ -126,6 +126,9 @@ signals:
   /// Jump to the synthetic Home view. Bound to GeneralSettings::keyHomeView
   /// when useHomeView is enabled and the binding is non-zero.
   void requestHomeView();
+  /// Toggle the collection tree panel (Kartend-ob1c9). Bound to
+  /// GeneralSettings::keyToggleCollectionTree when non-zero.
+  void requestToggleCollectionTree();
   void requestSearchModeToggle();
   void requestSearchBarFocus();
   void requestScrollAnimationStop();

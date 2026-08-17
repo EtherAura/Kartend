@@ -2,6 +2,7 @@
 #include "menucontroller.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
+#include "collectiontreecontroller.h"
 #include "detailspanemanager.h"
 #include "errorpresentation.h"
 #include "historystore.h"
@@ -141,6 +142,7 @@ void MenuController::setupMenuBar() {
   setupActionShowMenuBar();
   setupActionShowToolbar();
   setupActionShowSidebar();
+  setupActionShowCollectionTree();
   setupLayoutActions();
   setupActionDetailsPaneOrientation();
   setupFullscreenAction();
@@ -222,6 +224,59 @@ void MenuController::setupActionShowSidebar() {
         mgr->toggleSidebar();
       }
     }
+  });
+}
+
+void MenuController::setupActionShowCollectionTree() {
+  // Kartend-ob1c9: the tree panel's per-collection toggle. Unlike the
+  // showMenuBar/showToolbar pair this is NOT a ViewSettings global — the
+  // active collection remembers its own visibility, so the action routes
+  // through the controller and the checkmark follows visibilityChanged
+  // (wired in MainWindow::setupCollectionTree).
+  if (!m_ctx.ui) return;
+  connectGlobalAction(m_ctx.ui->actionShowCollectionTree, [this]() {
+    if (m_ctx.getCollectionTreeController) {
+      if (auto *tree = m_ctx.getCollectionTreeController()) {
+        tree->toggleVisible();
+      }
+    }
+  });
+
+  // Dock-side submenu — per-collection Left/Right, "like the other
+  // sidebar". Check state is refreshed on open because the answer changes
+  // with the active collection, not with the actions themselves.
+  if (!m_ctx.ui->menuView || !m_ctx.ui->menuLayout) return;
+  auto *positionMenu = new QMenu(tr("Collection Tree Position"), m_ctx.ui->menuView);
+  auto *positionGroup = new QActionGroup(positionMenu);
+  positionGroup->setExclusive(true);
+  QAction *leftAction = positionMenu->addAction(tr("Left"));
+  QAction *rightAction = positionMenu->addAction(tr("Right"));
+  for (QAction *action : {leftAction, rightAction}) {
+    action->setCheckable(true);
+    positionGroup->addAction(action);
+  }
+  m_ctx.ui->menuView->insertMenu(m_ctx.ui->menuLayout->menuAction(), positionMenu);
+
+  auto applyPosition = [this](DetailsPanePosition position) {
+    if (m_ctx.getCollectionTreeController) {
+      if (auto *tree = m_ctx.getCollectionTreeController()) {
+        tree->setDockPosition(position);
+      }
+    }
+  };
+  connect(leftAction, &QAction::triggered, this,
+          [applyPosition]() { applyPosition(DetailsPanePosition::Left); });
+  connect(rightAction, &QAction::triggered, this,
+          [applyPosition]() { applyPosition(DetailsPanePosition::Right); });
+  connect(positionMenu, &QMenu::aboutToShow, this, [this, leftAction, rightAction]() {
+    DetailsPanePosition position = DetailsPanePosition::Left;
+    if (m_ctx.getCollectionTreeController) {
+      if (auto *tree = m_ctx.getCollectionTreeController()) {
+        position = tree->activeDockPosition();
+      }
+    }
+    leftAction->setChecked(position != DetailsPanePosition::Right);
+    rightAction->setChecked(position == DetailsPanePosition::Right);
   });
 }
 

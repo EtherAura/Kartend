@@ -70,6 +70,9 @@ signals:
   void requestEnterAction();
   void requestEscapeAction();
   void requestToggleSidebarAction();
+  /// Toggle the collection tree panel (Kartend-ob1c9). Bound to
+  /// GamepadSettings::gamepadToggleCollectionTreeButton (default unbound).
+  void requestToggleCollectionTreeAction();
   void requestScrollAnimationStop();
 
   void bindingCaptureButtonPressed(const QString &buttonName);

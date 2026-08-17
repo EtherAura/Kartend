@@ -56,15 +56,16 @@ struct MovementIntent {
 [[nodiscard]] double normalizeSdlAxis(int rawSint16);
 
 // Action the manager should emit for a pressed button. None means
-// the press isn't bound to any of the three actions (silently ignored).
+// the press isn't bound to any of the four actions (silently ignored).
 // Comparisons are case-insensitive and an empty configured binding is
 // treated as "unbound" — it doesn't match any incoming button.
-enum class ButtonAction { None, Confirm, Back, ToggleSidebar };
+enum class ButtonAction { None, Confirm, Back, ToggleSidebar, ToggleCollectionTree };
 
 [[nodiscard]] ButtonAction resolveButtonAction(const QString &buttonName,
                                                const QString &confirmBinding,
                                                const QString &backBinding,
-                                               const QString &toggleSidebarBinding);
+                                               const QString &toggleSidebarBinding,
+                                               const QString &toggleCollectionTreeBinding);
 
 } // namespace GamepadHelpers
 

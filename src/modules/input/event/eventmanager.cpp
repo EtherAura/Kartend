@@ -290,6 +290,14 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
     return false;
   }
 
+  // Kartend-ob1c9: while the collection tree panel has keyboard focus its
+  // QTreeWidget owns arrows / Enter / expansion natively — stand down like
+  // the artwork-preview bypass above, or the application-wide filter routes
+  // every key into grid-selection navigation instead.
+  if (m_ctx && m_ctx->ui.collectionTreeWidget && m_ctx->ui.collectionTreeWidget->hasFocus()) {
+    return false;
+  }
+
   // Delegate to KeyboardManager for key handling
   if (keyEventSink()) {
     const bool searchBarFocused = (m_searchBar) && m_searchBar->hasFocus();

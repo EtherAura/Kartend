@@ -1,2 +1,3 @@
+add_subdirectory(collectiontreecontroller)
 add_subdirectory(detailspanemanager)
 add_subdirectory(settingsdialogcontroller)

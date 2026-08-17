@@ -59,6 +59,7 @@ class DetailPageOverlay;
 class DetailPageManager;
 class MenuController;
 class MarqueeController;
+class CollectionTreeController;
 class DbEventsController;
 class DialogController;
 class SettingsDialogController;
@@ -415,6 +416,10 @@ private:
   /// settingsDialogController() and QObject-parented to this window, so Qt
   /// tears it down with the window (raw pointer, no unique_ptr).
   SettingsDialogController *m_settingsDialogController = nullptr;
+  /// Collection tree panel (Kartend-ob1c9) — the hidable, left/right
+  /// dockable tree navigator. QObject-parented to this window (raw pointer,
+  /// no unique_ptr), same lifetime pattern as the other UI controllers.
+  CollectionTreeController *m_collectionTreeController = nullptr;
   /// Central z-order coordinator for every registered overlay. Constructed
   /// before any overlay widget so each overlay's setLayerManager() call
   /// during setupUI() registers against a live instance. Owns no widgets —
@@ -632,6 +637,7 @@ private:
   void adjustGridWidth(int delta);
   void setViewType(ViewType viewType);
   void setupSidebar();
+  void setupCollectionTree();
   void setupArtworkManager();
   /// Build / refresh the CollectionFilesystemWatcher's watch set from the
   /// current m_collections. Safe to call repeatedly — used on startup and

@@ -126,6 +126,12 @@ void ShortcutsDialog::populateContent() {
   if (settings.startup.useHomeView && settings.keybindings.keyHomeView != 0) {
     addShortcut(navSection, keyText(settings.keybindings.keyHomeView), tr("Jump to Home view"));
   }
+  // F6 is the fixed menu chord; this row surfaces the user's rebindable
+  // alternative when one is set (Kartend-ob1c9).
+  if (settings.keybindings.keyToggleCollectionTree != 0) {
+    addShortcut(navSection, keyText(settings.keybindings.keyToggleCollectionTree),
+                tr("Toggle collection tree panel"));
+  }
 
   auto *searchSection = addSection(m_leftColumnLayout, tr("Search"));
   addShortcut(searchSection, keyText(settings.keybindings.keySearch),

@@ -68,7 +68,8 @@ double normalizeSdlAxis(int rawSint16) {
 }
 
 ButtonAction resolveButtonAction(const QString &buttonName, const QString &confirmBinding,
-                                 const QString &backBinding, const QString &toggleSidebarBinding) {
+                                 const QString &backBinding, const QString &toggleSidebarBinding,
+                                 const QString &toggleCollectionTreeBinding) {
   const QString normalized = buttonName.trimmed();
   if (normalized.isEmpty()) {
     return ButtonAction::None;
@@ -88,6 +89,9 @@ ButtonAction resolveButtonAction(const QString &buttonName, const QString &confi
   }
   if (matches(toggleSidebarBinding)) {
     return ButtonAction::ToggleSidebar;
+  }
+  if (matches(toggleCollectionTreeBinding)) {
+    return ButtonAction::ToggleCollectionTree;
   }
   return ButtonAction::None;
 }

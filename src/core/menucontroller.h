@@ -24,6 +24,7 @@ QT_END_NAMESPACE
 class Ui_MainWindow;
 class NavigationManager;
 class ISettingsManager;
+class CollectionTreeController;
 class DetailsPaneManager;
 class ScrollManager;
 class ArtworkManager;
@@ -40,6 +41,7 @@ struct MenuControllerContext {
   std::function<NavigationManager *()> getNavigationManager;
   std::function<ISettingsManager *()> getSettingsManager;
   std::function<DetailsPaneManager *()> getDetailsPaneManager;
+  std::function<CollectionTreeController *()> getCollectionTreeController;
   std::function<ScrollManager *()> getScrollManager;
   std::function<ArtworkManager *()> getArtworkManager;
   std::function<IDatabaseManager *()> getDatabaseManager;
@@ -206,6 +208,7 @@ private:
   void setupActionShowMenuBar();
   void setupActionShowToolbar();
   void setupActionShowSidebar();
+  void setupActionShowCollectionTree();
   void setupActionSettings();
   void setupActionAbout();
   void setupActionAboutQt();

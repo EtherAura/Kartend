@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A collection tree panel — see your whole library at a glance and jump
+  anywhere in one click.** A new panel lists every collection as a
+  collapsible tree (nested subcollections included; a collection linked
+  under several parents appears under each), with playlists grouped in
+  their own section below. Clicking a row jumps straight to that
+  collection, and the highlight follows you however you navigate — tiles,
+  breadcrumbs, the command palette, or the back key. The panel is chrome
+  you control per collection: toggle it with **F6** (or View → Show
+  Collection Tree, a rebindable key, or a controller button you assign),
+  dock it on the left or right via View → Collection Tree Position, and
+  each collection remembers the visibility and side you chose while
+  browsing it. Arrow keys work inside the panel when it has focus, and it
+  picks up each collection's accent color like the rest of the window
+  furniture.
+
 - **A release split across several discs can now appear as one item.** A
   recording or film that arrives as `Recital (Disc 1).flac` and `Recital
   (Disc 2).flac` used to browse as two tiles, each holding half of

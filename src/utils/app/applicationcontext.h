@@ -47,6 +47,7 @@ class IScrollDataSource;
 class IArtworkManager;
 class ISettingsManager;
 class ISessionManager;
+class ICollectionTreeController;
 class IDetailsPaneManager;
 class IDetailPageManager;
 class IDatabaseManager;
@@ -135,6 +136,11 @@ struct ApplicationContext {
     // Optional / feature-specific
     QMenuBar *menubar = nullptr;
     QLineEdit *searchBar = nullptr;
+    /// Kartend-ob1c9: the collection tree panel's QTreeWidget (as a plain
+    /// QWidget — consumers only need hasFocus()). EventManager stands its
+    /// grid-navigation key handling down while this has focus, the same
+    /// bypass the search bar gets.
+    QWidget *collectionTreeWidget = nullptr;
     /// Search-mode toggle: a QAction added to the searchBar QLineEdit at
     /// LeadingPosition (no longer a standalone button).
     QAction *searchModeAction = nullptr;
@@ -170,6 +176,9 @@ struct ApplicationContext {
     ISettingsManager *settingsManager = nullptr;
     ISessionManager *sessionManager = nullptr;
     IDetailsPaneManager *detailsPaneManager = nullptr;
+    /// Kartend-ob1c9: the collection tree panel's toggle role — the input
+    /// layer (rebindable key, gamepad action) reaches it through here.
+    ICollectionTreeController *collectionTreeController = nullptr;
     IDetailPageManager *detailPageManager = nullptr;
     IDatabaseManager *databaseManager = nullptr;
     INavigationManager *navigationManager = nullptr;
@@ -348,6 +357,9 @@ struct ApplicationContext {
   [[nodiscard]] ISessionManager *sessionManager() const { return managers.sessionManager; }
   [[nodiscard]] IDetailsPaneManager *detailsPaneManager() const {
     return managers.detailsPaneManager;
+  }
+  [[nodiscard]] ICollectionTreeController *collectionTreeController() const {
+    return managers.collectionTreeController;
   }
   [[nodiscard]] IDetailPageManager *detailPageManager() const { return managers.detailPageManager; }
   [[nodiscard]] IDatabaseManager *databaseManager() const { return managers.databaseManager; }

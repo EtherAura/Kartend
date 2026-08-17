@@ -41,6 +41,7 @@
 #include "kartreader.h"
 #include "titlecountshelpers.h"
 
+#include "collectiontreecontroller.h"
 #include "datauditcontroller.h"
 #include "dbeventscontroller.h"
 #include "detailspane.h"
@@ -769,6 +770,12 @@ void MainWindow::rebuildHierarchyCache() {
   // keep the toolbar filter popup in sync so retagged collections show up
   // immediately and orphaned filters self-clear.
   refreshFilterToolbar();
+  // Kartend-ob1c9: every collection-list mutation funnels through here, so
+  // this is the tree panel's rebuild chokepoint — imports, settings edits,
+  // playlist resyncs and reorders all land in one place.
+  if (m_collectionTreeController) {
+    m_collectionTreeController->rebuildTree();
+  }
 }
 
 void MainWindow::resyncPlaylistCollections() {

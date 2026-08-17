@@ -32,6 +32,8 @@ private slots:
   void globalSections_survivePerCollectionSave();
   void clampedOutOfRangeValue_persistedOnLoad();
   void uuidCollisionCapturedForStartupWarning();
+  // Kartend-ob1c9: the collection tree panel's per-collection block.
+  void collectionTreeBlock_roundTripsAndClampsPosition();
 
 private:
   static void writeConfigIni(const QString &iniContents);
@@ -313,6 +315,44 @@ void TestSettingsRoundtrip::clampedOutOfRangeValue_persistedOnLoad() {
   QVERIFY2(!rewritten.contains(QStringLiteral("gridWidth=0")),
            qPrintable(QStringLiteral("Out-of-range gridWidth=0 was not rewritten on load:\n%1")
                           .arg(rewritten)));
+}
+
+void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
+  // Kartend-ob1c9: visibility + dock side survive load→save→load, and a
+  // position outside the tree's left/right vocabulary (including the
+  // details pane's "top"/"bottom") clamps to left instead of importing.
+  writeConfigIni(QStringLiteral("[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreeVisible=false\n"
+                                "collectionTreePosition=right\n"));
+
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections;
+  mgr.loadCollections(collections);
+  QCOMPARE(collections.size(), 1);
+  QVERIFY(!collections[0].collectionTree.treeVisible);
+  QCOMPARE(collections[0].collectionTree.treePosition, DetailsPanePosition::Right);
+
+  collections[0].collectionTree.treeVisible = true;
+  collections[0].collectionTree.treePosition = DetailsPanePosition::Left;
+  mgr.saveCollections(collections);
+
+  QList<CollectionConfig> reloaded;
+  mgr.loadCollections(reloaded);
+  QCOMPARE(reloaded.size(), 1);
+  QVERIFY(reloaded[0].collectionTree.treeVisible);
+  QCOMPARE(reloaded[0].collectionTree.treePosition, DetailsPanePosition::Left);
+
+  writeConfigIni(QStringLiteral("[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreePosition=top\n"));
+  QList<CollectionConfig> clamped;
+  mgr.loadCollections(clamped);
+  QCOMPARE(clamped.size(), 1);
+  QCOMPARE(clamped[0].collectionTree.treePosition, DetailsPanePosition::Left);
+  QVERIFY(clamped[0].collectionTree.treeVisible); // default ON
 }
 
 // Expanded QTEST_GUILESS_MAIN so the macOS HOME sandbox is installed before

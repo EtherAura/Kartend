@@ -22,6 +22,7 @@ void load(QSettings &settings, KeybindingSettings &opts) {
   opts.keyJumpLast = settings.value(keys::kKeyJumpLast, static_cast<int>(Qt::Key_End)).toInt();
   opts.keyItemDetails = settings.value(keys::kKeyItemDetails, static_cast<int>(Qt::Key_I)).toInt();
   opts.keyHomeView = settings.value(keys::kKeyHomeView, 0).toInt();
+  opts.keyToggleCollectionTree = settings.value(keys::kKeyToggleCollectionTree, 0).toInt();
 }
 
 void save(QSettings &settings, const KeybindingSettings &opts) {
@@ -38,6 +39,7 @@ void save(QSettings &settings, const KeybindingSettings &opts) {
   settings.setValue(keys::kKeyJumpLast, opts.keyJumpLast);
   settings.setValue(keys::kKeyItemDetails, opts.keyItemDetails);
   settings.setValue(keys::kKeyHomeView, opts.keyHomeView);
+  settings.setValue(keys::kKeyToggleCollectionTree, opts.keyToggleCollectionTree);
 }
 
 } // namespace KeybindingSettingsPersistence
