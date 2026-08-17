@@ -181,6 +181,16 @@ foreach(_integration_class IN LISTS INTEGRATION_TEST_CLASSES)
            COMMAND test_integration ${_integration_class})
 endforeach()
 
+# The tree panel's icon geometry is dpr-sensitive (2026-08-17: a unit-mixing
+# class of bug only shows on scaled displays), so its pixel tests also run
+# at a forced 2x scale factor. Kept to this one suite — the rest of the
+# integration binary is dpr-agnostic and doubling every entry would pad the
+# suite for nothing.
+add_test(NAME Integration.TestCollectionTreePanel.Scale2
+         COMMAND test_integration TestCollectionTreePanel)
+set_tests_properties(Integration.TestCollectionTreePanel.Scale2
+                     PROPERTIES ENVIRONMENT "QT_SCALE_FACTOR=2")
+
 # Kartend-kkeur: give the integration test its own HOME so QStandardPaths test
 # mode (~/.qttest) is isolated from the unit tests under `ctest -j`. Mirrors
 # the per-test HOME loop at the end of tests/CMakeLists.txt — that loop only

@@ -19,6 +19,12 @@ private slots:
   // user decision 2026-08-17) — and childless rows never poison the
   // collapse memory during staged startup rebuilds.
   void tree_opensFullyExpanded_onFreshSession();
+
+  // Pixel test: renders the real tree with a seeded icon on an INDENTED row
+  // and measures where it lands — centred in the row's visible span, fully
+  // inside the viewport. Guards the decoration-rect geometry that clipped
+  // icons at the panel edge (field reports 2026-08-17).
+  void icons_onIndentedRows_renderCenteredAndUnclipped();
 };
 
 #endif // TEST_COLLECTIONTREEPANEL_H

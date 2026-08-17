@@ -733,9 +733,20 @@ void CollectionTreeController::refreshIcons() {
     const QString name = collections.at(index).name;
     int depth = 1; // rootIsDecorated indents even top-level rows one unit
     for (QTreeWidgetItem *p = item->parent(); p; p = p->parent()) ++depth;
-    const int canvasWidth = qMax(24, viewportWidth - chrome - indentation * depth);
-    const int canvasDevW = qMax(1, qRound(canvasWidth * dpr));
-    const int maxWidth = qMax(24, canvasWidth - breathing);
+    // The decoration rect is a FIXED width (the view iconSize, sized for
+    // depth 1) and Qt centres whatever pixmap it gets inside it. A
+    // per-depth NARROWER canvas therefore gets re-centred by Qt — shifted
+    // right by half the depth difference, past the panel edge (field
+    // report 2026-08-17: clipped AND off-centre on indented rows). So:
+    // every canvas is exactly decoration-width (canvas == rect, no Qt
+    // offset), and the logo is placed manually, centred within the row's
+    // VISIBLE span — from the row's indent to the viewport edge. The
+    // canvas tail past the visible span stays transparent and clips
+    // invisibly.
+    const int decoWidth = qMax(24, viewportWidth - chrome - indentation);
+    const int canvasDevW = qMax(1, qRound(decoWidth * dpr));
+    const int visibleWidth = qMax(24, viewportWidth - chrome - indentation * depth);
+    const int maxWidth = qMax(24, visibleWidth - breathing);
 
     QString parentArtworkDir;
     const int parentIndex = item->data(0, kRoleParentCollection).toInt();
@@ -763,7 +774,8 @@ void CollectionTreeController::refreshIcons() {
       if (!sibling.isEmpty()) path = sibling;
     }
 
-    const QString cacheKey = path + QLatin1Char('|') + QString::number(maxWidth);
+    const QString cacheKey =
+        path + QLatin1Char('|') + QString::number(visibleWidth);
     auto cached = cache.find(cacheKey);
     if (cached == cache.end()) {
       QPixmap pm;
@@ -859,16 +871,14 @@ void CollectionTreeController::refreshIcons() {
         }
       }
       if (!pm.isNull()) {
-        // Uniform-width canvas with the logo CENTERED (user direction
-        // 2026-08-17: "more centered" — supersedes the left-aligned pass).
-        // The canvas is still uniform per depth so Qt's decoration rect
-        // geometry stays stable and nothing drifts row-to-row; centering
-        // happens INSIDE the canvas, deterministically.
+        // Decoration-width canvas; logo centred in the VISIBLE span (see
+        // the depth/geometry comment above).
         QPixmap canvas(canvasDevW, qMax(qRound(m_iconSize * dpr), pm.height()));
         canvas.fill(Qt::transparent);
         {
           QPainter painter(&canvas);
-          painter.drawPixmap((canvas.width() - pm.width()) / 2,
+          const int visibleDevW = qMin(canvas.width(), qRound(visibleWidth * dpr));
+          painter.drawPixmap(qMax(0, (visibleDevW - pm.width()) / 2),
                              (canvas.height() - pm.height()) / 2, pm);
         }
         canvas.setDevicePixelRatio(dpr);

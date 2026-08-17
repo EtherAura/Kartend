@@ -5,6 +5,10 @@
 #include "mainwindow.h"
 #include "mocks/mockedmainwindowfixture.h"
 
+#include <QDir>
+#include <QImage>
+#include <QPainter>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -72,4 +76,93 @@ void TestCollectionTreePanel::tree_opensFullyExpanded_onFreshSession() {
                             .arg((*it)->text(0))));
   }
   QVERIFY2(sawParentRow, "seeded parent/child must produce at least one branch row");
+}
+
+void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAndUnclipped() {
+  QTemporaryDir artDir;
+  QVERIFY(artDir.isValid());
+  const QString iconPath = artDir.path() + QStringLiteral("/wide.png");
+  {
+    QImage art(240, 24, QImage::Format_ARGB32);
+    art.fill(QColor(255, 0, 0));
+    QVERIFY(art.save(iconPath));
+  }
+
+  // Depth-3 probe at MINIMUM panel width — the exact conditions of the
+  // field report (2026-08-17): the deeper the row and the narrower the
+  // panel, the further Qt's decoration-rect centring used to push the
+  // icon past the edge. Normal style everywhere: the tinted DEFAULT would
+  // recolour the probe and the red-pixel scan below would find nothing.
+  CollectionConfig shell;
+  shell.name = QStringLiteral("Shell");
+  shell.collectionTree.treeIconStyle = TreeIconStyle::Normal;
+  shell.collectionTree.treeWidth = CollectionTreeSettings::kMinWidth;
+  CollectionConfig child;
+  child.name = QStringLiteral("Child");
+  child.parentCollectionIndex = 0;
+  child.collectionTree.treeIconStyle = TreeIconStyle::Normal;
+  child.collectionTree.treeWidth = CollectionTreeSettings::kMinWidth;
+  CollectionConfig grand;
+  grand.name = QStringLiteral("Grand");
+  grand.parentCollectionIndex = 1;
+  grand.collectionIcon = iconPath; // depth-3 row carries the probe icon
+  grand.collectionTree.treeIconStyle = TreeIconStyle::Normal;
+  grand.collectionTree.treeWidth = CollectionTreeSettings::kMinWidth;
+  KartendTest::MockedMainWindowFixture fixture({shell, child, grand});
+  MainWindow *win = fixture.window();
+  QVERIFY(win);
+  win->show();
+  QVERIFY(QTest::qWaitForWindowExposed(win));
+
+  auto *controller = win->findChild<CollectionTreeController *>();
+  QVERIFY(controller);
+  // Activate Shell so its collectionTree state (min width, Normal) applies.
+  controller->onCollectionSwitched(0);
+
+  auto *tree = win->findChild<QTreeWidget *>(QStringLiteral("collectionTreeWidget"));
+  QVERIFY(tree);
+  QVERIFY(tree->viewport());
+  // Let deferred icon rebakes (viewport-resize singleShots) settle.
+  QTest::qWait(80);
+
+  const QPixmap grabbed = tree->viewport()->grab();
+  const QImage frame = grabbed.toImage();
+  QVERIFY(!frame.isNull());
+  // The grab is PHYSICAL pixels; every widget metric below is logical.
+  // Convert once and measure everything in physical, or a 2x display
+  // "fails" this test on pure unit mixing (which happened — 2026-08-17).
+  const qreal dpr = grabbed.devicePixelRatio() > 0 ? grabbed.devicePixelRatio() : 1.0;
+  int left = frame.width();
+  int right = -1;
+  for (int y = 0; y < frame.height(); ++y) {
+    for (int x = 0; x < frame.width(); ++x) {
+      const QColor c = frame.pixelColor(x, y);
+      if (c.red() > 180 && c.green() < 90 && c.blue() < 90) {
+        left = qMin(left, x);
+        right = qMax(right, x);
+      }
+    }
+  }
+  QVERIFY2(right >= 0, "probe icon must be rendered somewhere in the viewport");
+
+  // Fully inside the viewport: nothing may touch the last pixels before the
+  // edge (the 8px chrome margin guarantees daylight when unclipped).
+  QVERIFY2(right < frame.width() - qRound(4 * dpr),
+           qPrintable(QStringLiteral("icon right edge %1 hugs/clips the viewport edge %2")
+                          .arg(right)
+                          .arg(frame.width())));
+
+  // Centred in the row's visible span [indent*depth, viewport width],
+  // all in PHYSICAL pixels; tolerance scales with dpr.
+  const int rowStart = qRound(tree->indentation() * 3 * dpr);
+  const int spanCenter = rowStart + (frame.width() - rowStart) / 2;
+  const int iconCenter = (left + right) / 2;
+  QVERIFY2(qAbs(iconCenter - spanCenter) <= qRound(5 * dpr),
+           qPrintable(QStringLiteral("icon centre %1 vs visible-span centre %2 (row start %3, "
+                                     "viewport %4, dpr %5)")
+                          .arg(iconCenter)
+                          .arg(spanCenter)
+                          .arg(rowStart)
+                          .arg(frame.width())
+                          .arg(dpr)));
 }
