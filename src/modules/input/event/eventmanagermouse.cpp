@@ -51,6 +51,14 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   if (ourWindow == nullptr || targetWindow != ourWindow) {
     return false;
   }
+  // A wheel tick over the collection tree scrolls the TREE, not the grid
+  // selection (user request 2026-08-17). Target-based rather than
+  // focus-based — hovering is enough, matching every other scroll area.
+  if (m_ctx && m_ctx->ui.collectionTreeWidget && targetWidget &&
+      (targetWidget == m_ctx->ui.collectionTreeWidget ||
+       m_ctx->ui.collectionTreeWidget->isAncestorOf(targetWidget))) {
+    return false;
+  }
   return m_wheelHandler && m_wheelHandler->handleEvent(obj, event);
 }
 

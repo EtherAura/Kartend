@@ -23,6 +23,7 @@ SidebarsLayoutPanel::SidebarsLayoutPanel(QWidget *parent)
             [this](int) { emit changed(); });
   }
   connect(ui->treeIconsOnlyCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
+  connect(ui->treeShowLinesCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
   connect(ui->treeIconSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
           [this](int) { emit changed(); });
   connect(ui->treeIconStyleComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
@@ -52,6 +53,7 @@ void SidebarsLayoutPanel::load() {
   ui->treeJustificationComboBox->setCurrentIndex(
       static_cast<int>(current->collectionTree.treeJustification));
   ui->treeIconsOnlyCheckBox->setChecked(current->collectionTree.treeIconsOnly);
+  ui->treeShowLinesCheckBox->setChecked(current->collectionTree.treeShowLines);
   ui->treeIconSizeSpinBox->setValue(current->collectionTree.treeIconSize);
   ui->treeIconStyleComboBox->setCurrentIndex(static_cast<int>(current->collectionTree.treeIconStyle));
   ui->treeIconTintEdit->setText(current->collectionTree.treeIconTintColor);
@@ -68,6 +70,7 @@ void SidebarsLayoutPanel::clear() {
   ui->treeJustificationComboBox->setCurrentIndex(
       static_cast<int>(CollectionTreeSettings{}.treeJustification));
   ui->treeIconsOnlyCheckBox->setChecked(CollectionTreeSettings{}.treeIconsOnly);
+  ui->treeShowLinesCheckBox->setChecked(CollectionTreeSettings{}.treeShowLines);
   ui->treeIconSizeSpinBox->setValue(CollectionTreeSettings{}.treeIconSize);
   ui->treeIconStyleComboBox->setCurrentIndex(static_cast<int>(CollectionTreeSettings{}.treeIconStyle));
   ui->treeIconTintEdit->clear();
@@ -90,6 +93,7 @@ void SidebarsLayoutPanel::save() {
   current->collectionTree.treeJustification =
       static_cast<SidebarJustification>(ui->treeJustificationComboBox->currentIndex());
   current->collectionTree.treeIconsOnly = ui->treeIconsOnlyCheckBox->isChecked();
+  current->collectionTree.treeShowLines = ui->treeShowLinesCheckBox->isChecked();
   current->collectionTree.treeIconSize = ui->treeIconSizeSpinBox->value();
   current->collectionTree.treeIconStyle =
       static_cast<TreeIconStyle>(ui->treeIconStyleComboBox->currentIndex());

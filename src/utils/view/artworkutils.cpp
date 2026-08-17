@@ -34,14 +34,18 @@ QImage composeArtworkCard(const QImage &source, int targetWidthLogical, int targ
   const QImage scaledArtwork =
       sourceNoDpr.scaled(physicalW, physicalH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
+  // Logo-like art that would vanish against the card colour gets a hairline
+  // outline first (no-op for photos/covers — see the header contract).
+  const QImage cardArtwork = outlineLowContrastArtwork(scaledArtwork, background);
+
   QImage result(physicalW, physicalH, QImage::Format_ARGB32_Premultiplied);
   result.fill(background);
   {
     QPainter painter(&result);
     painter.setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform);
-    const int offsetX = (physicalW - scaledArtwork.width()) / 2;
-    const int offsetY = (physicalH - scaledArtwork.height()) / 2;
-    painter.drawImage(offsetX, offsetY, scaledArtwork);
+    const int offsetX = (physicalW - cardArtwork.width()) / 2;
+    const int offsetY = (physicalH - cardArtwork.height()) / 2;
+    painter.drawImage(offsetX, offsetY, cardArtwork);
   }
 
   if (cornerRadiusLogical > 0) {
@@ -59,6 +63,55 @@ QImage composeArtworkCard(const QImage &source, int targetWidthLogical, int targ
   }
 
   result.setDevicePixelRatio(dpr);
+  return result;
+}
+
+QImage outlineLowContrastArtwork(const QImage &art, const QColor &background) {
+  if (art.isNull() || !art.hasAlphaChannel()) {
+    return art;
+  }
+  const QImage img = art.format() == QImage::Format_ARGB32
+                         ? art
+                         : art.convertToFormat(QImage::Format_ARGB32);
+  const int bgLum = qGray(background.rgb());
+  qint64 opaque = 0;
+  qint64 lowContrast = 0;
+  for (int y = 0; y < img.height(); ++y) {
+    const auto *line = reinterpret_cast<const QRgb *>(img.constScanLine(y));
+    for (int x = 0; x < img.width(); ++x) {
+      if (qAlpha(line[x]) > 128) {
+        ++opaque;
+        if (qAbs(qGray(line[x]) - bgLum) < 56) ++lowContrast;
+      }
+    }
+  }
+  const qint64 total = qint64(img.width()) * img.height();
+  if (total <= 0 || opaque * 100 >= total * 92) {
+    return art; // fully-painted art (photos, covers) — not a logo
+  }
+  if (lowContrast * 100 < opaque * 10) {
+    return art; // readable as-is
+  }
+
+  QColor halo = bgLum < 128 ? QColor(255, 255, 255, 210) : QColor(0, 0, 0, 210);
+  QImage silhouette(img.size(), QImage::Format_ARGB32_Premultiplied);
+  silhouette.fill(Qt::transparent);
+  {
+    QPainter painter(&silhouette);
+    painter.drawImage(0, 0, img);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    painter.fillRect(silhouette.rect(), halo);
+  }
+  QImage result(img.width() + 2, img.height() + 2, QImage::Format_ARGB32_Premultiplied);
+  result.fill(Qt::transparent);
+  {
+    QPainter painter(&result);
+    painter.drawImage(0, 1, silhouette);
+    painter.drawImage(2, 1, silhouette);
+    painter.drawImage(1, 0, silhouette);
+    painter.drawImage(1, 2, silhouette);
+    painter.drawImage(1, 1, img);
+  }
   return result;
 }
 

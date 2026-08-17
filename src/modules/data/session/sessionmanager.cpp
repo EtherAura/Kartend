@@ -78,12 +78,15 @@ void SessionManager::initialize() {
       readGlobalData(root);
       readCachedViewports(root);
       {
-        // Collection tree expansion keys (root-level string array).
+        // Collection tree collapsed keys (root-level string array). The old
+        // "collectionTreeExpanded" key from the brief expanded-set era is
+        // deliberately ignored: the new default is everything-expanded,
+        // which is exactly what dropping the old state yields.
         QMutexLocker locker(&m_mutex);
-        m_collectionTreeExpandedKeys.clear();
-        for (const auto &v : root[QStringLiteral("collectionTreeExpanded")].toArray()) {
+        m_collectionTreeCollapsedKeys.clear();
+        for (const auto &v : root[QStringLiteral("collectionTreeCollapsed")].toArray()) {
           const QString key = v.toString();
-          if (!key.isEmpty()) m_collectionTreeExpandedKeys.append(key);
+          if (!key.isEmpty()) m_collectionTreeCollapsedKeys.append(key);
         }
       }
     }
@@ -164,10 +167,10 @@ auto SessionManager::buildSessionJson() const -> QJsonObject {
 
   root["collections"] = collections;
   root["global"] = static_cast<double>(globalItemCount);
-  if (!m_collectionTreeExpandedKeys.isEmpty()) {
-    QJsonArray expanded;
-    for (const QString &key : m_collectionTreeExpandedKeys) expanded.append(key);
-    root[QStringLiteral("collectionTreeExpanded")] = expanded;
+  if (!m_collectionTreeCollapsedKeys.isEmpty()) {
+    QJsonArray collapsed;
+    for (const QString &key : m_collectionTreeCollapsedKeys) collapsed.append(key);
+    root[QStringLiteral("collectionTreeCollapsed")] = collapsed;
   }
 
   // Serialize cached viewports for instant startup
@@ -453,12 +456,12 @@ SessionManager::getCachedViewport(const QString &collectionKey) const {
   return cachedViewports.value(collectionKey);
 }
 
-void SessionManager::setCollectionTreeExpandedKeys(const QStringList &keys) {
+void SessionManager::setCollectionTreeCollapsedKeys(const QStringList &keys) {
   QMutexLocker locker(&m_mutex);
-  m_collectionTreeExpandedKeys = keys;
+  m_collectionTreeCollapsedKeys = keys;
 }
 
-QStringList SessionManager::collectionTreeExpandedKeys() const {
+QStringList SessionManager::collectionTreeCollapsedKeys() const {
   QMutexLocker locker(&m_mutex);
-  return m_collectionTreeExpandedKeys;
+  return m_collectionTreeCollapsedKeys;
 }

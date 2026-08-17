@@ -83,12 +83,15 @@ public:
 
   virtual void clearStaleCollections(const QList<CollectionConfig> &currentCollections) = 0;
 
-  /// Collection tree panel expansion memory (Kartend-ob1c9 follow-up, user
-  /// request 2026-08-17): the set of expansion keys (collection UUIDs plus
-  /// the reserved playlists-group literal) whose branches are open. Session
-  /// state, not configuration — hence here and not kartend.cfg.
-  virtual void setCollectionTreeExpandedKeys(const QStringList &keys) = 0;
-  [[nodiscard]] virtual QStringList collectionTreeExpandedKeys() const = 0;
+  /// Collection tree panel expansion memory (Kartend-ob1c9 follow-up):
+  /// the set of expansion keys (collection UUIDs plus the reserved
+  /// playlists-group literal) whose branches the user CLOSED. Inverted to a
+  /// collapsed-set 2026-08-17 per user decision — every branch defaults
+  /// EXPANDED, and only deliberate collapses are remembered, so new
+  /// collections and fresh sessions open fully unfolded. Session state,
+  /// not configuration — hence here and not kartend.cfg.
+  virtual void setCollectionTreeCollapsedKeys(const QStringList &keys) = 0;
+  [[nodiscard]] virtual QStringList collectionTreeCollapsedKeys() const = 0;
 };
 
 #endif // ISESSIONMANAGER_H

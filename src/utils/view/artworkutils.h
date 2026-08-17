@@ -549,6 +549,25 @@ private:
                                         const QColor &background);
 
 /**
+ * @brief Add a hairline outline to logo-like artwork that would blend into
+ * @p background; returns @p art untouched otherwise.
+ *
+ * User request 2026-08-17: the collection tree grew this treatment first
+ * ("crisp outline when needed"), then the item cards. Two gates keep it to
+ * logos: the art must have meaningful transparency (opaque coverage under
+ * 92% of its rect — photos and box covers are ~100% and skip), and at least
+ * a TENTH of its opaque pixels must sit within the low-contrast band of the
+ * background (measured on the real files: an unreadable navy-on-gold mark
+ * scores 14%, a fully readable red-on-white one 5%). The outline is the
+ * art's alpha silhouette in an opposing shade at the four cardinal offsets
+ * of ONE pixel — hairline at any DPR, never a glow. The result is 2px
+ * taller/wider (1px pad each side) so the outline is not clipped.
+ * CollectionTreeController mirrors these thresholds on its QPixmap path
+ * (post style-recolour); keep them in step.
+ */
+[[nodiscard]] QImage outlineLowContrastArtwork(const QImage &art, const QColor &background);
+
+/**
  * @brief Clear the artwork directory cache.
  * Call when collections change or need fresh filesystem data.
  */

@@ -49,6 +49,9 @@ void load(QSettings &settings, CollectionTreeSettings &tree, const QString &coll
   tree.treeIconsOnly =
       settings.value(keys::kCollectionTreeIconsOnly, CollectionTreeSettings{}.treeIconsOnly)
           .toBool();
+  tree.treeShowLines =
+      settings.value(keys::kCollectionTreeShowLines, CollectionTreeSettings{}.treeShowLines)
+          .toBool();
   const int rawIconSize =
       settings.value(keys::kCollectionTreeIconSize, CollectionTreeSettings{}.treeIconSize).toInt();
   tree.treeIconSize = std::clamp(rawIconSize, CollectionTreeSettings::kMinIconSize,
@@ -85,6 +88,7 @@ void save(QSettings &settings, const CollectionTreeSettings &tree) {
   settings.setValue(keys::kCollectionTreePosition, positionToString(tree.treePosition));
   settings.setValue(keys::kCollectionTreeWidth, tree.treeWidth);
   settings.setValue(keys::kCollectionTreeIconsOnly, tree.treeIconsOnly);
+  settings.setValue(keys::kCollectionTreeShowLines, tree.treeShowLines);
   settings.setValue(keys::kCollectionTreeIconSize, tree.treeIconSize);
   settings.setValue(keys::kCollectionTreeIconStyle,
                     CollectionUtils::treeIconStyleToString(tree.treeIconStyle));

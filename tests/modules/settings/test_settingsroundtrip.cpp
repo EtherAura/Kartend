@@ -386,18 +386,23 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
                                 "mediaDirectory=/tmp/media\n"
                                 "collectionTreeWidth=9\n"
                                 "collectionTreeIconsOnly=true\n"
+                                "collectionTreeShowLines=true\n"
                                 "collectionTreeIconSize=200\n"));
   QList<CollectionConfig> widthClamped;
   mgr.loadCollections(widthClamped);
   QCOMPARE(widthClamped[0].collectionTree.treeWidth, CollectionTreeSettings::kMinWidth);
-  // Icon options (user request 2026-08-17): bool round-trips, size clamps.
+  // Icon options (user request 2026-08-17): bools round-trip, size clamps.
+  // Tree lines default OFF; absence of the key must read false.
   QVERIFY(widthClamped[0].collectionTree.treeIconsOnly);
+  QVERIFY(widthClamped[0].collectionTree.treeShowLines);
   QCOMPARE(widthClamped[0].collectionTree.treeIconSize, CollectionTreeSettings::kMaxIconSize);
   mgr.saveCollections(widthClamped);
   QList<CollectionConfig> iconReloaded;
   mgr.loadCollections(iconReloaded);
   QVERIFY(iconReloaded[0].collectionTree.treeIconsOnly);
+  QVERIFY(iconReloaded[0].collectionTree.treeShowLines);
   QCOMPARE(iconReloaded[0].collectionTree.treeIconSize, CollectionTreeSettings::kMaxIconSize);
+  QVERIFY(!widthLoaded[0].collectionTree.treeShowLines); // key absent -> default off
 
   // Icon style + tint (user request 2026-08-17): round-trip, unknown style
   // clamps to normal, absent tint reads empty (= accent default).

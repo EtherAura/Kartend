@@ -184,10 +184,12 @@ private:
   DetailsPanePosition m_insertedPosition = DetailsPanePosition::Left;
   SidebarJustification m_insertedJustification = SidebarJustification::BelowToolbar;
   bool m_panelInserted = false;
-  /// Expansion memory across rebuilds, keyed by collection UUID (stable
-  /// across index shuffles). The synthetic Playlists group uses a reserved
-  /// key.
-  QSet<QString> m_expandedUuids;
+  /// Collapse memory across rebuilds, keyed by collection UUID (stable
+  /// across index shuffles; the synthetic Playlists group uses a reserved
+  /// key). INVERTED per user decision 2026-08-17: every branch defaults
+  /// EXPANDED and only deliberate collapses are remembered, so new
+  /// collections and fresh sessions open fully unfolded.
+  QSet<QString> m_collapsedUuids;
   /// Guards the activation/expansion handlers while rebuilds and highlight
   /// moves mutate the tree programmatically.
   bool m_suppressSignals = false;

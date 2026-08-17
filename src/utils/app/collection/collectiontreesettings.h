@@ -45,6 +45,10 @@ struct CollectionTreeSettings {
   /// text — a blank unlabelled row would be unusable, so text is the fallback,
   /// not a casualty.
   bool treeIconsOnly = false;
+  /// Branch connector lines (user request 2026-08-17). OFF by default —
+  /// the chevrons alone carry the structure; the lines are visual noise
+  /// most themes are better without. Chevrons stay either way.
+  bool treeShowLines = false;
   /// Row icon edge length in px (user request 2026-08-17). Clamped by the
   /// persistence layer like treeWidth.
   int treeIconSize = 16;

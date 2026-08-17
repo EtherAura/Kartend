@@ -10,6 +10,8 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QRegularExpression>
+#include <QStyle>
+#include <QStyleOption>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
 #include <QVBoxLayout>
@@ -32,10 +34,44 @@ constexpr int kRoleCollectionIndex = Qt::UserRole;  // int; -1 for the group hea
 constexpr int kRoleExpansionKey = Qt::UserRole + 1; // QString; UUID or reserved key
 constexpr int kRoleParentCollection = Qt::UserRole + 2; // int; -1 for roots/playlists
 constexpr int kRoleName = Qt::UserRole + 3; // QString; cfg.name (text may be blank in icons-only)
+constexpr int kRoleIsCategory = Qt::UserRole + 4; // bool; row has children (incl. group header)
 
 /// Expansion-memory key for the synthetic Playlists group row. UUIDs are
 /// derived from name+mediaDirectory, so a literal that can't collide.
 const QString kPlaylistsGroupKey = QStringLiteral("::playlists-group::");
+
+/// QTreeWidget whose branch column can hide the connector lines while
+/// keeping the expand chevrons (user request 2026-08-17: tree lines off by
+/// default, optional). Styles draw lines from State_Sibling/State_Item in
+/// PE_IndicatorBranch; painting the primitive ourselves with ONLY the
+/// children/open states yields just the arrow. Toggled via the
+/// "kartendShowLines" dynamic property so the controller's member type can
+/// stay QTreeWidget*.
+class TreeBranchView : public QTreeWidget {
+public:
+  using QTreeWidget::QTreeWidget;
+
+protected:
+  void drawBranches(QPainter *painter, const QRect &rect,
+                    const QModelIndex &index) const override {
+    if (property("kartendShowLines").toBool()) {
+      QTreeWidget::drawBranches(painter, rect, index);
+      return;
+    }
+    if (!model() || !model()->hasChildren(index)) {
+      return;
+    }
+    QStyleOption opt;
+    opt.initFrom(this);
+    const int unit = indentation();
+    opt.rect = QRect(rect.right() - unit + 1, rect.top(), unit, rect.height());
+    opt.state |= QStyle::State_Children;
+    if (isExpanded(index)) {
+      opt.state |= QStyle::State_Open;
+    }
+    style()->drawPrimitive(QStyle::PE_IndicatorBranch, &opt, painter, this);
+  }
+};
 
 /// Crop fully-transparent borders (field report 2026-08-17, round 6):
 /// ScreenScraper's company/logo canvases pad the actual mark with large
@@ -217,7 +253,8 @@ void CollectionTreeController::setupPanel() {
   m_header->setMargin(8);
   layout->addWidget(m_header);
 
-  m_tree = new QTreeWidget(content);
+  m_tree = new TreeBranchView(content);
+  m_tree->setProperty("kartendShowLines", false);
   m_tree->setObjectName(QStringLiteral("collectionTreeWidget"));
   m_tree->setHeaderHidden(true);
   m_tree->setRootIsDecorated(true);
@@ -247,8 +284,8 @@ void CollectionTreeController::setupPanel() {
   // first rebuild so the initial build already opens the right branches.
   if (m_ctx) {
     if (ISessionManager *session = m_ctx->sessionManager()) {
-      const QStringList keys = session->collectionTreeExpandedKeys();
-      m_expandedUuids = QSet<QString>(keys.begin(), keys.end());
+      const QStringList keys = session->collectionTreeCollapsedKeys();
+      m_collapsedUuids = QSet<QString>(keys.begin(), keys.end());
     }
   }
 
@@ -377,9 +414,9 @@ void CollectionTreeController::rebuildTree() {
     const QString key = (*liveIt)->data(0, kRoleExpansionKey).toString();
     if (key.isEmpty()) continue;
     if ((*liveIt)->isExpanded()) {
-      m_expandedUuids.insert(key);
+      m_collapsedUuids.remove(key);
     } else {
-      m_expandedUuids.remove(key);
+      m_collapsedUuids.insert(key);
     }
   }
   m_tree->clear();
@@ -412,6 +449,7 @@ void CollectionTreeController::rebuildTree() {
     item->setData(0, kRoleName, cfg.name);
     const QString uuid = hierarchy.collectionUuid(index);
     item->setData(0, kRoleExpansionKey, uuid);
+    item->setData(0, kRoleIsCategory, !current.node->children.isEmpty());
     // Expansion applied in the single post-pass below, once children exist.
     // Reverse-append so takeLast() preserves the model's child order.
     for (auto it = current.node->children.crbegin(); it != current.node->children.crend(); ++it) {
@@ -425,6 +463,7 @@ void CollectionTreeController::rebuildTree() {
     group->setData(0, kRoleCollectionIndex, -1);
     group->setData(0, kRoleExpansionKey, kPlaylistsGroupKey);
     group->setData(0, kRoleName, kPlaylistsGroupKey);
+    group->setData(0, kRoleIsCategory, true);
     group->setFlags(group->flags() & ~Qt::ItemIsSelectable);
     for (int index : model.playlistIndices) {
       if (index < 0 || index >= collections.size()) {
@@ -437,11 +476,6 @@ void CollectionTreeController::rebuildTree() {
       item->setData(0, kRoleName, collections.at(index).name);
       item->setData(0, kRoleExpansionKey, hierarchy.collectionUuid(index));
     }
-    // The group defaults open — a collapsed mystery section helps nobody —
-    // but remembered collapse wins.
-    if (m_expandedUuids.isEmpty()) {
-      m_expandedUuids.insert(kPlaylistsGroupKey);
-    }
   }
 
   // Single post-pass expansion restore: every row exists WITH its children
@@ -450,7 +484,7 @@ void CollectionTreeController::rebuildTree() {
   for (QTreeWidgetItemIterator restoreIt(m_tree); *restoreIt; ++restoreIt) {
     const QString key = (*restoreIt)->data(0, kRoleExpansionKey).toString();
     if (key.isEmpty()) continue;
-    (*restoreIt)->setExpanded(m_expandedUuids.contains(key));
+    (*restoreIt)->setExpanded(!m_collapsedUuids.contains(key));
   }
 
   refreshIcons();
@@ -561,6 +595,21 @@ void CollectionTreeController::refreshIcons() {
   for (QTreeWidgetItemIterator it(m_tree); *it; ++it) {
     QTreeWidgetItem *item = *it;
     const int index = item->data(0, kRoleCollectionIndex).toInt();
+    // Category rows — anything with children, including the Playlists group
+    // header — read differently from leaves beyond their icon size (user
+    // request 2026-08-17): bold label plus a faint full-row band. Both work
+    // in icons-only mode and with every icon style.
+    const bool isCategory = item->data(0, kRoleIsCategory).toBool();
+    QFont rowFont = item->font(0);
+    rowFont.setBold(isCategory);
+    item->setFont(0, rowFont);
+    if (isCategory) {
+      QColor band = m_tree->palette().color(QPalette::Text);
+      band.setAlpha(14);
+      item->setBackground(0, band);
+    } else {
+      item->setBackground(0, QBrush());
+    }
     if (index < 0 || index >= collections.size()) {
       continue; // the Playlists group header keeps its text-only look
     }
@@ -721,6 +770,10 @@ void CollectionTreeController::applyStateForCollection(int collectionIndex) {
   if (displayChanged) {
     refreshIcons();
   }
+  if (m_tree && m_tree->property("kartendShowLines").toBool() != tree.treeShowLines) {
+    m_tree->setProperty("kartendShowLines", tree.treeShowLines);
+    if (m_tree->viewport()) m_tree->viewport()->update();
+  }
   const bool wasVisible = m_panel->isVisible();
   m_panel->setVisible(tree.treeVisible);
   if (wasVisible != tree.treeVisible) {
@@ -867,17 +920,18 @@ void CollectionTreeController::onItemExpandedCollapsed(QTreeWidgetItem *item, bo
   if (key.isEmpty()) {
     return;
   }
+  // Collapsed-set semantics (user decision 2026-08-17): only deliberate
+  // collapses are remembered; expansion is the default state.
   if (expanded) {
-    m_expandedUuids.insert(key);
+    m_collapsedUuids.remove(key);
   } else {
-    m_expandedUuids.remove(key);
+    m_collapsedUuids.insert(key);
   }
-  // Session-persisted (not kartend.cfg — this is UI state, not config); the
-  // SessionManager flushes on its own cadence and at shutdown.
   if (m_ctx) {
     if (ISessionManager *session = m_ctx->sessionManager()) {
-      session->setCollectionTreeExpandedKeys(QStringList(m_expandedUuids.begin(),
-                                                         m_expandedUuids.end()));
+      session->setCollectionTreeCollapsedKeys(
+          QStringList(m_collapsedUuids.begin(), m_collapsedUuids.end()));
+      session->saveToDisk();
     }
   }
 }

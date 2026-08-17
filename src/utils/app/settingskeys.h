@@ -46,6 +46,7 @@ inline constexpr auto kCollectionTreeIconSize = "collectionTreeIconSize";
 inline constexpr auto kCollectionTreeIconStyle = "collectionTreeIconStyle";
 inline constexpr auto kCollectionTreeIconTint = "collectionTreeIconTint";
 inline constexpr auto kCollectionTreeIconsOnly = "collectionTreeIconsOnly";
+inline constexpr auto kCollectionTreeShowLines = "collectionTreeShowLines";
 inline constexpr auto kCollectionTreeVisible = "collectionTreeVisible";
 inline constexpr auto kCollectionTreeWidth = "collectionTreeWidth";
 inline constexpr auto kCollectionTypeFilter = "collectionTypeFilter";

@@ -18,6 +18,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edge. The details pane's existing Position control keeps working — it
   and the new page edit the same setting.
 
+- **The collection tree opens fully unfolded and reads better at a
+  glance.** Every branch now starts expanded — only the branches you close
+  are remembered (across sessions). Category rows — anything with children,
+  Playlists included — show a bold label over a faint band so structure
+  stands out without relying on icon size. The branch connector lines are
+  gone by default (the chevrons carry the structure); a new **Tree lines**
+  option on the Sidebar page brings them back. The mouse wheel now scrolls
+  the tree when the pointer is over it, instead of changing the selected
+  item in the grid. And the hairline outline that keeps low-contrast logos
+  readable in the tree is applied to item tiles and cards too — only for
+  logo-like art that would blend into the card colour; photos and covers
+  are never touched.
+
 - **Collection and platform artwork now arrives with the collection scrape —
   and your sidebar shows it.** Scraping a collection also fetches its
   platform art (logo, illustration, background) and wires the logo in as the
