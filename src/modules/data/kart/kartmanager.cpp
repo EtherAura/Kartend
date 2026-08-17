@@ -264,6 +264,66 @@ ErrorUtils::Result<KartReader::ExtractResult> KartManager::extractKart(const QSt
   return extractor.extractTo(kartPath, destDir);
 }
 
+QString KartManager::importSubdirNameFor(const QString &bundleName) {
+  QString n = bundleName.trimmed();
+  n.remove(QChar('\0'));
+  n.replace(QChar('/'), QChar('_'));
+  n.replace(QChar('\\'), QChar('_'));
+  // Windows strips trailing dots and spaces from path segments; chop them so
+  // the directory this host creates is the directory every host sees. This
+  // also collapses "." and ".." to nothing — the fallback catches them.
+  while (n.endsWith(QLatin1Char('.')) || n.endsWith(QLatin1Char(' '))) {
+    n.chop(1);
+  }
+  // Reserved device names resolve to the device on Windows regardless of
+  // extension ("CON", "con.txt", "Com1.bin").
+  const qsizetype dot = n.indexOf(QLatin1Char('.'));
+  QString stem = (dot < 0 ? n : n.left(dot)).toUpper();
+  while (stem.endsWith(QLatin1Char(' '))) {
+    stem.chop(1);
+  }
+  static const QStringList kReserved = {QStringLiteral("CON"), QStringLiteral("PRN"),
+                                        QStringLiteral("AUX"), QStringLiteral("NUL")};
+  const bool reservedComLpt =
+      stem.size() == 4 &&
+      (stem.startsWith(QLatin1String("COM")) || stem.startsWith(QLatin1String("LPT"))) &&
+      stem.at(3) >= QLatin1Char('1') && stem.at(3) <= QLatin1Char('9');
+  if (kReserved.contains(stem) || reservedComLpt) {
+    n.prepend(QStringLiteral("kart_"));
+  }
+  if (n.isEmpty()) {
+    n = QStringLiteral("kart");
+  }
+  return n;
+}
+
+ErrorUtils::Result<QString> KartManager::deriveImportDestination(const QString &kartPath,
+                                                                 const QString &parentDir) {
+  auto peeked = KartReader::peekManifest(kartPath);
+  if (peeked.isError()) return peeked.error();
+  const QString sub = importSubdirNameFor(peeked.value().name);
+  const QString dest = QDir(parentDir).filePath(sub);
+  const QFileInfo fi(dest);
+  if (fi.exists()) {
+    if (!fi.isDir()) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidFilePath,
+                                             "Import destination exists and is not a directory",
+                                             "KartManager::deriveImportDestination")
+          .withDetails(dest);
+    }
+    // Same Hidden|System filters as the extractTo backstop: dotfiles count.
+    if (!QDir(dest).isEmpty(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden |
+                            QDir::System)) {
+      return ErrorUtils::ErrorContext::error(
+                 ErrorUtils::ErrorCode::InvalidFilePath,
+                 "A non-empty folder with the bundle's name already exists at the destination",
+                 "KartManager::deriveImportDestination")
+          .withDetails(dest);
+    }
+  }
+  return dest;
+}
+
 ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::ExtractResult &result,
                                                         bool registerCollection,
                                                         const ConflictResolver &resolver) {
@@ -370,10 +430,17 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
   auto persistRes =
       persistImportedMetadata(db, result.manifest, result.destDir, collectionUuid,
                               resolver ? resolver : makeFixedChoiceResolver(MergeChoice::Skip));
-  closeMediaDbConnection(db);
-
   if (persistRes.isError()) {
+    closeMediaDbConnection(db);
     return persistRes.error();
+  }
+  // Kartend-fh3ab: point item_artwork rows at the bundled hand-linked
+  // artwork the extraction just wrote, so imported covers survive the
+  // machine move exactly like the rest of the metadata.
+  auto linksRes = persistImportedArtworkLinks(db, result.manifest, result.destDir, collectionUuid);
+  closeMediaDbConnection(db);
+  if (linksRes.isError()) {
+    return linksRes.error();
   }
 
   // Kartend-kmj1: restore bundled playlists onto the freshly-registered
@@ -468,7 +535,11 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
 
 ErrorUtils::Result<QString> KartManager::importKart(const QString &kartPath, const QString &destDir,
                                                     bool registerCollection) {
-  auto extracted = extractKart(kartPath, destDir);
+  // Kartend-qbfk1: @p destDir is the PARENT the user chose; content lands in
+  // a fresh bundle-named subdirectory of it, never in destDir itself.
+  auto destRes = deriveImportDestination(kartPath, destDir);
+  if (destRes.isError()) return destRes.error();
+  auto extracted = extractKart(kartPath, destRes.value());
   if (extracted.isError()) return extracted.error();
   // Kartend-s6mj: importKart is the synchronous entry kept for tests and
   // headless-style callers (the drag-drop drain used to run it on the GUI
@@ -497,7 +568,11 @@ ErrorUtils::Result<QString> KartManager::importKartHeadless(const QString &kartP
                                                             bool registerCollection,
                                                             MergeChoice headlessChoice,
                                                             bool allowUntrustedLauncher) {
-  auto extracted = extractKart(kartPath, destDir);
+  // Kartend-qbfk1: same parent-directory semantics as importKart — the CLI's
+  // destination argument is where the bundle-named subdirectory is created.
+  auto destRes = deriveImportDestination(kartPath, destDir);
+  if (destRes.isError()) return destRes.error();
+  auto extracted = extractKart(kartPath, destRes.value());
   if (extracted.isError()) return extracted.error();
   // Kartend-u8wf0: headless import has no interactive confirmer, so the
   // suspicious-path gate the synchronous/GUI paths run (importKart and the
@@ -615,8 +690,17 @@ void KartManager::importInteractive() {
         }
       }
     }
-    const auto report =
+    auto report =
         KartPreflight::buildReport(peeked.value(), previouslyTrustedLauncherPaths(), existingNames);
+    // Kartend-qbfk1: tell the user what an accept means on disk — how many
+    // files, and that they land in a fresh bundle-named folder inside the
+    // directory picked next. The count walk re-reads the container's entry
+    // headers; a malformed container leaves the count unknown (-1) here and
+    // fails extraction later with its own error.
+    const auto entryCount = KartReader::countEntries(kartPath);
+    // countEntries enforces MAX_ENTRY_COUNT (200000), so the int cast is safe.
+    report.bundleEntryCount = entryCount.isOk() ? static_cast<int>(entryCount.value()) : -1;
+    report.extractionSubdirName = importSubdirNameFor(peeked.value().name);
     if (!m_setup.preflightConfirmer(report)) {
       // Treat as a clean user cancellation — no error toast.
       return;
@@ -663,6 +747,31 @@ void KartManager::exportCollectionInteractive(int collectionIndex) {
 
 void KartManager::runImport(const QString &kartPath, const QString &destDir,
                             bool preflightConfirmed) {
+  // Kartend-qbfk1: derive the fresh bundle-named subdirectory before any
+  // worker or progress dialog exists — the interactive and drag-drop routes
+  // both hand this method the PARENT directory. Failing here mirrors the
+  // importInteractive peek-failure path: no progress bracket ever opened.
+  auto destRes = deriveImportDestination(kartPath, destDir);
+  if (destRes.isError()) {
+    // Reproduce the worker path's observable sequence exactly — bracket
+    // opened synchronously (as below), the importFailed + kartProgressFailed
+    // terminal pair delivered from the event loop. Before Kartend-qbfk1 this
+    // failure mode (unreadable bundle) reached the worker and fired that
+    // same sequence; the drop-drain chain and the owner's progress dialog
+    // sequence on it, so a synchronous or partial emission would break them.
+    emit kartProgressStarted(tr("Importing Kart"));
+    QMetaObject::invokeMethod(
+        this,
+        [this, err = destRes.error()]() {
+          emit importFailed(err);
+          emit kartProgressFailed();
+          showWarning(tr("Import Kart"), err.message);
+        },
+        Qt::QueuedConnection);
+    return;
+  }
+  const QString extractDest = destRes.value();
+
   // Un-parented and shared_ptr-owned on purpose — the worker task holds its
   // own reference so a timed-out teardown join can abandon it safely (see
   // the m_activeReader member doc and ~KartManager).
@@ -744,7 +853,7 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir,
   // without freeing the Extractor out from under it (see ~KartManager).
   auto reader = m_activeReader;
   watcher->setFuture(QtConcurrent::run(
-      [reader, kartPath, destDir]() { return reader->extractTo(kartPath, destDir); }));
+      [reader, kartPath, extractDest]() { return reader->extractTo(kartPath, extractDest); }));
 }
 
 void KartManager::runExport(int collectionIndex, const QString &outPath) {

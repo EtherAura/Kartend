@@ -129,6 +129,16 @@ private slots:
   void testExtractToRefusesSymlinkEscape();
   void testExtractToEmitsProgress();
   void testExtractToCanCancel();
+
+  // Destination and intra-bundle collision guards (Kartend-qbfk1)
+  void testExtractToRefusesNonEmptyDestination();
+  void testExtractToRefusesDotfileOnlyDestination();
+  void testExtractToAcceptsExistingEmptyDestination();
+  void testExtractToRefusesDuplicateEntryPaths();
+  void testExtractToRefusesCaseCollidingEntryPaths();
+  void testExtractToRefusesEntryOverEarlierDirectory();
+  void testCountEntriesWalksHeadersWithoutExtracting();
+  void testCountEntriesRejectsTruncatedContainer();
 };
 
 void TestKartReader::testPeekManifestRejectsBadMagic() {
@@ -499,8 +509,15 @@ void TestKartReader::testExtractToRefusesSymlinkEscape() {
   // Regression: a parent dir inside destAbs is a symlink pointing outside
   // destAbs. isPathSafe accepts the relative entry textually (no '..', not
   // absolute), and a startsWith(destAbs + '/') check passes because the
-  // cleaned path still lives under destAbs lexically. Only resolving the
-  // symlink chain via canonicalFilePath catches the escape.
+  // cleaned path still lives under destAbs lexically.
+  //
+  // Since Kartend-qbfk1 the FIRST line that refuses this fixture is the
+  // destination-emptiness guard — a pre-planted symlink means a non-empty
+  // destination, so extraction never starts. The canonical-resolve check
+  // stays in extractTo as the backstop for a symlink appearing DURING
+  // extraction (external mutation), which no fixture can stage
+  // deterministically through the public API. This test now pins the
+  // guard ordering and, unchanged, that nothing lands outside the dest.
   QByteArray data("x");
   QTemporaryFile f;
   writeTempKart(
@@ -522,9 +539,9 @@ void TestKartReader::testExtractToRefusesSymlinkEscape() {
   KartReader::Extractor ex;
   auto result = ex.extractTo(f.fileName(), dest.path());
   QVERIFY(result.isError());
-  // Reused error code (no symlink-specific code today) — sender matches
-  // the textual traversal/absolute checks above for consistency.
-  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
+  // The emptiness guard's code — the symlink makes the destination
+  // non-empty before the canonical check is ever consulted.
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::InvalidFilePath));
 
   // Verify the would-be target outside the dest dir was NOT written.
   const QString shouldNotExist = QDir(outside.path()).absoluteFilePath("escapee.bin");
@@ -566,6 +583,154 @@ void TestKartReader::testExtractToCanCancel() {
   auto result = ex.extractTo(f.fileName(), dest.path());
   QVERIFY(result.isError());
   QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::OperationCancelled));
+}
+
+// ----- Destination and intra-bundle collision guards (Kartend-qbfk1) -----
+
+// The traversal checks keep entries inside the destination; these tests pin
+// the complementary property — the destination itself must be fresh. A
+// bundle needs no traversal to plant '.config/autostart/evil.desktop' when
+// the user picks $HOME as the destination.
+
+void TestKartReader::testExtractToRefusesNonEmptyDestination() {
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(),
+                          {entryBytes("media/x.bin", QByteArray("x"), KartFormat::Flag_Media,
+                                      KartFormat::Compression_None)}),
+                f);
+  QTemporaryDir dest;
+  {
+    QFile existing(QDir(dest.path()).filePath("precious.txt"));
+    QVERIFY(existing.open(QIODevice::WriteOnly));
+    existing.write("user data");
+  }
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::InvalidFilePath));
+  // The refusal must come before any entry lands.
+  QVERIFY(!QFile::exists(QDir(dest.path()).filePath("media/x.bin")));
+}
+
+void TestKartReader::testExtractToRefusesDotfileOnlyDestination() {
+  // QDir::isEmpty()'s DEFAULT filters skip hidden files — a home directory
+  // populated only by dotfiles must still count as non-empty, or the guard
+  // is a no-op for exactly the directory the attack wants.
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(),
+                          {entryBytes("media/x.bin", QByteArray("x"), KartFormat::Flag_Media,
+                                      KartFormat::Compression_None)}),
+                f);
+  QTemporaryDir dest;
+  {
+    QFile hidden(QDir(dest.path()).filePath(".bashrc"));
+    QVERIFY(hidden.open(QIODevice::WriteOnly));
+    hidden.write("alias ls='ls'");
+  }
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::InvalidFilePath));
+}
+
+void TestKartReader::testExtractToAcceptsExistingEmptyDestination() {
+  QByteArray data("payload");
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entryBytes("media/x.bin", data, KartFormat::Flag_Media,
+                                                        KartFormat::Compression_None)}),
+                f);
+  QTemporaryDir dest; // exists and is empty — the allowed pre-existing shape
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  QFile out(QDir(dest.path()).filePath("media/x.bin"));
+  QVERIFY(out.open(QIODevice::ReadOnly));
+  QCOMPARE(out.readAll(), data);
+}
+
+void TestKartReader::testExtractToRefusesDuplicateEntryPaths() {
+  // One entry overwriting another inside the same bundle: the second write
+  // would silently replace the first via QSaveFile::commit's rename.
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(),
+                          {entryBytes("media/x.bin", QByteArray("first"), KartFormat::Flag_Media,
+                                      KartFormat::Compression_None),
+                           entryBytes("media/x.bin", QByteArray("second"), KartFormat::Flag_Media,
+                                      KartFormat::Compression_None)}),
+                f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
+}
+
+void TestKartReader::testExtractToRefusesCaseCollidingEntryPaths() {
+  // Distinct on ext4, the same file on Windows/default macOS — rejected on
+  // every platform so a portable .kart behaves identically everywhere (the
+  // same over-report direction as the Windows segment checks).
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(),
+                          {entryBytes("media/X.bin", QByteArray("upper"), KartFormat::Flag_Media,
+                                      KartFormat::Compression_None),
+                           entryBytes("media/x.bin", QByteArray("lower"), KartFormat::Flag_Media,
+                                      KartFormat::Compression_None)}),
+                f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
+}
+
+void TestKartReader::testExtractToRefusesEntryOverEarlierDirectory() {
+  // 'a/b' creates directory 'a'; a later entry named 'a' would rename a
+  // regular file over that directory's path. The pre-write existence guard
+  // must refuse rather than let QSaveFile fail (or worse, succeed) opaquely.
+  QTemporaryFile f;
+  writeTempKart(
+      buildKart(sampleManifest(), {entryBytes("a/b", QByteArray("child"), KartFormat::Flag_Media,
+                                              KartFormat::Compression_None),
+                                   entryBytes("a", QByteArray("clobber"), KartFormat::Flag_Media,
+                                              KartFormat::Compression_None)}),
+      f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::FileWriteError));
+  // The directory entry that landed first must survive the refusal.
+  QFile out(QDir(dest.path()).filePath("a/b"));
+  QVERIFY(out.open(QIODevice::ReadOnly));
+  QCOMPARE(out.readAll(), QByteArray("child"));
+}
+
+void TestKartReader::testCountEntriesWalksHeadersWithoutExtracting() {
+  QByteArray big(64 * 1024, 'q'); // larger than one header so a seek bug shows
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(),
+                          {entryBytes("media/a.bin", big, KartFormat::Flag_Media,
+                                      KartFormat::Compression_None),
+                           entryBytes("media/b.bin", QByteArray("b"), KartFormat::Flag_Media,
+                                      KartFormat::Compression_None),
+                           entryBytes("artwork/c.png", QByteArray("c"), KartFormat::Flag_Artwork,
+                                      KartFormat::Compression_None)}),
+                f);
+  auto count = KartReader::countEntries(f.fileName());
+  QVERIFY2(count.isOk(), qPrintable(count.error().message));
+  QCOMPARE(count.value(), 3u);
+}
+
+void TestKartReader::testCountEntriesRejectsTruncatedContainer() {
+  QByteArray bytes = buildKart(sampleManifest(),
+                               {entryBytes("media/a.bin", QByteArray(1024, 'a'),
+                                           KartFormat::Flag_Media, KartFormat::Compression_None)});
+  bytes.chop(512); // sever the payload so the declared length overruns the file
+  QTemporaryFile f;
+  writeTempKart(bytes, f);
+  auto count = KartReader::countEntries(f.fileName());
+  QVERIFY(count.isError());
+  QVERIFY(count.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
 }
 
 QTEST_MAIN(TestKartReader)

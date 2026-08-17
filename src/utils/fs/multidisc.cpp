@@ -127,15 +127,22 @@ QList<Group> group(const QStringList &absolutePaths) {
 
 QString buildM3uContents(const QStringList &absolutePaths, const QString &m3uDir) {
   QString out;
-  const QDir dir(m3uDir);
+  // Both sides of the sibling compare go through QFileInfo: on Windows,
+  // QFileInfo::absolutePath() drive-qualifies a drive-less absolute path
+  // ("/m" -> "C:/m") while QDir::absolutePath() hands the clean input back
+  // verbatim — the asymmetry made the compare below never match on the
+  // first Windows run of this suite. Real callers pass drive-qualified
+  // playlist dirs, where the two forms are identical.
+  const QString dirAbs =
+      m3uDir.isEmpty() ? QString() : QDir::cleanPath(QFileInfo(m3uDir).absoluteFilePath());
   for (const QString &path : absolutePaths) {
     QString line = path;
-    if (!m3uDir.isEmpty()) {
+    if (!dirAbs.isEmpty()) {
       const QFileInfo info(path);
       // Relative only for files sitting directly in the playlist's own
       // directory. Anything deeper or outside stays absolute: a "../.." chain
       // is more fragile than the absolute path it replaces.
-      if (info.absolutePath() == dir.absolutePath()) {
+      if (info.absolutePath() == dirAbs) {
         line = info.fileName();
       }
     }

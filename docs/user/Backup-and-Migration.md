@@ -46,13 +46,17 @@ Bundled per item — exactly these fields, no others:
   `release_date`, `content_rating`, `players`, `runtime_seconds`
 - `tags`, `custom_fields`
 - `manual_path`, `launcher_index`, `source`
+- `notes`, `rating`, `source_url`, and the pinned / hidden /
+  continue-later state flags
+- **Hand-linked artwork**: every `item_artwork` link whose file still
+  exists is copied into the bundle (under `item_artwork/`) and
+  re-linked on import, so hand-picked covers survive a machine move.
+  A link whose file has since been deleted is skipped, and an import
+  never replaces a link you already made locally.
 
-> **Not bundled per item, and lost on a round-trip:** notes, rating,
-> source URL, and the pinned / hidden / continue-later state flags.
-> Per-item **artwork links** are not bundled either — the `item_artwork`
-> table is not touched by the kart format at all. If any of those
-> matter to you, back up `media.db` as well; a `.kart` is not a
-> substitute. (Tracked as a defect, not a design choice.)
+> Older bundles (written before the user-state fields and artwork
+> links were added) still import cleanly — the missing fields simply
+> stay unset, exactly as they were exported.
 
 Bundled per collection:
 
@@ -151,10 +155,14 @@ the hierarchy afterwards; see
 5. After import, the new collection appears in the tree (typically at
    the destination you chose, or root by default).
 
-A **destination directory** can be picked during import — Kartend may
-update the imported collection's `mediaDirectory` to point at this
-destination if it doesn't exist on the target system. Useful when
-moving between your own machines with different paths.
+A **destination directory** can be picked during import. The bundle's
+content is never extracted loose into that directory: Kartend creates a
+**new folder named for the bundle** inside it and unpacks there (the
+preflight dialog shows the folder name and file count up front). If a
+non-empty folder with that name already exists, the import is refused
+rather than writing over anything. The imported collection's
+`mediaDirectory` points inside the new folder — useful when moving
+between your own machines with different paths.
 
 ### From the command line
 
@@ -167,7 +175,7 @@ kartend --import-kart ~/backups/films.kart \
 | Flag | Description |
 |------|-------------|
 | `--import-kart <path>` | Path to the `.kart` file. |
-| `--to <dir>` | (Optional) Destination directory; updates `mediaDirectory` to this path if originally pointed elsewhere. |
+| `--to <dir>` | (Optional) Destination directory; the bundle is unpacked into a new folder named for it under this path, and `mediaDirectory` is updated to match. |
 | `--on-conflict <policy>` | `skip` (default) / `overwrite` / `merge`. See [policies](#conflict-policies). |
 
 Headless. Exit `0` on success, `2` on failure (bad path, unknown
@@ -229,8 +237,10 @@ confirmation lists the same rows and defaults to **Cancel**.
 > to make at the confirmation above — see the warning at the top of this
 > page.
 >
-> Prefer an empty destination directory, so an import cannot land on
-> top of files you already have.
+> An import also cannot land on top of files you already have: content
+> only ever unpacks into a fresh bundle-named folder, extraction into a
+> non-empty target is refused outright, and a bundle that tries to write
+> the same file twice is rejected as malformed.
 
 You can **Accept** to continue (which then hands off to the merge
 dialog if needed) or **Reject** to cancel without touching the
@@ -299,9 +309,14 @@ collection:
 - The grid has one row per metadata field (title, description, genre,
   developer, publisher, release date, content rating, players,
   runtime, tags, custom fields, manual path, launcher override,
-  source), each with a "use incoming" checkbox that **Merge…** honours.
+  source, notes, source URL, rating, pinned, hidden, continue later),
+  each with a "use incoming" checkbox that **Merge…** honours.
 - **Skip** and **Overwrite** ignore the checkboxes and take one side
   whole.
+- For the three state flags, **Merge…** without "use incoming" keeps a
+  flag set on either side (a merge can never silently lose a local
+  pin); ticking "use incoming" copies the incoming value exactly, which
+  can clear a local toggle.
 - **Apply this choice to all remaining conflicts** turns your answer
   into the policy for the rest of the import.
 

@@ -78,6 +78,19 @@ void KartPreflightDialog::populateSummary(const KartPreflight::PreflightReport &
   html += QStringLiteral("<tr><td><b>%1</b></td><td>%2</td></tr>")
               .arg(tr("Artwork overrides"),
                    report.hasArtworkOverrides ? tr("present") : tr("not bundled"));
+  // Kartend-qbfk1: state the on-disk consequence of accepting — everything
+  // extracts into a fresh folder named for the bundle, never loose into the
+  // directory the user picks next. The count is absent when the container
+  // walk failed; extraction will surface that as its own error.
+  if (!report.extractionSubdirName.isEmpty()) {
+    const QString where = tr("a new folder “%1” inside the destination you choose next")
+                              .arg(report.extractionSubdirName.toHtmlEscaped());
+    html += QStringLiteral("<tr><td><b>%1</b></td><td>%2</td></tr>")
+                .arg(tr("Extracts to"),
+                     report.bundleEntryCount >= 0
+                         ? tr("%n file(s) into %1", "", report.bundleEntryCount).arg(where)
+                         : where);
+  }
   html += QStringLiteral("</table>");
   m_summaryLabel->setText(html);
 }

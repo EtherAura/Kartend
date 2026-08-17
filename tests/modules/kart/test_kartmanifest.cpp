@@ -28,6 +28,11 @@ private slots:
   void testParseAcceptsLaunchersAtCap();
   void testPlaylistRoundTrip();
   void testV1ManifestParsesWithEmptyPlaylists();
+
+  // Kartend-fh3ab: the user-state fields and hand-linked artwork carriers.
+  void testUserStateFieldsDefaultWhenKeysAbsent();
+  void testUserStateRatingIsClamped();
+  void testParseRejectsOversizedArtworkLinksArray();
 };
 
 namespace {
@@ -298,7 +303,21 @@ void TestKartManifest::testItemMetadataRoundTrip() {
   it.metadata.manualPath = "manual/x.pdf";
   it.metadata.launcherIndex = 3;
   it.metadata.source = "user";
+  // Kartend-fh3ab: the user-state half of item_metadata — these six were
+  // silently dropped by the serializer while the backup doc promised they
+  // round-trip. The operator== compare below covers them from now on.
+  it.metadata.notes = "multi\nline notes";
+  it.metadata.sourceUrl = "https://example.org/where-i-found-it";
+  it.metadata.rating = 7;
+  it.metadata.isPinned = true;
+  it.metadata.isHidden = true;
+  it.metadata.continueLater = true;
   it.launcherIndex = 3;
+  // Kartend-fh3ab: bundled hand-linked artwork travels per item; the type
+  // string is carried exactly, custom types included.
+  it.artworkLinks.append({QStringLiteral("front"), QStringLiteral("item_artwork/0/front.png")});
+  it.artworkLinks.append(
+      {QStringLiteral("My Custom Type!"), QStringLiteral("item_artwork/0/my_custom_type_.jpg")});
   m.items.append(it);
 
   const QByteArray bytes = KartManifest::serialize(m);
@@ -433,6 +452,59 @@ void TestKartManifest::testV1ManifestParsesWithEmptyPlaylists() {
   auto result = KartManifest::parse(v1Json);
   QVERIFY(result.isOk());
   QVERIFY(result.value().playlists.isEmpty());
+}
+
+// ----- Kartend-fh3ab: user-state fields + artwork links -----
+
+void TestKartManifest::testUserStateFieldsDefaultWhenKeysAbsent() {
+  // A bundle written before these fields were serialized carries none of the
+  // keys — every one must come back at its unset default, not at whatever a
+  // missing QJsonValue coerces to.
+  const QByteArray json = "{\"format_version\":1,\"uuid\":\"u\",\"name\":\"n\","
+                          "\"items\":[{\"media_path\":\"media/x.bin\","
+                          "\"metadata\":{\"title\":\"X\"}}]}";
+  auto result = KartManifest::parse(json);
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  const auto &meta = result.value().items.first().metadata;
+  QCOMPARE(meta.title, QString("X"));
+  QVERIFY(meta.notes.isEmpty());
+  QVERIFY(meta.sourceUrl.isEmpty());
+  QCOMPARE(meta.rating, -1);
+  QVERIFY(!meta.isPinned);
+  QVERIFY(!meta.isHidden);
+  QVERIFY(!meta.continueLater);
+  QVERIFY(result.value().items.first().artworkLinks.isEmpty());
+}
+
+void TestKartManifest::testUserStateRatingIsClamped() {
+  // Manifest numbers are untrusted: the store renders 0..10 as half-stars
+  // and a hostile bundle doesn't get to invent an 11 (or a -7 that isn't
+  // the -1 sentinel).
+  const QByteArray over = "{\"format_version\":1,\"uuid\":\"u\",\"name\":\"n\","
+                          "\"items\":[{\"media_path\":\"m\",\"metadata\":{\"rating\":99}}]}";
+  auto result = KartManifest::parse(over);
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  QCOMPARE(result.value().items.first().metadata.rating, 10);
+
+  const QByteArray under = "{\"format_version\":1,\"uuid\":\"u\",\"name\":\"n\","
+                           "\"items\":[{\"media_path\":\"m\",\"metadata\":{\"rating\":-7}}]}";
+  result = KartManifest::parse(under);
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  QCOMPARE(result.value().items.first().metadata.rating, -1);
+}
+
+void TestKartManifest::testParseRejectsOversizedArtworkLinksArray() {
+  // One item whose artwork_links array crosses the per-item ceiling — same
+  // reject-never-truncate contract as every other manifest array.
+  QByteArray links = QByteArray("{\"type\":\"t\",\"path\":\"p\"},")
+                         .repeated(KartFormat::MAX_MANIFEST_ARTWORK_LINKS_PER_ITEM + 1);
+  links.chop(1);
+  const QByteArray json = QByteArray("{\"format_version\":1,\"uuid\":\"u\",\"name\":\"n\","
+                                     "\"items\":[{\"media_path\":\"m\",\"artwork_links\":[") +
+                          links + "]}]}";
+  auto result = KartManifest::parse(json);
+  QVERIFY(result.isError());
+  QVERIFY(result.hasErrorCode(ErrorUtils::ErrorCode::KartManifestInvalid));
 }
 
 QTEST_MAIN(TestKartManifest)

@@ -185,6 +185,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Importing a .kart can no longer touch files you already have.** An
+  import used to unpack straight into whatever directory you picked — and
+  a hostile bundle didn't need any path trickery to abuse that: pointed at
+  a directory full of your files (say, your home folder), it could drop
+  `.config/autostart/…` entries or overwrite dotfiles using perfectly
+  ordinary relative paths. Imports now always unpack into a **new folder
+  named for the bundle** inside the directory you choose; the preflight
+  dialog tells you the folder's name and how many files will be written
+  before you pick it. If a non-empty folder by that name already exists,
+  the import is refused rather than merged over it. Underneath, the
+  extractor itself now refuses any non-empty target — dotfiles count —
+  never overwrites an existing file, and rejects a bundle carrying two
+  entries that would land on the same path, including pairs that only
+  collide on Windows or macOS filesystems (Kartend-qbfk1).
+
 - **Uses roughly half the memory during long sessions.** Three things were
   adding up. Cover art was decoded at a fixed size chosen for the largest
   place it might ever appear, so a grid showing 200-pixel covers still kept
@@ -232,6 +247,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-import to pick up, as before (Kartend-i366w).
 
 ### Fixed
+
+- **A .kart backup no longer forgets your notes, ratings, pins — or your
+  hand-picked covers.** Exporting a collection silently dropped the
+  personal half of each item's metadata: notes, rating, source URL and
+  the pinned / hidden / continue-later flags never entered the bundle,
+  and hand-linked artwork (covers you attached through the links dialog
+  or the Artwork Wizard) wasn't bundled at all — so an export-then-import
+  quietly lost exactly the data you can't re-scrape. All of it now
+  round-trips: the six fields travel in the manifest (older bundles
+  still import, with those fields simply unset), linked artwork files
+  are copied into the bundle and re-linked on import — without ever
+  replacing a link you already made on the importing machine — and the
+  merge dialog offers the new fields per-side like every other field,
+  with the safety rule that a merge never silently clears a local pin.
+  The backup guide's "lost on a round-trip" warning is gone because the
+  loss is gone.
 
 - **Clicking empty space in Cover Flow no longer throws the carousel
   back to the first item.** A left-click that missed every card — easy

@@ -94,6 +94,20 @@ private slots:
   // Kartend-kxqqf: the inverse — a bundle that asks to run nothing imports
   // without a prompt, so the warning keeps its meaning.
   void testAsyncImportSkipsConfirmerWithoutLauncherConfiguration();
+
+  // Kartend-qbfk1: every import extracts into a FRESH subdirectory of the
+  // caller-chosen parent, named for the bundle — never loose into the parent
+  // itself, where a hostile bundle could land dotfile payloads
+  // ('.config/autostart/…') among the user's existing files.
+  void testImportLandsInFreshBundleNamedSubdir();
+  // Kartend-qbfk1: a second import of the same bundle to the same parent
+  // finds the subdirectory occupied and is refused — nothing overwritten,
+  // the first import left intact.
+  void testRepeatImportToSameParentIsRefused();
+  // Kartend-qbfk1: the subdirectory derives from the manifest's
+  // user-controlled name — separators, Windows segment quirks and reserved
+  // device names must come out inert.
+  void testImportSubdirNameSanitizesHostileNames();
 };
 
 #endif

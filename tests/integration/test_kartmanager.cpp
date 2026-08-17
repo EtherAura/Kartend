@@ -573,12 +573,17 @@ namespace {
 // bundles its own executable and points the launcher at it. The bundled file
 // need not exist — the gate fires pre-launch. Returns the on-disk .kart path
 // (under `kartHome`).
-QString buildKartWithInTreeLauncher(const QString &extractRoot, QTemporaryDir &kartHome) {
+QString buildKartWithInTreeLauncher(const QString &importParentDir, QTemporaryDir &kartHome) {
   auto src = buildSyntheticCollection(QStringLiteral("Bundled Launcher"),
                                       QStringLiteral("clip.bin"), QByteArray("bytes"));
-  // Derive from the canonical root so the in-tree prefix compare is exact even
-  // when the temp dir lives under a symlinked path.
-  const QString canonRoot = QFileInfo(extractRoot).canonicalFilePath();
+  // Kartend-qbfk1: an import lands in a fresh bundle-named subdirectory of
+  // the chosen parent, so predict the extraction root the same way the
+  // manager derives it. Canonicalize the EXISTING parent (the subdirectory
+  // does not exist yet, where canonicalFilePath would return empty) so the
+  // in-tree prefix compare is exact even when the temp dir lives under a
+  // symlinked path.
+  const QString canonRoot = QFileInfo(importParentDir).canonicalFilePath() + QLatin1Char('/') +
+                            kart::KartManager::importSubdirNameFor(src->cfg.name);
   src->cfg.launcher.launcherPath = canonRoot + QStringLiteral("/payload/bundled-runner");
   auto prep = KartWriter::prepareFromCollection(src->cfg, QStringLiteral("bundled-uuid"), {});
   if (prep.isError()) return QString();
@@ -811,4 +816,100 @@ void TestKartManager::testAsyncImportSkipsConfirmerWithoutLauncherConfiguration(
   kartMgr->importKartAsync(kartPath, dest.path());
   QVERIFY2(importedSpy.wait(30000), "a launcher-less bundle must import");
   QCOMPARE(promptCount, 0);
+}
+
+// ----- Kartend-qbfk1: fresh-subdirectory import destination -----
+
+namespace {
+// Shared fixture for the subdir tests: a minimal bundle written to
+// kartHome, returning its path (empty on failure).
+QString buildPlainKart(const QString &collectionName, QTemporaryDir &kartHome) {
+  auto src = buildSyntheticCollection(collectionName, QStringLiteral("clip.bin"),
+                                      QByteArray("subdir-bytes"));
+  auto prep = KartWriter::prepareFromCollection(src->cfg, QStringLiteral("subdir-uuid"), {});
+  if (prep.isError()) return QString();
+  prep.value().preferredCompression = KartCompression::zstdAvailable()
+                                          ? KartFormat::Compression_Zstd
+                                          : KartFormat::Compression_Zlib;
+  const QString kartPath = QDir(kartHome.path()).filePath(QStringLiteral("subdir.kart"));
+  KartWriter::Writer writer;
+  if (writer.writeKart(kartPath, prep.value()).isError()) return QString();
+  return kartPath;
+}
+} // namespace
+
+void TestKartManager::testImportLandsInFreshBundleNamedSubdir() {
+  QTemporaryDir kartHome;
+  QVERIFY(kartHome.isValid());
+  const QString kartPath = buildPlainKart(QStringLiteral("Fresh Subdir"), kartHome);
+  QVERIFY(!kartPath.isEmpty());
+
+  // appCtx declared BEFORE the manager: ~ApplicationManager nulls the
+  // ctx->managers.* slots, so the context must outlive it (Kartend-w06qp).
+  ApplicationContext appCtx;
+  ApplicationManager appManager;
+  appManager.initialize(&appCtx);
+  kart::KartManager *kartMgr = appManager.getKartManager();
+  QVERIFY(kartMgr != nullptr);
+
+  QTemporaryDir parent;
+  QVERIFY(parent.isValid());
+  auto res = kartMgr->importKartHeadless(kartPath, parent.path(),
+                                         /*registerCollection=*/false,
+                                         /*headlessChoice=*/kart::MergeChoice::Skip);
+  QVERIFY2(res.isOk(), qPrintable(res.isError() ? res.error().message : QString()));
+
+  // The returned root is parent/<bundle name>, the media landed inside it,
+  // and the parent gained exactly that one entry — nothing loose beside it.
+  const QString expected = QDir(parent.path()).filePath(QStringLiteral("Fresh Subdir"));
+  QCOMPARE(QFileInfo(res.value()).absoluteFilePath(), QFileInfo(expected).absoluteFilePath());
+  QVERIFY(QFile::exists(QDir(res.value()).filePath(QStringLiteral("media/clip.bin"))));
+  const QStringList parentEntries =
+      QDir(parent.path())
+          .entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
+  QCOMPARE(parentEntries, QStringList{QStringLiteral("Fresh Subdir")});
+}
+
+void TestKartManager::testRepeatImportToSameParentIsRefused() {
+  QTemporaryDir kartHome;
+  QVERIFY(kartHome.isValid());
+  const QString kartPath = buildPlainKart(QStringLiteral("Repeat Import"), kartHome);
+  QVERIFY(!kartPath.isEmpty());
+
+  // appCtx declared BEFORE the manager (Kartend-w06qp).
+  ApplicationContext appCtx;
+  ApplicationManager appManager;
+  appManager.initialize(&appCtx);
+  kart::KartManager *kartMgr = appManager.getKartManager();
+  QVERIFY(kartMgr != nullptr);
+
+  QTemporaryDir parent;
+  QVERIFY(parent.isValid());
+  auto first = kartMgr->importKartHeadless(kartPath, parent.path(),
+                                           /*registerCollection=*/false,
+                                           /*headlessChoice=*/kart::MergeChoice::Skip);
+  QVERIFY2(first.isOk(), qPrintable(first.isError() ? first.error().message : QString()));
+  const QString firstMedia = QDir(first.value()).filePath(QStringLiteral("media/clip.bin"));
+  QVERIFY(QFile::exists(firstMedia));
+
+  auto second = kartMgr->importKartHeadless(kartPath, parent.path(),
+                                            /*registerCollection=*/false,
+                                            /*headlessChoice=*/kart::MergeChoice::Skip);
+  QVERIFY2(second.isError(), "occupied bundle-named subdirectory must refuse the import");
+  QVERIFY(second.hasErrorCode(ErrorUtils::ErrorCode::InvalidFilePath));
+  // The refusal is a no-op on disk: the first import survives untouched.
+  QVERIFY(QFile::exists(firstMedia));
+}
+
+void TestKartManager::testImportSubdirNameSanitizesHostileNames() {
+  using kart::KartManager;
+  QCOMPARE(KartManager::importSubdirNameFor(QStringLiteral("Plain Name")),
+           QStringLiteral("Plain Name"));
+  QCOMPARE(KartManager::importSubdirNameFor(QStringLiteral("a/b\\c")), QStringLiteral("a_b_c"));
+  QCOMPARE(KartManager::importSubdirNameFor(QStringLiteral("..")), QStringLiteral("kart"));
+  QCOMPARE(KartManager::importSubdirNameFor(QStringLiteral("name...   ")), QStringLiteral("name"));
+  QCOMPARE(KartManager::importSubdirNameFor(QString()), QStringLiteral("kart"));
+  QCOMPARE(KartManager::importSubdirNameFor(QStringLiteral("CON")), QStringLiteral("kart_CON"));
+  QCOMPARE(KartManager::importSubdirNameFor(QStringLiteral("Com1.bin")),
+           QStringLiteral("kart_Com1.bin"));
 }

@@ -3,10 +3,14 @@
 #include <QDir>
 #include <QFile>
 #include <QSignalSpy>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QTest>
 
+#include "dbmigrations.h"
+#include "itemartwork.h"
 #include "kartcompression.h"
 #include "kartreader.h"
 #include "kartwriter.h"
@@ -64,6 +68,10 @@ private slots:
   void testWriterCanCancel();
   void testPrepareFromCollectionScansDirs();
   void testExtractedPayloadIsNeverExecutable();
+  // Kartend-fh3ab: hand-linked artwork (item_artwork rows) travels in the
+  // bundle — the sibling scan alone cannot see files linked from outside
+  // the artwork directory.
+  void testPrepareBundlesHandLinkedArtwork();
 };
 
 void TestKartWriter::testExtensionShouldCompress() {
@@ -461,6 +469,88 @@ void TestKartWriter::testExtractedPayloadIsNeverExecutable() {
            "extracted .kart payload must never be executable — the launcher "
            "exec-bit check is what currently blocks a self-bundled launcher");
 #endif
+}
+
+void TestKartWriter::testPrepareBundlesHandLinkedArtwork() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  QDir rootDir(root.path());
+  rootDir.mkpath("media");
+  rootDir.mkpath("artwork");
+  rootDir.mkpath("elsewhere"); // deliberately OUTSIDE the artwork directory
+
+  QDir mDir(rootDir.filePath("media"));
+  QDir eDir(rootDir.filePath("elsewhere"));
+  const QString mediaAbs = writeFile(mDir, "Sonic.bin", "rom-bytes");
+  const QByteArray coverBytes(96, 'c');
+  const QString coverAbs = writeFile(eDir, "hand-picked cover.png", coverBytes);
+
+  CollectionConfig cfg;
+  cfg.name = "Genesis";
+  cfg.mediaDirectory = mDir.absolutePath();
+  cfg.artworkDirectory = rootDir.filePath("artwork");
+  cfg.extensions = {"bin"};
+
+  const QString conn = "fh3ab-writer";
+  QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn);
+  db.setDatabaseName(":memory:");
+  QVERIFY(db.open());
+  {
+    // Same seed as test_kartmerge's openMemoryDb: migrations assume the
+    // base tables the DatabaseManager bootstraps.
+    QSqlQuery q(db);
+    q.exec("CREATE TABLE collections (id INTEGER PRIMARY KEY, name TEXT)");
+    q.exec("CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, path TEXT, "
+           "last_modified TEXT)");
+  }
+  DbMigrations::applySchemaMigrations(db, "test");
+
+  // A live hand link plus a dead one (file long gone) — only the live link
+  // may be bundled; the dead link resolves to nothing in the UI and must
+  // resolve to nothing here too instead of failing the export.
+  ItemArtworkStore::ItemArtwork live;
+  live.collectionUuid = "w-uuid";
+  live.path = mediaAbs;
+  live.artworkType = "front";
+  live.manualPath = coverAbs;
+  QVERIFY(ItemArtworkStore::save(db, live).isOk());
+  ItemArtworkStore::ItemArtwork dead = live;
+  dead.artworkType = "box";
+  dead.manualPath = rootDir.filePath("elsewhere/deleted-long-ago.png");
+  QVERIFY(ItemArtworkStore::save(db, dead).isOk());
+
+  auto res = KartWriter::prepareFromCollection(cfg, "w-uuid", {}, &db);
+  QVERIFY2(res.isOk(), qPrintable(res.error().message));
+  QCOMPARE(res.value().items.size(), 1);
+  const auto &item = res.value().items.first();
+  QCOMPARE(item.manifestItem.artworkLinks.size(), 1);
+  QCOMPARE(item.manifestItem.artworkLinks.first().type, QString("front"));
+  QCOMPARE(item.manifestItem.artworkLinks.first().path, QString("item_artwork/0/front.png"));
+  QCOMPARE(item.artworkLinkAbs, QStringList{coverAbs});
+
+  // The payload really travels: write the bundle, extract it, and find the
+  // cover bytes at the manifest-declared path with the links intact.
+  auto params = res.value();
+  params.preferredCompression = KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd
+                                                                 : KartFormat::Compression_Zlib;
+  QTemporaryDir outDir;
+  const QString kartPath = QDir(outDir.path()).filePath("links.kart");
+  KartWriter::Writer w;
+  auto wr = w.writeKart(kartPath, params);
+  QVERIFY2(wr.isOk(), qPrintable(wr.error().message));
+
+  QTemporaryDir extractDir;
+  KartReader::Extractor r;
+  auto rd = r.extractTo(kartPath, extractDir.path());
+  QVERIFY2(rd.isOk(), qPrintable(rd.error().message));
+  QFile extracted(QDir(extractDir.path()).filePath("item_artwork/0/front.png"));
+  QVERIFY(extracted.open(QIODevice::ReadOnly));
+  QCOMPARE(extracted.readAll(), coverBytes);
+  QCOMPARE(rd.value().manifest.items.first().artworkLinks, item.manifestItem.artworkLinks);
+
+  db.close();
+  db = QSqlDatabase();
+  QSqlDatabase::removeDatabase(conn);
 }
 
 QTEST_MAIN(TestKartWriter)

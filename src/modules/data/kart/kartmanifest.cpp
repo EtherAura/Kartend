@@ -398,6 +398,16 @@ QJsonObject itemMetadataToJson(const ItemMetadataStore::ItemMetadata &m) {
   o["manual_path"] = m.manualPath;
   o["launcher_index"] = m.launcherIndex;
   o["source"] = m.source;
+  // Kartend-fh3ab: the user-state half of item_metadata (v15) — notes,
+  // rating, source URL and the three flags — used to be dropped here, so an
+  // export-then-reimport silently lost them while the doc promised they
+  // round-trip.
+  o["notes"] = m.notes;
+  o["source_url"] = m.sourceUrl;
+  o["rating"] = m.rating;
+  o["is_pinned"] = m.isPinned;
+  o["is_hidden"] = m.isHidden;
+  o["continue_later"] = m.continueLater;
   return o;
 }
 
@@ -417,6 +427,16 @@ ItemMetadataStore::ItemMetadata jsonToItemMetadata(const QJsonObject &o) {
   m.manualPath = o["manual_path"].toString();
   m.launcherIndex = o["launcher_index"].toInt(-1);
   m.source = o["source"].toString();
+  // Kartend-fh3ab: absent keys (bundles written before these fields were
+  // serialized) fall back to the struct's unset values. The rating is
+  // clamped like every other manifest-supplied number — the store renders
+  // 0..10 as half-stars and a hostile bundle doesn't get to invent an 11.
+  m.notes = o["notes"].toString();
+  m.sourceUrl = o["source_url"].toString();
+  m.rating = qBound(-1, o["rating"].toInt(-1), 10);
+  m.isPinned = o["is_pinned"].toBool(false);
+  m.isHidden = o["is_hidden"].toBool(false);
+  m.continueLater = o["continue_later"].toBool(false);
   return m;
 }
 
@@ -429,6 +449,18 @@ QJsonObject itemToJson(const Item &i) {
   o["title"] = i.title;
   o["metadata"] = itemMetadataToJson(i.metadata);
   o["launcher_index"] = i.launcherIndex;
+  // Kartend-fh3ab: omitted entirely when the item has no hand-linked
+  // artwork, so bundles without links stay byte-identical to before.
+  if (!i.artworkLinks.isEmpty()) {
+    QJsonArray links;
+    for (const ArtworkLink &l : i.artworkLinks) {
+      QJsonObject lo;
+      lo["type"] = l.type;
+      lo["path"] = l.path;
+      links.append(lo);
+    }
+    o["artwork_links"] = links;
+  }
   return o;
 }
 
@@ -441,6 +473,16 @@ Item jsonToItem(const QJsonObject &o) {
   i.title = o["title"].toString();
   i.metadata = jsonToItemMetadata(o["metadata"].toObject());
   i.launcherIndex = o["launcher_index"].toInt(-1);
+  const QJsonArray links = o["artwork_links"].toArray();
+  for (const auto &lv : links) {
+    const QJsonObject lo = lv.toObject();
+    ArtworkLink link;
+    link.type = lo["type"].toString();
+    link.path = lo["path"].toString();
+    if (!link.type.isEmpty() && !link.path.isEmpty()) {
+      i.artworkLinks.append(link);
+    }
+  }
   return i;
 }
 
@@ -593,7 +635,13 @@ ErrorUtils::Result<Manifest> parse(const QByteArray &json) {
     return arrayTooLarge("items", itemsArr.size(), KartFormat::MAX_MANIFEST_ITEMS);
   }
   for (const auto &v : itemsArr) {
-    m.items.append(jsonToItem(v.toObject()));
+    const QJsonObject io = v.toObject();
+    const qsizetype linkCount = io["artwork_links"].toArray().size();
+    if (linkCount > KartFormat::MAX_MANIFEST_ARTWORK_LINKS_PER_ITEM) {
+      return arrayTooLarge("item artwork links", linkCount,
+                           KartFormat::MAX_MANIFEST_ARTWORK_LINKS_PER_ITEM);
+    }
+    m.items.append(jsonToItem(io));
   }
   // Playlists optional — v1 bundles omit the field entirely. toArray()
   // returns an empty array for a missing or wrong-type value, which is

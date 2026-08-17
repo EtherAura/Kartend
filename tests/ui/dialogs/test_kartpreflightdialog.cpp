@@ -59,6 +59,7 @@ private slots:
   void summaryRendersBundleFactsAndEscapesHtml();
   void launcherConfigurationSuppressesTheAllClear();
   void elevatedLauncherFindingRaisesTheBanner();
+  void extractionDestinationRowRendersCountAndEscapedName();
 };
 
 void TestKartPreflightDialog::cleanReportShowsAllClearAndHidesTree() {
@@ -182,6 +183,36 @@ void TestKartPreflightDialog::elevatedLauncherFindingRaisesTheBanner() {
   QVERIFY(group);
   QCOMPARE(group->child(0)->text(1),
            kart::launcherTrustReasonLabel(kart::LauncherTrustReason::InterpreterProgram));
+}
+
+void TestKartPreflightDialog::extractionDestinationRowRendersCountAndEscapedName() {
+  // Kartend-qbfk1: the summary states what accepting means on disk — the
+  // would-write file count and the fresh bundle-named folder, name escaped
+  // like every other user-controlled string in the table.
+  KartPreflight::PreflightReport r = makeCleanReport();
+  r.extractionSubdirName = QStringLiteral("<Docs & Talks>");
+  r.bundleEntryCount = 14;
+  KartPreflightDialog dlg(r);
+  QLabel *row = labelContaining(dlg, QStringLiteral("Extracts to"));
+  QVERIFY(row);
+  QVERIFY(row->text().contains(QStringLiteral("14")));
+  QVERIFY(row->text().contains(QStringLiteral("&lt;Docs &amp; Talks&gt;")));
+  QVERIFY(row->text().contains(QStringLiteral("new folder")));
+
+  // Unknown count (the container walk failed; extraction will error on its
+  // own) → the folder line renders without a file count.
+  KartPreflight::PreflightReport unknown = makeCleanReport();
+  unknown.extractionSubdirName = QStringLiteral("Docs");
+  unknown.bundleEntryCount = -1;
+  KartPreflightDialog dlg2(unknown);
+  QLabel *row2 = labelContaining(dlg2, QStringLiteral("new folder"));
+  QVERIFY(row2);
+  QVERIFY(!row2->text().contains(QStringLiteral("file")));
+
+  // No subdirectory name supplied (a report built outside the import flow)
+  // → the row is omitted entirely, matching the blank-Type convention.
+  KartPreflightDialog dlg3(makeCleanReport());
+  QVERIFY(!labelContaining(dlg3, QStringLiteral("Extracts to")));
 }
 
 QTEST_MAIN(TestKartPreflightDialog)

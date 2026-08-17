@@ -67,6 +67,10 @@ inline constexpr qsizetype MAX_MANIFEST_LAUNCHERS = 10000;
 
 inline constexpr qsizetype MAX_MANIFEST_PLAYLISTS = 10000;
 
+// One item links at most a handful of artwork types (seven standard ids plus
+// the user's custom types); 256 is far above any real gallery.
+inline constexpr qsizetype MAX_MANIFEST_ARTWORK_LINKS_PER_ITEM = 256;
+
 enum EntryFlag : quint8 {
   Flag_Media = 0x01,
   Flag_Artwork = 0x02,

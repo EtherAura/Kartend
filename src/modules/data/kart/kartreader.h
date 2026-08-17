@@ -25,6 +25,12 @@ struct ExtractResult {
 
 [[nodiscard]] ErrorUtils::Result<KartManifest::Manifest> peekManifest(const QString &kartPath);
 
+/// Walk the container's entry headers (payloads are seeked over, not read)
+/// and return how many files an extraction would write — cheap enough for
+/// the preflight dialog. The same per-entry bounds extractTo enforces apply
+/// here, so a malformed container errors instead of reporting a bogus count.
+[[nodiscard]] ErrorUtils::Result<quint32> countEntries(const QString &kartPath);
+
 class Extractor : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(Extractor)

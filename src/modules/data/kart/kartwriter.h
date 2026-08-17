@@ -22,6 +22,10 @@ struct ItemSource {
   QString videoAbs;
   QString manualAbs;
   KartManifest::Item manifestItem;
+  /// Kartend-fh3ab: absolute source path of each bundled hand-linked artwork
+  /// file, index-aligned with manifestItem.artworkLinks (whose .path is the
+  /// in-bundle destination the writer copies this file to).
+  QStringList artworkLinkAbs;
 };
 
 struct WriterParams {

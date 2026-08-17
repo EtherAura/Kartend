@@ -277,9 +277,27 @@ public:
         m_nameFilters(std::move(nameFilters)), m_cancelToken(std::move(cancelToken)),
         m_queue(std::move(queue)) {
     setAutoDelete(true);
+    // Kartend-5xdxf: TSan-visible publish of the fully-constructed task —
+    // the release-store below pairs with run()'s acquire-load. See run().
+    m_constructed.store(true, std::memory_order_release);
   }
 
   void run() override {
+    // Kartend-5xdxf: QThreadPool's enqueue/dequeue mutex is the REAL
+    // ordering between the ctor's member writes (driver thread) and the
+    // reads below (pool thread), but that QMutex's fast path is inline
+    // atomics compiled into UNINSTRUMENTED distro libQt6Core, so TSan
+    // cannot see the edge and reported the pair as a data race (nightly
+    // TSan red on main @4d196a87). The acquire-load pairing with the
+    // ctor's release-store makes every member write visibly ordered.
+    // Same direction as ScanCompletionQueue's inFlight/handoffSeq
+    // (Kartend-bl8w0): a pure ADDITION of synchronization over what the
+    // pool already guarantees, so it cannot mask a genuine race. The
+    // early-return arm is unreachable — start() only ever sees a
+    // completed constructor — it exists to give the load a consumer.
+    if (!m_constructed.load(std::memory_order_acquire)) {
+      return;
+    }
     if (!m_queue || !m_cancelToken) {
       return;
     }
@@ -372,6 +390,8 @@ private:
   // the queue — exactly like the cancellation token above — lets the last
   // finisher (driver or a slow worker) free it safely.
   std::shared_ptr<ScanCompletionQueue> m_queue;
+  // Kartend-5xdxf: TSan-visible ctor→run() handoff edge; see run().
+  std::atomic<bool> m_constructed{false};
 };
 
 // SynchronousPragmaGuard was deleted in Kartend-fux2w: after Kartend-y9if
