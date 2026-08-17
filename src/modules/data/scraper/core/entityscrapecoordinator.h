@@ -38,10 +38,24 @@ public:
   /// has no per-item picker.
   void startEntityCollection();
 
+  /// Manufacturer-logo matching pass (Kartend-cnti4, user-approved design):
+  /// runs when a scrape queue COMPLETES (not on cancel/quota-stop). For each
+  /// collection whose name case-insensitively matches a recorded ScreenScraper
+  /// company name, wire the on-disk company art (harvested from this and
+  /// earlier game scrapes) into its icon/logo slots and persist — so a
+  /// hand-made "manufacturer" parent gets its logo from the same scrape run
+  /// that arted its children, with no extra requests and no user step. A slot
+  /// holding platform art or a user-chosen image is never displaced: only
+  /// empty or company-art-owned slots are written.
+  void applyManufacturerLogos();
+
 private:
+  /// @p wikiFallbackTried marks a result that already went through the
+  /// Wikidata logo fallback (Kartend-czna3) so a not-found from the fallback
+  /// itself books as not-found instead of recursing.
   void onEntityFetchComplete(const ErrorUtils::Result<Scraper::ScrapedItem> &result,
                              const std::shared_ptr<MetadataLookupProvider> &provider,
-                             quint64 generation);
+                             quint64 generation, bool wikiFallbackTried = false);
   /// Map scraped platform art (the _shared/ paths writeMediaFiles wrote this
   /// run PLUS the ones it kept because they already satisfied the rescrape
   /// policy, Kartend-jjyst.5) onto the collection's CollectionConfig art

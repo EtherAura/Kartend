@@ -72,7 +72,16 @@ auto ExtensionUtils::parseUserExtensionList(const QString &text) -> QStringList 
 auto ExtensionUtils::imageBaseExtensions() -> const QStringList & {
   static const QStringList exts = []() {
     QStringList base = {QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
-                        QStringLiteral("bmp"), QStringLiteral("gif"), QStringLiteral("webp")};
+                        QStringLiteral("bmp"), QStringLiteral("gif"), QStringLiteral("webp"),
+                        // SVG (Kartend field report 2026-08-17): ScreenScraper's
+                        // logo-svg variants and the Wikidata/Commons logos are
+                        // vectors — without the whitelist entry every SVG
+                        // payload was renamed .png on write (the tree's
+                        // suffix-keyed SVG renderer then never fired). Kept
+                        // unconditional: the Qt SVG imageformats plugin ships
+                        // with every supported install, and a missing plugin
+                        // only degrades rendering, not naming.
+                        QStringLiteral("svg")};
     const auto formats = QImageReader::supportedImageFormats();
     if (formats.contains(QByteArrayLiteral("avif")) ||
         formats.contains(QByteArrayLiteral("AVIF"))) {
@@ -112,6 +121,18 @@ auto ExtensionUtils::imageExtensionForBytes(const QString &urlPath, const QByteA
     }
     if (kImageExts.contains(format)) {
       return format;
+    }
+  }
+  // SVG sniff by prefix: QImageReader::imageFormat only answers for formats
+  // whose plugin implements canRead peeking, and the SVG plugin's detection
+  // is unreliable enough that an extension-less vector fell through to the
+  // .png default (Kartend field report 2026-08-17 — the fetch URL had lost
+  // its suffix through a redirect). A leading XML/SVG marker is definitive.
+  const QByteArray head = bytes.left(256).trimmed();
+  if (head.startsWith(QByteArrayLiteral("<svg")) || head.startsWith(QByteArrayLiteral("<?xml"))) {
+    if (head.contains(QByteArrayLiteral("<svg")) ||
+        bytes.left(2048).contains(QByteArrayLiteral("<svg"))) {
+      return QStringLiteral("svg");
     }
   }
   return QStringLiteral("png");

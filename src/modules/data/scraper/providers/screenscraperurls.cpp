@@ -67,7 +67,7 @@ QUrl buildJeuInfosUrl(const Credentials &creds, const QString &romnom, int syste
   return url;
 }
 
-QUrl buildSystemeMediaUrl(const Credentials &creds, int systemeid, const QString &apiToken,
+QUrl buildSystemeMediaUrl(const Credentials &creds, int systemeid, const QString &mediaToken,
                           bool hasUser) {
   QUrl url(QString::fromLatin1(SS_MEDIASYSTEME));
   QUrlQuery q;
@@ -81,14 +81,18 @@ QUrl buildSystemeMediaUrl(const Credentials &creds, int systemeid, const QString
     q.addQueryItem(QStringLiteral("sspassword"), creds.userPassword);
   }
   q.addQueryItem(QStringLiteral("systemeid"), QString::number(systemeid));
-  // Live-API verified: a bare token ("wheel") answers 200 "NOMEDIA"
+  // `mediaToken` is passed through VERBATIM and must already carry the region
+  // qualifier. Live-API verified: a bare token ("wheel") answers 200 "NOMEDIA"
   // (text/html) even for systems that DO have the art — the media parameter
-  // wants the region-qualified form ("wheel(wor)"). Platform art on SS is
-  // almost exclusively world-tagged, so request (wor) rather than plumbing
-  // the per-game region preference through. A genuinely missing type still
-  // answers NOMEDIA as text/html, which fetchMediaBytes' image/ content-type
-  // gate converts to a structured, non-fatal per-asset miss.
-  q.addQueryItem(QStringLiteral("media"), apiToken + QStringLiteral("(wor)"));
+  // wants the region-qualified form ("wheel(wor)").
+  //
+  // The qualifier used to be appended here, hardcoded to (wor). It moved to
+  // the caller (Kartend-qzk1s) because the systemesListe catalog now tells us
+  // which region variants a system actually has — SS itself resolves fallback
+  // (a system can carry an `eu` row whose token is `wheel(wor)`), so the token
+  // has to come from the catalog rather than be reassembled here. Callers with
+  // no catalog entry still pass the "<type>(wor)" form explicitly.
+  q.addQueryItem(QStringLiteral("media"), mediaToken);
   url.setQuery(q);
   return url;
 }

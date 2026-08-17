@@ -70,6 +70,8 @@ private slots:
   void buildSystemeMediaUrl_mapsParamsAndGatesUser();
   void fetchEntity_userCredsRequireBothIdAndPassword();
   void fetchEntity_platformAssetShapeRolesAndScopeKey();
+  void fetchEntity_catalogSkipsTypesTheSystemDoesNotHave();
+  void fetchEntity_catalogHonorsPreferredRegion();
   void fetchEntity_absentIdInNonEmptyCatalogIsNotFound();
   void fetchEntity_nonPlatformTypeIsInvalidArgument();
   // Kartend-ckepd.6: empty-identity autodetect via the collection accessor.
@@ -347,14 +349,18 @@ void TestScreenScraperProvider::buildSystemeMediaUrl_mapsParamsAndGatesUser() {
   // gates user creds on hasUser, and omits output=json (it returns media
   // bytes, not JSON). Live-API verified: the media parameter must be the
   // region-qualified token — a bare "wheel" answers 200 "NOMEDIA" even for
-  // systems that have the art, so the builder appends "(wor)".
+  // systems that have the art.
+  //
+  // Kartend-qzk1s moved the qualifier to the CALLER: the token is passed
+  // through verbatim so a catalog-supplied variant ("wheel(jp)") survives
+  // instead of being overwritten with (wor).
   Credentials creds;
   creds.devId = QStringLiteral("dev123");
   creds.devPassword = QStringLiteral("devpw");
   creds.userId = QStringLiteral("user42");
   creds.userPassword = QStringLiteral("userpw");
 
-  const QUrl url = ScreenScraperUrls::buildSystemeMediaUrl(creds, 7, QStringLiteral("wheel"),
+  const QUrl url = ScreenScraperUrls::buildSystemeMediaUrl(creds, 7, QStringLiteral("wheel(wor)"),
                                                            /*hasUser=*/false);
   QCOMPARE(url.host(), QStringLiteral("api.screenscraper.fr"));
   QVERIFY(url.path().endsWith(QStringLiteral("/mediaSysteme.php")));
@@ -367,12 +373,18 @@ void TestScreenScraperProvider::buildSystemeMediaUrl_mapsParamsAndGatesUser() {
   QVERIFY(!q.hasQueryItem(QStringLiteral("ssid")));   // user creds gated off
 
   // hasUser=true adds ssid/sspassword.
-  const QUrlQuery q2(ScreenScraperUrls::buildSystemeMediaUrl(creds, 7,
-                                                             QStringLiteral("illustration"),
-                                                             /*hasUser=*/true));
+  const QUrlQuery q2(ScreenScraperUrls::buildSystemeMediaUrl(
+      creds, 7, QStringLiteral("illustration(wor)"), /*hasUser=*/true));
   QCOMPARE(q2.queryItemValue(QStringLiteral("ssid")), QStringLiteral("user42"));
   QCOMPARE(q2.queryItemValue(QStringLiteral("sspassword")), QStringLiteral("userpw"));
   QCOMPARE(q2.queryItemValue(QStringLiteral("media")), QStringLiteral("illustration(wor)"));
+
+  // A non-world catalog token must survive verbatim — the builder no longer
+  // rewrites the qualifier, which is what lets the user's region preference
+  // reach platform art at all.
+  const QUrlQuery q3(ScreenScraperUrls::buildSystemeMediaUrl(creds, 7, QStringLiteral("wheel(jp)"),
+                                                             /*hasUser=*/false));
+  QCOMPARE(q3.queryItemValue(QStringLiteral("media")), QStringLiteral("wheel(jp)"));
 }
 
 void TestScreenScraperProvider::fetchEntity_userCredsRequireBothIdAndPassword() {
@@ -470,30 +482,137 @@ void TestScreenScraperProvider::fetchEntity_platformAssetShapeRolesAndScopeKey()
   const Scraper::ScrapedItem &item = result->value();
   QCOMPARE(item.title, QStringLiteral("Test Platform"));
   QCOMPARE(item.sourceProviderId, QStringLiteral("screenscraper"));
-  // Four assets, in kPlatformMediaTypes order: wheel/logo → Logo(0/1),
-  // illustration/photo → Background(0/1). asset.type is the CANONICAL type
-  // (e.g. "logo"), distinct from the api token ("logo-monochrome").
-  QCOMPARE(item.media.size(), 4);
+  // The seeded System carries NO media catalog, which is the pre-Kartend-xny9o
+  // cache shape — so this also pins the speculative fallback: one asset per
+  // kPlatformMediaTypes entry, each with the world-qualified token the URL
+  // builder used to append itself. asset.type is the CANONICAL type (e.g.
+  // "logo"), distinct from the api token ("logo-monochrome").
   struct Expect {
     const char *type;
+    const char *token;
     Scraper::EntityArtRole role;
     int prio;
   };
   const Expect expected[] = {
-      {"wheel", Scraper::EntityArtRole::Logo, 0},
-      {"logo", Scraper::EntityArtRole::Logo, 1},
-      {"illustration", Scraper::EntityArtRole::Background, 0},
-      {"photo", Scraper::EntityArtRole::Background, 1},
+      {"wheel", "wheel(wor)", Scraper::EntityArtRole::Logo, 0},
+      {"logo", "logo-monochrome(wor)", Scraper::EntityArtRole::Logo, 1},
+      {"logo-svg", "logo-svg(wor)", Scraper::EntityArtRole::None, 0},
+      {"logo-monochrome-svg", "logo-monochrome-svg(wor)", Scraper::EntityArtRole::None, 0},
+      {"illustration", "illustration(wor)", Scraper::EntityArtRole::Background, 0},
+      {"photo", "photo(wor)", Scraper::EntityArtRole::Background, 1},
+      {"background", "background(wor)", Scraper::EntityArtRole::Background, 2},
   };
-  for (int i = 0; i < 4; ++i) {
+  QCOMPARE(item.media.size(), static_cast<qsizetype>(std::size(expected)));
+  for (int i = 0; i < static_cast<int>(std::size(expected)); ++i) {
     const Scraper::MediaAsset &a = item.media[i];
     QCOMPARE(a.type, QString::fromLatin1(expected[i].type));
     QCOMPARE(a.entityRole, expected[i].role);
     QCOMPARE(a.entityRolePriority, expected[i].prio);
     QCOMPARE(a.scope, Scraper::MediaScope::Platform);
     QCOMPARE(a.scopeKey, QStringLiteral("42"));
-    QCOMPARE(QUrlQuery(a.url).queryItemValue(QStringLiteral("systemeid")), QStringLiteral("42"));
+    const QUrlQuery q(a.url);
+    QCOMPARE(q.queryItemValue(QStringLiteral("systemeid")), QStringLiteral("42"));
+    QCOMPARE(q.queryItemValue(QStringLiteral("media")), QString::fromLatin1(expected[i].token));
   }
+  QVERIFY(QFile::remove(cachePath));
+}
+
+void TestScreenScraperProvider::fetchEntity_catalogSkipsTypesTheSystemDoesNotHave() {
+  // Kartend-qzk1s: with a media catalog present, only the types the system
+  // actually carries are requested. The whole point is the ones NOT emitted —
+  // each absent type used to cost a media-host request that answered NOMEDIA
+  // (measured: 173 of every 1,000 on the live catalog).
+  QStandardPaths::setTestModeEnabled(true);
+  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
+  ScreenScraperSystems::System sys;
+  sys.id = 42;
+  sys.displayName = QStringLiteral("Test Platform");
+  // Has wheel + photo. Deliberately NO logo-monochrome, illustration, or
+  // background — the three that must be skipped.
+  sys.media = {
+      {QStringLiteral("wheel"), QStringLiteral("wheel(wor)"), QStringLiteral("wor"), {},
+       QStringLiteral("png"), {}, {}, {}, false},
+      {QStringLiteral("photo"), QStringLiteral("photo(wor)"), QStringLiteral("wor"), {},
+       QStringLiteral("png"), {}, {}, {}, false},
+  };
+  QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
+
+  GeneralSettings settings;
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 ScreenScraperProvider::CollectionAccessor{});
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform;
+  target.identity = QStringLiteral("42");
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY(result.has_value());
+  QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
+  const auto &media = result->value().media;
+  QCOMPARE(media.size(), 2);
+  QCOMPARE(media[0].type, QStringLiteral("wheel"));
+  QCOMPARE(media[0].entityRole, Scraper::EntityArtRole::Logo);
+  QCOMPARE(media[1].type, QStringLiteral("photo"));
+  QCOMPARE(media[1].entityRole, Scraper::EntityArtRole::Background);
+  // The role/priority stamping is unchanged by the skipping — photo keeps its
+  // in-role priority of 1 even though illustration (priority 0) was dropped,
+  // so applyEntityArtToConfig still picks the best AVAILABLE candidate rather
+  // than being handed a renumbered list.
+  QCOMPARE(media[1].entityRolePriority, 1);
+  QVERIFY(QFile::remove(cachePath));
+}
+
+void TestScreenScraperProvider::fetchEntity_catalogHonorsPreferredRegion() {
+  // Kartend-qzk1s: platform art used to be pinned to (wor) because the builder
+  // hardcoded the qualifier. The catalog lists every region variant SS holds,
+  // so the user's configured region can finally win for platform art too.
+  QStandardPaths::setTestModeEnabled(true);
+  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
+  ScreenScraperSystems::System sys;
+  sys.id = 42;
+  sys.displayName = QStringLiteral("Test Platform");
+  sys.media = {
+      {QStringLiteral("wheel"), QStringLiteral("wheel(wor)"), QStringLiteral("wor"), {},
+       QStringLiteral("png"), {}, {}, {}, false},
+      {QStringLiteral("wheel"), QStringLiteral("wheel(jp)"), QStringLiteral("jp"), {},
+       QStringLiteral("png"), {}, {}, {}, false},
+  };
+  QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
+
+  GeneralSettings settings;
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  settings.scraper.options.preferredScraperRegion = QStringLiteral("jp");
+
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 ScreenScraperProvider::CollectionAccessor{});
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform;
+  target.identity = QStringLiteral("42");
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY(result.has_value());
+  QVERIFY(result->isOk());
+  QCOMPARE(result->value().media.size(), 1);
+  QCOMPARE(QUrlQuery(result->value().media[0].url).queryItemValue(QStringLiteral("media")),
+           QStringLiteral("wheel(jp)"));
+
+  // A region SS has no variant for falls back to the world tag, not to nothing.
+  settings.scraper.options.preferredScraperRegion = QStringLiteral("br");
+  result.reset();
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY(result.has_value());
+  QVERIFY(result->isOk());
+  QCOMPARE(QUrlQuery(result->value().media[0].url).queryItemValue(QStringLiteral("media")),
+           QStringLiteral("wheel(wor)"));
   QVERIFY(QFile::remove(cachePath));
 }
 

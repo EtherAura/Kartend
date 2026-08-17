@@ -17,7 +17,10 @@
 #include "batchscraperunner.h"
 #include "collection/typehelpers.h"
 #include "isettingsmanager.h"
+#include "pathutils.h"
+#include "screenscrapercompanyregistry.h"
 #include "scraperservice.h"
+#include "wikidatalogoprovider.h"
 
 namespace Scraper {
 
@@ -68,7 +71,8 @@ void EntityScrapeCoordinator::startEntityCollection() {
 
 void EntityScrapeCoordinator::onEntityFetchComplete(
     const ErrorUtils::Result<Scraper::ScrapedItem> &result,
-    const std::shared_ptr<MetadataLookupProvider> &provider, quint64 generation) {
+    const std::shared_ptr<MetadataLookupProvider> &provider, quint64 generation,
+    bool wikiFallbackTried) {
   // Stale result after cancel/finish — don't advance a queue we no longer own.
   if (m_svc->m_state != ScraperService::State::RunningAuto &&
       m_svc->m_state != ScraperService::State::RunningInteractive)
@@ -108,6 +112,50 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
     // Kartend-e8aag: a not-found entity (e.g. a niche platform with no catalog
     // entry) is counted apart from genuine errors.
     if (err.code == ErrorUtils::ErrorCode::RemoteResourceNotFound || err.httpStatus == 404) {
+      // Wikidata logo fallback (Kartend-czna3): a Platform entity no system
+      // matches is exactly the manufacturer-shell case ("Nintendo" is a
+      // company, not a console) — retry the job once through the Wikidata
+      // provider with a Collection target before booking the not-found.
+      // Guarded by wikiFallbackTried so the fallback's own not-found lands
+      // in the bucket instead of recursing.
+      if (!wikiFallbackTried && job.entity.type == Scraper::ScrapeEntityType::Platform &&
+          m_svc->m_ctx.collections) {
+        // Shells frequently carry no artwork directory of their own —
+        // substitute the first non-empty root so the logo has a home (the
+        // navigation sidebar and the startup matching pass search every
+        // collection's root, so any of them serves).
+        auto &mutableJob = m_svc->m_queue[m_svc->m_queueCursor];
+        if (mutableJob.artworkDir.isEmpty()) {
+          for (const CollectionConfig &c : *m_svc->m_ctx.collections) {
+            const QString root = PathUtils::validateAndExpandPath(c.artworkDirectory, c.name);
+            if (!root.isEmpty()) {
+              mutableJob.artworkDir = root;
+              break;
+            }
+          }
+        }
+        auto fallback = std::make_shared<WikidataLogoProvider>(
+            [collections = m_svc->m_ctx.collections,
+             idx = job.collectionIndex]() -> const CollectionConfig * {
+              if (!collections || idx < 0 || idx >= collections->size()) return nullptr;
+              return &(*collections)[idx];
+            });
+        Scraper::EntityScrapeTarget wikiTarget;
+        wikiTarget.type = Scraper::ScrapeEntityType::Collection;
+        wikiTarget.identity = job.collectionUuid;
+        wikiTarget.collectionIndex = job.collectionIndex;
+        qCInfo(lcEntityScrape) << "platform entity not found for" << job.collectionName
+                               << "— trying the Wikidata logo fallback";
+        QPointer<ScraperService> self(m_svc);
+        fallback->fetchEntity(
+            wikiTarget, [self, fallback, generation](
+                            const ErrorUtils::Result<Scraper::ScrapedItem> &fallbackResult) {
+              if (self.isNull() || self->m_runGeneration != generation) return;
+              self->m_entityCoordinator.onEntityFetchComplete(fallbackResult, fallback, generation,
+                                                              /*wikiFallbackTried=*/true);
+            });
+        return;
+      }
       ++m_svc->m_summary.notFound;
     } else {
       ++m_svc->m_summary.errors;
@@ -419,13 +467,31 @@ void EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectionUu
   const QString background = pathForRole(Scraper::EntityArtRole::Background);
 
   CollectionConfig &cfg = (*m_svc->m_ctx.collections)[collectionIndex];
+  // A config slot is scrape-writable only when it is empty or already points
+  // at scrape-owned art (a `_shared/` path this coordinator wired on an
+  // earlier run). A user-chosen image lives outside `_shared/` and is a
+  // deliberate per-collection decision made in the collection settings dialog
+  // — entity scrapes now ride along with EVERY collection scrape (user
+  // decision 2026-08-17), so overwriting here would silently revert the
+  // user's icon on every rescrape. Manual choice wins; the scraped file still
+  // lands on disk for the user to pick later. The rescrape policy is not
+  // consulted: it governs scraped FILES, and a hand-picked icon is a config
+  // choice, not a scraped file.
+  const auto scrapeOwned = [](const QString &current) {
+    return current.isEmpty() || current.contains(QStringLiteral("/_shared/"));
+  };
   bool changed = false;
   if (!logo.isEmpty()) {
-    cfg.background.headerLogoImage = logo;
-    cfg.collectionIcon = logo;
-    changed = true;
+    if (scrapeOwned(cfg.background.headerLogoImage)) {
+      cfg.background.headerLogoImage = logo;
+      changed = true;
+    }
+    if (scrapeOwned(cfg.collectionIcon)) {
+      cfg.collectionIcon = logo;
+      changed = true;
+    }
   }
-  if (!background.isEmpty()) {
+  if (!background.isEmpty() && scrapeOwned(cfg.background.backgroundImage)) {
     cfg.background.backgroundImage = background;
     changed = true;
   }
@@ -437,6 +503,26 @@ void EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectionUu
       const auto r = sm->saveCollections(*m_svc->m_ctx.collections);
       if (r.isError()) {
         qCWarning(lcEntityScrape) << "Failed to persist scraped platform art to config:"
+                                  << r.error().message;
+      }
+    }
+  }
+}
+
+void EntityScrapeCoordinator::applyManufacturerLogos() {
+  if (!m_svc->m_ctx.collections) return;
+  // The matching core lives on the registry module so the SAME pass can run
+  // at app startup without a service context (see applyToCollections' doc).
+  QList<CollectionConfig> &collections = *m_svc->m_ctx.collections;
+  const bool changed = ScreenScraperCompanyRegistry::applyToCollections(
+      collections, ScreenScraperCompanyRegistry::defaultPath());
+  if (!changed) return;
+  qCInfo(lcEntityScrape) << "manufacturer logos matched — persisting collection config";
+  if (m_svc->m_ctx.ctx) {
+    if (auto *sm = m_svc->m_ctx.ctx->settingsManager()) {
+      const auto r = sm->saveCollections(collections);
+      if (r.isError()) {
+        qCWarning(lcEntityScrape) << "Failed to persist matched manufacturer logos:"
                                   << r.error().message;
       }
     }

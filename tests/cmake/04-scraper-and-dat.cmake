@@ -164,6 +164,20 @@ kartend_add_test(NAME ScreenScraperSystemCache
   LINK kartend_data kartend_api kartend_utils
 )
 
+# ScreenScraper company registry tests (id→name accumulation + the
+# manufacturer-name → on-disk company art resolution, Kartend-cnti4)
+kartend_add_test(NAME ScreenScraperCompanyRegistry
+  SOURCES modules/scraper/test_screenscrapercompanyregistry.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
+# Wikidata logo pipeline (Kartend-czna3): pure wire-shape helpers + the
+# provider's two-hop fetchEntity through ProviderBase's fetch seam.
+kartend_add_test(NAME WikidataLogoProvider
+  SOURCES modules/scraper/test_wikidatalogoprovider.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # ScreenScraper systems autodetect tests
 kartend_add_test(NAME ScreenScraperSystems
   SOURCES modules/scraper/test_screenscrapersystems.cpp

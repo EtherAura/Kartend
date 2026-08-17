@@ -237,6 +237,14 @@ private:
   /// until the first lookup response with an `ssuser` block lands.
   ScreenScraperQuotaManager m_quota;
 
+  /// Fold a parsed item's publisher/developer id+name pairs into the on-disk
+  /// company registry (Kartend-cnti4). Lazy-loads the registry once per
+  /// provider instance and writes the file ONLY when a pair is new — across a
+  /// large batch the ids repeat constantly, so the steady state is zero I/O.
+  void recordCompanies(const Scraper::ScrapedItem &item) const;
+  mutable QHash<QString, QString> m_companyRegistry;
+  mutable bool m_companyRegistryLoaded = false;
+
   /// Owns the systemesListe + mediasJeuListe catalog dance — disk
   /// cache load, conditional refetch, parse, persist. The provider
   /// forwards ensure*Catalog calls to it and reads back

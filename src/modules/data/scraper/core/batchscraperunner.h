@@ -536,6 +536,13 @@ private:
   /// User-selected media types to fetch per item (e.g. "front",
   /// "screenshot", "fanart"). Lowercase. Empty = legacy front-only.
   QSet<QString> m_mediaTypeFilter;
+  /// Company-scoped assets fetched THIS run, keyed
+  /// `company_<scopeKey>/<type>` — the guard that makes the filter bypass in
+  /// resolveWantedMediaAssets cost one fetch per company per run instead of
+  /// one per game (the runner has no other shared-scope dedup; that lives in
+  /// the interactive dialog's download dispatcher). Mutable: the resolve
+  /// helper is const and this is memoisation, not state a caller observes.
+  mutable QSet<QString> m_companyFetchedThisRun;
   bool m_writeMetadata = true;
   /// Running total of media bytes downloaded — incremented in each
   /// fetchMediaBytes callback regardless of whether the bytes get

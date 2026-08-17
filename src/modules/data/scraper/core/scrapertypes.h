@@ -195,6 +195,14 @@ struct ScrapedItem {
   QString genre;
   QString developer;
   QString publisher;
+  /// Provider-specific numeric company ids behind `publisher` / `developer`
+  /// (Kartend-p1k3g — ScreenScraper's editeur/developpeur carry an `id`
+  /// alongside the text). Empty when the provider has none or the value fails
+  /// id validation: these become `company_<id>` shared filenames and registry
+  /// keys, so a non-numeric value is dropped at parse time rather than
+  /// trusted (same posture as MediaAsset::scopeKey, Kartend-xhbt).
+  QString publisherId;
+  QString developerId;
   QString releaseDate;
   QString contentRating;
   QString players;

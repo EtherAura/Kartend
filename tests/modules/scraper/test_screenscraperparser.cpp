@@ -38,6 +38,7 @@ private slots:
   void parseDetailResponse_dropsUnsafeMediaType();
   void parseDetailResponse_downgradesInvalidGroupScopeKey();
   void parseDetailResponse_keepsValidGroupScopeKey();
+  void parseDetailResponse_retainsValidCompanyIdRejectsHostile();
   void parseUserInfoResponse_nonJsonBodyRejectedRegardlessOfPrefix();
 };
 
@@ -212,6 +213,31 @@ void TestScreenScraperParser::parseDetailResponse_extractsTypedFields() {
   QCOMPARE(item.genre, QStringLiteral("Platform, Adventure"));
   QCOMPARE(item.sourceProviderId, QStringLiteral("screenscraper"));
   QCOMPARE(item.customFields.value("screenscraper_id"), QStringLiteral("1234"));
+  // The fixture's editeur/developpeur carry text but no id — absence reads as
+  // empty, never as an error (Kartend-p1k3g).
+  QVERIFY(item.publisherId.isEmpty());
+  QVERIFY(item.developerId.isEmpty());
+}
+
+void TestScreenScraperParser::parseDetailResponse_retainsValidCompanyIdRejectsHostile() {
+  // Kartend-p1k3g: the numeric id beside editeur/developpeur text is the only
+  // key mediaCompagnie.php accepts, so it must survive the parse — but it also
+  // becomes a company_<id> filename and a registry key, so a non-id value is
+  // dropped, not carried (mediaGroup scopeKey precedent, Kartend-xhbt).
+  const QByteArray fixture = QByteArrayLiteral(R"json({
+    "response": { "jeu": {
+      "id": "42",
+      "noms": [{"region": "us", "text": "Game"}],
+      "editeur": {"id": "77", "text": "Publisher Inc"},
+      "developpeur": {"id": "../evil", "text": "Dev Studio"}
+    }}})json");
+  auto result = ScreenScraperParser::parseDetailResponse(fixture);
+  QVERIFY(result.isOk());
+  const auto item = result.value();
+  QCOMPARE(item.publisherId, QStringLiteral("77"));
+  QVERIFY(item.developerId.isEmpty()); // hostile id rejected, text still kept
+  QCOMPARE(item.publisher, QStringLiteral("Publisher Inc"));
+  QCOMPARE(item.developer, QStringLiteral("Dev Studio"));
 }
 
 void TestScreenScraperParser::parseDetailResponse_picksUSRegionAndEnglishLanguage() {

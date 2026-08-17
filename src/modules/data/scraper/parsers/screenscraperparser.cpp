@@ -442,6 +442,18 @@ parseInner(const QByteArray &json, const ScreenScraperParser::ParseOptions &opti
                          .toPlainText();
   item.publisher = readSingleText(jeu.value("editeur"));
   item.developer = readSingleText(jeu.value("developpeur"));
+  // Kartend-p1k3g: editeur/developpeur ship a numeric company id next to the
+  // text ({"id":"3","text":"SEGA"}) — the only key mediaCompagnie.php accepts,
+  // and the joint that lets on-disk company_<id> art be matched back to a
+  // manufacturer NAME (Kartend-cnti4). Same allowlist as scopeKeys: the id
+  // becomes a filename component and a registry key, so a hostile value reads
+  // as absent rather than being carried along.
+  const auto readCompanyId = [](const QJsonValue &v) -> QString {
+    const QString id = v.toObject().value("id").toString();
+    return isValidScopeKey(id) ? id : QString();
+  };
+  item.publisherId = readCompanyId(jeu.value("editeur"));
+  item.developerId = readCompanyId(jeu.value("developpeur"));
   item.players = readSingleText(jeu.value("joueurs"));
   item.releaseDate = pickByTag(jeu.value("dates").toArray(), "region", regionPrefs);
   item.genre = collectGenres(jeu.value("genres").toArray(), languagePrefs);

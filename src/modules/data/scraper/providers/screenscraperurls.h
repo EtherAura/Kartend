@@ -52,9 +52,16 @@ void addCommonQueryParams(QUrlQuery &q, const QString &devId, const QString &dev
                                     const RomHasher::Result &hashes, bool hasUser);
 
 /// Build a mediaSysteme.php URL for one platform media type (Kartend-ckepd.4).
-/// Media (bytes) endpoint — no output=json. `apiToken` is the SS media type.
+/// Media (bytes) endpoint — no output=json.
+///
+/// `mediaToken` is the SS media parameter VERBATIM and must already include the
+/// region qualifier — "wheel(wor)", not "wheel". A bare type answers 200
+/// "NOMEDIA" even for systems that have the art. The caller owns the qualifier
+/// (Kartend-qzk1s) because the systemesListe catalog carries the exact token
+/// per available region variant; callers without a catalog entry pass
+/// "<type>(wor)" explicitly.
 [[nodiscard]] QUrl buildSystemeMediaUrl(const Credentials &creds, int systemeid,
-                                        const QString &apiToken, bool hasUser);
+                                        const QString &mediaToken, bool hasUser);
 
 /// SS API v2 returns specific HTTP status codes for distinct failure
 /// modes (see api.screenscraper.fr docs). Re-map the upstream's

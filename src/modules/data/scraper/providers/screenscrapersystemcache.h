@@ -21,6 +21,15 @@
 /// All parsing is in pure functions on QByteArray so the network
 /// path is testable with canned JSON; the on-disk persistence is
 /// testable with QTemporaryDir.
+///
+/// Sizing (measured against the live catalog, 2026-08-17): the response is
+/// 3.8 MB over 250 systems, the bulk of it the per-system `medias` arrays
+/// (7,655 entries, 32 distinct types). Retaining them takes the cache file
+/// from ~47 KB to ~1.6 MB — 41% of the raw response, since the credential
+/// -bearing URLs and the fields we don't model are dropped. Accepted
+/// deliberately: the alternative is re-fetching 3.8 MB to answer "does this
+/// platform have a wheel?", which the response we already paid for had
+/// already answered.
 namespace ScreenScraperSystemCache {
 
 /// Cache TTL — 30 days. The SS catalog grows when new systems are
@@ -41,6 +50,18 @@ constexpr int CACHE_TTL_DAYS = 30;
 /// and nom_retropie all participate in autodetect); splits the
 /// `extensions` comma-separated string into the typed list. Empty
 /// `systemes` array is a successful empty list, not an error.
+///
+/// Also retains the catalog fields SS ships that we used to drop on the
+/// floor (Kartend-xny9o): `compagnie` / `type` / `datedebut` / `datefin`
+/// / `romtype` / `supporttype`, and the per-system `medias` array. All
+/// are optional — each reads empty when SS omits it, and no absence can
+/// fail an entry.
+///
+/// **medias[].url is parsed but never retained.** SS interpolates
+/// devid / devpassword / ssid / sspassword into every url it returns, so
+/// only the `media=` token and the endpoint kind survive into
+/// ScreenScraperSystems::Media. The round-trip test asserts no credential
+/// param name appears in the bytes this module writes.
 [[nodiscard]] ErrorUtils::Result<QList<ScreenScraperSystems::System>>
 parseSystemsResponse(const QByteArray &json);
 

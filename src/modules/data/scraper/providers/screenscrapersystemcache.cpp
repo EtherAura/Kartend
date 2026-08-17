@@ -19,6 +19,8 @@
 #include <QStandardPaths>
 #include <QString>
 #include <QStringList>
+#include <QUrl>
+#include <QUrlQuery>
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -121,6 +123,66 @@ QStringList readExtensions(const QJsonValue &v) {
   return {};
 }
 
+/// SS is inconsistent about scalar shape across endpoint variants — the
+/// same field arrives as a JSON string on one and a number on another
+/// (`id` already needed this treatment below). Normalise to trimmed text;
+/// anything non-scalar reads as empty.
+QString readScalarText(const QJsonValue &v) {
+  if (v.isString()) return v.toString().trimmed();
+  if (v.isDouble()) return QString::number(v.toDouble());
+  return {};
+}
+
+/// Pull the `media=` token and the endpoint kind out of a medias[] url,
+/// discarding everything else — crucially the devid / devpassword / ssid /
+/// sspassword SS interpolates into every url it hands back. Nothing from
+/// the query string other than the media token survives this function, so
+/// no credential can reach the cache file (Kartend-xny9o).
+void readMediaUrl(const QString &rawUrl, ScreenScraperSystems::Media &m) {
+  if (rawUrl.isEmpty()) return;
+  const QUrl url(rawUrl);
+  m.token = QUrlQuery(url).queryItemValue(QStringLiteral("media"), QUrl::FullyDecoded).trimmed();
+  // Video assets come from a sibling endpoint taking the same params. An
+  // endpoint we don't recognise stays video=false — the entry's type and
+  // hashes are still worth keeping, and a caller that can't rebuild the
+  // URL simply falls back to requesting the type by name.
+  m.video = url.path().endsWith(QLatin1String("mediaVideoSysteme.php"), Qt::CaseInsensitive);
+}
+
+/// Parse one system's `medias` array. Tolerates BOTH shapes the way
+/// readExtensions/unwrapArray already do: the live SS response (a `url`
+/// carrying the media token) and our own round-tripped cache (`media` +
+/// `video` written back directly, since the url was never stored).
+QList<ScreenScraperSystems::Media> readMedia(const QJsonValue &v) {
+  const QJsonArray arr = v.toArray();
+  QList<ScreenScraperSystems::Media> out;
+  out.reserve(arr.size());
+  for (const auto &elem : arr) {
+    const QJsonObject o = elem.toObject();
+    if (o.isEmpty()) continue;
+    ScreenScraperSystems::Media m;
+    m.type = readScalarText(o.value("type")).toLower();
+    if (m.type.isEmpty()) continue; // an untyped asset is unaddressable
+    if (o.contains(QStringLiteral("url"))) {
+      readMediaUrl(readScalarText(o.value("url")), m);
+    } else {
+      m.token = readScalarText(o.value("media"));
+      m.video = o.value("video").toBool(false);
+    }
+    // SS always qualifies the token by region; a cache file hand-edited
+    // to drop it can still address the asset by bare type.
+    if (m.token.isEmpty()) m.token = m.type;
+    m.region = readScalarText(o.value("region")).toLower();
+    m.support = readScalarText(o.value("support"));
+    m.format = readScalarText(o.value("format")).toLower();
+    m.crc = readScalarText(o.value("crc"));
+    m.md5 = readScalarText(o.value("md5"));
+    m.sha1 = readScalarText(o.value("sha1"));
+    out.append(m);
+  }
+  return out;
+}
+
 } // namespace
 
 QString defaultCachePath() {
@@ -164,6 +226,17 @@ parseSystemsResponse(const QByteArray &json) {
     s.displayName = pickDisplayName(noms);
     s.aliases = extractAliases(noms);
     s.extensions = readExtensions(sys.value("extensions"));
+    // Retained-verbatim catalog fields (Kartend-xny9o). Every one of these
+    // is optional in the live response — `compagnie` alone is absent from
+    // roughly a third of the catalog — so each simply reads empty when SS
+    // omits it. None of them can fail the entry.
+    s.company = readScalarText(sys.value("compagnie"));
+    s.systemType = readScalarText(sys.value("type"));
+    s.startDate = readScalarText(sys.value("datedebut"));
+    s.endDate = readScalarText(sys.value("datefin"));
+    s.romType = readScalarText(sys.value("romtype"));
+    s.supportType = readScalarText(sys.value("supporttype"));
+    s.media = readMedia(sys.value("medias"));
     out.append(s);
   }
   return out;
@@ -200,6 +273,44 @@ bool saveSystems(const QString &filePath, const QList<ScreenScraperSystems::Syst
     noms["aliases"] = aliasesArr;
     sys["noms"] = noms;
     sys["extensions"] = s.extensions.join(QChar(','));
+    // Retained catalog fields, under SS's own key names so the round-trip
+    // stays a no-op and a power user editing the file sees the same
+    // vocabulary as the API. Omitted entirely when empty — a third of the
+    // catalog has no `compagnie`, and writing "" for all of them would
+    // bloat the file to no purpose.
+    const auto put = [&sys](const char *key, const QString &value) {
+      if (!value.isEmpty()) sys[QString::fromLatin1(key)] = value;
+    };
+    put("compagnie", s.company);
+    put("type", s.systemType);
+    put("datedebut", s.startDate);
+    put("datefin", s.endDate);
+    put("romtype", s.romType);
+    put("supporttype", s.supportType);
+    if (!s.media.isEmpty()) {
+      QJsonArray medias;
+      for (const auto &m : s.media) {
+        QJsonObject mo;
+        mo["type"] = m.type;
+        // `media` (the token), NOT `url` — the url SS gave us carried
+        // devid/devpassword/ssid/sspassword and was discarded at parse
+        // time. Writing one here would put the dev password on disk in
+        // cleartext; the round-trip test asserts it does not.
+        mo["media"] = m.token;
+        if (m.video) mo["video"] = true;
+        const auto putM = [&mo](const char *key, const QString &value) {
+          if (!value.isEmpty()) mo[QString::fromLatin1(key)] = value;
+        };
+        putM("region", m.region);
+        putM("support", m.support);
+        putM("format", m.format);
+        putM("crc", m.crc);
+        putM("md5", m.md5);
+        putM("sha1", m.sha1);
+        medias.append(mo);
+      }
+      sys["medias"] = medias;
+    }
     systemes.append(sys);
   }
   QJsonObject root;

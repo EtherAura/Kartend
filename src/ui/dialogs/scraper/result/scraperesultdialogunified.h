@@ -116,6 +116,16 @@ private:
   /// "_metadata" entry off into @p writeMetadata. Used by onScrapeClicked.
   [[nodiscard]] QSet<QString> buildMediaFilter(bool &writeMetadata) const;
 
+  /// One CollectionJob per non-Game entity type the collection's provider
+  /// supports — the platform/collection artwork companion jobs. Shared by
+  /// startEntityScrape (the item context-menu entry) and onScrapeClicked,
+  /// which rides these along with every normal collection scrape (user
+  /// decision 2026-08-17: entity art is fetched WHEN the collection is
+  /// scraped, not via a separate action). Empty when the collection is a
+  /// playlist, resolves no provider, or the provider is Game-only.
+  [[nodiscard]] QList<Scraper::ScraperService::CollectionJob>
+  buildEntityJobs(int collectionIndex, const QString &uuid, const QString &artworkDir) const;
+
   // ── buildUnifiedPanel section builders (Kartend-etbol) ──────────────────
   // buildUnifiedPanel was a single 421-line method; these split it into one
   // helper per UI section, each returning the widget it built so the parent

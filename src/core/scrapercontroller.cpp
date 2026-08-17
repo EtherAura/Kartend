@@ -70,7 +70,10 @@ makeProviderBuilder(QList<CollectionConfig> *collections, GeneralSettings *gener
 } // namespace ScraperControllerInternal
 
 ScraperController::ScraperController(QObject *parent)
-    : QObject(parent), m_scraperService(std::make_unique<Scraper::ScraperService>(nullptr)) {}
+    : QObject(parent), m_scraperService(std::make_unique<Scraper::ScraperService>(nullptr)) {
+  connect(m_scraperService.get(), &Scraper::ScraperService::scrapeFinished, this,
+          [this](const Scraper::ScraperService::Summary &) { emit scrapeRunFinished(); });
+}
 
 ScraperController::~ScraperController() = default;
 

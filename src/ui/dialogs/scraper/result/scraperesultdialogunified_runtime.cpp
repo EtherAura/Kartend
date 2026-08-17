@@ -512,6 +512,44 @@ void ScrapeResultDialogUnified::rescrapeFailedItems() {
   }
 }
 
+QList<Scraper::ScraperService::CollectionJob>
+ScrapeResultDialogUnified::buildEntityJobs(int collectionIndex, const QString &uuid,
+                                           const QString &artworkDir) const {
+  QList<Scraper::ScraperService::CollectionJob> jobs;
+  if (!m_dlg->m_scraperCtx.collections || collectionIndex < 0 ||
+      collectionIndex >= m_dlg->m_scraperCtx.collections->size()) {
+    return jobs;
+  }
+  const CollectionConfig &cfg = (*m_dlg->m_scraperCtx.collections)[collectionIndex];
+  // A playlist is a synthesized config spanning whatever its rules match — it
+  // has no single platform to resolve, so an entity job could only ever land
+  // in the not-found bucket.
+  if (cfg.isPlaylist) {
+    return jobs;
+  }
+  auto provider = m_dlg->m_scraperCtx.providerBuilder
+                      ? m_dlg->m_scraperCtx.providerBuilder(collectionIndex)
+                      : nullptr;
+  if (!provider) {
+    return jobs;
+  }
+  for (Scraper::ScrapeEntityType type : provider->supportedEntities()) {
+    if (type == Scraper::ScrapeEntityType::Game) continue; // Game is the per-item path
+    Scraper::ScraperService::CollectionJob job;
+    job.collectionIndex = collectionIndex;
+    job.collectionUuid = uuid;
+    job.collectionName = cfg.name;
+    job.artworkDir = artworkDir;
+    job.entity.type = type;
+    // Platform resolves its systemeid from an empty identity (override →
+    // autodetect); Collection/Category carry the collection uuid (Kartend-ckepd.1).
+    job.entity.identity = (type == Scraper::ScrapeEntityType::Platform) ? QString() : uuid;
+    job.entity.collectionIndex = collectionIndex;
+    jobs.append(job);
+  }
+  return jobs;
+}
+
 bool ScrapeResultDialogUnified::startEntityScrape(int collectionIndex) {
   if (!m_dlg->m_service || !m_dlg->m_scraperCtx.collections) return false;
   if (collectionIndex < 0 || collectionIndex >= m_dlg->m_scraperCtx.collections->size())
@@ -534,32 +572,16 @@ bool ScrapeResultDialogUnified::startEntityScrape(int collectionIndex) {
   const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
 
   // Entity art routes to the collection's OWN provider (the coordinator dispatches
-  // by collectionIndex, not entity type), so enqueue one job per non-Game entity
-  // type THAT provider supports: Platform for a ScreenScraper (games) collection,
-  // Collection for a TMDB (video) collection (Kartend-ckepd.4 / .5).
-  auto provider = m_dlg->m_scraperCtx.providerBuilder
-                      ? m_dlg->m_scraperCtx.providerBuilder(collectionIndex)
-                      : nullptr;
-  if (!provider) {
+  // by collectionIndex, not entity type): Platform for a ScreenScraper (games)
+  // collection, Collection for a TMDB (video) collection (Kartend-ckepd.4 / .5).
+  if (!m_dlg->m_scraperCtx.providerBuilder ||
+      !m_dlg->m_scraperCtx.providerBuilder(collectionIndex)) {
     QMessageBox::information(m_dlg, tr("Scrape collection artwork"),
                              tr("No scraper is configured for \"%1\".").arg(cfg.name));
     return false;
   }
-  QList<Scraper::ScraperService::CollectionJob> queue;
-  for (Scraper::ScrapeEntityType type : provider->supportedEntities()) {
-    if (type == Scraper::ScrapeEntityType::Game) continue; // Game is the per-item path
-    Scraper::ScraperService::CollectionJob job;
-    job.collectionIndex = collectionIndex;
-    job.collectionUuid = uuid;
-    job.collectionName = cfg.name;
-    job.artworkDir = artworkDir;
-    job.entity.type = type;
-    // Platform resolves its systemeid from an empty identity (override →
-    // autodetect); Collection/Category carry the collection uuid (Kartend-ckepd.1).
-    job.entity.identity = (type == Scraper::ScrapeEntityType::Platform) ? QString() : uuid;
-    job.entity.collectionIndex = collectionIndex;
-    queue.append(job);
-  }
+  const QList<Scraper::ScraperService::CollectionJob> queue =
+      buildEntityJobs(collectionIndex, uuid, artworkDir);
   if (queue.isEmpty()) {
     QMessageBox::information(
         m_dlg, tr("Scrape collection artwork"),
@@ -640,6 +662,40 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
       checkedOrder, m_dlg->m_selectionModel->itemSelectionByCollection(),
       m_dlg->m_selectionModel->itemOwnerByCollection(),
       static_cast<int>(m_dlg->m_scraperCtx.collections->size()));
+
+  // Ride the entity art (platform/collection logo + background) along with
+  // the scrape (user decision 2026-08-17): scraping a collection ALSO
+  // fetches its art, so the tree/home icons populate without a separate
+  // action. Enqueued for EVERY checked row AND every item owner — the two
+  // sets genuinely differ in both directions (Kartend-ob1c9.2 field report,
+  // "not all entities scraped"): a checked SHELL parent ("Nintendo" holding
+  // subcollections) owns no items so it forms no owner group, and checking
+  // only that parent makes the CHILDREN owners without their rows being
+  // checked. All entity jobs go first — a handful of cheap fetches that put
+  // every collection's art on disk before the per-item grind starts (and
+  // before a quota death could starve them at the queue tail). The
+  // coordinator wires landed art into cfg.collectionIcon / headerLogoImage /
+  // backgroundImage; buildEntityJobs itself drops playlists and
+  // provider-less collections, and a shell whose platform can't resolve
+  // lands in the not-found bucket, not in errors.
+  QSet<int> entityQueued;
+  const auto appendEntityJobsOnce = [this, &serviceQueue, &entityQueued](int index) {
+    if (index < 0 || index >= m_dlg->m_scraperCtx.collections->size()) return;
+    if (entityQueued.contains(index)) return;
+    entityQueued.insert(index);
+    const CollectionConfig &cfg = (*m_dlg->m_scraperCtx.collections)[index];
+    const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+    const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
+    serviceQueue.append(buildEntityJobs(index, uuid, artworkDir));
+  };
+  for (int checkedIndex : checkedOrder) {
+    appendEntityJobsOnce(checkedIndex);
+  }
+  for (const auto &group : ownerGroups) {
+    appendEntityJobsOnce(group.first);
+  }
+
   for (const auto &group : ownerGroups) {
     const int owner = group.first;
     const QStringList &items = group.second;

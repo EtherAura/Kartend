@@ -6,6 +6,7 @@
 #include "screenscraperprovider.h"
 
 #include <algorithm>
+#include <limits>
 #include <atomic>
 #include <utility>
 
@@ -31,6 +32,7 @@
 #include "httpclient.h"
 #include "romhasher.h"
 #include "screenscraperaccount.h"
+#include "screenscrapercompanyregistry.h"
 #include "screenscraperparser.h"
 #include "screenscraperregion.h"
 #include "screenscrapersystems.h"
@@ -71,13 +73,74 @@ constexpr PlatformMediaType kPlatformMediaTypes[] = {
     // Only types that map to a CollectionConfig art field are requested — no
     // point spending a media-host request + the user's SS quota on art with no
     // home (e.g. controller art has no config slot) (Kartend-ckepd.3 review).
+    // The catalog exposes 32 system media types; that is a reason to stop
+    // requesting the ones a system does NOT have, not a reason to download all
+    // 32 (Kartend-qzk1s).
+    //
     // Logo: prefer the wheel, fall back to the monochrome logo. Background:
-    // prefer the illustration, fall back to the console photo.
+    // illustration, then the console photo, then `background`.
     {"wheel", "wheel", "Logo (wheel)", Scraper::EntityArtRole::Logo, 0},
     {"logo-monochrome", "logo", "Logo (monochrome)", Scraper::EntityArtRole::Logo, 1},
+    // SVG logo variants (user request 2026-08-17): downloaded as STYLE
+    // SOURCES for the navigation sidebar's monochrome/tinted icon modes —
+    // real vector silhouettes instead of recoloured raster wheels — so their
+    // role is None: written to _shared/<type>/, never wired into the config
+    // slots (the raster wheel stays the collectionIcon; the tree probes these
+    // sibling dirs at render time). Catalog-driven selection skips them on
+    // systems that lack them (307 / 264 of 250 entries carry them).
+    {"logo-svg", "logo-svg", "Logo (SVG)", Scraper::EntityArtRole::None, 0},
+    {"logo-monochrome-svg", "logo-monochrome-svg", "Logo (monochrome SVG)",
+     Scraper::EntityArtRole::None, 0},
     {"illustration", "illustration", "Console illustration", Scraper::EntityArtRole::Background, 0},
     {"photo", "photo", "Console photo", Scraper::EntityArtRole::Background, 1},
+    // Added last deliberately (Kartend-qzk1s). Measured over the live catalog:
+    // illustration-or-photo covers 211/250 systems and `background` covers
+    // 212/250, but they are not the same 212 — 32 systems have `background`
+    // and NEITHER of the other two. Appending it at the lowest priority is
+    // therefore purely additive: it rescues those 32 (background coverage
+    // 211 -> 243/250) and cannot change what any system already resolved to,
+    // because a higher-priority candidate always wins when present. Whether
+    // `background` deserves to be PROMOTED over illustration is a look-and-feel
+    // call that needs eyes on real art, not a coverage argument — left alone.
+    {"background", "background", "Console background", Scraper::EntityArtRole::Background, 2},
 };
+
+/// Region ranking for PLATFORM art. Deliberately much simpler than the
+/// parser's per-ROM chain (buildRegionPreferences): a platform is not a ROM, so
+/// there is no item region or filename marker to honour — it collapses to "the
+/// user's configured region, then SS's world tag, then whatever exists". Lower
+/// is better; kNoRegionMatch keeps unmatched variants selectable but last.
+constexpr int kNoRegionMatch = 100;
+int platformRegionRank(const QString &region, const QString &preferredRegion) {
+  const QString r = region.trimmed().toLower();
+  if (!preferredRegion.isEmpty() && r == preferredRegion.trimmed().toLower()) return 0;
+  if (r == QLatin1String("wor")) return 1;
+  return kNoRegionMatch;
+}
+
+/// Best catalog entry for `type` on this system, or nullptr when the system has
+/// no such art. Returning nullptr is the whole point of Kartend-qzk1s: it means
+/// the type is skipped instead of costing a media-host request that answers
+/// NOMEDIA. Measured over the live catalog, that was 173 of every 1,000
+/// requests a full-library platform scrape used to fire.
+const ScreenScraperSystems::Media *bestCatalogMedia(const ScreenScraperSystems::System &sys,
+                                                    const QString &type,
+                                                    const QString &preferredRegion) {
+  const ScreenScraperSystems::Media *best = nullptr;
+  int bestRank = std::numeric_limits<int>::max();
+  for (const auto &m : sys.media) {
+    if (m.type != type) continue;
+    // Every type in kPlatformMediaTypes is a still image; a video-endpoint row
+    // would need mediaVideoSysteme.php, which this URL builder does not speak.
+    if (m.video || m.token.isEmpty()) continue;
+    const int rank = platformRegionRank(m.region, preferredRegion);
+    if (rank < bestRank) {
+      best = &m;
+      bestRank = rank;
+    }
+  }
+  return best;
+}
 
 // Re-applied on every fetchMediaBytes so the user can change the
 // concurrency/throttle settings live. API host stays at compile-time
@@ -262,14 +325,37 @@ void ScreenScraperProvider::fetchEntity(const Scraper::EntityScrapeTarget &targe
         // id alone would append `ssid=<id>&sspassword=` for a user with a
         // cleared password and fail SS login on every media URL.
         const bool hasUser = !creds.userId.isEmpty() && !creds.userPassword.isEmpty();
+        // Kartend-qzk1s: when the system carries a media catalog, it tells us
+        // exactly which art exists and under which region token, so we request
+        // only what is there. An EMPTY catalog is not "this system has no art"
+        // — it is "we don't know": a cache file written before Kartend-xny9o
+        // kept medias[] stays fresh for the full 30-day TTL, so those users
+        // must keep the pre-catalog behaviour (speculate every type, let the
+        // NOMEDIA content-type gate discard the misses) until their cache
+        // rolls over.
+        const bool haveCatalog = !sys->media.isEmpty();
+        const QString preferredRegion =
+            m_settingsAccessor && m_settingsAccessor()
+                ? m_settingsAccessor()->scraper.options.preferredScraperRegion
+                : QString();
         for (const auto &mt : kPlatformMediaTypes) {
+          const QString apiToken = QString::fromLatin1(mt.apiToken);
+          QString mediaToken;
+          if (haveCatalog) {
+            const auto *entry = bestCatalogMedia(*sys, apiToken, preferredRegion);
+            if (!entry) continue; // this system has no such art — don't spend a request
+            mediaToken = entry->token;
+          } else {
+            // Pre-catalog form: the world tag the builder used to append itself.
+            mediaToken = apiToken + QStringLiteral("(wor)");
+          }
           Scraper::MediaAsset asset;
           asset.type = QString::fromLatin1(mt.canonicalType);
           asset.label = QString::fromLatin1(mt.label);
           asset.entityRole = mt.role;
           asset.entityRolePriority = mt.rolePriority;
-          asset.url = ScreenScraperUrls::buildSystemeMediaUrl(
-              creds, systemeid, QString::fromLatin1(mt.apiToken), hasUser);
+          asset.url =
+              ScreenScraperUrls::buildSystemeMediaUrl(creds, systemeid, mediaToken, hasUser);
           // Platform-scoped → persisted to the collection's _shared art dir as
           // `_shared/<type>/platform_<systemeid>.<ext>` (Kartend-ckepd.3). The
           // systemeid is numeric, so it is a safe path component.
@@ -748,6 +834,11 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
     }
     return;
   }
+  // Record the editeur/developpeur id→name pairs this response carried —
+  // there is no company listing endpoint, so scraped games are the only
+  // source of the link that lets a manufacturer parent collection find its
+  // company art by name later (Kartend-cnti4).
+  recordCompanies(detail.value());
   const Scraper::ScrapeCandidate cand = ScreenScraperParser::candidateFromItem(detail.value());
   const QString id = cand.providerSpecificId;
   if (!id.isEmpty()) {
@@ -759,6 +850,34 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
     }
   }
   callback(QList<Scraper::ScrapeCandidate>{cand});
+}
+
+void ScreenScraperProvider::recordCompanies(const Scraper::ScrapedItem &item) const {
+  if (item.publisherId.isEmpty() && item.developerId.isEmpty()) return;
+  const QString path = ScreenScraperCompanyRegistry::defaultPath();
+  if (path.isEmpty()) return; // no writable cache location — nothing to record into
+  if (!m_companyRegistryLoaded) {
+    m_companyRegistryLoaded = true;
+    // A corrupted file loads as its error; start empty and let the next save
+    // rewrite it — losing recorded pairs is recoverable (they re-accumulate
+    // on the next scrape), refusing to record forever is not.
+    auto loaded = ScreenScraperCompanyRegistry::load(path);
+    if (loaded.isOk()) m_companyRegistry = loaded.value();
+  }
+  bool changed = false;
+  if (!item.publisherId.isEmpty()) {
+    changed |= ScreenScraperCompanyRegistry::merge(m_companyRegistry, item.publisherId,
+                                                   item.publisher);
+  }
+  if (!item.developerId.isEmpty()) {
+    changed |= ScreenScraperCompanyRegistry::merge(m_companyRegistry, item.developerId,
+                                                   item.developer);
+  }
+  if (changed) {
+    // Fire-and-forget: a failed write is logged by the cache helper and the
+    // in-memory map still serves this session.
+    (void)ScreenScraperCompanyRegistry::save(path, m_companyRegistry);
+  }
 }
 
 QString ScreenScraperProvider::findDatCanonicalName(const RomHasher::Result &hashes) {

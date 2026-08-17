@@ -91,6 +91,16 @@ public:
   explicit ScraperController(QObject *parent = nullptr);
   ~ScraperController() override;
 
+signals:
+  /// Re-emitted from the owned service's scrapeFinished — the service itself
+  /// is private (Kartend-hzef ownership), so listeners that only care that "a
+  /// run just ended and collection art/config may have changed" (the
+  /// collection tree's icon refresh, Kartend-ob1c9.1) subscribe here instead
+  /// of reaching into the controller for the service pointer.
+  void scrapeRunFinished();
+
+public:
+
   void setContext(const ScraperControllerContext &context);
 
 public slots:

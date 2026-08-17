@@ -17,6 +17,7 @@ private slots:
   void extensionMatchIsCaseInsensitive();
   void webpIsAlwaysDecodable();
   void avifTracksRuntimePluginSupport();
+  void svgSuffixAndSniffResolveToSvg();
   void videoBaseExtensions_returnsKnownExtensions();
   void normalizeStoredExtensions_canonicalizesToBare();
   void normalizeStoredExtensions_isIdempotent();
@@ -148,6 +149,27 @@ void TestExtensionUtils::nameFiltersMatchSingleDotFilenames() {
   const QRegularExpression broken =
       QRegularExpression::fromWildcard(QStringLiteral("*.*.mp4"), Qt::CaseInsensitive);
   QVERIFY(!broken.match(QStringLiteral("video.mp4")).hasMatch());
+}
+
+void TestExtensionUtils::svgSuffixAndSniffResolveToSvg() {
+  // Field report 2026-08-17: every SVG payload (ScreenScraper logo-svg,
+  // Wikidata/Commons logos) landed on disk as ".png" containing XML — svg
+  // was missing from the image whitelist AND the byte sniff. Suffix path:
+  QCOMPARE(ExtensionUtils::imageExtensionForBytes(QStringLiteral("/path/Maker_logo.svg"),
+                                                  QByteArrayLiteral("<svg/>")),
+           QStringLiteral("svg"));
+  // Sniff path (suffix lost through a redirect): xml-prologue and bare <svg
+  // forms both resolve; a plain XML that is NOT svg stays the png default.
+  QCOMPARE(ExtensionUtils::imageExtensionForBytes(
+               QStringLiteral("/cover.php"),
+               QByteArrayLiteral("<?xml version=\"1.0\"?>\n<!DOCTYPE svg PUBLIC>\n<svg width=\"5\"/>")),
+           QStringLiteral("svg"));
+  QCOMPARE(ExtensionUtils::imageExtensionForBytes(QStringLiteral("/cover.php"),
+                                                  QByteArrayLiteral("<svg xmlns=\"x\"/>")),
+           QStringLiteral("svg"));
+  QCOMPARE(ExtensionUtils::imageExtensionForBytes(
+               QStringLiteral("/cover.php"), QByteArrayLiteral("<?xml version=\"1.0\"?><feed/>")),
+           QStringLiteral("png"));
 }
 
 QTEST_MAIN(TestExtensionUtils)

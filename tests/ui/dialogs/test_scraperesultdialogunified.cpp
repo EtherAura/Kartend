@@ -291,6 +291,16 @@ private slots:
   void cleanup();
 
   void scrapeClickTranslatesSelectionIntoServiceQueue();
+  /// User decision 2026-08-17: entity/platform art rides the NORMAL collection
+  /// scrape — one entity job per scraped collection, queued ahead of that
+  /// collection's item job, no separate user action.
+  void scrapeClickRidesEntityJobAlongPerScrapedCollection();
+  /// "Not all entities scraped" field report (2026-08-17): a checked
+  /// collection that OWNS no items (a shell parent whose items live on
+  /// subcollections, or a not-yet-populated collection) must still get its
+  /// entity job — previously only item-owner groups did, so shells got
+  /// nothing and the click errored out with "pick at least one item".
+  void scrapeClickEntityOnlyRunForCheckedCollectionWithNoItems();
   void pickerNeededRendersCandidatesAndLiveMetadata();
   void interactiveApplyPersistsAdvancesAndStripsMetadata();
   void errorDetailsRescrapeRebuildsQueueGroupedByOwner();
@@ -355,6 +365,10 @@ void TestScrapeResultDialogUnified::scrapeClickTranslatesSelectionIntoServiceQue
   QVERIFY(tmp.isValid());
   QList<CollectionConfig> collections = makeCollections(tmp.path());
   auto provider = std::make_shared<ScriptedProvider>(); // Park: the run stays live for inspection
+  // Game-only provider: this test pins the SELECTION → queue translation; the
+  // entity ride-along (which would prepend a Platform job here) has its own
+  // test below.
+  provider->supportedEntityList = {Scraper::ScrapeEntityType::Game};
 
   ScraperService service;
   ScraperService::Context sctx;
@@ -430,6 +444,124 @@ void TestScrapeResultDialogUnified::scrapeClickTranslatesSelectionIntoServiceQue
   auto *closeButton = widgetWithText<QPushButton>(dlg, QStringLiteral("Close"));
   QVERIFY(closeButton);
   QVERIFY(closeButton->isVisibleTo(&dlg));
+
+  service.cancel(); // unpark cleanly before teardown
+}
+
+void TestScrapeResultDialogUnified::scrapeClickRidesEntityJobAlongPerScrapedCollection() {
+  // User decision 2026-08-17 (after the rejected right-click action): entity
+  // art is fetched WHEN a collection is scraped. A normal Scrape click must
+  // therefore hand the service the collection's Platform entity job AHEAD of
+  // its item job — same uuid/artwork-dir resolution, identity left empty for
+  // the provider's override→autodetect path. No separate user action exists.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = makeCollections(tmp.path());
+  auto provider = std::make_shared<ScriptedProvider>(); // {Game, Platform} by default
+  // Park the entity fetch: the service stops ON the ride-along job, so the
+  // startScrape snapshot (both jobs) and the dispatch order are inspectable.
+  provider->parkEntityInto(m_parkedCallbacks);
+
+  ScraperService service;
+  ScraperService::Context sctx;
+  sctx.collections = &collections;
+  sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(sctx);
+
+  ScrapeResultDialog dlg(nullptr, {});
+  ScrapeResultDialog::ScraperContext dctx;
+  dctx.collections = &collections;
+  dctx.providerBuilder = sctx.providerBuilder;
+  dlg.setScraperContext(dctx);
+  dlg.setScraperService(&service);
+  dlg.startUnifiedScrape(1, QStringLiteral("/m/beta-item.mp4"));
+
+  auto *interactive =
+      widgetWithText<QRadioButton>(dlg, QStringLiteral("Interactive (pick candidate per item)"));
+  QVERIFY(interactive);
+  interactive->setChecked(true);
+
+  auto *scrapeButton = widgetWithText<QPushButton>(dlg, QStringLiteral("Scrape"));
+  QVERIFY(scrapeButton);
+  scrapeButton->click();
+
+  // The service is parked on the entity job — dispatched FIRST, before the
+  // item job, so the collection art lands before the per-item grind.
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+  QCOMPARE(service.totalItems(), 2); // entity job + one game item
+  QCOMPARE(provider->lastEntityTarget.type, Scraper::ScrapeEntityType::Platform);
+  QVERIFY(provider->lastEntityTarget.identity.isEmpty()); // override → autodetect
+  QCOMPARE(provider->lastEntityTarget.collectionIndex, 1);
+
+  // Snapshot carries both jobs, entity first, sharing the game job's
+  // resolved uuid + artwork dir (the persistence keys resume survives on).
+  const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 2);
+  const QJsonObject entityJob = queue.at(0).toObject();
+  QCOMPARE(entityJob.value(QStringLiteral("collection_index")).toInt(), 1);
+  QCOMPARE(entityJob.value(QStringLiteral("collection_uuid")).toString(),
+           expectedUuid(collections[1]));
+  QCOMPARE(entityJob.value(QStringLiteral("artwork_dir")).toString(),
+           expectedArtworkDir(collections[1]));
+  const QJsonObject entity = entityJob.value(QStringLiteral("entity")).toObject();
+  QCOMPARE(entity.value(QStringLiteral("type")).toInt(),
+           static_cast<int>(Scraper::ScrapeEntityType::Platform));
+  QVERIFY(entity.value(QStringLiteral("identity")).toString().isEmpty());
+  const QJsonObject gameJob = queue.at(1).toObject();
+  QVERIFY(!gameJob.contains(QStringLiteral("entity")));
+  QCOMPARE(gameJob.value(QStringLiteral("remaining")).toArray().first().toString(),
+           QStringLiteral("/m/beta-item.mp4"));
+
+  service.cancel(); // unpark cleanly before teardown
+}
+
+void TestScrapeResultDialogUnified::scrapeClickEntityOnlyRunForCheckedCollectionWithNoItems() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = makeCollections(tmp.path());
+  auto provider = std::make_shared<ScriptedProvider>(); // {Game, Platform}
+  provider->parkEntityInto(m_parkedCallbacks);
+
+  ScraperService service;
+  ScraperService::Context sctx;
+  sctx.collections = &collections;
+  sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(sctx);
+
+  ScrapeResultDialog dlg(nullptr, {});
+  ScrapeResultDialog::ScraperContext dctx;
+  dctx.collections = &collections;
+  dctx.providerBuilder = sctx.providerBuilder;
+  dlg.setScraperContext(dctx);
+  dlg.setScraperService(&service);
+  // Check collection 0 WITHOUT any item — the shell / empty-collection shape.
+  dlg.startUnifiedScrape(0);
+
+  auto *interactive =
+      widgetWithText<QRadioButton>(dlg, QStringLiteral("Interactive (pick candidate per item)"));
+  QVERIFY(interactive);
+  interactive->setChecked(true);
+  auto *scrapeButton = widgetWithText<QPushButton>(dlg, QStringLiteral("Scrape"));
+  QVERIFY(scrapeButton);
+  scrapeButton->click();
+
+  // The run started (no "pick at least one item" refusal) and parked on the
+  // shell's entity job — the whole run is that one job.
+  QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
+  QCOMPARE(service.totalItems(), 1);
+  QCOMPARE(provider->lastEntityTarget.type, Scraper::ScrapeEntityType::Platform);
+  QCOMPARE(provider->lastEntityTarget.collectionIndex, 0);
+
+  const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 1);
+  const QJsonObject entityJob = queue.first().toObject();
+  QCOMPARE(entityJob.value(QStringLiteral("collection_index")).toInt(), 0);
+  QVERIFY(entityJob.contains(QStringLiteral("entity")));
+  QVERIFY(entityJob.value(QStringLiteral("remaining")).toArray().isEmpty());
 
   service.cancel(); // unpark cleanly before teardown
 }

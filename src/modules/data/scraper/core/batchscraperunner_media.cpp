@@ -12,6 +12,8 @@
 #include <QPointer>
 #include <QtConcurrent/QtConcurrentRun>
 
+#include "scrapeassetdedup.h"
+
 namespace Scraper {
 
 QList<Scraper::MediaAsset>
@@ -26,15 +28,38 @@ BatchScrapeRunner::resolveWantedMediaAssets(const Scraper::ScrapedItem &scraped)
   // which assets to fetch.
   const bool useFilter = !m_mediaTypeFilter.isEmpty();
   QList<Scraper::MediaAsset> wantedAssets;
+  bool legacyFrontTaken = false;
   for (const Scraper::MediaAsset &m : scraped.media) {
     if (!m.url.isValid()) continue;
+    // Company-scoped art (the manufacturer/publisher logos ScreenScraper
+    // embeds per game) BYPASSES the type filter (Kartend-cnti4 follow-up):
+    // it is the only source the manufacturer-logo matching pass can draw
+    // from, and its SS types land under the "Pictogram" checkboxes nobody
+    // ticks — filtered away, a hand-made "Nintendo" parent could never
+    // resolve a logo no matter how much was scraped. Guarded so the bypass
+    // costs one fetch per company PER RUN, not per game: an in-run key set
+    // plus (outside Overwrite) an on-disk probe — the runner has no other
+    // shared-scope dedup, that lives in the interactive dialog's dispatcher.
+    if (m.scope == Scraper::MediaScope::Company && !m.scopeKey.isEmpty()) {
+      const QString key =
+          Scraper::sharedScopePrefix(m.scope) + m.scopeKey + QLatin1Char('/') + m.type;
+      if (m_companyFetchedThisRun.contains(key)) continue;
+      if (m_rescrapeMode != Scraper::RescrapeMode::Overwrite &&
+          !ScrapeAssetDedup::findExistingSharedAsset(m, {m_artworkDir}).isEmpty()) {
+        continue; // already on disk from an earlier game or run
+      }
+      m_companyFetchedThisRun.insert(key);
+      wantedAssets.append(m);
+      continue;
+    }
     if (useFilter) {
       if (m_mediaTypeFilter.contains(m.type.toLower())) {
         wantedAssets.append(m);
       }
-    } else if (m.type.compare(QStringLiteral("front"), Qt::CaseInsensitive) == 0) {
+    } else if (!legacyFrontTaken &&
+               m.type.compare(QStringLiteral("front"), Qt::CaseInsensitive) == 0) {
       wantedAssets.append(m);
-      break; // legacy path: at most one cover per item.
+      legacyFrontTaken = true; // legacy path: at most one cover per item.
     }
   }
   return wantedAssets;

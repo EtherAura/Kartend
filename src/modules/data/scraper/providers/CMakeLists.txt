@@ -6,6 +6,7 @@ target_sources(kartend_data PRIVATE
   providerbase.cpp
   screenscraperaccount.cpp
   screenscrapercatalogmanager.cpp
+  screenscrapercompanyregistry.cpp
   screenscraperprovider.cpp
   screenscraperregion.cpp
   screenscrapermediatypecache.cpp
@@ -15,6 +16,7 @@ target_sources(kartend_data PRIVATE
   screenscraperurls.cpp
   steamstoreprovider.cpp
   tmdbprovider.cpp
+  wikidatalogoprovider.cpp
   websearchprovider.cpp
   flathubprovider.h
   metadatalookupprovider.h
@@ -25,6 +27,7 @@ target_sources(kartend_data PRIVATE
   providerbase.h
   screenscraperaccount.h
   screenscrapercatalogmanager.h
+  screenscrapercompanyregistry.h
   screenscraperprovider.h
   screenscraperregion.h
   screenscrapermediatypecache.h
@@ -34,5 +37,6 @@ target_sources(kartend_data PRIVATE
   screenscraperurls.h
   steamstoreprovider.h
   tmdbprovider.h
+  wikidatalogoprovider.h
   websearchprovider.h
 )

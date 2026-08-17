@@ -377,6 +377,10 @@ void ScraperService::pump() {
   // walk collections when each runner finishes. Interactive-mode:
   // we drive item-by-item ourselves.
   if (m_queueCursor >= m_queue.size()) {
+    // COMPLETED queue (cancel and quota-stop exit elsewhere): match
+    // manufacturer logos against the company data this run just enriched
+    // before announcing the finish (Kartend-cnti4).
+    m_entityCoordinator.applyManufacturerLogos();
     m_state = State::Finishing;
     clearStateFile();
     emit scrapeFinished(m_summary);
@@ -391,6 +395,7 @@ void ScraperService::pump() {
     ++m_queueCursor;
   }
   if (m_queueCursor >= m_queue.size()) {
+    m_entityCoordinator.applyManufacturerLogos(); // completed queue, as above
     m_state = State::Finishing;
     clearStateFile();
     emit scrapeFinished(m_summary);

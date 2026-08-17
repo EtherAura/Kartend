@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **One Sidebar settings page — pick each side panel's side and shape.**
+  A single page in Settings to put the details pane and the new collection tree on
+  the left or the right, per collection, plus a new **justification**
+  choice for each: *Below toolbar* keeps the classic layout where the
+  toolbar spans the full window width, while *Full height* lets a panel
+  run the entire height of the window with the toolbar stopping at its
+  edge. The details pane's existing Position control keeps working — it
+  and the new page edit the same setting.
+
+- **Collection and platform artwork now arrives with the collection scrape —
+  and your sidebar shows it.** Scraping a collection also fetches its
+  platform art (logo, illustration, background) and wires the logo in as the
+  collection's icon, including for every subcollection pulled in through a
+  parent. Hand-made manufacturer collections get logos too: publishers seen
+  during game scrapes are remembered and matched to your collection names
+  (a "Sony" collection claims "Sony Computer Entertainment"), with Wikimedia
+  Commons as a fallback source for anything ScreenScraper cannot name —
+  vector SVGs preferred, so logos stay crisp at any size. Matching also runs
+  at startup, so art that landed while the app was closed appears on launch.
+
+- **The collection tree shows each collection's artwork.** Rows display the
+  same icon your tiles resolve (the collection's own icon, or an image named
+  after it in the parent's artwork folder), left-aligned, never wider than
+  the panel, and with a hairline outline added automatically when a logo
+  would blend into the theme background. The panel is now resizable by
+  dragging its inner edge, remembers its expansion across sessions, and
+  offers per-collection icon options on the Sidebar settings page:
+  icons-only rows, icon height, and colour, monochrome (dark/light) or
+  accent-tinted rendering — monochrome uses the real monochrome/SVG logo art
+  when the scrape has delivered one.
+
+- **"Copy Settings From" now transfers sidebar preferences.** A new
+  Sidebars category covers every details-pane and navigation-sidebar
+  option, and is included when you copy everything.
+
 - **A collection tree panel — see your whole library at a glance and jump
   anywhere in one click.** A new panel lists every collection as a
   collapsible tree (nested subcollections included; a collection linked
