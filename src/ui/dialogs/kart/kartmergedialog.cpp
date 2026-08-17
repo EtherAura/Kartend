@@ -84,7 +84,7 @@ KartMergeDialog::KartMergeDialog(const QString &itemPath,
   // toggled"), matching how unset strings and numbers read above; the
   // merge unions flags unless "use incoming" is ticked, which copies the
   // incoming value exactly and can therefore clear a local toggle.
-  const auto flagLabel = [this](bool set) { return set ? tr("set") : QString(); };
+  const auto flagLabel = [](bool set) { return set ? tr("set") : QString(); };
   addRow(tr("Notes"), existing.notes, incoming.notes, &m_policy.preferIncomingNotes);
   addRow(tr("Source URL"), existing.sourceUrl, incoming.sourceUrl,
          &m_policy.preferIncomingSourceUrl);

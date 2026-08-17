@@ -580,15 +580,19 @@ ErrorUtils::Result<WriterParams> prepareFromCollection(const CollectionConfig &c
           const QString abs = PathUtils::expandPathWithoutExistenceCheck(row.manualPath);
           if (!QFileInfo::exists(abs)) continue;
           const QString suffix = QFileInfo(abs).suffix().toLower();
-          const QString base = artworkTypeFileStem(row.artworkType) +
-                               (suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix);
+          // "payloadBase", not "base" — the enclosing item loop already
+          // binds `base` to the item's basename (-Wshadow is fatal on the
+          // Release/maintenance legs).
+          const QString payloadBase =
+              artworkTypeFileStem(row.artworkType) +
+              (suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix);
           // Distinct types can sanitize to the same filename; bump until
           // free so the extractor's duplicate-entry guard never trips on a
           // bundle this writer produced.
-          QString name = base;
+          QString name = payloadBase;
           int bump = 2;
           while (usedNames.contains(name)) {
-            name = QString::number(bump++) + QStringLiteral("-") + base;
+            name = QString::number(bump++) + QStringLiteral("-") + payloadBase;
           }
           usedNames.insert(name);
           KartManifest::ArtworkLink link;
