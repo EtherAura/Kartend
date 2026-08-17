@@ -205,8 +205,8 @@ QPixmap ensureContrastAgainst(const QPixmap &pm, const QColor &background, qreal
   return result;
 }
 
-/// The Normal style's inverse of silhouetteSiblingFor (field report
-/// 2026-08-17: "some icons are all-black"): when the config slot holds the
+/// Colour-source repair for every style (field report 2026-08-17: "some
+/// icons are all-black"): when the config slot holds the
 /// MONOCHROME fallback — the colour wheel 500'd during that scrape, so the
 /// black-ink logo won applyEntityArtToConfig's priority walk — probe for a
 /// colour sibling (raster wheel, then the colour SVG) that has since landed
@@ -229,30 +229,11 @@ QString colourSiblingFor(const QString &resolvedPath) {
   return {};
 }
 
-/// For monochrome/tinted styles, prefer a REAL silhouette source over
-/// recolouring the colour wheel (field report 2026-08-17: "the monochrome
-/// versions do not actually use monochrome svgs"): given the resolved icon at
-/// `.../_shared/<type>/<file>.<ext>`, probe the sibling type directories the
-/// platform scrape fills — the monochrome SVG, the monochrome raster
-/// ("logo"), then the colour SVG (its alpha still yields a crisp silhouette,
-/// and SVG re-rasterises losslessly at any height). Empty when the icon is
-/// not shared-scope art or no sibling exists — caller recolours the original.
-QString silhouetteSiblingFor(const QString &resolvedPath) {
-  static const QRegularExpression shared(
-      QRegularExpression::anchoredPattern(QStringLiteral("(.*/_shared/)([^/]+)/([^/]+)")));
-  const QRegularExpressionMatch m = shared.match(resolvedPath);
-  if (!m.hasMatch()) return {};
-  const QString base = m.captured(1);
-  const QString fileBase = QFileInfo(m.captured(3)).completeBaseName();
-  for (const char *dir : {"logo-monochrome-svg", "logo", "logo-svg"}) {
-    for (const char *ext : {"svg", "png", "jpg", "webp"}) {
-      const QString candidate = base + QLatin1String(dir) + QLatin1Char('/') + fileBase +
-                                QLatin1Char('.') + QLatin1String(ext);
-      if (QFileInfo::exists(candidate)) return candidate;
-    }
-  }
-  return {};
-}
+// (The former silhouetteSiblingFor probe — swapping mono/tint styles to the
+// dedicated monochrome sources — was retired 2026-08-17: those sources have
+// different aspect ratios from the colour wheels, so switching styles
+// visibly resized rows. The luminance mapping recolours the colour art with
+// its detail intact, so every style now shares one source geometry.)
 
 } // namespace
 
@@ -740,16 +721,14 @@ void CollectionTreeController::refreshIcons() {
       item->setToolTip(0, QString());
       continue;
     }
-    // Silhouette styles swap to a genuine monochrome/SVG source when the
-    // scrape delivered one; the colour wheel is only the fallback. Normal
-    // style runs the INVERSE swap (field report 2026-08-17: "some icons are
-    // all-black"): when the wired icon is the monochrome fallback — the
-    // colour wheel 500'd during the scrape, so the black-ink logo won the
-    // config slot — prefer a colour sibling that has since landed.
-    if (m_iconStyle != TreeIconStyle::Normal) {
-      const QString sibling = silhouetteSiblingFor(path);
-      if (!sibling.isEmpty()) path = sibling;
-    } else if (path.contains(QStringLiteral("/_shared/logo/"))) {
+    // Every style renders the SAME source art (field report 2026-08-17:
+    // the dedicated silhouette sources have different aspect ratios from
+    // the colour wheels, so mono/tint rows visibly resized against Normal).
+    // The luminance mapping preserves detail, so recolouring the colour art
+    // beats swapping sources; the colour-sibling upgrade still repairs rows
+    // whose config slot holds the black-ink fallback ("some icons are
+    // all-black" — the colour wheel 500'd during that scrape).
+    if (path.contains(QStringLiteral("/_shared/logo/"))) {
       const QString sibling = colourSiblingFor(path);
       if (!sibling.isEmpty()) path = sibling;
     }

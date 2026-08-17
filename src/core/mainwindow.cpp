@@ -116,6 +116,13 @@ MainWindow::MainWindow(QWidget *parent)
   m_overlayZOrderRegistry = std::make_unique<OverlayZOrderRegistry>(nullptr);
 
   ui->setupUi(this);
+  // The top bar (hamburger/home/title/search) sits on QPalette::Window while
+  // the item grid's viewport paints QPalette::Base — in dark themes the two
+  // tones differ just enough to draw a full-width seam across the top of the
+  // grid (field report 2026-08-17: "unwanted divider"). Painting the bar
+  // with the viewport's role fuses the two surfaces.
+  ui->itemsTopBar->setBackgroundRole(QPalette::Base);
+  ui->itemsTopBar->setAutoFillBackground(true);
   setupUI();
 }
 
