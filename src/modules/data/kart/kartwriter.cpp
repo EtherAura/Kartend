@@ -583,9 +583,8 @@ ErrorUtils::Result<WriterParams> prepareFromCollection(const CollectionConfig &c
           // "payloadBase", not "base" — the enclosing item loop already
           // binds `base` to the item's basename (-Wshadow is fatal on the
           // Release/maintenance legs).
-          const QString payloadBase =
-              artworkTypeFileStem(row.artworkType) +
-              (suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix);
+          const QString payloadBase = artworkTypeFileStem(row.artworkType) +
+                                      (suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix);
           // Distinct types can sanitize to the same filename; bump until
           // free so the extractor's duplicate-entry guard never trips on a
           // bundle this writer produced.
