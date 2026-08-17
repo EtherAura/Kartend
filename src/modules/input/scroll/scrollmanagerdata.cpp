@@ -62,6 +62,63 @@ void ScrollManager::updateMediaItemCount(int mediaItemCount) {
   updateVirtualView();
 }
 
+void ScrollManager::refreshManualCoverPaths(bool force) {
+  IDatabaseManager *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  if (!db) {
+    return;
+  }
+  if (m_manualCoverPathsLoaded && !force) {
+    return;
+  }
+  m_manualCoverPaths = db->loadManualCoverPaths();
+  // databaseFilePath() is empty until the connection is open, which is exactly
+  // the case where the empty map above means "couldn't read" rather than
+  // "nothing is linked" — don't latch on it.
+  m_manualCoverPathsLoaded = !db->databaseFilePath().isEmpty();
+
+  if (m_widgetFactory) {
+    m_widgetFactory->setManualCoverPaths(m_manualCoverPaths);
+  }
+  if (m_coverFlow) {
+    m_coverFlow->setManualCoverPaths(m_manualCoverPaths);
+  }
+  if (m_filterManager) {
+    m_filterManager->setManualCoverPaths(m_manualCoverPaths);
+  }
+}
+
+void ScrollManager::onItemArtworkLinksChanged(const QString & /*collectionUuid*/,
+                                              const QString &path) {
+  refreshManualCoverPaths(/*force=*/true);
+
+  // Repaint the one tile the edit is about. reconfigureArtworkForActiveWidgets
+  // is the wrong tool here: it skips every widget that already has artwork, so
+  // it would never REPLACE an auto-discovered cover with the link the user just
+  // made, and a link that replaces nothing still needs its widget revisited
+  // even though the directory cache holds an unchanged negative for that name.
+  // configureArtworkForWidget now consults the manual map first, and
+  // ArtworkManager::addPendingArtwork re-delivers on a changed path.
+  if (m_widgetFactory && !path.isEmpty()) {
+    for (auto it = m_activeWidgets.constBegin(); it != m_activeWidgets.constEnd(); ++it) {
+      ItemWidget *widget = it.value();
+      if (widget && widget->getFilePath() == path) {
+        m_widgetFactory->configureArtworkForWidget(widget, path);
+      }
+    }
+  }
+  if (auto *art = m_ctx ? m_ctx->artworkManager() : nullptr) {
+    art->scheduleViewportUpdate();
+  }
+  // The carousel resolves its faces at card-build time, so it needs a rebuild
+  // rather than a repaint. No-op when the carousel is not the active view.
+  if (m_coverFlow) {
+    m_coverFlow->rebuildCardsIfActive();
+  }
+  // A link can make a previously-artless item visible under hideMissingArtwork
+  // (or clearing one can take it away again), so re-run the baseline.
+  refreshHideMissingArtworkBaseline();
+}
+
 void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
                                       const QHash<QString, QString> &fileNames,
                                       const QHash<QString, QString> &fileToArtworkDir) {

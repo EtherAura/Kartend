@@ -39,6 +39,17 @@ private slots:
   // the hideMissingArtwork predicate.
   void testBuildArtworkKeySetFromCachedListings();
   void testHideMissingArtworkResolvesSubdirAndFullNameKeys();
+
+  // Hand-linked covers (Kartend-1js9j): the name-based key set cannot see a
+  // manual item_artwork link, so the predicate consults the manual-cover map
+  // the render surfaces paint from before it consults the key set.
+  void testHideMissingArtworkKeepsHandLinkedItems();
+  void testHideMissingArtworkHandLinkAnswersEvenOnAColdCascade();
+
+  // A mirroring collection keeps each subfolder's art under the matching
+  // artwork subdirectory, which is where the render path looks (Kartend-7f76f).
+  void testHideMissingArtworkMirrorsSubfolderIntoArtworkTree();
+  void testHideMissingArtworkWithoutMirroringStillUsesTheRoot();
 };
 
 #endif // KARTEND_TESTS_TEST_FILTERMANAGER_H

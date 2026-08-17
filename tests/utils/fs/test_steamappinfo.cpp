@@ -21,6 +21,8 @@ private slots:
   void associationsFallbackAndToolType();
   void libraryAssetPathsExtracted();
   void rejectsUnknownMagic();
+  void rejectsOverflowingStringTableOffset();
+  void rejectsOversizedStringTableCount();
   void taxonomyHelpers();
 
 private:
@@ -185,6 +187,71 @@ void TestSteamAppInfo::libraryAssetPathsExtracted() {
 void TestSteamAppInfo::rejectsUnknownMagic() {
   const QString path = writeFixture(QByteArrayLiteral("\x27\x44\x56\x07\x01\x00\x00\x00"));
   const auto parsed = SteamAppInfo::read(path, {});
+  QVERIFY(parsed.isError());
+}
+
+// Security regression: appinfo.vdf is third-party data (Steam writes it, but
+// anything with write access to the Steam dir can tamper with it), and the V29
+// header's string-table offset is eight fully attacker-controlled bytes.
+// The bound check must not be written as `tableOffset + 4 > data.size()` —
+// that addition overflows signed 64-bit near INT64_MAX and wraps negative,
+// passing the test and letting the subsequent read index far past the buffer.
+void TestSteamAppInfo::rejectsOverflowingStringTableOffset() {
+  AppInfoFixture fixture(/*v29=*/true);
+  fixture.addGame(620, QStringLiteral("Portal 2"), QStringLiteral("Valve"),
+                  QStringLiteral("Valve Publishing"), 0);
+  QByteArray bytes = fixture.build();
+  QVERIFY(bytes.size() > 16);
+
+  // Overwrite the offset with values whose `+ 4` overflows or is otherwise out
+  // of range. Each must be refused, not crash and not silently parse.
+  const QList<quint64> hostileOffsets{
+      0x7FFFFFFFFFFFFFFFULL, // INT64_MAX: +4 overflows to negative
+      0x7FFFFFFFFFFFFFFCULL, // first value where +4 overflows
+      0xFFFFFFFFFFFFFFFFULL, // reads as -1
+      quint64(bytes.size()), // just past the end, no overflow
+  };
+  for (const quint64 offset : hostileOffsets) {
+    QByteArray tampered = bytes;
+    for (int i = 0; i < 8; ++i) {
+      tampered[8 + i] = char(offset >> (8 * i) & 0xFF);
+    }
+    const auto parsed = SteamAppInfo::read(writeFixture(tampered), {});
+    QVERIFY2(parsed.isError(),
+             qPrintable(QStringLiteral("offset 0x%1 must be rejected").arg(offset, 0, 16)));
+  }
+}
+
+// Hostile string-table entry count: a raw u32 immediately after the table
+// offset. Reserving it verbatim asks for count * sizeof(QString) (~103 GB at
+// 0xFFFFFFFF) before the per-entry truncation check can fire; the parser now
+// clamps the reservation to the bytes that actually remain.
+//
+// Scope, stated honestly: this test asserts only that such a file is REJECTED
+// rather than crashing. It does not by itself prove the clamp — without it the
+// parse still ends in the same truncation error, because Linux overcommit lets
+// an oversized reserve() map address space it never touches. Proving the clamp
+// would need allocation instrumentation that is not portable. Its value is
+// pinning the reject-don't-crash contract, not the allocation bound.
+void TestSteamAppInfo::rejectsOversizedStringTableCount() {
+  AppInfoFixture fixture(/*v29=*/true);
+  fixture.addGame(620, QStringLiteral("Portal 2"), QStringLiteral("Valve"),
+                  QStringLiteral("Valve Publishing"), 0);
+  QByteArray bytes = fixture.build();
+
+  // Recover the table offset the fixture wrote, then overwrite the count that
+  // lives at it. The table cannot possibly hold 0xFFFFFFFF entries, so the
+  // parse must fail on truncation rather than attempting the reservation.
+  quint64 tableOffset = 0;
+  for (int i = 0; i < 8; ++i) {
+    tableOffset |= quint64(quint8(bytes[8 + i])) << (8 * i);
+  }
+  QVERIFY(qsizetype(tableOffset) + 4 <= bytes.size());
+  for (int i = 0; i < 4; ++i) {
+    bytes[qsizetype(tableOffset) + i] = char(0xFF);
+  }
+
+  const auto parsed = SteamAppInfo::read(writeFixture(bytes), {});
   QVERIFY(parsed.isError());
 }
 

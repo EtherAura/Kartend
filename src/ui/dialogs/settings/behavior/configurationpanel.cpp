@@ -56,6 +56,7 @@ ConfigurationPanel::ConfigurationPanel(QWidget *parent)
   connect(ui->showAllSubcollectionItemsCheckBox, &QCheckBox::toggled, this,
           [this](bool) { emit changed(); });
   connect(ui->watchFilesystemCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
+  connect(ui->groupMultiDiscCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
   connect(ui->screenscraperSystemComboBox, &QComboBox::currentIndexChanged, this,
           [this](int) { emit changed(); });
   // A hand-pick freezes the type/extension → system autodetect so a
@@ -230,6 +231,7 @@ void ConfigurationPanel::load() {
   SettingsFormBinding::loadInto(ui->showAllSubcollectionItemsCheckBox,
                                 config.showAllSubcollectionItems);
   SettingsFormBinding::loadInto(ui->watchFilesystemCheckBox, config.watchFilesystem);
+  SettingsFormBinding::loadInto(ui->groupMultiDiscCheckBox, config.groupMultiDisc);
   m_screenscraperSystems =
       populateSystemsCombo(ui->screenscraperSystemComboBox, ui->screenscraperSystemHintLabel,
                            config.scraperOverrides.screenscraperSystemId);
@@ -296,6 +298,7 @@ void ConfigurationPanel::clear() {
   ui->expandModeCheckBox->setChecked(false);
   ui->showAllSubcollectionItemsCheckBox->setChecked(false);
   ui->watchFilesystemCheckBox->setChecked(false);
+  ui->groupMultiDiscCheckBox->setChecked(false);
   {
     QSignalBlocker blocker(ui->screenscraperSystemComboBox);
     ui->screenscraperSystemComboBox->clear();
@@ -323,6 +326,7 @@ void ConfigurationPanel::save() {
   config.expandMode = ui->expandModeCheckBox->isChecked();
   config.showAllSubcollectionItems = ui->showAllSubcollectionItemsCheckBox->isChecked();
   config.watchFilesystem = ui->watchFilesystemCheckBox->isChecked();
+  config.groupMultiDisc = ui->groupMultiDiscCheckBox->isChecked();
   // Combo carries the systemeid as item data (Auto-detect → -1).
   // currentData().toInt() returns 0 for an empty combo, so guard with
   // the index check — clear() leaves the combo empty until load() runs.
@@ -364,6 +368,9 @@ QLineEdit *ConfigurationPanel::mediaDirLineEdit() const {
 }
 QLineEdit *ConfigurationPanel::fileExtensionsLineEdit() const {
   return ui->fileExtensionsLineEdit;
+}
+QCheckBox *ConfigurationPanel::groupMultiDiscCheckBox() const {
+  return ui->groupMultiDiscCheckBox;
 }
 QComboBox *ConfigurationPanel::collectionTypeComboBox() const {
   return ui->collectionTypeComboBox;

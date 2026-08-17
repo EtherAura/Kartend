@@ -39,6 +39,7 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QStandardPaths>
 #include <QString>
 #include <QStringList>
 #include <QThread>
@@ -48,9 +49,12 @@
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
 #include "errorutils.h"
+#include "multidisc.h"
+#include "multidisccollapse.h"
 #include "pathutils.h"
 #include "querymanagerhelpers.h"
 #include "querymanagersql.h"
+#include "scanartwork.h"
 #include "uiconstants/database.h"
 
 Q_DECLARE_LOGGING_CATEGORY(lcQueryManager)
@@ -66,6 +70,40 @@ using namespace ScanServiceInternal;
 // scanservice_internal.h.
 namespace {
 constexpr int APPLY_BATCH_SIZE = KartendDb::BatchSizes::StagedScanApplyBatch;
+
+// Kartend-3mq7v: the multi-disc collapse post-pass, shared by both persist
+// pipelines (the streaming scanAndSaveItemsToDatabase and the in-memory
+// saveItemsToDatabase). Both stage into the same connection-local
+// scanned_items table and both apply from it, so the collapse belongs at the
+// single point between those two steps rather than inside either walk — see
+// multidisccollapse.h for why it cannot be a filter in the stream.
+//
+// Runs on BOTH arms of the setting, not just when grouping is on: a collection
+// the user turned grouping OFF for has to have its managed playlist directory
+// removed, or the generated .m3u files outlive the feature that produced them.
+// The member files stage normally on the same scan, so the library goes back to
+// one item per disc in a single pass.
+[[nodiscard]] QList<MultiDiscCollapse::CollapsedGroup>
+collapseMultiDiscGroups(QSqlDatabase &db, int &txnDepth, const CollectionConfig &collection,
+                        const QString &uuid) {
+  const QString playlistDir = MultiDisc::playlistDirFor(
+      QStandardPaths::writableLocation(QStandardPaths::AppDataLocation), uuid);
+  if (!collection.groupMultiDisc) {
+    (void)MultiDiscCollapse::discardPlaylists(playlistDir);
+    return {};
+  }
+  return MultiDiscCollapse::collapseStagedGroups(db, txnDepth, uuid, playlistDir);
+}
+
+// Discs that became one item no longer count individually towards the "X of Y
+// items added" summary — N staged members collapse to a single staged row.
+[[nodiscard]] int stagedCountAfterCollapse(int itemsStaged,
+                                           const QList<MultiDiscCollapse::CollapsedGroup> &groups) {
+  for (const MultiDiscCollapse::CollapsedGroup &group : groups) {
+    itemsStaged -= static_cast<int>(group.memberPaths.size()) - 1;
+  }
+  return std::max(0, itemsStaged);
+}
 } // namespace
 
 // ============================================================================
@@ -221,11 +259,13 @@ bool ScanService::applyStagedScanResultsAttempt(
       QStringList names;
       QStringList lastModified;
       QList<qint64> fileSizes;
+      QStringList artworkPaths;
       paths.reserve(APPLY_BATCH_SIZE);
       relPaths.reserve(APPLY_BATCH_SIZE);
       names.reserve(APPLY_BATCH_SIZE);
       lastModified.reserve(APPLY_BATCH_SIZE);
       fileSizes.reserve(APPLY_BATCH_SIZE);
+      artworkPaths.reserve(APPLY_BATCH_SIZE);
 
       qint64 batchMaxRowId = lastRowId;
       while (sel.next()) {
@@ -236,6 +276,7 @@ bool ScanService::applyStagedScanResultsAttempt(
         names.append(sel.value(3).toString());
         lastModified.append(sel.value(4).toString());
         fileSizes.append(sel.value(5).toLongLong());
+        artworkPaths.append(sel.value(6).toString());
       }
 
       if (paths.isEmpty()) {
@@ -257,12 +298,19 @@ bool ScanService::applyStagedScanResultsAttempt(
       // persisted kept file_size DEFAULT 0 — degrading sort_file_size to
       // name order and forcing the metadata path to stat-fallback
       // (Kartend-3gb7e). Mirrors ScannedItemsTable::applyToItems.
+      //
+      // artwork_path is in the same category as file_size — a per-scan cache of
+      // something on disk, refreshed on conflict (Kartend-guyc5). The staged
+      // value comes from ScanArtwork::resolveStagedArtwork; an empty string is
+      // "no cover found on this scan", which is what every DB-side artwork
+      // predicate tests for and what the previous value must be replaced with
+      // when the art is gone.
       QString sql = "INSERT INTO items (collection_id, collection_uuid, path, "
-                    "rel_path, name, last_modified, file_size, date_added) VALUES ";
+                    "rel_path, name, last_modified, file_size, date_added, artwork_path) VALUES ";
       QStringList valueSets;
       valueSets.reserve(paths.size());
       for (int i = 0; i < paths.size(); ++i) {
-        valueSets.append("(?, ?, ?, ?, ?, ?, ?, ?)");
+        valueSets.append("(?, ?, ?, ?, ?, ?, ?, ?, ?)");
       }
       sql += valueSets.join(", ");
       sql += " ON CONFLICT(collection_uuid, path) DO UPDATE SET "
@@ -270,7 +318,8 @@ bool ScanService::applyStagedScanResultsAttempt(
              "rel_path=excluded.rel_path, "
              "name=excluded.name, "
              "last_modified=excluded.last_modified, "
-             "file_size=excluded.file_size";
+             "file_size=excluded.file_size, "
+             "artwork_path=excluded.artwork_path";
 
       // Route through the prepared-statement cache so full batches (the
       // common case — every batch except the last is APPLY_BATCH_SIZE rows
@@ -293,6 +342,7 @@ bool ScanService::applyStagedScanResultsAttempt(
         ins.bindValue(bindPos++, lastModified[i]);
         ins.bindValue(bindPos++, fileSizes[i]);
         ins.bindValue(bindPos++, nowEpochSec);
+        ins.bindValue(bindPos++, artworkPaths[i]);
       }
       if (!ins.exec()) {
         // The hot lock-contention site: the txn's first write after the
@@ -390,10 +440,8 @@ bool ScanService::scanAndSaveItemsToDatabase(int collectionIndex,
     return false;
   }
 
-  // Include includeContentSubfolders in the signature to match needsRescan.
-  QString extSignature =
-      collection.extensions.isEmpty() ? QString() : collection.extensions.join('|');
-  extSignature += collection.folderBrowsing.includeContentSubfolders ? "|subfolders" : "";
+  // Same signature builder needsRescan uses — the two must never drift.
+  const QString extSignature = buildExtSignature(collection);
 
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
@@ -434,10 +482,34 @@ bool ScanService::scanAndSaveItemsToDatabase(int collectionIndex,
     return false;
   }
 
+  // Phase 1.5: collapse multi-disc releases in the staging table so phase 2
+  // applies one row per release instead of one per disc. Deliberately after the
+  // cancellation check — a cancelled scan must not write playlists.
+  const QList<MultiDiscCollapse::CollapsedGroup> collapsed =
+      collapseMultiDiscGroups(m_db, m_txnDepth, collection, uuid);
+  itemsStaged = stagedCountAfterCollapse(itemsStaged, collapsed);
+
+  // Phase 1.6: resolve each staged row's cover into the staging table so the
+  // apply carries it into items.artwork_path (Kartend-guyc5). AFTER the
+  // collapse on purpose: the rows that exist now are the rows that will become
+  // items, so a collapsed release resolves art the same way its tile will.
+  if (!isScanCancelled()) {
+    (void)ScanArtwork::resolveStagedArtwork(m_db, m_txnDepth, collection.artworkDirectory, uuid,
+                                            collection.mediaDirectory,
+                                            collection.folderBrowsing.includeArtworkSubfolders);
+  }
+
   // Phase 2: Apply staged results to persistent DB.
   int itemsApplied = 0;
   const bool success =
       commitStagedScanResults(collection, uuid, extSignature, dirSignature, itemsApplied);
+
+  // Phase 3: the collapsed items' merged metadata. Only now does the row it
+  // writes to exist, and only a committed apply means the member rows it was
+  // gathered from are really gone.
+  if (success && !collapsed.isEmpty()) {
+    MultiDiscCollapse::applyMergedMetadata(m_db, uuid, collapsed);
+  }
 
   // surface scan stats to the caller.
   if (outItemsScanned) {
@@ -588,10 +660,8 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
     return;
   }
 
-  // Include includeContentSubfolders in the signature to match needsRescan
-  QString extSignature =
-      collection.extensions.isEmpty() ? QString() : collection.extensions.join('|');
-  extSignature += collection.folderBrowsing.includeContentSubfolders ? "|subfolders" : "";
+  // Same signature builder needsRescan uses — the two must never drift.
+  const QString extSignature = buildExtSignature(collection);
 
   const QString uuid =
       CollectionUtils::computeCollectionUuid(collection.name, collection.mediaDirectory);
@@ -706,6 +776,17 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
   if (!isScanCancelled()) {
     emit scanItemsProgress(totalItems, totalItems);
 
+    // Multi-disc collapse (Kartend-3mq7v): same post-pass the streaming
+    // pipeline runs, at the same point — after staging, before the apply.
+    const QList<MultiDiscCollapse::CollapsedGroup> collapsed =
+        collapseMultiDiscGroups(m_db, m_txnDepth, collection, uuid);
+
+    // Staged-artwork resolution (Kartend-guyc5): same pass, same seam as the
+    // streaming pipeline — after the collapse, before the apply.
+    (void)ScanArtwork::resolveStagedArtwork(m_db, m_txnDepth, collection.artworkDirectory, uuid,
+                                            collection.mediaDirectory,
+                                            collection.folderBrowsing.includeArtworkSubfolders);
+
     int legacyId = -1;
     if (!prepareCollectionForItemsInsert(collection, uuid, extSignature, legacyId)) {
       return;
@@ -804,6 +885,10 @@ void ScanService::saveItemsToDatabase(int collectionIndex, const QStringList &fi
           qCWarning(lcQueryManager).nospace()
               << "ScanService::saveItemsToDatabase: apply landed on attempt " << (attempt + 1)
               << " after database-is-locked contention";
+        }
+        // The collapsed items' rows exist only now that the apply committed.
+        if (!collapsed.isEmpty()) {
+          MultiDiscCollapse::applyMergedMetadata(m_db, uuid, collapsed);
         }
         return;
       }

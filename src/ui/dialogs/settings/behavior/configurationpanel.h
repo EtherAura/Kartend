@@ -12,6 +12,7 @@ QT_BEGIN_NAMESPACE
 namespace Ui {
 class ConfigurationPanel;
 }
+class QCheckBox;
 class QComboBox;
 class QLineEdit;
 class QPushButton;
@@ -66,6 +67,11 @@ public:
   [[nodiscard]] QPushButton *browseMediaDirButton() const;
   [[nodiscard]] QLineEdit *mediaDirLineEdit() const;
   [[nodiscard]] QLineEdit *fileExtensionsLineEdit() const;
+  /// Exposed for the same reason as the two line edits above: the dialog has
+  /// to compare the WIDGET's value against the saved config to decide whether
+  /// a rescan is owed, and grouping changes what a scan produces
+  /// (Kartend-3ywd0).
+  [[nodiscard]] QCheckBox *groupMultiDiscCheckBox() const;
   [[nodiscard]] QComboBox *collectionTypeComboBox() const;
 
 signals:

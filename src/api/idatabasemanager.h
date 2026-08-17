@@ -119,6 +119,24 @@ public:
   virtual bool removeItemArtwork(const QString &collectionUuid, const QString &path,
                                  const QString &artworkType) = 0;
 
+  /// Absolute item path -> the cover that item's MANUAL `item_artwork` links
+  /// resolve to, for every hand-linked item in the database (Kartend-1js9j).
+  ///
+  /// The render surfaces — grid tile, cover-flow card, the hide-missing-artwork
+  /// filter — consult this map BEFORE their name-based artwork lookup, which is
+  /// how a hand-picked cover comes to outrank auto-discovery on the tile the
+  /// same way it already does in the sidebar gallery. It is a map rather than a
+  /// per-item call precisely because those surfaces run per widget while the
+  /// grid recycles widgets during a scroll: a per-tile query would put database
+  /// work on the GUI thread in the virtual-scroll hot path.
+  ///
+  /// One read plus one stat per LINK (see ItemArtworkStore::loadManualCoverPaths
+  /// for the existence rule); callers rebuild on itemArtworkLinksChanged rather
+  /// than polling. Default returns an empty map so mocks need no override —
+  /// every consumer treats "empty" as "no item is hand-linked", which is the
+  /// correct answer for a double with no `item_artwork` table.
+  [[nodiscard]] virtual QHash<QString, QString> loadManualCoverPaths() const { return {}; }
+
   [[nodiscard]] virtual UsageStatsStore::ItemUsageStats
   loadItemUsageStats(const QString &collectionUuid, const QString &path) const = 0;
 
@@ -228,6 +246,13 @@ signals:
   /// worker→main hop needs no custom meta-type registration.
   void itemStateFlagsLoaded(const QString &collectionUuid, const QStringList &pinnedPaths,
                             const QStringList &hiddenPaths, const QStringList &continueLaterPaths);
+  /// A manual `item_artwork` link was written or cleared for
+  /// (@p collectionUuid, @p path). Emitted by saveItemArtwork /
+  /// removeItemArtwork so the render surfaces can refresh the map they got
+  /// from loadManualCoverPaths() — without it a cover linked mid-session would
+  /// keep painting a placeholder until the next collection switch, since the
+  /// name-based directory cache has nothing to re-probe for it (Kartend-1js9j).
+  void itemArtworkLinksChanged(const QString &collectionUuid, const QString &path);
   void errorOccurred(const ErrorUtils::ErrorContext &error);
   void cachedCountsUpdated();
   void scanProgress(int current, int total, const QString &collectionName);

@@ -24,6 +24,7 @@ target_sources(kartend_utils PRIVATE
   collection/runtime_detection_settings_persistence.cpp
   collection/scraper_settings_persistence.cpp
   collection/scraperoverrides_persistence.cpp
+  collection/searchpreset.cpp
   collection/sidebarappearance_persistence.cpp
   collection/splash_settings_persistence.cpp
   collection/startup_settings_persistence.cpp
@@ -87,6 +88,7 @@ target_sources(kartend_utils PRIVATE
   collection/scraper_settings_persistence.h
   collection/scraperoverrides.h
   collection/scraperoverrides_persistence.h
+  collection/searchpreset.h
   collection/sidebarappearance.h
   collection/sidebarappearance_persistence.h
   collection/splash_settings.h

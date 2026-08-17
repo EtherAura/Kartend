@@ -38,6 +38,14 @@ constexpr const char *TAG_FAVORITE = "favorite";
 constexpr const char *KEY_COLLECTION_UUID = "collection_uuid";
 constexpr const char *KEY_TITLE_SEARCH = "title_search";
 
+// Composition (Kartend-r5dbe). Both keys are absent from every filter
+// written before composition existed, which is exactly how a legacy spec is
+// recognised on the way back in.
+constexpr const char *KEY_MATCH = "match";
+constexpr const char *KEY_RULES = "rules";
+constexpr const char *TAG_MATCH_ALL = "all";
+constexpr const char *TAG_MATCH_ANY = "any";
+
 } // namespace
 
 QString kindToTag(Kind kind) {
@@ -163,6 +171,95 @@ ErrorUtils::Result<Filter> fromJsonString(const QString &json) {
         .withDetails(err.errorString());
   }
   return fromJson(doc.object());
+}
+
+QJsonObject setToJson(const FilterSet &set) {
+  // Mirror the first rule into the legacy top-level fields, always. For a
+  // one-rule set that IS the whole object and the bytes are identical to what
+  // single-rule playlists have always stored — no migration, no rewrite of
+  // rows already on disk. For a larger set it is the fallback an older build
+  // reads, and a narrower playlist beats one that refuses to open.
+  QJsonObject o = toJson(set.rules.isEmpty() ? Filter{} : set.rules.first());
+  if (set.rules.size() <= 1) {
+    return o; // match mode is meaningless for a single rule; don't record it
+  }
+  o[KEY_MATCH] = QString::fromLatin1(set.match == MatchMode::Any ? TAG_MATCH_ANY : TAG_MATCH_ALL);
+  QJsonArray rules;
+  for (const Filter &f : set.rules) {
+    rules.append(toJson(f));
+  }
+  o[KEY_RULES] = rules;
+  return o;
+}
+
+ErrorUtils::Result<FilterSet> setFromJson(const QJsonObject &obj) {
+  FilterSet set;
+
+  // No "rules" array => a spec written before composition existed. Parse it
+  // through the unchanged single-filter path so every playlist an older build
+  // wrote keeps evaluating exactly as it did.
+  if (!obj.contains(KEY_RULES)) {
+    auto single = fromJson(obj);
+    if (single.isError()) {
+      return single.error();
+    }
+    set.rules.append(single.value());
+    return set;
+  }
+
+  const QString matchTag = obj.value(KEY_MATCH).toString(QString::fromLatin1(TAG_MATCH_ALL));
+  if (matchTag == QLatin1String(TAG_MATCH_ANY)) {
+    set.match = MatchMode::Any;
+  } else if (matchTag != QLatin1String(TAG_MATCH_ALL)) {
+    // Refuse rather than guess: silently falling back to "all" on an
+    // unrecognised mode would show a strict intersection to someone who asked
+    // for a union, which reads as missing items rather than as a bad spec.
+    return ErrorContext::error(ErrorCode::InvalidArgument, "Unknown smart-filter match mode",
+                               "SmartFilter::setFromJson")
+        .withDetails(QStringLiteral("Match: '%1'").arg(matchTag));
+  }
+
+  const QJsonArray arr = obj.value(KEY_RULES).toArray();
+  for (const auto &value : arr) {
+    if (!value.isObject()) {
+      return ErrorContext::error(ErrorCode::InvalidArgument,
+                                 "smart_filter 'rules' entry is not an object",
+                                 "SmartFilter::setFromJson");
+    }
+    // One unparseable rule fails the whole set. Skipping it would change what
+    // the playlist MEANS — dropping a rule from an "all" set widens it, so the
+    // user would silently get items they had excluded. An inert playlist is
+    // the honest outcome, and matches what a single unknown kind already did.
+    auto one = fromJson(value.toObject());
+    if (one.isError()) {
+      return one.error();
+    }
+    set.rules.append(one.value());
+  }
+  if (set.rules.isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "smart_filter 'rules' array is empty",
+                               "SmartFilter::setFromJson");
+  }
+  return set;
+}
+
+QString setToJsonString(const FilterSet &set) {
+  return QString::fromUtf8(QJsonDocument(setToJson(set)).toJson(QJsonDocument::Compact));
+}
+
+ErrorUtils::Result<FilterSet> setFromJsonString(const QString &json) {
+  if (json.trimmed().isEmpty()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "smart_filter JSON is empty",
+                               "SmartFilter::setFromJsonString");
+  }
+  QJsonParseError err;
+  const auto doc = QJsonDocument::fromJson(json.toUtf8(), &err);
+  if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+    return ErrorContext::error(ErrorCode::InvalidArgument, "smart_filter JSON is malformed",
+                               "SmartFilter::setFromJsonString")
+        .withDetails(err.errorString());
+  }
+  return setFromJson(doc.object());
 }
 
 } // namespace SmartFilter

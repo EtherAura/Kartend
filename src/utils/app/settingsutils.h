@@ -21,6 +21,10 @@ public:
   /// Path to the JSON file storing presentation / attract-mode
   /// profiles (Kartend-6pp5). Sibling to kartend.cfg.
   [[nodiscard]] static auto getPresentationProfilesPath() -> QString;
+  /// Path to the JSON file storing saved search presets (Kartend-jklv4) —
+  /// a named query plus the filter/sort state around it. Sibling to
+  /// kartend.cfg, same shape as the two profile registries above.
+  [[nodiscard]] static auto getSearchPresetsPath() -> QString;
   [[nodiscard]] static auto getFormat() -> QSettings::Format;
   /// Restrict kartend.cfg to user-only read+write (0600). The INI carries
   /// scraper credentials in cleartext under [Scrapers]; default umask on

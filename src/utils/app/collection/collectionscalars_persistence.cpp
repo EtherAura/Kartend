@@ -111,6 +111,7 @@ void load(QSettings &settings, CollectionConfig &config, bool &needsRewrite,
         << rawViewType << "' — falling back to 'grid'. Fix the INI to silence.";
   }
   config.hideMissingArtwork = settings.value(keys::kHideMissingArtwork, false).toBool();
+  config.groupMultiDisc = settings.value(keys::kGroupMultiDisc, false).toBool();
   config.hideTitles = settings.value(keys::kHideTitles, false).toBool();
   config.hideSubcollectionTitles = settings.value(keys::kHideSubcollectionTitles, false).toBool();
   config.customFontFamily = settings.value(keys::kCustomFontFamily).toString();
@@ -156,6 +157,7 @@ void save(QSettings &settings, const CollectionConfig &config, const QString &se
                     CollectionUtils::alignmentToString(config.horizontalAlignment));
   settings.setValue(keys::kViewType, CollectionUtils::viewTypeToString(config.viewType));
   settings.setValue(keys::kHideMissingArtwork, config.hideMissingArtwork);
+  settings.setValue(keys::kGroupMultiDisc, config.groupMultiDisc);
   settings.setValue(keys::kHideTitles, config.hideTitles);
   settings.setValue(keys::kHideSubcollectionTitles, config.hideSubcollectionTitles);
   settings.setValue(keys::kCustomFontFamily, config.customFontFamily);

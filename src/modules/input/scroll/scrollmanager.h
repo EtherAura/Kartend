@@ -290,6 +290,14 @@ private slots:
   void onSliderMoved(int position);
   void reconfigureArtworkForActiveWidgets();
   void onArtworkPreviewRequested(const QString &filePath, const QString &artworkDir);
+  /// A manual artwork link was written or cleared for @p path
+  /// (IDatabaseManager::itemArtworkLinksChanged). Re-reads the manual-cover map
+  /// and repaints the affected tile straight away (Kartend-1js9j) — the
+  /// name-based DirectoryCache has nothing to re-probe for a link, so without
+  /// this the newly-linked cover would not appear until the next collection
+  /// switch, and the negative the cache holds for that name would keep the
+  /// placeholder pinned.
+  void onItemArtworkLinksChanged(const QString &collectionUuid, const QString &path);
 
 private:
   void createVirtualContainer();
@@ -302,6 +310,18 @@ private:
   // receiveItemsRange; no-op unless the baseline is the active filter
   // (Kartend-l66sn).
   void refreshHideMissingArtworkBaseline();
+  /// Load the whole-library manual-cover map and hand it to the three surfaces
+  /// that resolve a cover — the grid tile factory, the cover-flow controller
+  /// and the hideMissingArtwork predicate (Kartend-1js9j). Read once and
+  /// re-pushed, rather than queried per item: all three run per widget or per
+  /// card, and the grid recycles widgets while scrolling a 100k-item library.
+  ///
+  /// @p force re-reads even when the map is already loaded; the un-forced call
+  /// is a no-op after the first successful read, so a collection switch costs
+  /// nothing. "Successful" is decided by the database having an open
+  /// connection, so an early call before the database opens does not latch an
+  /// empty map forever.
+  void refreshManualCoverPaths(bool force);
   void connectScrollEvents();
   void disconnectScrollEvents();
   void ensureWidgetForIndex(int visualIndex);
@@ -455,6 +475,17 @@ private:
   // cascade settles, capped by HIDE_MISSING_REFILTER_MAX_RETRIES.
   int m_baselineRefilterRetries = 0;
   qint64 m_lastArtworkPrewarmTime = 0; // Debounce artwork directory prewarm
+
+  // Absolute item path -> hand-linked cover, for every item in the library
+  // whose manual item_artwork links resolve to one (Kartend-1js9j). Owned here
+  // and pushed down to ItemWidgetFactory / CoverFlowController / FilterManager,
+  // the way setCachedArtworkPaths already is, so the three render surfaces
+  // agree on which cover an item shows without any of them querying per item.
+  QHash<QString, QString> m_manualCoverPaths;
+  // False until refreshManualCoverPaths() has read the map with the database
+  // actually open; keeps a collection switch from re-reading, and keeps an
+  // early read (before the connection exists) from latching an empty map.
+  bool m_manualCoverPathsLoaded = false;
 
   // Initial scroll index for pre-positioning before widget creation
   int m_initialScrollIndex = -1;

@@ -31,6 +31,7 @@ private slots:
   void setupMenuBar_keepsAboutAtTailOfHelpMenu();
   void setupMenuBar_routesLibraryToolsToToolsMenu();
   void setupMenuBar_groupsImportAndExportIntoSubmenus();
+  void setupMenuBar_bindsImportFromLauncherShortcut();
 };
 
 #endif // KARTEND_TESTS_TEST_MENUCONTROLLER_H

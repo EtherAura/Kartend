@@ -192,6 +192,20 @@ bool EventManager::handleMousePress(QObject *obj, QEvent *event) {
     return false;
   }
 
+  // Cover flow owns its left-clicks (Kartend-g7hbx): CoverFlowWidget
+  // hit-tests its own cards and gallery strip, and a click that misses both
+  // is a no-op — there is no "click empty space to deselect" in a carousel
+  // that always has a centered card. Falling through to the grid path here
+  // mapped the click into the HIDDEN gridContainer, found no widget, and
+  // emitted clearSelectionRequested — the carousel then rendered the cleared
+  // selection (-1) clamped to item 0 while the toolbar counter and gallery
+  // strip kept the old selection. Bailing before mouseHold() also keeps
+  // click-hold scrolling from arming against the hidden grid.
+  if (CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections) &&
+      (*m_collections)[*m_currentCollectionIndex].viewType == ViewType::CoverFlow) {
+    return false;
+  }
+
   if (!m_itemScrollArea || (!m_gridContainer) || (!m_stackedWidget) || (!m_itemsPage)) {
     return false;
   }

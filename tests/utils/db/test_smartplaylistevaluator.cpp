@@ -116,6 +116,12 @@ private slots:
   void byTitleSearch_emptyNeedleReturnsNothing();
   void missingArtwork_returnsNullOrEmptyArtwork();
   void evaluate_unopenedDb_returnsEmptyWithoutCrashing();
+
+  // Multi-rule composition (Kartend-r5dbe)
+  void matchAll_intersectsRulesAndKeepsFirstRuleOrder();
+  void matchAny_unionsRulesWithoutDuplicates();
+  void singleRuleSet_matchesTheBareFilter();
+  void emptyRuleSet_returnsNothing();
 };
 
 void TestSmartPlaylistEvaluator::recentlyLaunched_returnsOrderedByLastPlayedDesc() {
@@ -486,6 +492,107 @@ void TestSmartPlaylistEvaluator::evaluate_unopenedDb_returnsEmptyWithoutCrashing
   // Returns empty (logging the error). The contract is "no exceptions,
   // no UB" so the QueryManager smart-scope branch can degrade silently.
   QCOMPARE(SmartPlaylistEvaluator::evaluate(db, f).size(), 0);
+}
+
+namespace {
+SmartFilter::Filter ruleOf(SmartFilter::Kind kind) {
+  SmartFilter::Filter f;
+  f.kind = kind;
+  return f;
+}
+
+// Alpha is pinned AND has artwork, Beta is pinned only, Gamma has artwork
+// only, Delta neither — every cell of the two-rule truth table.
+void seedTruthTable(QSqlDatabase &db) {
+  createItemsTable(db);
+  createItemMetadataTable(db);
+  insertItem(db, "u1", "Alpha", "/a/alpha.mp4", 0, QString(), "/art/alpha.png");
+  insertItem(db, "u1", "Beta", "/a/beta.mp4");
+  insertItem(db, "u1", "Gamma", "/a/gamma.mp4", 0, QString(), "/art/gamma.png");
+  insertItem(db, "u1", "Delta", "/a/delta.mp4");
+  insertItemMetadata(db, "u1", "/a/alpha.mp4", true, false, false);
+  insertItemMetadata(db, "u1", "/a/beta.mp4", true, false, false);
+}
+
+QStringList pathsOf(const QList<SmartPlaylistEvaluator::Match> &matches) {
+  QStringList out;
+  out.reserve(matches.size());
+  for (const auto &m : matches) {
+    out.append(m.path);
+  }
+  return out;
+}
+} // namespace
+
+void TestSmartPlaylistEvaluator::matchAll_intersectsRulesAndKeepsFirstRuleOrder() {
+  const QString conn = "spe_match_all";
+  auto db = openMemoryDb(conn);
+  seedTruthTable(db);
+
+  SmartFilter::FilterSet set;
+  set.match = SmartFilter::MatchMode::All;
+  set.rules = {ruleOf(SmartFilter::Kind::Pinned), ruleOf(SmartFilter::Kind::HasArtwork)};
+
+  // Only Alpha satisfies both. Beta (pinned, no art) and Gamma (art, not
+  // pinned) each satisfy exactly one rule and must NOT survive an
+  // intersection — the failure this guards against is a union masquerading
+  // as "all".
+  QCOMPARE(pathsOf(SmartPlaylistEvaluator::evaluate(db, set)),
+           QStringList{QStringLiteral("/a/alpha.mp4")});
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::matchAny_unionsRulesWithoutDuplicates() {
+  const QString conn = "spe_match_any";
+  auto db = openMemoryDb(conn);
+  seedTruthTable(db);
+
+  SmartFilter::FilterSet set;
+  set.match = SmartFilter::MatchMode::Any;
+  set.rules = {ruleOf(SmartFilter::Kind::Pinned), ruleOf(SmartFilter::Kind::HasArtwork)};
+
+  // Alpha matches BOTH rules and must appear exactly once — a naive
+  // concatenation would list it twice and the playlist would show a
+  // duplicate tile. Order follows the first rule (pinned, alphabetical:
+  // Alpha then Beta), then the second rule's newcomers (Gamma). Delta
+  // matches neither and stays out.
+  const QStringList expected{QStringLiteral("/a/alpha.mp4"), QStringLiteral("/a/beta.mp4"),
+                             QStringLiteral("/a/gamma.mp4")};
+  QCOMPARE(pathsOf(SmartPlaylistEvaluator::evaluate(db, set)), expected);
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::singleRuleSet_matchesTheBareFilter() {
+  const QString conn = "spe_single_rule";
+  auto db = openMemoryDb(conn);
+  seedTruthTable(db);
+
+  // A one-rule set is the pre-composition playlist. It must return exactly
+  // what the bare Filter overload returns, or every playlist written before
+  // composition would quietly change what it shows.
+  const auto bare = SmartPlaylistEvaluator::evaluate(db, ruleOf(SmartFilter::Kind::Pinned));
+  SmartFilter::FilterSet set;
+  set.rules = {ruleOf(SmartFilter::Kind::Pinned)};
+  QCOMPARE(pathsOf(SmartPlaylistEvaluator::evaluate(db, set)), pathsOf(bare));
+  QCOMPARE(bare.size(), 2);
+
+  closeAndRemove(db, conn);
+}
+
+void TestSmartPlaylistEvaluator::emptyRuleSet_returnsNothing() {
+  const QString conn = "spe_empty_rules";
+  auto db = openMemoryDb(conn);
+  seedTruthTable(db);
+
+  // Parsing rejects an empty rules array, so this shape only reaches the
+  // evaluator from hand-built code. "Nothing" is the safe reading: an
+  // unconstrained set must never be treated as "match the whole library".
+  SmartFilter::FilterSet set;
+  QCOMPARE(SmartPlaylistEvaluator::evaluate(db, set).size(), 0);
+
+  closeAndRemove(db, conn);
 }
 
 QTEST_MAIN(TestSmartPlaylistEvaluator)

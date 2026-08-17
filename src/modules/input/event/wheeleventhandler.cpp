@@ -195,6 +195,22 @@ bool WheelEventHandler::handleEvent(QObject * /*obj*/, QEvent *event) {
     return false;
   }
 
+  // Cover flow: the selection step IS the whole job — the carousel animates
+  // its own glide off updateSelectionForIndex, and the grid's scroll area is
+  // hidden. Everything below this branch is grid-viewport machinery, and
+  // running it against the hidden scroll area was actively harmful
+  // (Kartend-2sdjp): the wheel animation ran its full duration against a
+  // zero-range scrollbar, onAnimationFinished then re-pushed
+  // updateSelectionForIndex + ensureItemVisible ~1.5s later from hidden-grid
+  // geometry (the observed carousel snap-back), and the
+  // wheelScrolling / continuousScrollActive / userScrollActive flags were
+  // left flapping on state no grid view was consuming.
+  if (collection.viewType == ViewType::CoverFlow) {
+    applySelectionDelta(wheelSteps);
+    event->accept();
+    return true;
+  }
+
   const int currentPos = axisScrollBar->value();
 
   if (state()) {
@@ -388,7 +404,13 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
     return wrapTriggered;
   }
 
-  if (viewportScrollState()) {
+  // Cover flow owns its motion: no grid-viewport scroll state to arm, and
+  // nothing ever runs the animation whose completion would clear it — a set
+  // continuousScrollActive flag would simply stick (Kartend-2sdjp). Same
+  // reasoning as ArrowNavigationHandler::performVisibilityForKeyMove's
+  // cover-flow early-return.
+  const bool isCoverFlow = (collection.viewType == ViewType::CoverFlow);
+  if (viewportScrollState() && !isCoverFlow) {
     if (wrapTriggered) {
       viewportScrollState()->setForceImmediateCenter(true);
       viewportScrollState()->setWrapSequenceActive(true);
@@ -417,7 +439,7 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
     scrollOverlay()->updateSelectionForIndex(newSelection);
   }
 
-  if (wrapTriggered && viewportPositioner()) {
+  if (wrapTriggered && !isCoverFlow && viewportPositioner()) {
     viewportPositioner()->applyImmediateViewportPositioningForSelection(newSelection);
     if (scrollGrid()) {
       scrollGrid()->updateVirtualView();
@@ -430,6 +452,19 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
   // via InteractionManager forwarding) stay frozen during wheel navigation.
   if (selectionCore()) {
     selectionCore()->notifySelectionChanged();
+  }
+
+  // Persist the landing index, exactly as the keyboard path's
+  // handleSuccessfulSelection does on every move. The cancel above only
+  // stands down restores scheduled BEFORE this step; the next reload
+  // (safeReloadCollection captured persistCurrentSelection at its debounce
+  // start, restoreSelectionForCurrentCollection reads the session store)
+  // schedules a FRESH restore against whatever is persisted — which was the
+  // pre-wheel index, so the selection visibly snapped back seconds after a
+  // wheel move. Cover flow surfaced it (Kartend-2sdjp), but the hole was
+  // view-agnostic: grid, list and horizontal wheel moves are persisted too.
+  if (selectionMgr() && CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
+    selectionMgr()->persistSelectionForIndex(*m_currentCollectionIndex, newSelection);
   }
 
   return wrapTriggered;

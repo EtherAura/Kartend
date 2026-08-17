@@ -87,7 +87,7 @@ the highlighted collection. Multi-select is not supported — use
 | **Name** | Display name. Renaming updates references everywhere. |
 | **Type** | Free-form classification used by the [type filter](Search-Sort-Filter.md#type-filter). |
 | **Parent Collection** | Dropdown of all candidate parents (excluding the current collection and its descendants). |
-| **Linked Parents** | Multi-select picker for [alias parents](Collections.md#linked-parents). |
+| **Linked Parents** | Multi-select picker for [alias parents](Collections.md#linked-parents-alias-parents). |
 
 ### Paths & Extensions
 

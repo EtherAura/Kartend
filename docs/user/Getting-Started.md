@@ -221,7 +221,7 @@ visually.
 
 A collection can also have **Linked Parents** — alias references that
 make it appear under multiple parents simultaneously without copying it.
-See [Collections](Collections.md#linked-parents).
+See [Collections](Collections.md#linked-parents-alias-parents).
 
 ### A tile-grid home across all your collections
 

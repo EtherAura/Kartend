@@ -211,7 +211,7 @@ once:
 Across all view modes, the selected item is marked by a translucent
 **selection overlay** painted on top of the tile, tinted by
 `selectionColor` (per-collection, see
-[Themes & Appearance](Themes-and-Appearance.md#colors)). When you
+[Themes & Appearance](Themes-and-Appearance.md#color-palette)). When you
 move selection — arrow keys, mouse click, gamepad, alphabetic jump
 — the overlay **glides** from the previous tile to the new one
 rather than jump-cutting. The animation is short (matching the

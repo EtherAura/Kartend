@@ -16,13 +16,46 @@ You will receive an acknowledgment within 48 hours. Security issues will be prio
 
 ## Security Considerations
 
+Kartend opens **no listening socket** — it has no server, no local IPC endpoint,
+and no D-Bus service. Its only network use is outbound HTTPS from the scraper
+client and DAT/artwork downloads. There is no remote attack surface to reach.
+
 Kartend launches user-configured external processes. The launch module includes:
 - Executable path validation and permission checks
-- Sensitive directory blacklisting (system paths, `/root`, etc.)
+- Pseudo-filesystem blocklist for the launcher executable — `/proc`, `/sys`, and
+  `/dev` are rejected both as written and after symlink canonicalization
+  (`LaunchManager::validateLauncherPath`). This is a targeted guard against
+  paths like `/proc/self/exe`, **not** a general "system directory" or
+  privileged-path blocklist: `/root`, `/etc`, and `/usr` are not on it, because
+  a launcher the user's own account can execute is by definition already within
+  that account's reach.
 - TOCTOU mitigation with re-validation before execution
 - Argument list passing (no shell interpolation)
 
-SQL queries use parameterized binding throughout; FTS input is sanitized.
+Argument-list passing protects a launcher the *user* configured. It does not
+help when the launcher configuration itself is untrusted input, which is the
+case for an imported `.kart` package: the package names both the program and
+its arguments, so choosing a shell as the program defeats the absence of one.
+Import therefore treats the whole launcher block — launcher path, core path
+and launch parameters, primary and additional — as untrusted regardless of
+where the paths point. Every field the package supplies is listed to the user
+verbatim and requires explicit confirmation before the collection is
+registered, on every import route including drag-and-drop; the safe-prefix
+allowlist only ranks the severity of each row, and the preflight dialog's
+all-clear is reachable only for a package that carries no launcher block at
+all. Values that name a shell or interpreter, carry an inline-command flag, or
+resolve inside the extracted package tree are called out specifically. The
+headless import has no one to ask, so it refuses a package-shipped launcher,
+core or path argument unless `--allow-untrusted-launcher` is passed.
+Extraction never sets an execute bit on payload files, which is enforced by
+test.
+
+SQL queries use parameterized binding throughout — including the dynamically
+sized `IN (...)` clauses, which build `?` placeholder lists and bind each value.
+The only string-interpolated SQL is table/column identifiers from compile-time
+constants, which SQL cannot parameterize. FTS input is sanitized to an allowlist
+(letters, digits, underscore; everything else becomes a separator) before being
+bound as a parameter.
 
 ## Bundled Scraper Credentials — Security Theater
 

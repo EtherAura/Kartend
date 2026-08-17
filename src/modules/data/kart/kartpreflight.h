@@ -6,6 +6,7 @@
 #include <QSet>
 #include <QString>
 
+#include "kartlaunchertrust.h"
 #include "kartmanifest.h"
 
 /// Pre-import validation pass over a parsed kart manifest. Computes a report
@@ -17,9 +18,13 @@
 ///     overrides) is checked against the local filesystem / PATH so the user
 ///     learns about missing emulators or media players up front instead of
 ///     watching the first launch fail.
-///   • Suspicious paths — same allowlist used by the legacy
-///     suspiciousPathConfirmer, surfaced through the same report so the
-///     dialog can show every concern in one place.
+///   • Launcher trust — every launcher field the bundle supplies (paths,
+///     cores, launch parameters), because an imported launcher block chooses
+///     both the program and its arguments. Disclosure is unconditional; the
+///     allowlist only sets each finding's severity. See kartlaunchertrust.h.
+///   • Suspicious paths — the icon / placeholder half of the same allowlist,
+///     surfaced through the same report so the dialog can show every concern
+///     in one place.
 ///   • Name conflicts — flags the case where a collection with the same name
 ///     already exists; the merge dialog still handles per-item conflicts
 ///     later, but the preflight warns about full-collection collisions.
@@ -55,11 +60,25 @@ struct PreflightReport {
 
   // ─── Issues to surface ────────────────────────────────────
   QList<LauncherIssue> launcherIssues;
-  QList<QPair<QString, QString>> suspiciousPaths; // (field, path)
+  /// Every launcher field the bundle supplies, whether or not anything looks
+  /// wrong with it. Non-empty means the bundle carries executable content, so
+  /// the report can never be reported as clean.
+  QList<kart::KartLauncherFinding> launcherTrust;
+  QList<QPair<QString, QString>> suspiciousPaths; // (field, path) — icon / placeholder
   bool nameConflicts = false;
 
+  /// True when at least one launcher finding tripped a danger signal, as
+  /// opposed to merely being supplied by the bundle.
+  [[nodiscard]] bool hasElevatedLauncherTrust() const {
+    for (const kart::KartLauncherFinding &f : launcherTrust) {
+      if (kart::isElevatedLauncherTrustReason(f.reason)) return true;
+    }
+    return false;
+  }
+
   [[nodiscard]] bool hasIssues() const {
-    return !launcherIssues.isEmpty() || !suspiciousPaths.isEmpty() || nameConflicts;
+    return !launcherIssues.isEmpty() || !launcherTrust.isEmpty() || !suspiciousPaths.isEmpty() ||
+           nameConflicts;
   }
 };
 

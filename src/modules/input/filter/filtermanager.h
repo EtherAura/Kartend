@@ -120,6 +120,20 @@ public:
   /// (visible) and the caller should prewarm + retry (Kartend-l66sn).
   [[nodiscard]] bool artworkKeySetSettled() const;
 
+  /// Absolute item path -> hand-linked cover, from
+  /// IDatabaseManager::loadManualCoverPaths() (Kartend-1js9j).
+  ///
+  /// The hide-missing-artwork key set is name-based, so it answered "artless"
+  /// for an item whose cover was hand-linked rather than named after it — and
+  /// once the grid tile started painting that link, the filter was hiding an
+  /// item that renders a real cover. Consulting this map first moves the
+  /// predicate to match what the tile draws. Unlike the key set it needs no
+  /// warm directory cache: a link is a database fact, existence-checked when
+  /// the map was built, so it is authoritative even while the cascade is cold.
+  void setManualCoverPaths(const QHash<QString, QString> &manualCovers) {
+    m_manualCoverPaths = manualCovers;
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   // Filter operations
   // ─────────────────────────────────────────────────────────────────────────
@@ -192,10 +206,27 @@ private:
   // that have no artwork pipeline configured.
   [[nodiscard]] bool mediaItemHasArtwork(int mediaIndex) const;
 
-  // Rebuild m_artworkKeySet from the DirectoryCache listings when the cached
-  // copy is stale (directory changed, or the cache's contentsGeneration
-  // moved). Cheap when fresh: one generation read plus a string compare.
+  // Rebuild the artwork key sets from the DirectoryCache listings when the
+  // cached copies are stale (the cache's contentsGeneration moved, or the
+  // configured root changed). Cheap when fresh: one generation read plus a
+  // string compare.
   void ensureArtworkKeySet() const;
+
+  // The artwork directory whose key set answers for @p fullPath. This is the
+  // configured root unless the collection mirrors its media subfolders into
+  // the artwork tree, in which case it is the mirrored subdirectory the render
+  // path searches (Kartend-7f76f).
+  [[nodiscard]] QString artworkDirectoryForItem(const QString &fullPath) const;
+
+  // Key set + settledness for one artwork directory, built on first use and
+  // dropped wholesale when the generation moves.
+  struct ArtworkKeys {
+    QSet<QString> keys;
+    // Whether the cascade behind `keys` was fully cached when it was built. A
+    // cold directory's empty set means "not caught up", never "artless".
+    bool settled = false;
+  };
+  [[nodiscard]] const ArtworkKeys &artworkKeysFor(const QString &artworkDirectory) const;
 
   void determineTargetCollections(int subcollectionIndex, QSet<int> &targetCollections);
   [[nodiscard]] bool itemBelongsToTargetCollections(const QString &entry,
@@ -242,20 +273,26 @@ private:
   bool m_hideMissingArtwork = false;
   QString m_hideMissingArtworkDirectory;
 
-  // Precomputed artwork-backed key set for the hideMissingArtwork predicate
-  // (ArtworkUtils::buildArtworkKeySet over m_hideMissingArtworkDirectory).
-  // Every filter pass used to run the full findArtworkForFileCached cascade
-  // per media item — up to 20 DirectoryCache probes under the global lock,
-  // each with a potential first-miss stat sweep — a multi-second GUI freeze
-  // at 10k+ items. The set is built once and reused until the cache's
-  // contentsGeneration moves or the directory changes (ensureArtworkKeySet).
-  mutable QSet<QString> m_artworkKeySet;
+  // Precomputed artwork-backed key sets for the hideMissingArtwork predicate
+  // (ArtworkUtils::buildArtworkKeySet). Every filter pass used to run the full
+  // findArtworkForFileCached cascade per media item — up to 20 DirectoryCache
+  // probes under the global lock, each with a potential first-miss stat sweep
+  // — a multi-second GUI freeze at 10k+ items. Sets are built once and reused
+  // until the cache's contentsGeneration moves or the root changes.
+  //
+  // ONE SET PER ARTWORK DIRECTORY, not one per collection: a mirroring layout
+  // keeps each subfolder's art under its own mirrored directory, and a single
+  // set built from the root answered "artless" for every one of them
+  // (Kartend-7f76f). Collections that do not mirror only ever populate the one
+  // entry, so the common case is a hash hit on a one-element table.
+  mutable QHash<QString, ArtworkKeys> m_artworkKeySets;
   mutable quint64 m_artworkKeySetGeneration = 0;
   mutable QString m_artworkKeySetDirectory;
   mutable bool m_artworkKeySetValid = false;
-  // Whether the cascade backing m_artworkKeySet was fully cached when the
-  // set was built; stamped by ensureArtworkKeySet per generation.
-  mutable bool m_artworkKeySetSettled = false;
+  // fullPath -> hand-linked cover (see setManualCoverPaths). Empty for every
+  // library where nobody has linked a cover, which is the case
+  // mediaItemHasArtwork short-circuits on before it resolves any path.
+  QHash<QString, QString> m_manualCoverPaths;
 };
 
 #endif

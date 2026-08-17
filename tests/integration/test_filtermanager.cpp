@@ -387,6 +387,116 @@ void TestFilterManager::testHideMissingArtworkResolvesSubdirAndFullNameKeys() {
   ArtworkUtils::DirectoryCache::instance().clear();
 }
 
+// Kartend-7f76f: with includeArtworkSubfolders on, the render path resolves an
+// item's cover under <artwork>/<the item's media subfolder>. The predicate
+// built one key set from the artwork ROOT, so it saw nothing for any item in a
+// subfolder — it failed OPEN, which meant hideMissingArtwork quietly did
+// nothing at all for a mirrored collection rather than hiding the wrong rows.
+void TestFilterManager::testHideMissingArtworkMirrorsSubfolderIntoArtworkTree() {
+  QTemporaryDir mediaDir;
+  QTemporaryDir artDir;
+  QVERIFY(mediaDir.isValid());
+  QVERIFY(artDir.isValid());
+  QVERIFY(QDir(mediaDir.path()).mkpath(QStringLiteral("Live")));
+  QVERIFY(QDir(artDir.path()).mkpath(QStringLiteral("Live")));
+
+  // Recital is arted under the MIRRORED subdirectory; Encore, beside it, is
+  // not. Overture sits at the media root and is arted at the artwork root, so
+  // the flat case has to keep working through the very same pass.
+  const QStringList covers = {
+      QStringLiteral("Live/Recital.png"),
+      QStringLiteral("Overture.png"),
+  };
+  for (const QString &name : covers) {
+    QFile art(QDir(artDir.path()).filePath(name));
+    QVERIFY(art.open(QIODevice::WriteOnly));
+    art.write("x");
+    art.close();
+  }
+  // Warm both cascades — the root's and the mirrored subdirectory's. A cold
+  // directory fails open, which would pass this test for the wrong reason.
+  ArtworkUtils::DirectoryCache::instance().clear();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(QDir(artDir.path()).filePath(QStringLiteral("Live"))));
+
+  const QStringList paths = {
+      QDir(mediaDir.path()).filePath(QStringLiteral("Live/Recital.bin")),
+      QDir(mediaDir.path()).filePath(QStringLiteral("Live/Encore.bin")),
+      QDir(mediaDir.path()).filePath(QStringLiteral("Overture.bin")),
+  };
+
+  CollectionContext ctx;
+  ctx.config.mediaDirectory = mediaDir.path();
+  ctx.config.artworkDirectory = artDir.path();
+  ctx.config.folderBrowsing.includeArtworkSubfolders = true;
+  ctx.config.hideMissingArtwork = true;
+
+  FilterManager mgr;
+  mgr.setContext(ctx);
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  mgr.clearFilter();
+
+  // Recital survives on its mirrored cover and Overture on the root one;
+  // Encore is the only genuinely artless item and the only one pruned.
+  QVERIFY(mgr.isFiltered());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 2}));
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+}
+
+// The mirroring branch must not change collections that do not mirror: with
+// the flag off, a subfolder item is still answered by the artwork ROOT.
+void TestFilterManager::testHideMissingArtworkWithoutMirroringStillUsesTheRoot() {
+  QTemporaryDir mediaDir;
+  QTemporaryDir artDir;
+  QVERIFY(mediaDir.isValid());
+  QVERIFY(artDir.isValid());
+  QVERIFY(QDir(mediaDir.path()).mkpath(QStringLiteral("Live")));
+  QVERIFY(QDir(artDir.path()).mkpath(QStringLiteral("Live")));
+
+  // Named for the subfolder item but filed at the ROOT — which is exactly
+  // where a non-mirroring collection is supposed to look.
+  QFile art(QDir(artDir.path()).filePath(QStringLiteral("Recital.png")));
+  QVERIFY(art.open(QIODevice::WriteOnly));
+  art.write("x");
+  art.close();
+  // A decoy under the mirrored directory, for an item that has nothing at the
+  // root: it must NOT be consulted while the flag is off.
+  QFile decoy(QDir(artDir.path()).filePath(QStringLiteral("Live/Encore.png")));
+  QVERIFY(decoy.open(QIODevice::WriteOnly));
+  decoy.write("x");
+  decoy.close();
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+
+  const QStringList paths = {
+      QDir(mediaDir.path()).filePath(QStringLiteral("Live/Recital.bin")),
+      QDir(mediaDir.path()).filePath(QStringLiteral("Live/Encore.bin")),
+  };
+
+  CollectionContext ctx;
+  ctx.config.mediaDirectory = mediaDir.path();
+  ctx.config.artworkDirectory = artDir.path();
+  ctx.config.folderBrowsing.includeArtworkSubfolders = false;
+  ctx.config.hideMissingArtwork = true;
+
+  FilterManager mgr;
+  mgr.setContext(ctx);
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  mgr.clearFilter();
+
+  QVERIFY(mgr.isFiltered());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+}
+
 void TestFilterManager::testActualIndexRoundTripAcrossPrefixBands() {
   static const QList<CollectionConfig> collections = [] {
     QList<CollectionConfig> out;
@@ -436,4 +546,95 @@ void TestFilterManager::testUnifiedSortMapRemapsFilteredIndices() {
   QCOMPARE(spy.count(), 1);
   QCOMPARE(spy.at(0).at(0).toInt(), 3);
   QCOMPARE(spy.at(0).at(1).toInt(), 3);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hand-linked covers (Kartend-1js9j). The key set is built from artwork FILE
+// NAMES, so it has no way to know an item was linked to an image that is named
+// nothing like it. Once the grid tile and the cover-flow card started painting
+// those links, a key-set-only predicate hid items that visibly render a cover.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestFilterManager::testHideMissingArtworkKeepsHandLinkedItems() {
+  QTemporaryDir artDir;
+  QTemporaryDir elsewhere;
+  QVERIFY(artDir.isValid() && elsewhere.isValid());
+  // Alpha is covered the ordinary way; Beta's cover was picked by hand and
+  // lives outside the artwork directory under an unrelated name; Gamma has
+  // nothing at all.
+  QFile art(artDir.filePath(QStringLiteral("Alpha.png")));
+  QVERIFY(art.open(QIODevice::WriteOnly));
+  art.write("x");
+  art.close();
+  const QString linked = elsewhere.filePath(QStringLiteral("hand-picked.png"));
+  QFile linkedFile(linked);
+  QVERIFY(linkedFile.open(QIODevice::WriteOnly));
+  linkedFile.write("x");
+  linkedFile.close();
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+
+  static const QStringList paths = {
+      QStringLiteral("/items/Alpha.bin"),
+      QStringLiteral("/items/Beta.bin"),
+      QStringLiteral("/items/Gamma.bin"),
+  };
+  FilterManager mgr;
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  mgr.setHideMissingArtworkFilter(true, artDir.path());
+  mgr.setManualCoverPaths({{QStringLiteral("/items/Beta.bin"), linked}});
+
+  mgr.clearFilter();
+  QVERIFY(mgr.artworkKeySetSettled());
+  // Beta survives on its link; only the genuinely artless Gamma is pruned.
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 1}));
+
+  // Clearing the links puts Beta back where the key set alone would have it,
+  // so the predicate tracks the map rather than latching a verdict.
+  mgr.setManualCoverPaths({});
+  mgr.clearFilter();
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
+
+  ArtworkUtils::DirectoryCache::instance().clear();
+}
+
+void TestFilterManager::testHideMissingArtworkHandLinkAnswersEvenOnAColdCascade() {
+  QTemporaryDir artDir;
+  QTemporaryDir elsewhere;
+  QVERIFY(artDir.isValid() && elsewhere.isValid());
+  const QString linked = elsewhere.filePath(QStringLiteral("hand-picked.png"));
+  QFile linkedFile(linked);
+  QVERIFY(linkedFile.open(QIODevice::WriteOnly));
+  linkedFile.write("x");
+  linkedFile.close();
+  // No prewarm: the cold-cascade fail-open path (Kartend-l66sn) is active.
+  ArtworkUtils::DirectoryCache::instance().clear();
+
+  static const QStringList paths = {
+      QStringLiteral("/items/Alpha.bin"),
+      QStringLiteral("/items/Beta.bin"),
+  };
+  FilterManager mgr;
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  mgr.setHideMissingArtworkFilter(true, artDir.path());
+  mgr.setManualCoverPaths({{QStringLiteral("/items/Beta.bin"), linked}});
+
+  // Everything is visible while the cascade is cold — but Beta is visible for
+  // a stronger reason than Alpha, and stays visible once the cascade settles
+  // and the pass turns authoritative.
+  mgr.clearFilter();
+  QVERIFY(!mgr.artworkKeySetSettled());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 1}));
+
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+  mgr.clearFilter();
+  QVERIFY(mgr.artworkKeySetSettled());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{1}));
+
+  ArtworkUtils::DirectoryCache::instance().clear();
 }

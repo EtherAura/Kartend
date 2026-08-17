@@ -120,6 +120,11 @@ void MenuController::setupActionImportTheme() {
 void MenuController::setupActionImportFromLauncher() {
   if (!m_ctx.ui || !m_ctx.mainWindow) return;
   m_importFromLauncherAction = new QAction(tr("Import from Launcher..."), this);
+  // Reachable without the mouse. It is the only way into the importer, and it
+  // sits two levels deep under File → Import, so re-running it — which is the
+  // normal way to pick up a launcher's newly-installed games — meant walking
+  // the menus every time.
+  m_importFromLauncherAction->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_I));
   m_ctx.mainWindow->addAction(m_importFromLauncherAction);
   if (m_ctx.ui->menuImport) {
     m_ctx.ui->menuImport->addAction(m_importFromLauncherAction);

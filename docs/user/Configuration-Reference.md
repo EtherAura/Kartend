@@ -19,9 +19,23 @@ The configuration file lives at `~/.config/kartend/kartend.cfg` (see
 Restart Kartend after editing the file by hand. Changes through the
 Settings Dialog are saved immediately.
 
-> **Path expansion** — paths support `~` for the user home directory.
-> Environment variables like `$HOME` and `$XDG_*` are *not* expanded;
-> use `~` or absolute paths.
+> **Path expansion** — paths support `~` for the user home directory
+> (only a bare `~` or a leading `~/`; a `~` mid-path is a literal
+> character) and `%collection%` for the owning collection's name.
+> Expansion happens when the path is *used*, not when it is read — the
+> INI keeps whatever you typed. Environment variables like `$HOME` and
+> `$XDG_*` are *not* expanded; use `~` or absolute paths.
+>
+> **Path rejection** — path values are screened on load and on save.
+> A value containing a shell metacharacter (semicolon, pipe, backtick,
+> dollar, angle bracket), a newline, a NUL byte, a `..` traversal
+> segment, or — outside Windows — a backslash is
+> refused and read back as empty, with a warning in the log. Ampersands,
+> parentheses and brackets are deliberately allowed — they are ordinary
+> in real filenames and safe when paths are passed as process arguments
+> rather than through a shell. If a path key you hand-edited comes
+> back blank, check [Logging & Diagnostics](Logging-and-Diagnostics.md)
+> before assuming the key was ignored.
 
 > **Config-only keys** — most keys on this page have a matching
 > control in the [Settings Dialog](Settings-Dialog.md), but a handful
@@ -38,7 +52,7 @@ Settings Dialog are saved immediately.
 | `int` | integer | `gridWidth=6` |
 | `float` | decimal | `attractModeScrollSpeed=1.5` |
 | `path` | filesystem path with optional `~` | `mediaDirectory=~/Videos` |
-| `csv` | comma-separated values, no spaces around commas | `extensions=mkv,mp4,webm` |
+| `csv` | comma-separated values; spaces around commas are trimmed on read | `extensions=mkv,mp4,webm` |
 | `hex` | `#RRGGBB` color | `backgroundColor=#1a1a2e` |
 | `enum` | one of a fixed value list (documented inline) | `viewType=list` |
 | `int (0–255)` | 8-bit integer (used for alpha and tint) | `sidebarHeaderBgOpacity=200` |
@@ -53,7 +67,7 @@ Settings Dialog are saved immediately.
 | `wrapNavigation` | bool | `false` | Wrap selection at grid edges. |
 | `selectItemOnHover` | bool | `false` | Auto-select when the pointer enters a tile. |
 | `startupCollection` | string | empty | Open this collection on launch. Empty = first root collection. |
-| `useHomeView` | bool | `false` | Open a synthetic Home view at startup that shows one tile per root collection. Takes priority over `startupCollection` when both are set. `Back` from any root-level collection returns here. See [Shell Collections](Shell-Collections.md#nesting-shells). |
+| `useHomeView` | bool | `false` | Open a synthetic Home view at startup that shows one tile per root collection. Only opens at startup when `startupCollection` is empty — a pinned collection wins, so a per-launch override still lands where you asked. `Back` from any root-level collection returns here regardless. See [Shell Collections](Shell-Collections.md#nesting-shells). |
 | `homeViewLabel` | string | empty | Override the Home view's title and toolbar-button label. Empty = localized **Home**. |
 | `homeViewIcon` | path | empty | Absolute path to a custom Home toolbar-button icon. Empty = themed icon. |
 
@@ -62,6 +76,7 @@ Settings Dialog are saved immediately.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `pixmapCacheSizeMB` | int | `50` | Qt pixmap cache budget (10–500). |
+| `artworkDiskCacheBudgetMB` | int | `2048` | Budget for the on-disk decoded-artwork cache. A background walk evicts the oldest-touched entries once the directory exceeds this. `0` = unlimited (eviction disabled); any other value clamps into 256–32768 so a typo can't turn the cache into permanent churn. |
 | `scrollAnimationDurationMs` | int | `1500` | Scroll ease duration. |
 | `scrollVelocityMultiplier` | float | `1.0` | Global scroll speed multiplier (0.25–5.0). |
 | `videoThumbnailExtractionTimeoutMs` | int | `4000` | Hard cap per video-thumbnail extraction in ms (1000–30000). After this window a null pixmap is cached so the queue advances. |
@@ -119,13 +134,13 @@ Button names are the SDL / Qt6::Gamepad standard labels (`A`, `B`, `X`,
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `artworkCycleModifier` | enum | `Shift` | Modifier paired with middle-click to cycle artwork types. One of `Shift`, `Control`, `Alt`, `Meta`. |
+| `artworkCycleModifier` | int | `33554432` (Shift) | Modifier paired with middle-click to cycle artwork types. Stored as the numeric `Qt::KeyboardModifier` value, not a name: `33554432` Shift, `67108864` Ctrl, `134217728` Alt, `268435456` Meta. Anything else is coerced back to Shift on load, so pick from the Settings Dialog dropdown rather than hand-editing. |
 
 ### Sorting
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `sortMode` | enum | `NameAscending` | One of `NameAscending`, `NameDescending`, `DateAscending`, `DateDescending`, `SizeAscending`, `SizeDescending`, `Random`. |
+| `sortMode` | int | `0` Name A→Z | Stored as an integer, not a name: `0` Name A→Z · `1` Name Z→A · `2` Collection A→Z · `3` Collection Z→A · `4` Artwork first · `5` Artwork last · `6` Random · `7` Date newest · `8` Date oldest · `9` Size largest · `10` Size smallest. Anything outside 0–10 is coerced back to `0` on load. |
 | `excludeSubfoldersFromSort` | bool | `false` | Keep subcollection / virtual-folder tiles at the top regardless of sort. |
 
 ### Type filter & subcollection visibility
@@ -184,6 +199,7 @@ visibility keys default to `true`; text overrides default to empty
 | `titleTintSaturation` | int (0–255) | `180` | Tile-title tint saturation. |
 | `titleTintLightness` | int (0–255) | `60` | Tile-title tint lightness. |
 | `titleBaseColor` | hex | empty | Tile-title base color. Empty = use selection color. |
+| `titleTintEnabled` | bool | see note | Master toggle for tile-title tinting. New installs default to off. On upgrade the default is inferred: if this key has never been written but any of `titleTintSaturation` / `titleTintLightness` / `titleBaseColor` has, the tint stays **on** — flipping a library's titles to plain text on upgrade would be an unannounced appearance change. |
 | `showTitleInPlaceholder` | bool | `false` | Overlay item title on placeholder tiles. |
 
 ### Splash screens & startup video
@@ -211,7 +227,7 @@ visibility keys default to `true`; text overrides default to empty
 |-----|------|---------|-------------|
 | `runtimeDetectionEnabled` | bool | `false` | Track when launched items run; show **Now Playing** overlay. See [Splash & Now Playing](Splash-and-Now-Playing.md). |
 | `historyEnabled` | bool | `true` | Record launch history. |
-| `historyMaxEntries` | int | `500` | Soft cap on history rows. `≤ 0` = unlimited. |
+| `historyMaxEntries` | int | `500` | Cap on retained history rows; the oldest are trimmed past it. Clamped to 10–50000 on load, so there is no "unlimited" value — set it high rather than to `0`. |
 
 ### Marquee / secondary display
 
@@ -252,15 +268,19 @@ the primary screen and logs a warning.
 
 ### Launcher presets
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `launcherPresets` | serialized | empty | Reusable launcher configs (id / name / path / core / params). Managed via the Settings → Launcher tab. |
+Reusable launcher configs are **not** `[General]` keys — they live in their
+own top-level `[Launchers]` array group, documented
+[below](#launchers--global-launcher-preset-registry).
 
 ### Session state
 
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `lastSelectedItems` | hash | empty | Auto-managed map of collection → last selected item index. |
+Session state — which item was selected last in each collection, so
+`rememberSelection` has something to restore — is **not** in
+`kartend.cfg`. It lives in `~/.cache/kartend/metadata/session.json`, and
+is deliberately outside the config file: it's regenerable, changes on
+every navigation, and would otherwise churn a dotfile you're
+diff-tracking. Deleting it loses nothing but the remembered positions.
+See [File Locations](File-Locations.md).
 
 ## `[Scrapers]` — credential storage
 
@@ -300,6 +320,11 @@ Quality / Custom); switching to Custom unlocks the numeric fields.
 | `scrapeAutoResume` | bool | `false` | Silently resume an interrupted batch on next launch instead of showing the Resume / Discard prompt. Off by default so first-time users see the prompt and learn the recovery path. |
 | `scrapeLogging` | bool | `false` | Raise the `kartend.scrape*` logging categories to debug+info and tee output to a size-capped `scrape.log` in the config directory. The only way to capture scrape diagnostics from a GUI build. |
 | `preferredRegion` | string | `us` | Fallback ScreenScraper region (`us` / `eu` / `jp` / `wor` / …). Items still honor their own matched-ROM region first; this only backstops items with no region entry. |
+| `scraperHashMode` | enum | `0` Always | When to hash a file for content-based identification. `0` Always / `1` SizeGated (hash only files at or under `scraperMaxHashableSizeMB`; larger ones fall straight through to filename matching) / `2` Never (filename-only — cheapest, for libraries whose filenames you trust). Clamped to 0–2. |
+| `scraperMaxHashableSizeMB` | int | `4096` | Size gate used by `scraperHashMode=1` (1–65536). The default covers most disc images in an archive while excluding ones that would never extract inside a sane timeout. |
+| `scraperRegionSource` | enum | `0` TrustScraperFirst | How an item's region is decided. `0` TrustScraperFirst (the provider's matched-file region wins; a filename tag such as `(Japan)` is the fallback only when hashing didn't narrow the candidate) / `1` FilenameWhenAvailable (the filename tag always preempts the provider) / `2` ScraperOnly (never read the filename). Clamped to 0–2. |
+| `datLibraryPath` | path | empty | Folder of catalogue (DAT) files probed at startup to *propose* collection matches. Proposals are confirm-only — nothing is applied without you accepting it. Empty = feature off. See [DAT Audit](DAT-Audit.md). |
+| `quarantineDefaultDir` | path | empty | Prefills the quarantine-folder field in the DAT auditor's Fix dialog when the audited collection has no per-run value. |
 
 ## `[Launchers]` — global launcher-preset registry
 
@@ -320,13 +345,21 @@ display name; renaming a collection rewrites the section header.
 | `type` | string | empty | Media-type tag — a preset (Video / Audio / Images / Documents / Games) or a custom value. Used by the [type filter](Search-Sort-Filter.md#type-filter) and to pick a scraper. |
 | `scraperProviderId` | string | empty | Pinned metadata scraper id (`tmdb`, `screenscraper`, `musicbrainz`, `openlibrary`). Empty = resolve automatically from `type`. |
 | `mediaDirectory` | path | empty | Folder of items. Empty = parent-only. |
-| `artworkDirectory` | path | empty | Folder of cover images. |
-| `videoDirectory` | path | empty | Folder of preview videos. |
-| `manualDirectory` | path | empty | Folder of per-item manuals. |
+| `artworkDirectory` | path | empty | Root of the media-asset tree — cover images plus the `video/` and `manual/` subfolders (see [Artwork](Artwork.md)). |
 | `extensions` | csv | empty | File extensions to scan. Empty = all. |
 | `collectionIcon` | path | empty | Subcollection tile icon. |
 | `placeholderArtwork` | path | empty | Custom placeholder image. |
+| `watchFilesystem` | bool | `false` | Watch this collection's media folder and rescan when files change, instead of only on demand. |
 | `importSource` | string | empty | [Launcher-import](Launcher-Import.md) marker (`steam` / `flatpak` / `lutris`). Non-empty = this collection's media folder holds `.kartlink` stubs Kartend re-syncs from that launcher at startup and on demand. Set by the import flow; not normally hand-edited. |
+| `importScope` | string | empty | Which slice of the source launcher's library the import covered. Written by the import flow alongside `importSource`. |
+| `importSourceKey` | string | empty | Identifies the specific source instance (e.g. which Steam library or Flatpak installation) so re-sync targets the right one. Written by the import flow. |
+
+> **Retired keys** — `videoDirectory` and `manualDirectory` were separate
+> folders once. They were folded into a single asset root: preview videos
+> now live under `<artworkDirectory>/video/` and manuals under
+> `<artworkDirectory>/manual/`. Kartend no longer *reads* either key, and
+> actively removes them from the INI on the next save, so setting one by
+> hand does nothing and does not survive. Move the files instead.
 
 ### Hierarchy
 
@@ -342,7 +375,7 @@ secondary linked parents:
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `additionalParents` | array | empty | Linked secondary parents — persisted as a QSettings array (`additionalParents\1\name=…`). See [Collections → Linked Parents](Collections.md#linked-parents). |
+| `additionalParents` | array | empty | Linked secondary parents — persisted as a QSettings array (`additionalParents\1\name=…`). See [Collections → Linked Parents](Collections.md#linked-parents-alias-parents). |
 
 ### Launcher
 
@@ -354,8 +387,8 @@ See [Launchers](Launchers.md) for the complete model.
 | `launcherName` | string | empty | Display name. Empty = filename of `launcherPath`. |
 | `corePath` | path | empty | LibRetro core (RetroArch only). |
 | `launchParameters` | string | empty | Extra arguments passed before the file path. |
-| `additionalLaunchers` | serialized | empty | Secondary launchers (id / name / path / core / params / presetId). |
-| `defaultLauncherIndex` | int | `0` | Default selection index (0 = primary). |
+| `additionalLaunchers` | array | empty | Secondary launchers, persisted as a QSettings array (`additionalLaunchers\1\name=…`) with `name` / `launcherPath` / `corePath` / `launchParameters` / `presetId` per entry. An entry with neither a `launcherPath` nor a `presetId` can't launch anything, so it is dropped on load and the INI rewritten. |
+| `defaultLauncherIndex` | int | `0` | Default selection index (0 = primary). Clamped to the number of launchers actually present, so a stale index from a hand-edit can't point past the end. |
 
 ### Scraper overrides
 
@@ -375,12 +408,13 @@ here. See [Scraper](Scraper.md) for the workflow side.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `includeContentSubfolders` | bool | `false` | Show subfolders as virtual-folder tiles. |
-| `includeArtworkSubfolders` | bool | `false` | Match artwork in subfolders too. |
+| `includeArtworkSubfolders` | bool | `false` | Mirror content subfolders into the artwork folder when matching artwork. |
 | `showAllSubfolderItems` | bool | `false` | Mix subfolder items into the parent grid. |
 | `showAllSubcollectionItems` | bool | `false` | Mix descendant collection items into this grid. |
 | `showHiddenFolders` | bool | `false` | Include dot-prefixed folders. |
 | `extractArchives` | bool | `false` | Auto-extract archives before launch. |
 | `extractedExtension` | string | empty | Which extension to launch from inside an archive. |
+| `groupMultiDisc` | bool | `false` | Collapse files that differ only by a disc marker — `(Disc 1)`, `(CD 2)`, `[Side A]` — into one item backed by a playlist generated under Kartend's data directory. See [Multi-disc grouping](Collections.md#multi-disc-grouping). |
 
 ### Grid layout
 
@@ -388,14 +422,14 @@ here. See [Scraper](Scraper.md) for the workflow side.
 |-----|------|---------|-------------|
 | `viewType` | enum | `grid` | `grid` / `list` / `coverflow` / `horizontal`. |
 | `gridWidth` | int | `4` | Items per row in Grid / List views. |
-| `gridWidthSidebarHidden` | int | derived | Override `gridWidth` when the **Expand** sidebar is hidden. |
-| `horizontalGridHeight` | int | `4` | Items per column in Horizontal view. |
-| `horizontalGridHeightSidebarHidden` | int | derived | Override for Horizontal when sidebar hidden. |
-| `gridHeightSidebarHidden` | int | derived | Override when **Expand** sidebar is docked top/bottom. |
-| `itemWidth` | int | `200` | Tile width (pixels). |
-| `itemHeight` | int | `200` | Tile height (pixels). |
-| `fontSize` | int | `12` | Tile-title font size. |
-| `cornerRadius` | int | `8` | Tile rounded-corner radius. |
+| `gridWidthSidebarHidden` | int | `0` | Override `gridWidth` when the **Expand** sidebar is hidden. `0` = no override; follow `gridWidth`. |
+| `horizontalGridHeight` | int | `0` | Items per column in Horizontal view. `0` = fall back to `gridWidth`. |
+| `horizontalGridHeightSidebarHidden` | int | `0` | Override for Horizontal when sidebar hidden. `0` = no override. |
+| `gridHeightSidebarHidden` | int | `0` | Override when **Expand** sidebar is docked top/bottom. `0` = no override. |
+| `itemWidth` | int | `220` | Tile width (pixels). |
+| `itemHeight` | int | `245` | Tile height (pixels). |
+| `fontSize` | int | `8` | Tile-title font size (points). |
+| `cornerRadius` | int | `0` | Tile rounded-corner radius. `0` = square corners. |
 | `horizontalSpacing` | int | `20` | Pixel gap between columns. |
 | `verticalSpacing` | int | `20` | Pixel gap between rows. |
 | `horizontalAlignment` | enum | `center` | `left` / `center` / `right`. |
@@ -410,8 +444,8 @@ here. See [Scraper](Scraper.md) for the workflow side.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `listFontSize` | int | `11` | Row text size. |
-| `listRowHeight` | int | `40` | Row height in pixels. |
+| `listFontSize` | int | `8` | Row text size (points). |
+| `listRowHeight` | int | `32` | Row height in pixels. |
 | `listRowColor` | hex | derived | Row background. |
 | `listAltRowColor` | hex | derived | Alternating row background. |
 
@@ -420,14 +454,14 @@ here. See [Scraper](Scraper.md) for the workflow side.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `backgroundType` | enum | `color` | `color` / `image` / `video`. |
-| `backgroundColor` | hex | `#1a1a2e` | Solid background color. |
+| `backgroundColor` | hex | empty | Solid background color. Empty = no override; the viewport keeps the system/theme background. |
 | `backgroundImage` | path | empty | Wallpaper image. |
 | `backgroundVideo` | path | empty | Looping muted video wallpaper. |
 | `primaryColor` | hex | derived | Toolbar / menu bar / chrome color. |
 | `tileColor` | hex | derived | Item tile / placeholder color. |
 | `selectionColor` | hex | derived | Selection rectangle color. |
 | `vignetteEnabled` | bool | `false` | Darken the viewport corners. |
-| `vignetteIntensity` | int (0–100) | `50` | Vignette strength. |
+| `vignetteIntensity` | int (0–100) | `60` | Vignette strength. `0` = no effect, `100` = pitch black at the corners. |
 | `wallpaperParallax` | bool | `false` | Background image scrolls slower than items. |
 | `parallaxStrength` | int (0–100) | `30` | Parallax scrolling factor. |
 | `toolbarBackdropBlur` | bool | `false` | Blur the toolbar background. |
@@ -437,15 +471,15 @@ here. See [Scraper](Scraper.md) for the workflow side.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `titleExclusionPatterns` | csv (regex) | empty | Patterns to strip from displayed titles. |
-| `titleExclusionEnabled` | bool | `false` | Toggle the pattern list without losing it. |
+| `titleExclusionPatterns` | array | empty | Regex patterns stripped from displayed titles. Persisted as a QSettings array (`titleExclusionPatterns\1\pattern=…`), *not* a comma-separated list — a regex is full of commas, brackets and backslashes, and a delimited list would need escaping rules nobody would get right by hand. |
+| `titleExclusionEnabled` | bool | `true` | Toggle the pattern list without losing it. Defaults on, so a pattern you add applies immediately rather than silently doing nothing. |
 
 ### Header logo
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `headerLogoImage` | path | empty | Logo image painted at the top of the grid. |
-| `headerLogoPosition` | enum | `topleft` | `topleft` / `topcenter` / `topright`. |
+| `headerLogoPosition` | enum | `topcenter` | `topleft` / `topcenter` / `topright`. An unrecognized value falls back to `topcenter` and logs a warning. |
 
 ### Sidebar (per-collection styling)
 
@@ -454,11 +488,11 @@ See [Sidebar & Details Pane](Sidebar-and-Details-Pane.md) for behavior.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `sidebarVisible` | bool | `false` | Sidebar shown by default. |
-| `sidebarMode` | enum | `overlay` | `overlay` (floating) / `expand` (docked). |
-| `sidebarPosition` | enum | `right` | `right` / `left` / `top` / `bottom`. |
+| `sidebarMode` | enum | `overlay` | `overlay` (floating) / `fixed` (docked — the **Expand** mode in the UI). The INI spelling is `fixed`, not `expand`; anything other than `fixed` reads as `overlay`. |
+| `sidebarPosition` | enum | `right` | `right` / `left` / `top` / `bottom`. An unrecognized value falls back to `right` and logs a warning. |
 | `sidebarWidth` | int | `300` | Preferred width (pixels). |
-| `sidebarHeight` | int | `200` | Preferred height for top/bottom dock. |
-| `sidebarWidthLocked` | bool | `false` | Disable resize dragging. |
+| `sidebarHeight` | int | `280` | Preferred height for top/bottom dock. |
+| `sidebarWidthLocked` | bool | `true` | Disable resize dragging. |
 | `sidebarBackgroundType` | enum | `color` | `color` / `image` / `pattern`. |
 | `sidebarBackgroundColor` | hex | derived | Sidebar background color. |
 | `sidebarBackgroundImage` | path | empty | Sidebar background image. |
@@ -470,10 +504,10 @@ See [Sidebar & Details Pane](Sidebar-and-Details-Pane.md) for behavior.
 | `sidebarHeaderBgColor` | hex | derived | Section-header bubble color. |
 | `sidebarHeaderBgOpacity` | int (0–255) | `200` | Section-header bubble alpha. |
 | `sidebarSectionBgColor` | hex | derived | Body-section bubble color. |
-| `sidebarSectionBgOpacity` | int (0–255) | `200` | Body-section bubble alpha. |
+| `sidebarSectionBgOpacity` | int (0–255) | `170` | Body-section bubble alpha. |
 | `sidebarFontFamily` | string | empty | Sidebar font family. Empty = inherit. |
 | `sidebarFontPointSize` | int | `0` | Sidebar font size. `0` = inherit. |
-| `sidebarActiveTab` | enum | `item` | Active tab on first show: `item` / `collection` / `file`. |
+| `sidebarActiveTab` | enum | `item` | Active tab on first show: `item` / `collection` / `file`. An unrecognized value falls back to `item` and logs a warning. |
 
 ### Per-collection display behavior
 
@@ -483,17 +517,27 @@ See [Sidebar & Details Pane](Sidebar-and-Details-Pane.md) for behavior.
 | `expandMode` | bool | `false` | Two-stage activation (preview, then launch). |
 | `customArtworkTypes` | csv | empty | Free-form custom artwork-type ids. See [Artwork](Artwork.md). |
 
-### Runtime-only fields (not normally written)
+### Runtime-only fields (never written to the INI)
 
-These appear in `kartend.cfg` only as session state — don't set them
-manually.
+You may see these field names in source code or in a bug report. They are
+**not** INI keys — they exist only in the in-memory `CollectionConfig`, are
+never loaded from or saved to `kartend.cfg`, and writing them by hand has
+no effect.
 
-| Key | Description |
-|-----|-------------|
-| `currentSubfolder` | Relative path to the active subfolder when virtual folder navigation is in use. |
-| `isPlaylist` | Marker for synthesized playlist collections. |
+| Field | Description |
+|-------|-------------|
+| `currentSubfolder` | Relative path to the active subfolder when virtual-folder navigation is in use. Reset on every launch by design — where you were browsing inside a collection is navigation state, not configuration. |
+| `isPlaylist` | Marker for synthesized playlist collections. Playlists are rows in the SQLite database; a matching INI section would shadow the row, so the save path skips them entirely. |
 | `playlistId` | UUID of the underlying playlist row. |
 | `playlistReservedKind` | Empty for user playlists, `favorites` for the built-in favorites playlist. |
+
+### Forward-compatible keys
+
+Any key in a collection section that this build doesn't recognize is
+stashed on load and replayed on save, so opening an older Kartend against
+a config written by a newer one doesn't silently drop the newer keys. The
+exceptions are the retired `videoDirectory` / `manualDirectory`, which are
+deliberately dropped rather than preserved.
 
 ## Example: a complete media collection
 
@@ -509,8 +553,9 @@ runtimeDetectionEnabled=true
 name=Films
 type=Video
 mediaDirectory=~/Videos/Films
-artworkDirectory=~/Videos/Films/_covers
-videoDirectory=~/Videos/Films/_previews
+; preview videos go under ~/Videos/Films/_assets/video/,
+; manuals under ~/Videos/Films/_assets/manual/
+artworkDirectory=~/Videos/Films/_assets
 extensions=mkv,mp4,zip
 launcherPath=/usr/bin/mpv
 launchParameters=--fullscreen
@@ -532,8 +577,10 @@ toolbarBackdropBlur=true
 sidebarVisible=true
 sidebarMode=overlay
 sidebarPosition=right
-titleExclusionPatterns=\s*\(USA\),\s*\[!\]
 titleExclusionEnabled=true
+titleExclusionPatterns\size=2
+titleExclusionPatterns\1\pattern=\s*\(USA\)
+titleExclusionPatterns\2\pattern=\s*\[!\]
 hideMissingArtwork=true
 ```
 

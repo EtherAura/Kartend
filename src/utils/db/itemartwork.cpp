@@ -11,6 +11,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
+#include "artworkutils.h"
 #include "errorutils.h"
 #include "extensionutils.h"
 #include "pathutils.h"
@@ -40,6 +41,27 @@ constexpr const char *UPSERT_SQL =
 constexpr const char *DELETE_ONE_SQL =
     "DELETE FROM item_artwork "
     "WHERE collection_uuid = ? AND path = ? AND artwork_type = ?";
+
+/// Bulk manual-cover query (Kartend-1js9j). The artwork_type IN (...) list is
+/// filled from manualCoverTypes() at call time so the set of cover-capable
+/// manual types stays defined in exactly one place; gallery-only rows (logo,
+/// custom types, and the scraper's non-standard cover variants — see
+/// manualCoverTypes) never reach the fold. ORDER BY path lets the fold stream
+/// one item at a time.
+QString selectManualCoversSql(int coverTypeCount) {
+  QString placeholders;
+  placeholders.reserve(coverTypeCount * 2);
+  for (int i = 0; i < coverTypeCount; ++i) {
+    if (i > 0) {
+      placeholders += QLatin1Char(',');
+    }
+    placeholders += QLatin1Char('?');
+  }
+  return QStringLiteral("SELECT path, artwork_type, manual_path FROM item_artwork "
+                        "WHERE manual_path IS NOT NULL AND manual_path != '' "
+                        "AND artwork_type IN (") +
+         placeholders + QStringLiteral(") ORDER BY path");
+}
 
 QVariant nullableString(const QString &value) {
   return value.isEmpty() ? QVariant(QMetaType(QMetaType::QString)) : QVariant(value);
@@ -73,6 +95,23 @@ const QStringList &standardTypes() {
 
 bool isStandardType(const QString &artworkType) {
   return standardTypes().contains(artworkType);
+}
+
+const QStringList &manualCoverTypes() {
+  // coverSubdirPriority ∩ standardTypes, in coverSubdirPriority order — see
+  // the header for why the scraper-written non-standard cover variants
+  // (box-3d / mixrbv1 / mixrbv2) are excluded from the MANUAL fold while
+  // still participating in subdirectory auto-discovery (Kartend-u67w0).
+  static const QStringList types = [] {
+    QStringList filtered;
+    for (const QString &type : ArtworkUtils::coverSubdirPriority()) {
+      if (isStandardType(type)) {
+        filtered.append(type);
+      }
+    }
+    return filtered;
+  }();
+  return types;
 }
 
 QString standardTypeDisplayName(const QString &artworkType) {
@@ -270,6 +309,85 @@ QString resolveArtworkPath(const QString &overridePath, const QString &baseName,
     return {};
   }
   return findStandardArtwork(baseName, artworkDirectory, artworkType);
+}
+
+QString resolveCoverPath(const QHash<QString, QString> &manualByType,
+                         const QString &autoDiscovered) {
+  // The empty map is the overwhelmingly common case (no hand-linked artwork on
+  // this item at all), and it must cost nothing beyond the branch — this runs
+  // once per staged row on every scan.
+  if (!manualByType.isEmpty()) {
+    // manualCoverTypes owns the definition of "a type whose MANUAL link can
+    // supply the cover". Types outside the list (logo, custom types, the
+    // scraper's non-standard cover variants) are gallery-only here — even
+    // when a caller hands us an unfiltered row map, this walk is the gate
+    // (Kartend-u67w0: DatabaseManager's write-through passes every row).
+    for (const QString &type : manualCoverTypes()) {
+      const QString link = manualByType.value(type).trimmed();
+      if (link.isEmpty()) {
+        continue;
+      }
+      const QString expanded = expandTilde(link);
+      // Same stat resolveArtworkPath applies. A link whose target was deleted
+      // is skipped, not returned: the fallback below then reports whatever
+      // auto-discovery still finds, which is what the item actually renders.
+      if (QFile::exists(expanded)) {
+        return expanded;
+      }
+    }
+  }
+  return autoDiscovered;
+}
+
+ErrorUtils::Result<QHash<QString, QString>> loadManualCoverPaths(QSqlDatabase &db) {
+  if (!db.isOpen()) {
+    return ErrorContext::warning(ErrorCode::DatabaseNotOpen, "Database not open",
+                                 "ItemArtworkStore::loadManualCoverPaths");
+  }
+
+  const QStringList &coverTypes = manualCoverTypes();
+  QSqlQuery q(db);
+  if (!q.prepare(selectManualCoversSql(static_cast<int>(coverTypes.size())))) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                               "Failed to prepare item_artwork manual-cover select",
+                               "ItemArtworkStore::loadManualCoverPaths")
+        .withDetails(q.lastError().text());
+  }
+  for (const QString &type : coverTypes) {
+    q.addBindValue(type);
+  }
+  if (!q.exec()) {
+    return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                               "Failed to query item_artwork manual covers",
+                               "ItemArtworkStore::loadManualCoverPaths")
+        .withDetails(q.lastError().text());
+  }
+
+  QHash<QString, QString> covers;
+  QString currentPath;
+  QHash<QString, QString> manualByType;
+  // One item's links are contiguous thanks to ORDER BY path, so the fold only
+  // ever holds the group it is inside.
+  const auto flush = [&]() {
+    if (currentPath.isEmpty()) {
+      return;
+    }
+    const QString cover = resolveCoverPath(manualByType, QString());
+    if (!cover.isEmpty()) {
+      covers.insert(currentPath, cover);
+    }
+    manualByType.clear();
+  };
+  while (q.next()) {
+    const QString path = q.value(0).toString();
+    if (path != currentPath) {
+      flush();
+      currentPath = path;
+    }
+    manualByType.insert(q.value(1).toString(), q.value(2).toString());
+  }
+  flush();
+  return covers;
 }
 
 } // namespace ItemArtworkStore

@@ -98,6 +98,17 @@ public:
 
   [[nodiscard]] CoverFlowWidget *widget() const { return m_widget; }
 
+  /// Absolute item path -> hand-linked cover, from
+  /// IDatabaseManager::loadManualCoverPaths() (Kartend-1js9j). A card face is
+  /// resolved cache-only because a rebuild touches every card, so the carousel
+  /// cannot ask the database per item any more than the grid can — it reads
+  /// this prebuilt map instead, ahead of the name-based lookup, so a hand-picked
+  /// cover shows on the card exactly as it does on the tile. ScrollManager owns
+  /// the map and re-pushes it when links change.
+  void setManualCoverPaths(const QHash<QString, QString> &manualCovers) {
+    m_manualCoverPaths = manualCovers;
+  }
+
   /// Number of carousel slots still waiting on a cold artwork-directory
   /// cache (Kartend-6x8tn). Observability for tests / diagnostics only.
   [[nodiscard]] int pendingArtworkCount() const { return m_pendingArtwork.size(); }
@@ -174,6 +185,9 @@ private:
   QWidget *m_gridContainer = nullptr;
   const CollectionContext *m_context = nullptr;
   const QList<CollectionConfig> *m_collections = nullptr;
+  // fullPath -> hand-linked cover (see setManualCoverPaths). Empty for every
+  // library where nobody has linked a cover.
+  QHash<QString, QString> m_manualCoverPaths;
   ScrollDataStore *m_dataManager = nullptr;
 
   // The carousel widget is parented to the items-page content widget, not to

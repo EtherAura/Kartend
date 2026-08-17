@@ -300,3 +300,32 @@ void TestMenuController::setupMenuBar_groupsImportAndExportIntoSubmenus() {
            QStringList({QStringLiteral("Export Collection as Kart..."),
                         QStringLiteral("Export Current Theme...")}));
 }
+
+void TestMenuController::setupMenuBar_bindsImportFromLauncherShortcut() {
+  // Kartend-xv4if: the importer sits two levels deep under File → Import and
+  // has no other entry point, so without a shortcut the only way in is the
+  // mouse. Re-running it is the normal way to pick up newly-installed games,
+  // and it is what the docs walkthrough drives. Asserting the exact sequence
+  // is deliberate — a silent rebinding would break both.
+  QMainWindow win;
+  Ui_MainWindow ui;
+  ui.setupUi(&win);
+
+  GeneralSettings settings;
+  MenuController controller;
+  MenuControllerContext ctx;
+  ctx.ui = &ui;
+  ctx.mainWindow = &win;
+  ctx.getGeneralSettings = [&settings] { return &settings; };
+  controller.setContext(ctx);
+
+  controller.setupMenuBar();
+
+  QVERIFY(ui.menuImport);
+  const QList<QAction *> actions = ui.menuImport->actions();
+  const auto it = std::find_if(actions.begin(), actions.end(), [](const QAction *action) {
+    return action->text() == QStringLiteral("Import from Launcher...");
+  });
+  QVERIFY2(it != actions.end(), "Import from Launcher... is missing from the Import menu");
+  QCOMPARE((*it)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_I));
+}

@@ -32,7 +32,7 @@ Some examples of what you can build:
 - **What's new this month?** — *Recently added, 30* (items added to the
   database in the last 30 days)
 - **Show me only the items I've illustrated** — *Has artwork* (every
-  item with a non-empty artwork override)
+  item a cover was found for in the collection's artwork folder)
 - **Items I've started but haven't finished** — *Continue later* (the
   in-progress queue, driven by the per-item flag)
 - **A worklist for the artwork wizard** — *Missing artwork*
@@ -59,18 +59,18 @@ immediately and opens populated with its current matches.
 
 | Kind | Parameter | Selects |
 |------|-----------|---------|
-| **Recently launched** | Show top (1–1000, default 50) | The N most-recently-launched items, newest first. Backed by `launch_history`. |
-| **Most played** | Show top (1–1000, default 50) | The N items with the highest cumulative play count, then by total play seconds. |
+| **Recently launched** | Show top (1–1000, default 50) | The N most-recently-launched items, newest first. Reads the item's own `last_played` timestamp, not the launch-history log. |
+| **Most played** | Show top (1–1000, default 50) | The N items with the highest launch count, ties broken by most-recently-played. |
 | **Never launched** | Show first (1–1000, default 50) | The first N items with zero recorded launches. Ordered the same way the rest of the grid is by default. |
 | **By extension** | Extensions (csv, lowercase, leading dot optional) | Every item whose file extension is in the list. Empty list = no matches. Example: `pdf,epub,cbz`. |
-| **Has artwork** | *(none)* | Every item with a non-empty artwork file recorded against it (auto-discovered or manually [linked](Artwork.md)). |
-| **Missing artwork** | *(none)* | The complement of *Has artwork* — items with no artwork file on disk. Useful as a worklist for the [Artwork Wizard](Artwork.md#artwork-assignment-wizard). |
+| **Has artwork** | *(none)* | Every item with a cover — one auto-discovered in `artworkDirectory` when the collection was last scanned, or one you [linked by hand](Artwork.md#manual-per-item-links). |
+| **Missing artwork** | *(none)* | The complement of *Has artwork* — items no cover was found for on the last scan. Useful as a worklist for the [Artwork Wizard](Artwork.md#artwork-assignment-wizard). |
 | **Recently added** | Window (1–3650 days, default 30) | Items whose `date_added` falls within the last N days, newest first. |
 | **By collection** | Collection (picker) | Every item belonging to the chosen collection. The collection is referenced by UUID so renames don't break the filter. Empty selection yields zero matches. |
 | **By title search** | Substring | Every item whose name contains the given substring (case-insensitive, `LIKE %?%`). Empty substring yields zero matches. |
 | **Favorite** | *(none)* | Every item present in the reserved Favorites playlist. |
 | **Pinned** | *(none)* | Items toggled pinned via [item state flags](Item-Metadata.md#state-flags). |
-| **Hidden** | *(none)* | Items toggled hidden. Useful as a "review the hidden pile" view since the regular grid filters these out by default. |
+| **Hidden** | *(none)* | Items toggled hidden. Note that hidden items are de-emphasised in the regular grid, not filtered out of it, so this is a way to see them together rather than a way to see them at all. |
 | **Continue later** | *(none)* | Items toggled continue-later — the in-progress queue. |
 
 > **Counted vs uncounted** — *Recently launched*, *Most played*,
@@ -80,29 +80,34 @@ immediately and opens populated with its current matches.
 
 ### Recently launched
 
-Driven by the `launch_history` table. Items that have never been
-launched don't appear. Re-launching an item promotes it to the top of
-the result the next time the playlist is opened.
+Driven by each item's own `last_played` timestamp, newest first. Items
+that have never been launched don't appear. Re-launching an item
+promotes it to the top of the result the next time the playlist is
+opened.
 
-If [launch history is disabled](History-and-Statistics.md), this
-playlist returns no results — `launch_history` stops collecting new
-rows when `[General] historyEnabled=false`.
+This is **not** affected by `[General] historyEnabled`. That setting
+gates the `launch_history` log — the chronological record you browse in
+the History dialog. The per-item `last_played` and `play_count` stamps
+are written on every launch regardless, which is exactly why the
+launch-based playlists keep working with history recording turned
+off.
 
 ### Most played
 
-Sorted by total launch count first, then by total play time. **Total
-play time is only collected when runtime detection is enabled**
-(see [Splash & Now Playing](Splash-and-Now-Playing.md#now-playing)).
-Without runtime detection the secondary sort is a no-op and ties
-resolve in insertion order.
+Sorted by launch count first, then — for ties — by how recently the
+item was last played. Total *play time* is tracked separately (and only
+when runtime detection is on, see
+[Splash & Now Playing](Splash-and-Now-Playing.md#now-playing-overlay)),
+but this rule does not read it.
 
 ### Never launched
 
-The complement of *Recently launched*: items with **zero** rows in
-`launch_history`. Useful for "what's left in my backlog?" tiles.
+The complement of *Recently launched*: items whose `play_count` is
+zero or unset. Useful for "what's left in my backlog?" tiles.
 
-If you turn history collection off after building it up, items keep
-their existing counts — they don't suddenly become "never launched".
+Turning history collection off doesn't affect this rule at all: it
+reads `play_count`, which keeps incrementing on every launch whatever
+`historyEnabled` is set to.
 
 ### By extension
 
@@ -118,13 +123,33 @@ Trims whitespace around each token. An empty list yields zero matches.
 
 ### Has artwork
 
-Returns every item with a non-empty artwork association. This includes:
+Returns every item with a cover auto-discovered from `artworkDirectory` —
+the same search the grid uses to paint the tile: the artwork folder and
+its typed cover subfolders (`front/`, `box/`, …), matched on the item's
+name, including the multi-disc case where a grouped item takes the art of
+one of its discs. Items showing the procedural placeholder (no real
+artwork) are excluded.
 
-- Items whose artwork was auto-discovered from `artworkDirectory`
-- Items linked to a custom artwork file via
-  [Item Artwork Links](Artwork.md)
+The match is recorded when the collection is scanned, so it reflects your
+artwork folder as of that scan. Add or remove a cover without touching the
+media folder and this rule catches up the next time that collection is
+scanned; the grid, which looks at the folder directly, updates sooner.
 
-Items showing the procedural placeholder (no real artwork) are excluded.
+A cover you [linked by hand](Artwork.md#manual-per-item-links) counts too,
+and counts immediately — links are stored in the database rather than found
+on disk, so saving or clearing one moves the item in and out of this rule
+straight away rather than waiting for a scan. It is also what the tile paints:
+a hand-linked cover shows on the item's tile and its cover-flow card, ahead of
+anything auto-discovery found, so this rule and the grid agree. The link has to
+still point at a file that exists; one whose target you have since deleted
+doesn't count, and the item falls back to whatever auto-discovery finds for it.
+Links on types that are never used as a cover — `logo`, and any custom type
+you've added — are gallery-only and don't count here.
+
+> **Note** — clearing a link is the one case that can lag. If the item also
+> has an auto-discovered cover, it reports as missing artwork until that
+> collection is next scanned, at which point the auto-discovered cover takes
+> over again.
 
 ### Recently added
 
@@ -199,7 +224,7 @@ re-evaluation in the meantime.
 
 ## Limitations
 
-- **One rule per playlist** — there's no AND / OR composition today. If
+- **One rule per playlist in the editor** — the dialog builds a single rule. The stored format and the evaluator already support AND / OR sets of rules, so a `smart_filter` written by hand or by another tool is honoured; there is just no UI for building one yet. If
   you want "Never played PDFs", combine extension filtering with a
   separate workflow (e.g., a custom field, or the structured search
   tokens described in [Search](Search-Sort-Filter.md#structured-search-tokens)).

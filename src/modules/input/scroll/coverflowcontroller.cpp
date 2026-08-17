@@ -285,6 +285,16 @@ void CoverFlowController::onSelectionChanged(int selectedIndex) {
   if (!m_widget || !isActive()) {
     return;
   }
+  // A cleared selection (-1) is a transient the pipeline emits on its way
+  // somewhere else — prepareForRestore clears before re-selecting, search
+  // transitions clear between filters. The widget clamps negatives to 0, so
+  // passing it through glided the carousel to the FIRST item with a phantom
+  // selection border while the toolbar counter kept the old index
+  // (Kartend-g7hbx). Hold the carousel where it is instead; the next real
+  // selection re-syncs it, and rebuilds handle the genuinely-empty case.
+  if (selectedIndex < 0) {
+    return;
+  }
   m_widget->setSelectedIndex(selectedIndex, true);
   // Lazy video-path + gallery resolution: scanning the video directory and
   // loading per-item artwork rows for every one of N items at rebuild time
@@ -325,26 +335,18 @@ static QString cardArtworkDirectory(const QString &fullPath, const CollectionCon
   if (artworkDir.isEmpty()) {
     return {};
   }
-  const QString &mediaDir = context.config.mediaDirectory;
-  const bool shouldMirror =
-      context.config.folderBrowsing.includeArtworkSubfolders ||
-      (!mediaDir.isEmpty() && QDir(artworkDir).absolutePath() == QDir(mediaDir).absolutePath());
-  if (shouldMirror && !mediaDir.isEmpty()) {
-    QDir mediaDirObj(mediaDir);
-    QString relativePath = mediaDirObj.relativeFilePath(fullPath);
-    QString relativeDir = QFileInfo(relativePath).path();
-    if (!relativeDir.isEmpty() && relativeDir != QStringLiteral(".")) {
-      artworkDir = QDir(artworkDir).absoluteFilePath(relativeDir);
-    }
-  }
-  return artworkDir;
+  // Shared with ItemWidgetFactory::configureArtworkForWidget (Kartend-j5amz):
+  // one helper owns both the "should this mirror at all" test and the refusal
+  // to mirror for an item that lives outside the media directory.
+  return ArtworkUtils::mirroredArtworkDirectory(
+      artworkDir, context.config.mediaDirectory, fullPath,
+      context.config.folderBrowsing.includeArtworkSubfolders);
 }
 
-// Resolve the artwork path for a single media item. Mirrors the lookup
-// logic in ItemWidgetFactory::configureArtworkForWidget (per-item override
-// for showAllSubcollectionItems, subfolder mirroring when artworkDir ==
-// mediaDir or includeArtworkSubfolders is set) — but uses the directory
-// cache only. The synchronous filesystem fallback that the grid factory
+// Resolve the artwork path for a single media item. Same directory as
+// ItemWidgetFactory::configureArtworkForWidget resolves (per-item override for
+// showAllSubcollectionItems, then the shared subfolder mirror) — but uses the
+// directory cache only. The synchronous filesystem fallback that the grid factory
 // employs for visible widgets is too expensive here: cover flow rebuilds
 // the entire card list on every navigation/filter/range-load event, and
 // running ArtworkUtils::findArtworkForFile across tens of thousands of
@@ -354,8 +356,22 @@ static QString cardArtworkDirectory(const QString &fullPath, const CollectionCon
 // them up): the controller tracks them in m_pendingArtwork, prewarms their
 // directories off-thread, and a bounded trailing retry re-runs buildCard
 // for just those slots (Kartend-6x8tn).
+//
+// A cover the user linked by hand answers first (Kartend-1js9j): @p manualCovers
+// is the prebuilt, existence-checked map from
+// ItemArtworkStore::loadManualCoverPaths, so honouring the link costs one hash
+// lookup rather than the per-item item_artwork read the cards cannot afford —
+// and it needs no warm directory cache, which is why a hit here also keeps the
+// slot out of the pending-artwork retry.
 static QString resolveCardArtworkPath(const QString &fullPath, const CollectionContext &context,
-                                      IDatabaseManager *db) {
+                                      IDatabaseManager *db,
+                                      const QHash<QString, QString> &manualCovers) {
+  if (!manualCovers.isEmpty()) {
+    const QString manualCover = manualCovers.value(fullPath);
+    if (!manualCover.isEmpty()) {
+      return manualCover;
+    }
+  }
   const QString artworkDir = cardArtworkDirectory(fullPath, context, db);
   if (artworkDir.isEmpty()) {
     return {};
@@ -520,7 +536,8 @@ void CoverFlowController::resolveAndPushGallery(int visualIndex) {
   // image is what every other card in the carousel renders by default,
   // so it deserves a slot in the gallery so the user can return to it
   // after browsing variants.
-  const QString primaryArtwork = resolveCardArtworkPath(fullPath, *m_context, db);
+  const QString primaryArtwork =
+      resolveCardArtworkPath(fullPath, *m_context, db, m_manualCoverPaths);
   if (!primaryArtwork.isEmpty()) {
     entries.append({QObject::tr("Cover"), primaryArtwork, /*isVideo=*/false});
     seenPaths.insert(primaryArtwork);
@@ -592,7 +609,7 @@ CoverFlowCardData CoverFlowController::buildCard(int actualIndex, IDatabaseManag
     const QString fileName = QFileInfo(fullPath).fileName();
     card.title = m_dataManager->fileNames().value(fullPath.isEmpty() ? rawEntry : fullPath,
                                                   QFileInfo(fileName).completeBaseName());
-    card.artworkPath = resolveCardArtworkPath(fullPath, *m_context, db);
+    card.artworkPath = resolveCardArtworkPath(fullPath, *m_context, db, m_manualCoverPaths);
   }
   return card;
 }

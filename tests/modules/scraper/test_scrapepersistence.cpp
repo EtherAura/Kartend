@@ -43,10 +43,36 @@ public:
     return KartendTest::MockDatabaseManager::loadItemMetadata(uuid, path);
   }
 
+  // The rows handLinkedArtworkTypes reads to decide what a scrape must not
+  // overwrite (Kartend-yibgw). Served for the matching (uuid, path) only, so a
+  // test can prove a link on one item does not shield another.
+  [[nodiscard]] QList<ItemArtworkStore::ItemArtwork>
+  loadItemArtwork(const QString &uuid, const QString &path) const override {
+    QList<ItemArtworkStore::ItemArtwork> out;
+    for (const auto &row : preloadedArtwork) {
+      if (row.collectionUuid == uuid && row.path == path) {
+        out.append(row);
+      }
+    }
+    return out;
+  }
+
   ItemMetadataStore::ItemMetadata preloadedMetadata;
+  QList<ItemArtworkStore::ItemArtwork> preloadedArtwork;
   QList<ItemMetadataStore::ItemMetadata> metadataSaves;
   QList<ItemArtworkStore::ItemArtwork> artworkSaves;
 };
+
+/// A hand-linked cover row pointing at a real file on disk.
+ItemArtworkStore::ItemArtwork makeLink(const QString &uuid, const QString &itemPath,
+                                       const QString &type, const QString &coverPath) {
+  ItemArtworkStore::ItemArtwork row;
+  row.collectionUuid = uuid;
+  row.path = itemPath;
+  row.artworkType = type;
+  row.manualPath = coverPath;
+  return row;
+}
 
 Scraper::PendingMediaWrite makeMedia(const QString &type, const QString &label,
                                      const QByteArray &bytes) {
@@ -96,6 +122,12 @@ private slots:
   void policySkip_reportsExistingDestinationPath();
   void interactiveFailedFetchKeepsAbsentMarkerDeselectedPrunes();
   void cancelToken_stopsWriteFanOut();
+
+  // A hand-linked cover outranks a scraped one (Kartend-yibgw)
+  void handLinkedType_isNotOverwrittenEvenInOverwriteMode();
+  void handLinkedType_shieldsOnlyItsOwnTypeAndItem();
+  void handLinkedType_staleLinkDoesNotBlockTheScrape();
+  void scrapeOwnedRow_doesNotBlockARescrape();
 };
 
 void TestScrapePersistence::front_writesCoverIntoTypedSubdirNotFlatRoot() {
@@ -958,6 +990,132 @@ void TestScrapePersistence::cancelToken_stopsWriteFanOut() {
   QCOMPARE(result2.mediaWritten, 2);
   QVERIFY(QFile::exists(tmp.path() + "/screenshot/foo.png"));
   QVERIFY(QFile::exists(tmp.path() + "/title/foo.png"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hand-linked covers survive a scrape (Kartend-yibgw)
+//
+// docs/user/Scraper.md promised this protection and no check implemented it:
+// the write gate keyed only on rescrapeMode plus destination existence, and
+// under RescrapeMode::Overwrite — the DEFAULT — it wrote unconditionally.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestScrapePersistence::handLinkedType_isNotOverwrittenEvenInOverwriteMode() {
+  QTemporaryDir tmp;
+  QTemporaryDir elsewhere;
+  QVERIFY(tmp.isValid());
+  QVERIFY(elsewhere.isValid());
+  // The user's own file, outside the artwork tree — the shape a hand link
+  // usually takes, and one the destination-existence gate can never see.
+  const QString linked = QDir(elsewhere.path()).filePath(QStringLiteral("my-cover.png"));
+  QFile chosen(linked);
+  QVERIFY(chosen.open(QIODevice::WriteOnly));
+  chosen.write("MINE");
+  chosen.close();
+
+  CapturingDb db;
+  db.preloadedArtwork = {makeLink("u1", "/m/song.flac", QStringLiteral("front"), linked)};
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("front"), QStringLiteral("Front"), QByteArray("SCRAPED"))};
+
+  const auto result =
+      Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(), QStringLiteral("song"), item,
+                                media, Scraper::RescrapeMode::Overwrite);
+
+  QCOMPARE(result.mediaWritten, 0);
+  QCOMPARE(result.mediaSkipped, 1);
+  QVERIFY2(!QFileInfo::exists(tmp.path() + "/front/song.png"),
+           "the scrape must not write the type the user linked by hand");
+  // The user's file is untouched, and the skip is explained rather than silent.
+  QFile check(linked);
+  QVERIFY(check.open(QIODevice::ReadOnly));
+  QCOMPARE(check.readAll(), QByteArray("MINE"));
+  QVERIFY(!result.firstFailures.isEmpty());
+}
+
+void TestScrapePersistence::handLinkedType_shieldsOnlyItsOwnTypeAndItem() {
+  QTemporaryDir tmp;
+  QTemporaryDir elsewhere;
+  QVERIFY(tmp.isValid());
+  QVERIFY(elsewhere.isValid());
+  const QString linked = QDir(elsewhere.path()).filePath(QStringLiteral("my-cover.png"));
+  QFile chosen(linked);
+  QVERIFY(chosen.open(QIODevice::WriteOnly));
+  chosen.write("MINE");
+  chosen.close();
+
+  CapturingDb db;
+  // A link on `front` for THIS item, and one on `front` for a DIFFERENT item.
+  db.preloadedArtwork = {makeLink("u1", "/m/song.flac", QStringLiteral("front"), linked),
+                         makeLink("u1", "/m/other.flac", QStringLiteral("screenshot"), linked)};
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("front"), QStringLiteral("Front"), QByteArray("SCRAPED")),
+      makeMedia(QStringLiteral("screenshot"), QStringLiteral("Shot"), QByteArray("SCRAPED"))};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(),
+                                                QStringLiteral("song"), item, media);
+
+  // The link is per (item, type): `front` is shielded, `screenshot` is not —
+  // the other item's screenshot link must not reach across.
+  QCOMPARE(result.mediaWritten, 1);
+  QCOMPARE(result.mediaSkipped, 1);
+  QVERIFY(!QFileInfo::exists(tmp.path() + "/front/song.png"));
+  QVERIFY(QFileInfo::exists(tmp.path() + "/screenshot/song.png"));
+}
+
+void TestScrapePersistence::handLinkedType_staleLinkDoesNotBlockTheScrape() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  CapturingDb db;
+  // A link whose image the user has since deleted. The same rule
+  // resolveCoverPath applies: a link only counts while its file exists, so
+  // this one protects nothing and the scrape proceeds.
+  db.preloadedArtwork = {
+      makeLink("u1", "/m/song.flac", QStringLiteral("front"), "/nonexistent/gone.png")};
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("front"), QStringLiteral("Front"), QByteArray("SCRAPED"))};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(),
+                                                QStringLiteral("song"), item, media);
+
+  QCOMPARE(result.mediaWritten, 1);
+  QVERIFY(QFileInfo::exists(tmp.path() + "/front/song.png"));
+}
+
+void TestScrapePersistence::scrapeOwnedRow_doesNotBlockARescrape() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  // The scrape writes item_artwork rows itself for non-standard types, so a
+  // row alone cannot mean "hand-linked" — otherwise a re-scrape would be
+  // blocked forever by its own previous output. A row pointing INTO
+  // {artwork}/{type}/ is the scrape's, and must not shield anything.
+  QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("back")));
+  const QString owned = QDir(tmp.path()).filePath(QStringLiteral("back/song.png"));
+  QFile previous(owned);
+  QVERIFY(previous.open(QIODevice::WriteOnly));
+  previous.write("OLD_SCRAPE");
+  previous.close();
+
+  CapturingDb db;
+  db.preloadedArtwork = {makeLink("u1", "/m/song.flac", QStringLiteral("back"), owned)};
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Test");
+  const QList<Scraper::PendingMediaWrite> media = {
+      makeMedia(QStringLiteral("back"), QStringLiteral("Back"), QByteArray("NEW_SCRAPE"))};
+
+  const auto result = Scraper::applyScrapedItem(&db, "u1", "/m/song.flac", tmp.path(),
+                                                QStringLiteral("song"), item, media);
+
+  QCOMPARE(result.mediaWritten, 1);
+  QFile check(owned);
+  QVERIFY(check.open(QIODevice::ReadOnly));
+  QCOMPARE(check.readAll(), QByteArray("NEW_SCRAPE"));
 }
 
 QTEST_MAIN(TestScrapePersistence)

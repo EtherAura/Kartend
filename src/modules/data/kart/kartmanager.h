@@ -13,6 +13,7 @@
 #include "collection/launcherpreset.h"
 #include "dialogrunners.h"
 #include "errorutils.h"
+#include "kartlaunchertrust.h"
 #include "kartmerge.h"
 #include "kartpreflight.h"
 #include "kartreader.h"
@@ -32,16 +33,13 @@ class Writer;
 
 namespace kart {
 
-/// Field+path pair returned by collectSuspiciousKartPaths.
-using SuspiciousKartPath = QPair<QString, QString>;
-
-/// Owner-provided confirmation hook for suspicious .kart paths during
-/// interactive import (Kartend-s6mj). When the manifest carries
-/// launcherPath / collectionIcon / placeholderArtwork entries outside the
-/// safe-prefix allowlist (and not previously trusted), the manager calls
-/// this closure with the offending (field, path) pairs and aborts the
-/// import unless it returns true. UI side typically shows a QMessageBox
-/// warning with default=Cancel.
+/// Owner-provided confirmation hook for an imported .kart's launcher
+/// configuration (Kartend-s6mj, widened by Kartend-kxqqf). The manager calls
+/// it with one (field, value) row per launcher field the manifest supplies —
+/// launcher paths, cores and launch parameters — plus any icon / placeholder
+/// path outside the safe-prefix allowlist, and aborts the import unless it
+/// returns true. Rows carry their reason label in the field column. UI side
+/// typically shows a QMessageBox warning with default=Cancel.
 using SuspiciousPathConfirmer = std::function<bool(const QList<SuspiciousKartPath> &)>;
 
 /// Owner-provided preflight gate fired after KartReader::peekManifest succeeds
@@ -116,26 +114,9 @@ struct KartManagerSetup {
   DialogRunners dialogs;
 };
 
-/// Classify the imported manifest's externally-controlled path fields against
-/// a safe-prefix allowlist (user home, /usr/bin, /usr/local/bin, /opt) plus
-/// the @p trustedLauncherPaths set (typically already-configured launcher
-/// paths from existing collections). Returns the (field, path) pairs that
-/// fall outside any safe root so the caller can surface a confirmation
-/// dialog before registering the collection.
-[[nodiscard]] QList<SuspiciousKartPath>
-collectSuspiciousKartPaths(const CollectionConfig &cfg, const QSet<QString> &trustedLauncherPaths);
-
-/// Kartend-u8wf0: return the launcher path fields whose value resolves to a
-/// location INSIDE the extracted kart tree (@p extractedRoot). These are the
-/// most dangerous headless case: a .kart that bundles its own executable and
-/// points launcherPath at it, so importing-then-launching runs code the kart
-/// fully chose. collectSuspiciousKartPaths can't catch this because the
-/// extraction root is usually under $HOME (an allowlisted prefix). The GUI
-/// path gates every suspicious path behind the interactive confirmer;
-/// importKartHeadless uses this to refuse in-tree launchers unless the caller
-/// explicitly opts in.
-[[nodiscard]] QList<SuspiciousKartPath> collectInTreeLauncherPaths(const CollectionConfig &cfg,
-                                                                   const QString &extractedRoot);
+// SuspiciousKartPath, the launcher-trust findings and the collectors that
+// produce them live in kartlaunchertrust.h (included above), so KartPreflight
+// can name them without depending on the manager.
 
 class KartManager : public QObject {
   Q_OBJECT
@@ -242,7 +223,12 @@ private:
   /// the header needs no template type.
   QFutureWatcherBase *m_activeWatcher = nullptr;
 
-  void runImport(const QString &kartPath, const QString &destDir);
+  /// @p preflightConfirmed marks an import the user already accepted in the
+  /// preflight dialog. That dialog lists the same launcher rows, so re-asking
+  /// about them post-extract would be two prompts for one decision; only the
+  /// escalation preflight could not have seen — a payload the bundle ships,
+  /// which needs the extraction root to detect — still stops for consent.
+  void runImport(const QString &kartPath, const QString &destDir, bool preflightConfirmed = false);
   void runExport(int collectionIndex, const QString &outPath);
 
   /// Kartend-s6mj: gather launcher paths already configured in any saved
@@ -250,6 +236,18 @@ private:
   /// the user has effectively approved them before, so re-prompting on
   /// every re-import would be noise.
   [[nodiscard]] QSet<QString> previouslyTrustedLauncherPaths() const;
+
+  /// Kartend-kxqqf: the (field, value) rows the interactive confirmer is
+  /// handed for @p cfg — every launcher field the bundle supplies plus any
+  /// icon / placeholder path outside the allowlist. Empty only when the
+  /// bundle asks for nothing executable, which is the one case that imports
+  /// without a prompt. @p extractedRoot enables the bundled-payload
+  /// escalation; pass an empty string before extraction.
+  /// @p onlyBundledPayloads narrows the rows to that escalation alone, for a
+  /// caller whose user has already seen the rest (see runImport).
+  [[nodiscard]] QList<SuspiciousKartPath>
+  launcherConfirmationRows(const CollectionConfig &cfg, const QString &extractedRoot,
+                           bool onlyBundledPayloads = false) const;
 
   /// Kartend-sqoq0: warn via the owner-supplied runner when wired, else the
   /// stock QMessageBox parented on getParentWindow() (shown only when a

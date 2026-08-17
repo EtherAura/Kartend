@@ -29,6 +29,9 @@ public:
   int lastHoverIndex = -1;
   int selectItemByHoverCalls = 0;
   int cancelPendingRestoreCalls = 0;
+  int lastPersistedColl = -1;
+  int lastPersistedIndex = -1;
+  int persistSelectionForIndexCalls = 0;
 
   [[nodiscard]] int currentSelectedIndex() const override { return index; }
   void setSelectedIndex(int idx) override {
@@ -45,6 +48,12 @@ public:
     ++selectItemByHoverCalls;
   }
   [[nodiscard]] bool isRestoringSelection() const override { return restoring; }
+
+  void persistSelectionForIndex(int coll, int idx) override {
+    lastPersistedColl = coll;
+    lastPersistedIndex = idx;
+    ++persistSelectionForIndexCalls;
+  }
 
   // --- inert stubs below ---
   void cancelPendingSelectionRestore() override { ++cancelPendingRestoreCalls; }

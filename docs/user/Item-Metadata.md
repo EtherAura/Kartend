@@ -22,7 +22,7 @@ right-click menu reference is in
 | Display name | Computed | After title-pattern cleanup ([title patterns](Search-Sort-Filter.md#title-pattern-exclusion)). |
 | Play count | Database (`items.play_count`) | Incremented on every launch. |
 | Last played | Database (`items.last_played`) | Timestamp. |
-| Time played | Database (`launch_history.duration_seconds`) | Sum across history rows. Only populated if [runtime detection](Splash-and-Now-Playing.md#runtime-detection) is on. |
+| Time played | Database (`launch_history.duration_seconds`) | Sum across history rows. Only populated if [runtime detection](Splash-and-Now-Playing.md#what-runtime-detection-turns-on) is on. |
 | Notes | Database (`item_metadata.notes`) | Free-form multi-line text. |
 | Tags | Database (`item_metadata.tags`) | JSON array; surfaced in search via `tag:` token. |
 | Rating | Database (`item_metadata.rating`) | 0–10 in half-star steps; `-1` = unrated. |

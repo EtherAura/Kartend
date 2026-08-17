@@ -133,6 +133,17 @@ public:
   void setCachedArtworkPaths(const QHash<QString, QString> &artworkPaths);
   void clearCachedArtworkPaths() { m_cachedArtworkPaths.clear(); }
 
+  /// Absolute item path -> hand-linked cover, from
+  /// IDatabaseManager::loadManualCoverPaths() (Kartend-1js9j). Consulted ahead
+  /// of every other source in configureArtworkForWidget, because a manual link
+  /// beats auto-discovery everywhere else in Kartend and the tile is the
+  /// surface that used to disagree. ScrollManager owns the map and re-pushes it
+  /// when links change; the factory only reads it, so tile construction stays
+  /// free of per-item database work.
+  void setManualCoverPaths(const QHash<QString, QString> &manualCovers) {
+    m_manualCoverPaths = manualCovers;
+  }
+
   /**
    * @brief Creates a subcollection widget.
    * @param subcollectionIndex The index of the subcollection.
@@ -271,6 +282,10 @@ private:
   const QStringList *m_filePaths = nullptr;
   const QHash<QString, QString> *m_fileNames = nullptr;
   QHash<QString, QString> m_cachedArtworkPaths; // fullPath -> artworkPath from session cache
+  // fullPath -> hand-linked cover (see setManualCoverPaths). Empty for every
+  // library where nobody has linked a cover, which is the case the lookup in
+  // configureArtworkForWidget short-circuits on.
+  QHash<QString, QString> m_manualCoverPaths;
   // Memoized resolvePlaceholderArtworkForCollection results keyed by
   // collection index. The resolution walks the parent chain and expands
   // config variables, and ran once per widget materialization for a value

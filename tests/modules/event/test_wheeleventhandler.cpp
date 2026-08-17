@@ -80,6 +80,9 @@ private slots:
   void deltaWrapDisabledClampsToValidRange();
   void deltaNoMovementReturnsWrapFlagOnly();
   void deltaUserStepCancelsPendingSelectionRestore();
+  void deltaMovedSelectionIsPersistedForTheActiveCollection();
+  void deltaHomeViewMoveIsNotPersisted();
+  void coverFlowWheelSkipsTheHiddenGridScrollMachinery();
   void deltaZeroTotalItemsBailsSafely();
   void deltaNoScrollManagerBails();
   void onAnimationFinishedClearsFlagsAndEmitsScrollEnded();
@@ -271,8 +274,9 @@ void TestWheelEventHandler::deltaNoMovementReturnsWrapFlagOnly() {
   QCOMPARE(m_sel.setSelectedIndexCalls, 0);
   // No movement -> the pending automatic restore must NOT be stood down
   // either: an idle wheel notch at a boundary is not an expression of a new
-  // selection intent (Kartend-ic4h6).
+  // selection intent (Kartend-ic4h6). Nothing to persist either.
   QCOMPARE(m_sel.cancelPendingRestoreCalls, 0);
+  QCOMPARE(m_sel.persistSelectionForIndexCalls, 0);
 }
 
 // Kartend-ic4h6: a wheel step that MOVES the selection is user input, and must
@@ -300,6 +304,96 @@ void TestWheelEventHandler::deltaUserStepCancelsPendingSelectionRestore() {
   QVERIFY2(m_sel.cancelPendingRestoreCalls >= 1,
            "wheel selection step moved the selection without standing down the pending "
            "restore — a verification timer would revert this move");
+}
+
+// Kartend-2sdjp: cancelling the pending restore is only half the protection —
+// it stands down restores scheduled BEFORE the wheel step. The next reload
+// (safeReloadCollection captured persistCurrentSelection at its debounce
+// start; restoreSelectionForCurrentCollection reads the session store)
+// schedules a FRESH restore against whatever is persisted, so a wheel move
+// that never persisted its landing index was snapped back seconds later.
+// Keyboard has always persisted via handleSuccessfulSelection; the wheel path
+// must too, in every view type.
+void TestWheelEventHandler::deltaMovedSelectionIsPersistedForTheActiveCollection() {
+  CollectionConfig coverFlowConfig;
+  coverFlowConfig.viewType = ViewType::CoverFlow;
+  m_collections = {coverFlowConfig};
+  wire(/*viewIndex=*/0);
+  m_scroll.totalItems = 100;
+  m_sel.index = 10;
+  m_settings.input.mouseWheelRows = 1;
+
+  m_handler.applySelectionDelta(-1);
+
+  QCOMPARE(m_sel.lastSetIndex, 11);
+  QCOMPARE(m_sel.persistSelectionForIndexCalls, 1);
+  QCOMPARE(m_sel.lastPersistedColl, 0);
+  QCOMPARE(m_sel.lastPersistedIndex, 11);
+}
+
+void TestWheelEventHandler::deltaHomeViewMoveIsNotPersisted() {
+  // The synthetic home view (index -1) has no backing collection to remember
+  // a selection for — the isValidIndex guard must skip the persist, exactly
+  // as handleSuccessfulSelection's currentColl >= 0 guard does.
+  wire(/*viewIndex=*/-1);
+  m_scroll.totalItems = 100;
+  m_sel.index = 20;
+
+  m_handler.applySelectionDelta(-1);
+
+  QCOMPARE(m_sel.setSelectedIndexCalls, 1);
+  QCOMPARE(m_sel.persistSelectionForIndexCalls, 0);
+}
+
+// Kartend-2sdjp: in cover flow the selection step is the whole job — the
+// carousel glides itself off updateSelectionForIndex and the grid scroll area
+// is HIDDEN. The grid machinery this test proves skipped was actively harmful:
+// the wheel animation ran ~1.5s against a zero-range scrollbar and its
+// completion re-pushed selection/viewport state from hidden-grid geometry
+// (the VM-reproduced carousel snap-back), while userScrollActive /
+// programmaticScroll were left armed with nothing consuming or clearing them.
+void TestWheelEventHandler::coverFlowWheelSkipsTheHiddenGridScrollMachinery() {
+  QScrollArea scrollArea;
+  QStackedWidget stack;
+  auto *itemsPage = new QWidget; // owned by the stack after addWidget()
+  stack.addWidget(itemsPage);
+  stack.setCurrentWidget(itemsPage);
+
+  CollectionConfig coverFlowConfig;
+  coverFlowConfig.viewType = ViewType::CoverFlow;
+  m_collections = {coverFlowConfig};
+  m_viewIndex = 0;
+  m_ctx.managers.seedScrollRoles(&m_scroll);
+  m_ctx.managers.seedSelectionRoles(&m_sel);
+  m_ctx.managers.interactionState = &m_state;
+  WheelEventHandler::Setup setup;
+  setup.ctx = &m_ctx;
+  setup.itemScrollArea = &scrollArea;
+  setup.stackedWidget = &stack;
+  setup.itemsPage = itemsPage;
+  setup.collections = &m_collections;
+  setup.currentCollectionIndex = &m_viewIndex;
+  setup.generalSettings = &m_settings;
+  m_handler.setupReferences(setup);
+  m_scroll.totalItems = 100;
+  m_sel.index = 10;
+
+  QSignalSpy started(&m_handler, &WheelEventHandler::scrollStarted);
+  QWheelEvent wheel(QPointF(0, 0), QPointF(0, 0), QPoint(), QPoint(0, -120), Qt::NoButton,
+                    Qt::NoModifier, Qt::NoScrollPhase, false);
+  const bool consumed = m_handler.handleEvent(&scrollArea, &wheel);
+
+  // The step itself lands, is persisted, and the event is consumed…
+  QVERIFY(consumed);
+  QVERIFY(wheel.isAccepted());
+  QCOMPARE(m_sel.lastSetIndex, 11);
+  QCOMPARE(m_sel.persistSelectionForIndexCalls, 1);
+  // …while the grid-viewport machinery stays untouched: no scroll-state flags
+  // armed (nothing would ever clear them), no scrollStarted for a scroll that
+  // isn't happening.
+  QVERIFY(!m_state.scroll().userScrollActive);
+  QVERIFY(!m_state.scroll().programmaticScroll);
+  QCOMPARE(started.count(), 0);
 }
 
 void TestWheelEventHandler::deltaZeroTotalItemsBailsSafely() {

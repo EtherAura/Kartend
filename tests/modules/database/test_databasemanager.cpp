@@ -27,6 +27,7 @@
 #include "collection/collectioncontext.h"
 #include "collection/typehelpers.h"
 #include "databasemanager.h"
+#include "itemartwork.h"
 #include "sessionmanager.h"
 
 namespace {
@@ -69,6 +70,13 @@ private slots:
   void testRecordItemLaunch_survivesHeldWriteLock();
   void testRecordItemLaunch_survivesWriteLockOutlastingInlineLadder();
   void testRecordItemLaunch_deferredWriteKeepsItsLaunchTimeOrder();
+
+  // Manual artwork links write through to items.artwork_path (Kartend-jkty9) --
+  void testSaveItemArtwork_writesCoverPathThroughImmediately();
+  void testSaveItemArtwork_staleLinkLeavesArtworkPathUntouched();
+  void testSaveItemArtwork_galleryOnlyTypeLeavesArtworkPathUntouched();
+  void testRemoveItemArtwork_retractsTheLinkItHadWrittenThrough();
+  void testRemoveItemArtwork_keepsAnAutoDiscoveredCover();
 
 private:
   std::unique_ptr<SessionManager> m_session;
@@ -788,6 +796,184 @@ void TestDatabaseManager::testRecordItemLaunch_deferredWriteKeepsItsLaunchTimeOr
   QVERIFY2(aHist < bHist, qPrintable(QStringLiteral("deferred history row stamped at/after the "
                                                     "later launch: A=%1 B=%2")
                                          .arg(aHist, bHist)));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Manual artwork links write through to items.artwork_path (Kartend-jkty9)
+//
+// `items.artwork_path` is what every DB-side artwork predicate reads — the
+// HasArtwork / MissingArtwork smart-playlist rules, the has:/missing:artwork
+// search tokens, Collection Health's missing-artwork count, and the Artwork
+// Wizard's own queue. The scan folds manual links into it, but a link is a
+// DATABASE fact: waiting for the next scan to notice one is what left the
+// wizard's own assignments in its queue the next time it ran.
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+/// One collection + one item, and a real image file to link. Returns the item's
+/// path; @p cover is filled with a writable image path inside @p dir.
+QString seedLinkableItem(QSqlDatabase &insp, const QString &uuid, const QTemporaryDir &dir,
+                         QString &cover) {
+  const QString itemPath = QDir(dir.path()).filePath(QStringLiteral("item.bin"));
+  cover = QDir(dir.path()).filePath(QStringLiteral("hand-picked.png"));
+  QFile art(cover);
+  if (art.open(QIODevice::WriteOnly)) {
+    art.write("px");
+    art.close();
+  }
+  runSql(insp, "DELETE FROM items");
+  runSql(insp, "DELETE FROM collections");
+  runSql(insp, "DELETE FROM item_artwork");
+  runSql(insp, QStringLiteral("INSERT INTO collections (id, name, last_scanned, uuid) "
+                              "VALUES (1, 'Linked', 'x', '%1')")
+                   .arg(uuid));
+  runSql(insp, QStringLiteral("INSERT INTO items (collection_id, path, name, last_modified, "
+                              "collection_uuid) VALUES (1, '%1', 'item', 'x', '%2')")
+                   .arg(itemPath, uuid));
+  return itemPath;
+}
+
+ItemArtworkStore::ItemArtwork makeLink(const QString &uuid, const QString &path,
+                                       const QString &type, const QString &manual) {
+  ItemArtworkStore::ItemArtwork row;
+  row.collectionUuid = uuid;
+  row.path = path;
+  row.artworkType = type;
+  row.manualPath = manual;
+  return row;
+}
+} // namespace
+
+// The headline fix: assigning a cover by hand has to clear the item out of the
+// missing-artwork predicates NOW, not at the next scan of the collection.
+void TestDatabaseManager::testSaveItemArtwork_writesCoverPathThroughImmediately() {
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString uuid = QStringLiteral("writethrough-uuid");
+  QString cover;
+  const QString itemPath = seedLinkableItem(insp, uuid, dir, cover);
+
+  const QString sql =
+      QStringLiteral("SELECT COALESCE(artwork_path,'') FROM items WHERE path='%1'").arg(itemPath);
+  QVERIFY(scalarText(insp, sql).isEmpty());
+
+  QVERIFY(db.saveItemArtwork(makeLink(uuid, itemPath, QStringLiteral("front"), cover)));
+
+  QCOMPARE(scalarText(insp, sql), cover);
+}
+
+// The same existence rule the scan applies: a link whose file is already gone
+// must not be written through, or the predicate would claim a cover the render
+// path cannot resolve.
+void TestDatabaseManager::testSaveItemArtwork_staleLinkLeavesArtworkPathUntouched() {
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString uuid = QStringLiteral("stale-link-uuid");
+  QString cover;
+  const QString itemPath = seedLinkableItem(insp, uuid, dir, cover);
+  QVERIFY(QFile::remove(cover));
+
+  QVERIFY(db.saveItemArtwork(makeLink(uuid, itemPath, QStringLiteral("front"), cover)));
+
+  QVERIFY(scalarText(insp, QStringLiteral("SELECT COALESCE(artwork_path,'') FROM items "
+                                          "WHERE path='%1'")
+                               .arg(itemPath))
+              .isEmpty());
+}
+
+// `logo` is not a cover type — the auto-discovery cascade never treats it as
+// one — so linking one must not make an artless item look covered.
+void TestDatabaseManager::testSaveItemArtwork_galleryOnlyTypeLeavesArtworkPathUntouched() {
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString uuid = QStringLiteral("logo-only-uuid");
+  QString cover;
+  const QString itemPath = seedLinkableItem(insp, uuid, dir, cover);
+
+  QVERIFY(db.saveItemArtwork(makeLink(uuid, itemPath, QStringLiteral("logo"), cover)));
+
+  QVERIFY(scalarText(insp, QStringLiteral("SELECT COALESCE(artwork_path,'') FROM items "
+                                          "WHERE path='%1'")
+                               .arg(itemPath))
+              .isEmpty());
+}
+
+// Clearing the link that put the value there has to take it back out, or the
+// item would keep reporting a cover it no longer has anywhere.
+void TestDatabaseManager::testRemoveItemArtwork_retractsTheLinkItHadWrittenThrough() {
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString uuid = QStringLiteral("retract-uuid");
+  QString cover;
+  const QString itemPath = seedLinkableItem(insp, uuid, dir, cover);
+  const QString sql =
+      QStringLiteral("SELECT COALESCE(artwork_path,'') FROM items WHERE path='%1'").arg(itemPath);
+
+  QVERIFY(db.saveItemArtwork(makeLink(uuid, itemPath, QStringLiteral("front"), cover)));
+  QCOMPARE(scalarText(insp, sql), cover);
+
+  QVERIFY(db.removeItemArtwork(uuid, itemPath, QStringLiteral("front")));
+
+  QVERIFY(scalarText(insp, sql).isEmpty());
+}
+
+// The other direction of the same rule: a cover the last scan auto-discovered
+// is still on disk and still renders, so clearing an unrelated link must leave
+// the column alone rather than blanking the item.
+void TestDatabaseManager::testRemoveItemArtwork_keepsAnAutoDiscoveredCover() {
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString uuid = QStringLiteral("keep-auto-uuid");
+  QString cover;
+  const QString itemPath = seedLinkableItem(insp, uuid, dir, cover);
+  // What the scan would have recorded from the artwork directory.
+  const QString autoCover = QDir(dir.path()).filePath(QStringLiteral("item.png"));
+  QVERIFY(runSql(insp, QStringLiteral("UPDATE items SET artwork_path='%1' WHERE path='%2'")
+                           .arg(autoCover, itemPath)));
+
+  // A link on a type that was never written through (no row existed), then
+  // cleared: the auto-discovered value must survive both operations.
+  QVERIFY(db.removeItemArtwork(uuid, itemPath, QStringLiteral("front")));
+
+  QCOMPARE(scalarText(insp, QStringLiteral("SELECT COALESCE(artwork_path,'') FROM items "
+                                           "WHERE path='%1'")
+                                .arg(itemPath)),
+           autoCover);
 }
 
 QTEST_MAIN(TestDatabaseManager)

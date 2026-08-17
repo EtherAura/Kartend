@@ -235,6 +235,11 @@ inline constexpr auto kVignetteEnabled = "vignetteEnabled";
 inline constexpr auto kVignetteIntensity = "vignetteIntensity";
 inline constexpr auto kWallpaperParallax = "wallpaperParallax";
 inline constexpr auto kWatchFilesystem = "watchFilesystem";
+/// Collapse files whose names differ only by a disc marker — "(Disc 1)",
+/// "(CD 2)" — into one item backed by a generated .m3u. Off by default so an
+/// existing library's tile count and titles never change under the user on
+/// upgrade; opt in per collection where the media is actually split.
+inline constexpr auto kGroupMultiDisc = "groupMultiDisc";
 inline constexpr auto kWrapNavigation = "wrapNavigation";
 
 } // namespace kartend::settings::keys

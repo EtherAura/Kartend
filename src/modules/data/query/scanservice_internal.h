@@ -11,6 +11,7 @@
 #include <QString>
 
 #include "batchsizes.h"
+#include "collection/collectionconfig.h"
 #include "errorutils.h"
 
 // Shared scan-pipeline constants + helpers. These were previously copy-pasted
@@ -22,6 +23,33 @@ namespace ScanServiceInternal {
 inline constexpr int BATCH_SIZE = KartendDb::BatchSizes::FilesystemScanBatch;
 inline constexpr int COMMIT_INTERVAL_BATCHES = KartendDb::BatchSizes::ScanCommitInterval;
 inline constexpr int PROGRESS_REPORT_INTERVAL = 50000;
+
+// The collection's scan signature: the settings whose change invalidates every
+// row a previous scan produced, so needsRescan() must force a full rewalk.
+//
+// It was open-coded identically in three places (needsRescan,
+// scanAndSaveItemsToDatabase, saveItemsToDatabase) and adding a term meant
+// finding all three — a signature that drifts between the "do we rescan?" and
+// "what do we store?" sides makes a collection either rescan on every launch or
+// never notice a settings change again.
+//
+// Each term is appended only when its setting is ON, so enabling a feature
+// changes the signature while every collection that never touches it keeps the
+// signature it already has stored (no spurious rescan on upgrade).
+[[nodiscard]] inline QString buildExtSignature(const CollectionConfig &collection) {
+  QString signature =
+      collection.extensions.isEmpty() ? QString() : collection.extensions.join(QLatin1Char('|'));
+  if (collection.folderBrowsing.includeContentSubfolders) {
+    signature += QLatin1String("|subfolders");
+  }
+  // Kartend-3mq7v: toggling multi-disc grouping changes which files become
+  // items, so the collection has to rewalk — otherwise turning it on (or off)
+  // does nothing visible until some unrelated change happens to trigger a scan.
+  if (collection.groupMultiDisc) {
+    signature += QLatin1String("|multidisc");
+  }
+  return signature;
+}
 
 // Kartend-a911.2: executes a prepared query and logs a DatabaseQueryFailed
 // warning on failure. Returns nullopt on success, the constructed ErrorContext

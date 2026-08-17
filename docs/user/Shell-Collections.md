@@ -167,7 +167,7 @@ bookkeeping.
 
 ## Alias parents and shells
 
-A shell collection can be the [alias parent](Collections.md#linked-parents)
+A shell collection can be the [alias parent](Collections.md#linked-parents-alias-parents)
 of a collection that already lives elsewhere — useful when one
 collection naturally belongs in two categories. Example: a `Concerts`
 collection lives under `Video`, but you alias-parent it under `Audio`

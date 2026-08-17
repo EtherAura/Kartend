@@ -111,6 +111,7 @@ private slots:
   void testPeekManifestRejectsTooShort();
   void testPeekManifestSucceedsOnGoodKart();
   void testExtractToWritesFiles();
+  void testExtractedPayloadsAreNotExecutable();
   void testExtractToWritesPathVariantEntries_data();
   void testExtractToWritesPathVariantEntries();
   void testExtractToValidatesShaAndFailsOnTamper();
@@ -176,6 +177,35 @@ void TestKartReader::testExtractToWritesFiles() {
   QFile read2(QDir(dest.path()).filePath("artwork/b.png"));
   QVERIFY(read2.open(QIODevice::ReadOnly));
   QCOMPARE(read2.readAll(), b);
+}
+
+void TestKartReader::testExtractedPayloadsAreNotExecutable() {
+  // Kartend-f8y08: a bundle can name one of its own extracted files as the
+  // launcher. That import is gated on an explicit confirmation, but the
+  // extractor is the independent control underneath it: payloads land without
+  // an execute bit, so the file cannot be started as a program even if the
+  // gate above were ever weakened. The format carries no permission field —
+  // this test exists to keep it that way, because "restore the mode on
+  // extract" is an easy-looking feature that would quietly turn a bundled
+  // file into a runnable one.
+#ifdef Q_OS_WIN
+  QSKIP("POSIX permission bits are not meaningful on Windows");
+#else
+  QByteArray script("#!/bin/sh\necho hi\n");
+  QTemporaryFile f;
+  writeTempKart(
+      buildKart(sampleManifest(), {entryBytes("media/runner.sh", script, KartFormat::Flag_Media,
+                                              KartFormat::Compression_None)}),
+      f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  const QFileInfo extracted(QDir(dest.path()).filePath("media/runner.sh"));
+  QVERIFY(extracted.exists());
+  QVERIFY2(!extracted.isExecutable(),
+           "extracted kart payloads must never land with an execute bit");
+#endif
 }
 
 void TestKartReader::testExtractToWritesPathVariantEntries_data() {

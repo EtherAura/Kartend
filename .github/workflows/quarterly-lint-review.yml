@@ -38,7 +38,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build review checklist from .clang-tidy + suppression files
         id: checklist
@@ -174,7 +174,7 @@ jobs:
         # stable label so the issues are easy to find/filter; always creates a
         # fresh dated issue (unlike nightly-tsan's rolling single issue) so each
         # quarter's snapshot is its own auditable artifact.
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const title = process.env.ISSUE_TITLE;

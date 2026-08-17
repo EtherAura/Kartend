@@ -267,7 +267,14 @@ auto read(const QString &appInfoPath, const QSet<QString> &wantedAppIds)
     }
     const qint64 tableOffset = readI64(data, 8);
     pos = 16;
-    if (tableOffset < 16 || tableOffset + 4 > data.size()) {
+    // Bound-check by SUBTRACTION, never `tableOffset + 4 > data.size()`: the
+    // offset is eight fully attacker-controlled bytes, so the addition
+    // overflows signed 64-bit for any value near INT64_MAX and wraps negative,
+    // silently passing a `>` test and letting the readU32 below index far past
+    // the buffer (QByteArray::operator[] const is Q_ASSERT-only, so release
+    // builds read out of bounds rather than aborting). data.size() >= 16 is
+    // established above, so the subtraction cannot underflow.
+    if (tableOffset < 16 || tableOffset > data.size() - 4) {
       return ErrorContext::error(ErrorCode::InvalidConfigValue,
                                  "appinfo.vdf string table offset out of range",
                                  "SteamAppInfo::read")
@@ -276,7 +283,14 @@ auto read(const QString &appInfoPath, const QSet<QString> &wantedAppIds)
     recordsEnd = qsizetype(tableOffset);
     const quint32 count = readU32(data, qsizetype(tableOffset));
     qsizetype stringPos = qsizetype(tableOffset) + 4;
-    stringTable.reserve(qsizetype(count));
+    // Clamp the reservation to what the remaining bytes could actually hold.
+    // `count` is a raw u32 from the file: reserving it directly asks for up to
+    // 4 Gi * sizeof(QString) (~103 GB) before the truncation check in the loop
+    // can fire, turning a 24-byte hostile file into a bad_alloc abort. Every
+    // entry costs at least its NUL terminator, so the remaining byte count is a
+    // sound ceiling; a genuine file is unaffected because its table really does
+    // carry that many bytes.
+    stringTable.reserve(qMin(qsizetype(count), data.size() - stringPos));
     for (quint32 i = 0; i < count; ++i) {
       QString entry;
       if (!readCString(data, stringPos, entry)) {

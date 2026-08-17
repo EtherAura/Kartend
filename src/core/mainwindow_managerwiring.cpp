@@ -405,12 +405,14 @@ void MainWindow::wireKartManager() {
                                      const ItemMetadataStore::ItemMetadata &incoming) {
       return m_dialogController->runKartMergeDialog(itemPath, existing, incoming);
     };
-    // Kartend-s6mj: interactive confirmation when an imported .kart carries
-    // launcher / icon / placeholder paths outside the safe allowlist. The
-    // user sees one (field, path) entry per row and must opt in via the
-    // non-default "Import anyway" button. Cancel is default to make the
-    // safe choice the easy one (a malicious .kart's launcherPath=/bin/sh
-    // would otherwise execute on the next Launch click).
+    // Kartend-s6mj / Kartend-kxqqf: interactive confirmation when an imported
+    // .kart carries a launcher configuration — the program to run, the core
+    // to load and the arguments to pass — or an icon / placeholder path
+    // outside the safe allowlist. The user sees one (field, value) entry per
+    // row, each labelled with why it is listed, and must opt in via the
+    // non-default "Import anyway" button. Cancel is default to make the safe
+    // choice the easy one: whatever the manifest names here is what a later
+    // Launch click executes.
     kartSetup.suspiciousPathConfirmer =
         [this](const QList<kart::SuspiciousKartPath> &suspicious) -> bool {
       QStringList lines;
@@ -420,11 +422,12 @@ void MainWindow::wireKartManager() {
       }
       QMessageBox box(this);
       box.setIcon(QMessageBox::Warning);
-      box.setWindowTitle(tr("Import Kart — suspicious paths"));
-      box.setText(tr("This .kart references paths outside the safe-prefix "
-                     "allowlist (your home directory, /usr/bin, /usr/local/bin, "
-                     "/opt). Continuing will register these paths and they may "
-                     "be executed on a later Launch click."));
+      box.setWindowTitle(tr("Import Kart — launcher configuration"));
+      box.setText(tr("This .kart brings its own launcher settings. Importing it "
+                     "registers the program below, along with the arguments it "
+                     "will be started with, and a later Launch click runs them. "
+                     "Import a bundle you did not make only if you trust its "
+                     "source as much as you would trust a program it sent you."));
       box.setInformativeText(lines.join(QLatin1Char('\n')));
       auto *importAnyway = box.addButton(tr("Import anyway"), QMessageBox::AcceptRole);
       auto *cancel = box.addButton(tr("Cancel"), QMessageBox::RejectRole);

@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include <QDateTime>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -188,10 +189,17 @@ QList<Match> evalHasArtwork(QSqlDatabase &db) {
     return out;
   }
   QSqlQuery q(db);
-  // items.artwork_path is populated by the scanner (v1 column) when an
-  // artwork file matched on disk; an empty / NULL value means "fall back
-  // to the procedural placeholder". Filtering on non-empty artwork_path
-  // is the cheap way to ask "does this item have a real cover".
+  // items.artwork_path caches where the collection's artwork directory
+  // answered to this item's name on its LAST SCAN — the same cascade, disc
+  // fallback included, that the grid resolves live per tile
+  // (ScanArtwork::resolveStagedArtwork fills it; see scanartwork.h). Empty /
+  // NULL means "no cover matched, fall back to the procedural placeholder".
+  // Filtering on non-empty artwork_path is the cheap way to ask "does this
+  // item have a real cover" without a filesystem probe per row.
+  //
+  // Scan-time, not live: art dropped into the artwork directory without the
+  // media directory changing does not trigger a rescan, so this answer catches
+  // up on the collection's next scan.
   if (!q.exec(QStringLiteral("SELECT collection_uuid, path FROM items "
                              "WHERE artwork_path IS NOT NULL AND artwork_path != '' "
                              "ORDER BY name COLLATE NOCASE ASC"))) {
@@ -299,7 +307,9 @@ QList<Match> evalMissingArtwork(QSqlDatabase &db) {
   }
   QSqlQuery q(db);
   // Symmetric to evalHasArtwork — NULL OR empty captures both shapes the
-  // scanner can leave behind when an artwork file isn't found on disk.
+  // scanner can leave behind when no artwork file matched on disk (a row the
+  // apply never touched is NULL; one the apply refreshed with an unresolved
+  // staged value is the empty string).
   if (!q.exec(QStringLiteral("SELECT collection_uuid, path FROM items "
                              "WHERE artwork_path IS NULL OR artwork_path = '' "
                              "ORDER BY name COLLATE NOCASE ASC"))) {
@@ -417,6 +427,64 @@ QList<Match> evaluate(QSqlDatabase &db, const SmartFilter::Filter &filter) {
     return evalFavorite(db);
   }
   return {};
+}
+
+QList<Match> evaluate(QSqlDatabase &db, const SmartFilter::FilterSet &set) {
+  if (set.rules.isEmpty()) {
+    return {}; // rejected at parse time; belt-and-braces against a hand-built set
+  }
+  if (set.rules.size() == 1) {
+    return evaluate(db, set.rules.first());
+  }
+
+  // Composition happens over result SETS rather than by fusing the rules into
+  // one WHERE clause. Each Kind's SQL carries its own ordering and its own
+  // LIMIT — "top 20 played" means the top 20, not "played, capped later" — and
+  // those semantics survive intact only if each rule runs as written. The cost
+  // is one query per rule on playlist open, against a table the scanner
+  // already indexes.
+  //
+  // Ordering follows the FIRST rule: it is the one the user wrote first, and
+  // an "all" set can only ever be a subset of it. Union appends later rules'
+  // items in rule order, so the result is stable across rebuilds.
+  const auto keyOf = [](const Match &m) { return m.collectionUuid + QChar(u'\0') + m.path; };
+
+  QList<Match> combined = evaluate(db, set.rules.first());
+  for (qsizetype i = 1; i < set.rules.size(); ++i) {
+    if (combined.isEmpty() && set.match == SmartFilter::MatchMode::All) {
+      break; // an intersection can only shrink — the remaining queries can't change it
+    }
+    const QList<Match> next = evaluate(db, set.rules.at(i));
+
+    QSet<QString> nextKeys;
+    nextKeys.reserve(next.size());
+    for (const Match &m : next) {
+      nextKeys.insert(keyOf(m));
+    }
+
+    if (set.match == SmartFilter::MatchMode::All) {
+      QList<Match> kept;
+      kept.reserve(std::min(combined.size(), next.size()));
+      for (const Match &m : combined) {
+        if (nextKeys.contains(keyOf(m))) {
+          kept.append(m);
+        }
+      }
+      combined = kept;
+    } else {
+      QSet<QString> haveKeys;
+      haveKeys.reserve(combined.size());
+      for (const Match &m : combined) {
+        haveKeys.insert(keyOf(m));
+      }
+      for (const Match &m : next) {
+        if (!haveKeys.contains(keyOf(m))) {
+          combined.append(m);
+        }
+      }
+    }
+  }
+  return combined;
 }
 
 } // namespace SmartPlaylistEvaluator

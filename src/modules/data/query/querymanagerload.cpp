@@ -93,12 +93,15 @@ void QueryManager::loadAllCollections(const QList<CollectionConfig> &allCollecti
     }
 
     QHash<QString, QDateTime> timestamps;
-    QStringList filePaths = loadOrScanCollection(collectionIndex, collection, timestamps);
+    QHash<QString, QString> storedAbsByKey;
+    QStringList filePaths =
+        loadOrScanCollection(collectionIndex, collection, timestamps, nullptr, &storedAbsByKey);
 
     QueryManagerInternal::appendFileMapsAndListCanonical(
         collectionIndex, collection,
         CollectionUtils::resolveArtworkDirectory(collectionIndex, allCollections), filePaths,
-        allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, false);
+        allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, false,
+        &storedAbsByKey);
   }
 
   QueryManagerInternal::sortFiles(allFilePaths);
@@ -142,7 +145,10 @@ void QueryManager::loadItems(const CollectionContext &context,
   // a Date/Size sort below doesn't stat every file again.
   QHash<QString, QDateTime> timestamps;
   QHash<QString, qint64> dbSizes;
-  QStringList filePaths = loadOrScanCollection(ctx.currentIndex, ctx.config, timestamps, &dbSizes);
+  // Rows whose stored path the media-dir join cannot reconstruct (Kartend-yxahw).
+  QHash<QString, QString> storedAbsByKey;
+  QStringList filePaths =
+      loadOrScanCollection(ctx.currentIndex, ctx.config, timestamps, &dbSizes, &storedAbsByKey);
 
   // Apply subfolder filtering
   const QString &subfolder = ctx.config.folderBrowsing.currentSubfolder;
@@ -183,7 +189,7 @@ void QueryManager::loadItems(const CollectionContext &context,
 
   QueryManagerInternal::appendFileMapsAndListCanonical(
       ctx.currentIndex, ctx.config, resolvedArtworkDir, filePaths, allFilePaths, allFileNames,
-      fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, false);
+      fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, false, &storedAbsByKey);
 
   // Re-key the relative-keyed metadata to the absolute paths sortFiles sees
   // (no canonical-path cache here — this load path doesn't dedup).
@@ -245,8 +251,9 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
   if (hasMainMediaDirectory) {
     QHash<QString, QDateTime> timestamps;
     QHash<QString, qint64> dbSizes;
-    QStringList mainFilePaths =
-        loadOrScanCollection(mainCtx.currentIndex, mainCtx.config, timestamps, &dbSizes);
+    QHash<QString, QString> mainStoredAbsByKey;
+    QStringList mainFilePaths = loadOrScanCollection(mainCtx.currentIndex, mainCtx.config,
+                                                     timestamps, &dbSizes, &mainStoredAbsByKey);
 
     // Apply subfolder filtering for the main collection
     const QString &subfolder = mainCtx.config.folderBrowsing.currentSubfolder;
@@ -287,7 +294,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
         mainCtx.currentIndex, mainCtx.config,
         CollectionUtils::resolveArtworkDirectory(mainCtx.currentIndex, allCollections),
         mainFilePaths, allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir,
-        fileToCollectionIndex, true, &seenCanonicalPaths, &canonicalPathCache);
+        fileToCollectionIndex, true, &mainStoredAbsByKey, &seenCanonicalPaths, &canonicalPathCache);
 
     QueryManagerInternal::harvestCanonicalPathCache(mainCtx.config.mediaDirectory, timestamps,
                                                     canonicalPathCache, m_persistentCanonicalPaths);
@@ -335,8 +342,9 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
 
     QHash<QString, QDateTime> subTimestamps;
     QHash<QString, qint64> subDbSizes;
-    QStringList subFilePaths =
-        loadOrScanCollection(collectionIndex, collection, subTimestamps, &subDbSizes);
+    QHash<QString, QString> subStoredAbsByKey;
+    QStringList subFilePaths = loadOrScanCollection(collectionIndex, collection, subTimestamps,
+                                                    &subDbSizes, &subStoredAbsByKey);
 
     // Kartend-4fmu1: same seed/harvest bracket as the main collection above.
     QueryManagerInternal::seedCanonicalPathCache(collection.mediaDirectory, subTimestamps,
@@ -346,7 +354,7 @@ void QueryManager::loadItemsWithSubcollections(const CollectionContext &context,
         collectionIndex, collection,
         CollectionUtils::resolveArtworkDirectory(collectionIndex, allCollections), subFilePaths,
         allFilePaths, allFileNames, fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, true,
-        &seenCanonicalPaths, &canonicalPathCache);
+        &subStoredAbsByKey, &seenCanonicalPaths, &canonicalPathCache);
 
     QueryManagerInternal::harvestCanonicalPathCache(collection.mediaDirectory, subTimestamps,
                                                     canonicalPathCache, m_persistentCanonicalPaths);

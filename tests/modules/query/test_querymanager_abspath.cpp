@@ -32,6 +32,7 @@
 #include "collection/collectioncontext.h"
 #include "collection/typehelpers.h"
 #include "querymanager.h"
+#include "querymanagerhelpers.h"
 #include "sessionmanager.h"
 
 class TestQueryManagerAbsPath : public QObject {
@@ -40,6 +41,7 @@ private slots:
   void initTestCase();
   void scanStoresAbsolutePathAndRelPath();
   void reconcileAbsolutizesExistingRowsPreservingStats();
+  void cachedLoadUsesStoredPathWhenRelPathPointsElsewhere();
 };
 
 void TestQueryManagerAbsPath::initTestCase() {
@@ -294,6 +296,61 @@ void TestQueryManagerAbsPath::reconcileAbsolutizesExistingRowsPreservingStats() 
       flag.exec(QStringLiteral("SELECT value FROM meta WHERE key = 'items_paths_absolutized'")));
   QVERIFY(flag.next());
   QCOMPARE(flag.value(0).toString(), QStringLiteral("1"));
+}
+
+void TestQueryManagerAbsPath::cachedLoadUsesStoredPathWhenRelPathPointsElsewhere() {
+  // Kartend-yxahw, at the layer the bug lived in. Every consumer of the cached
+  // load re-derives an item's absolute path by joining its media-dir-relative
+  // key onto the collection's media directory. That holds for every ordinary
+  // row and is DELIBERATELY false for the collapsed multi-disc item, whose
+  // path is a generated playlist under <appDataDir>/multi-disc/<uuid>/ while
+  // its rel_path places it beside its discs for folder browsing. The join
+  // produced a file that does not exist, and everything downstream — launch,
+  // details pane, artwork — got that nonexistent path.
+  //
+  // Driven through the pure helper rather than a live load: the alternative is
+  // to craft the row in SQLite and then defeat every rescan heuristic to reach
+  // the cached branch, which tests the heuristics more than the fix.
+  QTemporaryDir mediaDir;
+  QVERIFY(mediaDir.isValid());
+  const QDir dir(mediaDir.path());
+
+  CollectionConfig collection;
+  collection.name = QStringLiteral("OverrideCollection");
+  collection.mediaDirectory = mediaDir.path();
+
+  // What the cached load hands over: media-dir-relative keys.
+  const QStringList filePaths = {QStringLiteral("ordinary.bin"), QStringLiteral("Recital.m3u")};
+  // ...plus the true path for the one row the join cannot reconstruct.
+  const QString playlistPath = QStringLiteral("/somewhere/else/multi-disc/abc123/Recital.m3u");
+  QHash<QString, QString> storedAbsByKey;
+  storedAbsByKey.insert(QStringLiteral("Recital.m3u"), playlistPath);
+
+  QStringList allFilePaths;
+  QHash<QString, QString> allFileNames;
+  QHash<QString, QString> fileToArtworkDir;
+  QHash<QString, QString> fileToMediaDir;
+  QHash<QString, int> fileToCollectionIndex;
+
+  QueryManagerInternal::appendFileMapsAndListCanonical(
+      0, collection, collection.artworkDirectory, filePaths, allFilePaths, allFileNames,
+      fileToArtworkDir, fileToMediaDir, fileToCollectionIndex, false, &storedAbsByKey);
+
+  // The ordinary row still resolves by joining — unchanged behaviour.
+  QVERIFY2(allFilePaths.contains(dir.absoluteFilePath(QStringLiteral("ordinary.bin"))),
+           qPrintable(QStringLiteral("ordinary row must still join: %1")
+                          .arg(allFilePaths.join(QStringLiteral(", ")))));
+
+  // The collapsed row resolves to its real playlist, NOT to the rejoin.
+  QVERIFY2(allFilePaths.contains(playlistPath),
+           qPrintable(QStringLiteral("expected the stored path %1, got: %2")
+                          .arg(playlistPath, allFilePaths.join(QStringLiteral(", ")))));
+  QVERIFY2(!allFilePaths.contains(dir.absoluteFilePath(QStringLiteral("Recital.m3u"))),
+           "rel_path was rejoined onto the media dir for the collapsed item");
+
+  // And its display name comes from the key, so the tile still reads "Recital"
+  // rather than anything derived from the playlist's location.
+  QCOMPARE(allFileNames.value(playlistPath), QStringLiteral("Recital"));
 }
 
 QTEST_MAIN(TestQueryManagerAbsPath)

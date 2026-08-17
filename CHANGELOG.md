@@ -9,6 +9,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A release split across several discs can now appear as one item.** A
+  recording or film that arrives as `Recital (Disc 1).flac` and `Recital
+  (Disc 2).flac` used to browse as two tiles, each holding half of
+  something you think of as one thing. Turn on **Group multi-disc releases
+  into one item** for a collection and files whose names differ only by a
+  disc marker — `(Disc 1)`, `(CD 2)`, `[Side A]`, with `disk` spelled
+  either way — collapse into a single tile named for what they have in
+  common, which plays every part in order through a playlist Kartend
+  generates. That playlist lives in Kartend's own data directory, never
+  beside your media: the feature reads your folders and does not write to
+  them. Metadata is merged rather than picked from whichever file was
+  scanned first — the first disc wins where two discs disagree, later
+  discs fill in anything it lacks, and tags accumulate across all of them,
+  so artwork or notes attached to a later part are not lost. Anything you
+  edit on the grouped item afterwards outranks all of it and survives
+  rescans. An art folder filed per disc needs no renaming either: a
+  grouped item with no cover of its own now takes the art of its lowest
+  disc, and a cover named for the release still wins where you have one.
+  Grouping is per-collection and off by default, so existing
+  libraries look exactly as they did until you ask for this. A file
+  standing alone is never collapsed, and identically-named releases in
+  different folders stay separate. Turning it back off restores the
+  individual items, per-disc notes and ratings included, and removes the
+  playlists it generated — nothing is left behind either way.
+
+- **Games installed while Kartend is open now appear on their own.** A
+  launcher collection used to refresh at startup or when you asked it to, so
+  a game installed in Steam or Heroic mid-session stayed invisible until the
+  next launch. Kartend now watches the folders those launchers write their
+  manifests into and re-syncs shortly after they change. It waits for the
+  dust to settle first — a Steam download rewrites its manifest repeatedly
+  while it runs, and the sync is silent and idempotent, so nothing interrupts
+  you and a burst of writes still costs one pass. Only sources you have
+  actually imported are watched.
+
+- **A smart playlist can hold more than one rule.** Until now it held
+  exactly one, so "recently launched" and "favourite" were each expressible
+  but "recently launched *and* favourite" was not. A playlist now takes a
+  list of rules and matches items that satisfy **all** of them or **any** of
+  them. Each rule keeps its own ordering and its own limit — "top 20 played"
+  still means the top 20 of that rule, not the whole set trimmed afterwards
+  — and the results are ordered by the first rule you wrote. An item
+  matching two rules appears once. Existing playlists are untouched: a
+  one-rule playlist is stored exactly as it always was, so nothing needs
+  migrating and nothing is rewritten on upgrade.
+
+- **Launch parameters can now name the parts of an item's path.** A
+  template could already place the whole path with `%1`; it can now also
+  use `%name%` for the title, `%dir%` for the containing folder, plus
+  `%filename%` and `%ext%`. That is enough to tell a player which title to
+  show in its window bar, or to point a subtitle flag at the file sitting
+  next to the video — both of which previously meant wrapping the launcher
+  in a shell script. Tokens are substituted inside each argument after the
+  parameter string has been split, so a title containing spaces stays a
+  single argument instead of becoming several. Items imported from Steam,
+  Flatpak and the like launch through a shortcut rather than a file on
+  disk: `%name%` still gives their title, the path-part tokens come out
+  empty, and **Preview launch command…** now says so instead of leaving you
+  to wonder why an argument went blank.
+
 - **ES-DE libraries can be imported, one collection per system.** File →
   Import → "Import from Launcher…" now detects ES-DE and brings in each of
   its systems as its own collection — SNES games in a SNES collection, PS2
@@ -118,6 +178,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   attribute by watching the screen: the trace names the culprit in a single
   run (Kartend-i3mmq, Kartend-ic4h6).
 
+- **Ctrl+Shift+I opens "Import from Launcher".** It was reachable only through
+  File → Import → Import from Launcher, two levels of menu, and re-running it
+  is the ordinary way to pick up games installed since the last import — so
+  the trip was one you made repeatedly.
+
 ### Changed
 
 - **Uses roughly half the memory during long sessions.** Three things were
@@ -167,6 +232,153 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   re-import to pick up, as before (Kartend-i366w).
 
 ### Fixed
+
+- **Clicking empty space in Cover Flow no longer throws the carousel
+  back to the first item.** A left-click that missed every card — easy
+  to do given the carousel's large margins, or when clicking the window
+  just to focus it — fell through to the item grid's click handling.
+  The grid is hidden while Cover Flow is showing, so the click found
+  nothing there and cleared the selection, which the carousel rendered
+  by gliding to the first item with a selection border while the
+  position counter and thumbnail strip still showed the item you were
+  on. Clicks that miss the cards are now simply ignored in Cover Flow,
+  and a cleared selection no longer masquerades as "the first item is
+  selected" — the carousel holds its place until a real selection
+  arrives.
+
+- **A selection made with the mouse wheel no longer snaps back a moment
+  later.** Scrolling the wheel moved the selection but — unlike the
+  arrow keys — never recorded the new position as the collection's
+  remembered selection. Anything that reloads the view a moment later
+  (a background rescan finishing, a settings save, the
+  remember-selection restore) would then politely put the selection
+  back where the record said it should be: wherever you were *before*
+  the wheel. Wheel moves are now recorded exactly like keyboard moves,
+  in every view. Cover Flow, where this was most visible, also no
+  longer runs the grid's scroll animation against its hidden item
+  grid — that animation's completion could re-center the carousel on
+  stale geometry a second and a half after the wheel stopped, and its
+  half-armed scroll state was left dangling with nothing to clear it.
+
+- **A real front cover now beats the composite image on the tile.** Two
+  separate leftovers of older scrapes conspired to keep the multi-panel
+  composite (`mixrbv`) image on grid tiles and cover-flow cards even
+  when a proper front cover exists. First, older scrapes kept a copy of
+  "the best cover available at the time" directly in the artwork
+  folder — often the composite — and the artwork folder was always
+  searched before `front/`; the search now looks in `front/` first.
+  Second, every scrape records where it saved its non-standard images
+  (`mixrbv1`, `box-3d`, …) so the sidebar gallery can list them — and
+  that bookkeeping record was mistaken for a hand-linked cover, which
+  outranks everything. Those records no longer drive the tile: only a
+  link on a standard cover type (what the links dialog and the Artwork
+  Wizard create) does. Everything else keeps its old rank: a cover you
+  drop directly into the artwork folder still beats the box, mix and
+  screenshot fallbacks, a hand-set link still beats everything, and the
+  composite still shows for items that genuinely have nothing better.
+  If you *want* a composite as an item's tile face, link it on the
+  Front Cover type.
+
+- **Importing a `.kart` package now shows you what it will run, and asks
+  before it registers it.** A package brings its own launcher settings —
+  the program to start, the core to load and the arguments to pass — and
+  those were chosen by whoever built the package, not by you. Kartend
+  weighed only the folder the program sits in against a short list of
+  ordinary locations, so a package naming something that lives in one of
+  them was registered in silence, and the preflight review reported no
+  validation issues while never having looked at the arguments at all.
+  The arguments are the half that decides what a program actually does.
+  Preflight now lists every launcher setting a package carries, each value
+  written out exactly as it will be used, and an import carrying any of
+  them asks you to confirm before it is registered — including a
+  drag-and-drop import, which never showed the review in the first place.
+  Ordinary-looking settings are listed quietly; ones that read as unusual
+  are called out, whether that is a program whose arguments are themselves
+  instructions, an argument carrying a command of its own, or a file the
+  package shipped for itself. That last case is now recognised for cores
+  and arguments too rather than only for the program, which matters
+  because a core is read into the player rather than started as a program
+  of its own. The all-clear banner is now reserved for a package that asks
+  to run nothing at all, so it can no longer vouch for settings nothing
+  examined. A package you exported yourself imports exactly as before —
+  you simply get to see what is in it first (Kartend-kxqqf,
+  Kartend-f8y08).
+
+- **A cover you assign by hand now counts as artwork, and the artwork wizard
+  stops offering you items you have already done.** Kartend finds covers two
+  ways: by matching file names in a collection's artwork folder, and by the
+  per-item links you set yourself through **Edit artwork links…** or the
+  **Assign Missing Artwork…** wizard. Only the first counted. So the *Has
+  artwork* and *Missing artwork* smart playlists, the `has:artwork` and
+  `missing:artwork` search terms and the missing-artwork count in Collection
+  Health all reported a hand-linked item as having nothing — and the wizard,
+  whose worklist is built the same way, handed you back every item you had
+  just assigned the next time you opened it, with no way to work through a
+  large library short of renaming files. Links now count everywhere those do,
+  and they count the moment you save one rather than at the collection's next
+  scan, so the worklist shrinks as you go. A link only counts while the image
+  it points at is still there: delete that file and the item goes back to
+  whatever its name matches, rather than claiming a cover nothing can show.
+  Links on `logo` and on custom artwork types stay gallery-only, since those
+  are never used as an item's cover. One case still waits for a scan —
+  clearing a link on an item that also has a name-matched cover reports it as
+  missing artwork until that collection is next scanned.
+
+- **A cover you assign by hand now shows on the item's tile.** Assigning one
+  put it in the sidebar gallery and on the detail page, but the grid went on
+  painting the procedural placeholder, and the cover-flow card the same — the
+  two surfaces that actually show you a cover were the two that never looked at
+  your links. Picking an image by hand is how you fix what automatic matching
+  gets wrong, so it was the one case where the fix did not visibly take. Tiles
+  and cards now show a hand-linked cover, and show it ahead of anything matched
+  by file name, which is the order the rest of Kartend has always used. The new
+  cover appears as soon as you save the link rather than waiting for you to
+  leave the collection and come back. The **hide missing artwork** filter
+  follows: an item kept off the grid because nothing in the artwork folder
+  answers to its name comes back the moment you link a cover for it, so the
+  filter no longer hides an item that would render one. A link to a file you
+  have since deleted still shows nothing, and links on `logo` or a custom
+  artwork type remain gallery-only.
+
+- **Collections that keep artwork in matching subfolders now find it even
+  when the content folder is a symbolic link.** With **Include Artwork
+  Subfolders** on, Kartend looks for an item's cover in the artwork subfolder
+  matching the item's own content subfolder — and working out which subfolder
+  that is assumed the item sat under the content folder exactly as you spelled
+  it. A collection pointed at a symbolic link does not: its items are known by
+  the real location behind the link, which is a different path. The
+  disagreement turned into a chain of `..` steps that climbed out of the
+  artwork folder entirely, so the search happened somewhere belonging to
+  neither setting and every tile in a subfolder fell back to the placeholder.
+  An item that does not sit under the content folder now has its cover looked
+  for in the artwork folder itself, which is the same place a scan records it,
+  so tiles and the scan's record agree. Cover flow resolved covers through its
+  own copy of this and had the same fault; both now share one answer.
+
+- **Everything that answers "does this item have a cover?" now agrees with
+  what you can see.** The *Has artwork* and *Missing artwork* smart-playlist
+  rules, the `has:artwork` and `missing:artwork` search terms, the
+  missing-artwork count in Collection Health and the artwork wizard's
+  worklist all read a record of the cover found for each item — and the scan
+  never wrote that record. So they reported an entire library as artless
+  while its tiles painted covers perfectly well: *Missing artwork* returned
+  everything, *Has artwork* returned nothing, and the health dashboard put
+  the missing count at 100%. Scanning a collection now files each item's
+  cover as it finds it, using the same search the grid uses — the artwork
+  folder and its typed subfolders, matched on the item's name, including the
+  case where a multi-disc release takes the art of one of its discs. The
+  record is refreshed on every scan, so art you add or delete is reflected
+  the next time that collection is scanned, and the grid itself is unchanged:
+  it still looks at your folders directly and remains the last word on what
+  you see.
+
+- **A subcollection's chosen icon shows on its tile again.** Setting
+  `collectionIcon` on a subcollection left its Grid tile on the striped
+  placeholder unless the image file happened to be named after the
+  subcollection itself — so pointing "Games" at `SuperTuxKart.png` showed
+  nothing, while the same file renamed to `Games.png` worked. The tile fell
+  back to the placeholder silently, which read as missing artwork rather
+  than a setting being ignored.
 
 - **Games whose icon is an SVG now get a cover when imported from the
   application menu.** Modern desktop packages increasingly ship only a
@@ -487,6 +699,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   was Discard, which throws away the edits the button was meant to keep.
   Cancel still asks, which is where the question is genuinely open
   (Kartend-1g46b).
+- **Artwork filed in folders that mirror your media now counts as artwork.**
+  Where a collection's artwork folder repeats the shape of its media folder —
+  a cover in `Artwork/Concertos/` for a recording in `Media/Concertos/` — the
+  grid painted those covers, but nothing that asks the library whether an item
+  *has* artwork agreed. The *Has artwork* and *Missing artwork* smart
+  playlists, the `has:artwork` and `missing:artwork` search terms, the
+  missing-artwork count in Collection Health and the artwork wizard's worklist
+  all called every item in a subfolder artless, because a scan looked only at
+  the top of the artwork folder while the grid looked inside the matching one.
+  A scan now looks where the grid looks, folder by folder, so what the library
+  records matches what you can see. Collections whose artwork sits in one flat
+  folder resolve exactly as they did (Kartend-35wqh).
+- **A cover you assign by hand now gives its row an artwork preview in List
+  view.** Hand-linked covers already counted everywhere else, but a List row
+  showed no preview button unless a file named after the item happened to
+  exist as well — so for an item whose link was the only cover it had, the
+  row looked bare next to the same item's tile in Grid. The button appears for
+  a linked item now, and opens the image you linked rather than hunting for
+  one by name, which is also what it does when the item's collection has no
+  artwork folder configured at all (Kartend-ni68u).
+- **A grouped multi-disc release filed in a subfolder now finds its cover.**
+  With **Group multi-disc releases into one item** on, a release whose discs
+  sit in a subfolder of a collection that mirrors its artwork folders showed
+  the placeholder, even with `Recital (Disc 1).png` filed right beside the
+  discs. Grouping gives the release a playlist of its own to play, and the
+  cover search followed that playlist — which lives in Kartend's data folder,
+  not next to your media — so it looked for the art at the top of the artwork
+  folder instead of in the one matching where the release actually sits. It
+  now looks where the release is (Kartend-srg3i).
+- **Hide missing artwork no longer hides items that have artwork.** For a
+  collection whose artwork folders mirror its media folders, turning on **hide
+  missing artwork** made items in subfolders disappear — including ones whose
+  cover was sitting in the matching artwork subfolder and visibly painted on
+  the tile. The filter only ever looked at the top of the artwork folder, so
+  anything filed deeper counted as missing. It now looks in the same folder
+  the tile does (Kartend-7f76f).
+- **A scrape no longer replaces a cover you chose yourself.** The scraper
+  documentation said a cover you had linked by hand was left alone; nothing
+  actually checked, so a scrape overwrote it — and the mode that overwrites
+  is the one most scrapes run in. If an item has a cover you linked through
+  **Item Artwork Links** or the **Assign Missing Artwork…** wizard, a scrape
+  now skips that artwork type and says so in its summary, whichever re-scrape
+  mode you picked. Other artwork types on the same item still scrape as
+  before, and re-scraping something the scraper itself fetched earlier is
+  unaffected. The link stops protecting the type once the image it points at
+  is gone (Kartend-yibgw).
 
 ## [0.0.18] - 2026-07-29
 

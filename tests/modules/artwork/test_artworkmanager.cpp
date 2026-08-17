@@ -46,6 +46,8 @@ private slots:
   void testFindArtworkForFile_resolvesFromFrontSubdir();
   void testFindArtworkForFile_fallsBackThroughCoverSubdirs();
   void testFindArtworkForFile_prefersFrontOverScreenshot();
+  void testFindArtworkForFile_prefersFrontOverFlatRoot();
+  void testFindArtworkForFile_flatRootBeatsNonFrontSubdirs();
 
   // Pure cycle algorithm ---------------------------------------
   void testNextArtworkType_emptyAvailable();
@@ -62,6 +64,7 @@ private slots:
   void testCancelAllArtworkLoading_idempotent();
   void testCancelAllArtworkLoading_clearsPending();
   void testDestruct_withInFlightDispatch_doesNotCrash();
+  void testSubcollectionArtwork_survivesNameThatDiffersFromFile();
 
   // ArtworkLoadDispatcher generation-counter regression coverage (Kartend-7rpq)
   void testDispatcher_dispatchAfterCancelAllStillCompletes();
@@ -224,6 +227,35 @@ void TestArtworkManager::testFindArtworkForFile_prefersFrontOverScreenshot() {
   QCOMPARE(path, front);
 }
 
+void TestArtworkManager::testFindArtworkForFile_prefersFrontOverFlatRoot() {
+  // Kartend-u67w0: pre-b73642f8 scrapes mirrored their best-available cover
+  // to the flat root; for items with no box-2D at the time that mirror is a
+  // mixrbv COMPOSITE. A real front cover — whenever it exists — must beat
+  // the root file, or the stale composite stays the tile forever.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QVERIFY(!writeArtworkFile(tmp.path(), QStringLiteral("game.png")).isEmpty());
+  const QString front = writeArtworkFile(QDir(tmp.path()).filePath(QStringLiteral("front")),
+                                         QStringLiteral("game.png"));
+  QVERIFY(!front.isEmpty());
+  const QString path = ArtworkManager::findArtworkForFile("game.rom", tmp.path());
+  QCOMPARE(path, front);
+}
+
+void TestArtworkManager::testFindArtworkForFile_flatRootBeatsNonFrontSubdirs() {
+  // Only `front/` moved above the root (Kartend-u67w0): a hand-dropped
+  // root cover still outranks the box / mix / screenshot fallbacks.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString root = writeArtworkFile(tmp.path(), QStringLiteral("game.png"));
+  QVERIFY(!root.isEmpty());
+  QVERIFY(!writeArtworkFile(QDir(tmp.path()).filePath(QStringLiteral("mixrbv1")),
+                            QStringLiteral("game.png"))
+               .isEmpty());
+  const QString path = ArtworkManager::findArtworkForFile("game.rom", tmp.path());
+  QCOMPARE(path, root);
+}
+
 // ─── Pure cycle algorithm ─────────────────────────────────────
 
 void TestArtworkManager::testNextArtworkType_emptyAvailable() {
@@ -339,6 +371,36 @@ void TestArtworkManager::testDestruct_withInFlightDispatch_doesNotCrash() {
   QCoreApplication::processEvents();
 
   QVERIFY(true);
+}
+
+void TestArtworkManager::testSubcollectionArtwork_survivesNameThatDiffersFromFile() {
+  // Kartend-zxl0y. A subcollection tile takes its artwork from the child's
+  // collectionIcon first, and that can point at ANY file — its name has no
+  // relation to the subcollection's. The pre-dispatch identity check used to
+  // compare basenames, and for a subcollection the "basename" is its NAME, so
+  // an icon like ".../SuperTuxKart.png" on a subcollection called "Games" was
+  // dropped before ever reaching a worker and the tile fell back to the
+  // procedural placeholder. Nothing logged it: discarding a stale request is
+  // the normal job of that loop.
+  const QString artPath = m_tempDir.path() + "/SuperTuxKart.png";
+  QPixmap onDisk(64, 64);
+  onDisk.fill(Qt::green);
+  QVERIFY(onDisk.save(artPath, "PNG"));
+
+  ArtworkManager manager;
+  wireSetup(&manager);
+
+  ItemWidget widget;
+  widget.setItemDimensions(220, 280);
+  widget.setAsSubcollection(0, QStringLiteral("Games")); // name != file basename
+  QVERIFY(widget.isSubcollection());
+
+  ArtworkInfo info{QPointer<ItemWidget>(&widget), artPath};
+  info.widgetIdentity = widget.getItemName();
+  manager.loadArtworkParallel({info}, /*highPriority=*/true);
+
+  // The decode is off-thread; spin until it lands rather than sleeping.
+  QTRY_VERIFY_WITH_TIMEOUT(manager.hasArtworkForWidget(&widget), 5000);
 }
 
 // ─── ArtworkLoadDispatcher generation-counter coverage (Kartend-7rpq) ───────

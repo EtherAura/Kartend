@@ -1,7 +1,17 @@
 version: 2
 updates:
   - package-ecosystem: "github-actions"
-    directory: "/"
+    # "/" only covers .github/workflows/ plus a ROOT-level action.yml — it does
+    # NOT reach composite actions under .github/actions/<name>/action.yml, so
+    # their pins would rot silently. That already bit us once: Dependabot
+    # bumped actions/cache to v6 across the workflows (#72) and the
+    # windows-build composite action had to be fixed by hand afterwards
+    # (cce8c3b5). The glob keeps every present and future composite action
+    # covered. `directories` (plural) is what supports globbing; `directory`
+    # does not.
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
     commit-message:

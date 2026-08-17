@@ -24,6 +24,7 @@ kartend [options]
 | `--on-conflict <policy>` | takes value | Conflict policy for `--import-kart`: `skip` (default) / `overwrite` / `merge`. |
 | `--export-kart <name>` | takes value | Export the named collection headlessly. Implies exit on completion. |
 | `--export-out <path>` | takes value | Output path for `--export-kart`. **Required** when exporting. |
+| `--allow-untrusted-launcher` | flag | Permit `--import-kart` to register a launcher setting that points *inside* the extracted kart tree — a package that ships the thing it wants run, whether that is named as the launcher, as the core, or as a path argument. Off by default: a headless import has no one to ask, so it refuses rather than silently wiring up a stranger's file. |
 
 Standard Qt options (`--platform`, `--style`, `--stylesheet`, etc.) are
 also accepted but rarely used in practice. See the Qt documentation
@@ -33,10 +34,9 @@ for the full list.
 
 | Code | Meaning |
 |------|---------|
-| `0` | Success — including a normal interactive launch ending with `Ctrl+Q` or window-close. |
-| `1` | Generic error (rarely used; reserved). |
-| `2` | Command-line argument error or headless operation failed (collection not found, missing required arg, kart read/write error). |
-| `42` | Sanitizer / smoke-test exit code (see `KARTEND_SMOKE_TEST_EXIT_MS`). |
+| `0` | Success — including a normal interactive launch ending with `Ctrl+Q` or window-close, and a run terminated by `KARTEND_SMOKE_TEST_EXIT_MS` (the smoke-test hook quits gracefully so sanitizers see a normal teardown). |
+| `1` | Emitted by Qt's own argument parser for an unrecognized option, before Kartend's code runs. Kartend itself never returns 1. |
+| `2` | Kartend's own validation or a headless operation failed: collection not found, unknown `--on-conflict` policy, missing `--export-out`, unsafe path, kart read/write error. |
 
 ## Examples
 
@@ -60,8 +60,11 @@ kartend --export-kart "Films" --export-out ~/backups/films.kart
 ```
 
 Both flags required. Exit `0` on success; `2` on failure (collection
-not found, output path unwritable, etc.). The console gets a one-line
-summary on success.
+not found, output path unwritable, etc.).
+
+Progress lines and the closing summary both go to **stderr**, not
+stdout — so `2>/dev/null` silences them, and a script that only reads
+stdout will see nothing at all. Check the exit code, not the output.
 
 ### Headless: import a collection
 
@@ -174,7 +177,10 @@ echo "Exit: $status"
 rm -rf "$TMP"
 ```
 
-Exit `0` means the package was readable.
+Exit `0` means the package was readable. Note this is a real import,
+not a dry run — `--on-conflict skip` only governs *name collisions*, so
+the package genuinely lands in `$TMP`. That's why the recipe throws the
+directory away afterwards.
 
 ### Headless mode and HOME
 
@@ -209,8 +215,10 @@ based and cheap to extend.
   unknown-option semantics apply.
 - A unit-testable parser shim lives in
   [src/utils/app/cliargs.cpp](../../src/utils/app/cliargs.cpp) — the inline
-  parser in `main.cpp` mirrors it but uses `process()` for real CLI
-  behavior.
+  parser in `main.cpp` is meant to mirror it but uses `process()` for
+  real CLI behavior. The two are kept in sync by hand, so check both
+  when auditing the option set; `--allow-untrusted-launcher` is
+  currently registered only in `main.cpp`.
 - Adding a new flag:
   1. Add the `QCommandLineOption` definition to `main.cpp`.
   2. Mirror it in `cliargs.cpp` so it can be unit-tested without
@@ -218,6 +226,9 @@ based and cheap to extend.
   3. Wire the new behavior (call into the relevant manager).
   4. Add a row to the table at the top of this page and a worked
      example below it.
-- Headless export entry point: `KartManager::exportKartCollection`.
+- Headless export is built inline in `main.cpp`: it resolves the
+  collection UUID via `CollectionUtils::computeCollectionUuid`, then
+  calls `KartWriter::prepareFromCollection()` and
+  `KartWriter::Writer::writeKart()`. `KartManager` is not involved.
 - Headless import entry point: `KartManager::importKartHeadless`.
-- Tests for arg parsing: `tests/utils/test_cliargs.cpp`.
+- Tests for arg parsing: `tests/utils/app/test_cliargs.cpp`.

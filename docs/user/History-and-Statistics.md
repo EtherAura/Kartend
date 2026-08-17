@@ -23,7 +23,7 @@ Play counts and last-played still record. Time played is `0`.
 
 With runtime detection on, Kartend tracks the child process via
 `QProcess`, so `launch_history.duration_seconds` is the real wall-clock
-runtime. See [Splash & Now Playing → Runtime detection](Splash-and-Now-Playing.md#runtime-detection)
+runtime. See [Splash & Now Playing → Runtime detection](Splash-and-Now-Playing.md#what-runtime-detection-turns-on)
 for what that mode also turns on (the Now Playing overlay) and what it
 costs (Kartend stays focused on the launch instead of going to the
 background).
@@ -85,7 +85,7 @@ A small grid above the tabs with running totals:
 | Items launched at least once | Count of items with `play_count > 0` |
 | Played in last 7 days | Count of distinct items with a `launch_history` row in the past 7 days |
 | Total launches | Sum of `play_count` across all items |
-| Total time played | Sum of `duration_seconds` across all `launch_history` rows. **Shows "Disabled" when [`runtimeDetectionEnabled=false`](Splash-and-Now-Playing.md#runtime-detection)** — and the inline note explains how to turn it on. |
+| Total time played | Sum of `duration_seconds` across all `launch_history` rows. **Shows "Disabled" when [`runtimeDetectionEnabled=false`](Splash-and-Now-Playing.md#what-runtime-detection-turns-on)** — and the inline note explains how to turn it on. |
 
 ### Most played tab
 

@@ -116,6 +116,14 @@ kartend_add_test(NAME CollectionFilesystemWatcher
   LINK kartend_data kartend_api kartend_utils
 )
 
+# LauncherManifestWatcher tests (Kartend-5vuqy). Debounce coalescing and the
+# re-add-after-vanish reconcile, driven through notifyChangeForTesting so the
+# suite never waits on real filesystem event delivery.
+kartend_add_test(NAME LauncherManifestWatcher
+  SOURCES modules/watcher/test_launchermanifestwatcher.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # ThemePreset tests (Kartend-y3rg). JSON round-trip + file I/O + apply.
 kartend_add_test(NAME ThemePreset
   SOURCES utils/app/test_themepreset.cpp
@@ -125,6 +133,13 @@ kartend_add_test(NAME ThemePreset
 # PresentationProfile tests (Kartend-6pp5). JSON round-trip + apply + registry.
 kartend_add_test(NAME PresentationProfile
   SOURCES utils/app/test_presentationprofile.cpp
+  LINK kartend_utils
+)
+
+# SearchPreset tests (Kartend-jklv4). Same registry shape as the profiles
+# above: JSON round-trip + apply/snapshot + name-keyed registry helpers.
+kartend_add_test(NAME SearchPreset
+  SOURCES utils/app/test_searchpreset.cpp
   LINK kartend_utils
 )
 
@@ -157,6 +172,18 @@ kartend_add_test(NAME ArtworkCandidates
 kartend_add_test(NAME ArtworkCompose
   SOURCES utils/view/test_artworkcompose.cpp
   LINK kartend_utils Qt6::Gui
+)
+
+# ArtworkMirror tests (Kartend-j5amz): mirroredArtworkDirectory, the shared
+# decision behind "which directory holds this item's cover" when a collection
+# mirrors media subfolders into its artwork folder. Covers the case the grid
+# and cover flow both got wrong — an item living OUTSIDE the media directory
+# (a generated multi-disc playlist, a canonicalized path behind a symlinked
+# media folder), where the relative path is a "../.." chain that resolved
+# outside the artwork tree. Pure string work, no filesystem.
+kartend_add_test(NAME ArtworkMirror
+  SOURCES utils/view/test_artworkmirror.cpp
+  LINK kartend_utils
 )
 
 # FuzzyMatch tests (Kartend-581t). Pure subsequence score, no DB.

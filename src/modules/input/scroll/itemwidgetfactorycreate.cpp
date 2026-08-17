@@ -82,7 +82,17 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collection
     }
     // Store artwork directory for preview overlay to use
     widget->setArtworkDirectory(artworkDir);
-    if (!artworkDir.isEmpty()) {
+    // A hand-linked cover counts here exactly as it does on the tile
+    // (Kartend-ni68u). It is checked BEFORE the name cascade and before the
+    // artworkDir guard: a link makes an item count even when its collection
+    // has no artwork directory at all, which is the case the cascade below
+    // cannot see. ScrollManager::showArtworkPreview routes the button to the
+    // linked path, so the preview this flag promises is the one that opens.
+    const QString manualCover =
+        m_manualCoverPaths.isEmpty() ? QString() : m_manualCoverPaths.value(fullPath);
+    if (!manualCover.isEmpty()) {
+      widget->setHasArtwork(true);
+    } else if (!artworkDir.isEmpty()) {
       QString fileName = QFileInfo(fullPath).fileName();
       QString artworkPath = ArtworkUtils::findArtworkForFileCached(fileName, artworkDir);
       // Cold-cache fallback: findArtworkForFileCached returns empty on the
@@ -260,6 +270,37 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     perfTimer.start();
   }
 
+  // A cover the user linked by hand outranks everything below (Kartend-1js9j).
+  // It has to come first, not just before the name cascade: the session artwork
+  // cache and the shift+middle-click type override are both name-based
+  // auto-discovery, and a manual link beats auto-discovery in the sidebar
+  // gallery, in loadItemDetail, and in items.artwork_path — the tile was the
+  // one surface that disagreed. The map is prebuilt and existence-checked
+  // (ItemArtworkStore::loadManualCoverPaths), so this stays a hash lookup on
+  // the virtual-scroll hot path; the isEmpty() guard makes it free for the
+  // libraries with no hand-linked artwork at all.
+  //
+  // LIST MODE takes the flag, not the pixmap: the row shows a preview BUTTON
+  // rather than the cover. It used to be excluded here entirely, because the
+  // overlay behind that button resolved the image by NAME and would have
+  // opened nothing for a link-only item; ScrollManager::showArtworkPreview now
+  // routes a linked item to the exact path instead, so the button opens the
+  // cover the flag promises (Kartend-ni68u). Mirrors the list branch of
+  // createMediaWidget, so a reconfigure pass agrees with first paint.
+  if (!m_manualCoverPaths.isEmpty()) {
+    const QString manualCover = m_manualCoverPaths.value(fullPath);
+    if (!manualCover.isEmpty()) {
+      if (widget && widget->isListMode()) {
+        widget->setHasArtwork(true);
+        return;
+      }
+      if (auto *art = artworkMgr()) {
+        art->addPendingArtwork(widget, manualCover);
+        return;
+      }
+    }
+  }
+
   // Check cached artwork paths first (instant startup optimization)
   if (!m_cachedArtworkPaths.isEmpty()) {
     QString cachedPath = m_cachedArtworkPaths.value(fullPath);
@@ -294,24 +335,16 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
 
   qint64 afterDirLookup = lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
 
-  // Mirror the subfolder structure from media directory to artwork directory
-  // when:
-  // 1. includeArtworkSubfolders is explicitly enabled, OR
-  // 2. artworkDirectory equals mediaDirectory (artwork is co-located with
-  // media)
-  const QString &mediaDir = m_context.config.mediaDirectory;
-  bool shouldMirrorSubfolders = m_context.config.folderBrowsing.includeArtworkSubfolders ||
-                                (QDir(artworkDir).absolutePath() == QDir(mediaDir).absolutePath());
-
-  if (shouldMirrorSubfolders && !mediaDir.isEmpty()) {
-    QDir mediaDirObj(mediaDir);
-    QString relativePath = mediaDirObj.relativeFilePath(fullPath);
-    // Extract the directory component (subfolder path without the filename)
-    QString relativeDir = QFileInfo(relativePath).path();
-    if (!relativeDir.isEmpty() && relativeDir != ".") {
-      artworkDir = QDir(artworkDir).absoluteFilePath(relativeDir);
-    }
-  }
+  // Mirror the media subfolder structure into the artwork directory when the
+  // collection asks for it (includeArtworkSubfolders, or artwork co-located
+  // with media). The shared helper also decides when NOT to mirror — an item
+  // living outside the media directory has no media-relative subfolder, and
+  // the `../../..` chain this used to build resolved outside the artwork tree
+  // entirely (Kartend-j5amz). CoverFlowController resolves its cards through
+  // the same helper so the two views never search different directories.
+  artworkDir = ArtworkUtils::mirroredArtworkDirectory(
+      artworkDir, m_context.config.mediaDirectory, fullPath,
+      m_context.config.folderBrowsing.includeArtworkSubfolders);
 
   // if the user previously shift+middle-clicked this item to
   // cycle its artwork type, prefer the override over the legacy lookup so a

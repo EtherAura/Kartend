@@ -716,7 +716,10 @@ bool QueryManager::populatePlaylistScopeTempTable(const QString &playlistId) {
     // filter. A malformed filter is logged and yields an empty scope so
     // the playlist tile renders as "(empty)" rather than failing the
     // whole fetch.
-    auto filterResult = SmartFilter::fromJsonString(smartFilterJson);
+    // Parsed as a SET (Kartend-r5dbe): a spec written before composition has
+    // no "rules" array and comes back as a one-rule set, evaluating exactly as
+    // it always did, so this is the composed path and the legacy path at once.
+    auto filterResult = SmartFilter::setFromJsonString(smartFilterJson);
     if (filterResult.isError()) {
       ErrorUtils::logError(filterResult.error());
       return true; // empty scope is still a valid populated state

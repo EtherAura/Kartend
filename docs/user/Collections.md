@@ -28,9 +28,10 @@ If you've never built one, start with the
 | **Placeholder Artwork** | no | Custom image for missing-artwork items. |
 | **Header Logo** | no | Logo overlay painted at the top of the collection's grid. |
 
-> **Where to find this** — Settings Dialog → tabs **Basic**,
-> **Paths & Extensions**, **Launcher**, **Appearance**, **Sidebar**,
-> **Colors**, **Text & Fonts**, **List View**.
+> **Where to find this** — Settings Dialog → the per-collection
+> categories **Configuration**, **Artwork**, **Appearance**,
+> **Launcher**, **Subfolders**, **Details Pane**. These are a category
+> list down the left side of the dialog, not tabs.
 
 A collection can also have no media directory of its own — a
 [shell collection](Shell-Collections.md) used to group other
@@ -55,25 +56,31 @@ The Settings Dialog's left-hand tree is the control surface.
   For a step-by-step alternative, **File → New Library Wizard…** walks
   the same fields across multiple pages with installed-launcher
   detection. See [Getting Started → New Library Wizard](Getting-Started.md#new-library-wizard).
-- **Rename** — double-click the name field on the **Basic** tab, or use
-  the tree's right-click → **Rename**. Renaming updates `name`, the INI
+- **Rename** — right-click the tree row → **Rename** and edit the label
+  in place. Renaming updates `name`, the INI
   section header, and any linked-parent references in the
   `additionalParents` array of collections that use this one as an
   alias parent.
 - **Duplicate** — right-click → **Duplicate**. Opens the Duplicate
   Collection dialog: choose the new name and the parent (sibling /
-  child / root). All non-path settings (appearance, launcher config,
-  etc.) are copied; paths are intentionally left blank so you can point
-  the duplicate at a different folder.
-- **Delete** — right-click → **Delete** with a confirmation prompt. The
-  collection's children are reparented to its parent (or to root) — they
-  are not deleted alongside it.
+  child / root). It is a **full copy** — appearance, launcher config,
+  *and* the media / artwork paths. Point the duplicate at a different
+  folder afterwards if that's what you wanted; nothing is blanked for
+  you.
+- **Delete** — right-click → **Delete** with a confirmation prompt.
+  Deleting a collection deletes **its entire subtree**. The prompt says
+  so and gives the count ("Remove \"Films\" and all 3 nested
+  collection(s)?"); read it before confirming. Children are not
+  reparented, and the action cannot be undone.
 
 > **Caveat** — deleting a collection drops its INI section but does
 > *not* clear per-item state from the database (custom fields, manual
 > file links, launcher overrides, history). Re-adding a collection at
-> the same name reattaches that history. Remove the database file at
-> `~/.local/share/kartend/kartend.db` if you want a clean slate.
+> the same name **and the same media directory** reattaches that
+> history — the identity key is a hash of both, so re-adding under the
+> same name pointing somewhere else starts clean. Remove the database
+> file at `~/.local/share/kartend/media.db` if you want a clean slate
+> for everything.
 
 ## Hierarchies (parents and subcollections)
 
@@ -136,8 +143,10 @@ additionalParents\size=1
 launcherPath=/usr/bin/mpv
 ```
 
-> **Where to find this** — Settings Dialog → **Basic** tab → **Linked
-> Parents** (multi-select picker). Persisted as a QSettings array under
+> **Where to find this** — Settings Dialog → **Configuration** →
+> **Linked Parents** (multi-select picker). The picker excludes this
+> collection and all of its descendants, so you can't build a cycle
+> through the UI. Persisted as a QSettings array under
 > the `additionalParents` key — each entry has a `\<n>\name` subkey
 > plus a `\size` count:
 > ```
@@ -176,7 +185,8 @@ Type, or `[General] collectionTypeFilter=Video`) shows only collections
 whose `type` matches. Useful for switching modes ("show me only video,
 hide everything else") without rearranging the hierarchy.
 
-Pair with **Hide Subcollection Tiles** (`hideSubcollectionTiles=true`)
+Pair with **Hide Subcollection Tiles** (`hideSubcollectionTiles=true`,
+a **global** `[General]` setting, not a per-collection one)
 to flatten the view further — type filter + hide-subs makes Kartend
 behave like a flat library of media items, ignoring the tree.
 
@@ -204,12 +214,12 @@ create a Kartend subcollection for each subfolder. Enable **Include
 Content Subfolders** (`includeContentSubfolders=true`) and Kartend
 renders folders as virtual collection tiles right alongside media items.
 
-Related toggles (all per-collection, on the **Paths & Extensions** tab):
+Related toggles (all per-collection, on the **Subfolders** panel):
 
 | Setting | INI key | Effect |
 |---------|---------|--------|
 | Include Content Subfolders | `includeContentSubfolders` | Show subfolders as virtual tiles. |
-| Include Artwork Subfolders | `includeArtworkSubfolders` | Match artwork from any subfolder. |
+| Include Artwork Subfolders | `includeArtworkSubfolders` | Look for each item's artwork in the artwork subfolder matching the item's own content subfolder. See [Artwork](Artwork.md#subfolders). |
 | Show All Subfolder Items | `showAllSubfolderItems` | Mix items from subfolders with the parent's items, instead of requiring you to enter the subfolder. |
 | Show Hidden Folders | `showHiddenFolders` | Include dot-prefixed (`.config`-style) folders. |
 | Hide Subfolder Titles | `hideSubfolderTitles` | Hide titles on virtual folder tiles. |
@@ -232,7 +242,7 @@ grid:
 | Field | INI key | Notes |
 |-------|---------|-------|
 | Header Logo Image | `headerLogoImage` | Path to PNG / JPG / WEBP / SVG |
-| Header Logo Position | `headerLogoPosition` | `topleft` / `topcenter` / `topright` |
+| Header Logo Position | `headerLogoPosition` | `topcenter` (default) / `topleft` / `topright` |
 
 Distinct from the **Collection Icon** (`collectionIcon`) which is shown
 on the *tile* of this collection when it's a subcollection of another.
@@ -261,6 +271,104 @@ If you don't need automatic rescans, leave it off — for collections
 that change only when you explicitly edit them, the manual
 **File → Rescan Collection** (`Ctrl+F5`) is cheaper. The watcher's
 RAM cost scales with the number of subdirectories per collection.
+
+## Multi-disc grouping
+
+Some releases arrive as several files that are really one thing — a
+recital split across two discs, a film cut over three, an audiobook
+pressed as four. Scanned literally, each part becomes its own tile,
+and playing the release means launching each part in turn.
+
+Turn on **Group multi-disc releases into one item** and files whose
+names differ only by a disc marker collapse into a single item, named
+for what they have in common:
+
+```
+Recital (Disc 1).flac  ┐
+Recital (Disc 2).flac  ├─►  Recital
+Recital (Disc 3).flac  ┘
+```
+
+Launching the grouped item plays every part in order. Kartend does
+that by generating an `.m3u` playlist — but the playlist is written
+under Kartend's own data directory, not into your media folder.
+Nothing is added, renamed, or moved next to your files; the feature
+reads your folders and never writes to them.
+
+| Setting | INI key | Default | Effect |
+|---------|---------|---------|--------|
+| Group Multi-Disc | `groupMultiDisc` | `false` | Collapse disc-marked files of one release into a single item backed by a generated playlist. |
+
+> **Where to find this** — Settings Dialog → per-collection
+> **Configuration** tab → **Group multi-disc releases into one item**.
+
+### What counts as a disc marker
+
+The marker has to sit inside a parenthesised or bracketed tag group,
+and matching is case-insensitive with the space optional:
+
+| Recognised | Not recognised |
+|------------|----------------|
+| `(Disc 1)`, `(disc 2)` | `Recital Disc 1.flac` (no brackets) |
+| `(Disk 1)` — folds to `disc`, so both spellings group together | `Recital - Part 1.flac` (not a disc word) |
+| `(CD 2)`, `(CD3)` | |
+| `[Side A]` | |
+
+Numbered discs sort by value, so disc 10 follows disc 9 rather than
+disc 1; lettered sides sort alphabetically after any numbered parts.
+
+Grouping is scoped **per directory**, so two different releases that
+happen to share a title stay separate as long as they live in
+separate folders. A base title with only one disc file is left alone
+— collapsing a lone file would rename it for no benefit and hide its
+disc tag. Files carrying no disc marker are ignored entirely.
+
+### Metadata across the parts
+
+The parts' metadata is merged rather than taken from whichever file
+happened to be scanned first:
+
+- The **first disc is authoritative**. Where two parts disagree on a
+  field, disc 1's value stands.
+- Later discs **fill gaps only** — a description, rating or artwork
+  path that disc 1 lacks is picked up from a later part rather than
+  left empty. This is the same fill-missing-never-overwrite rule the
+  scraper and the launcher importers follow.
+- **Tags accumulate** across every part, de-duplicated.
+- Anything **you** edit on the grouped item outranks all of it and
+  survives later rescans.
+
+### Adding, removing, and turning it off
+
+The grouping is recomputed on every scan, so it keeps up with the
+folder:
+
+- Add a disc and the next scan folds it into the existing item.
+- Drop a release to a single remaining disc and it stops being a
+  group — the lone file returns as an ordinary item.
+- Delete the release and its generated playlist is swept with it.
+
+Turning the setting **off** restores the individual per-disc items
+and deletes the playlists Kartend generated for that collection.
+Per-disc notes, tags and ratings are preserved through the round
+trip, so toggling the setting is not a destructive act in either
+direction.
+
+Because grouping changes what a scan produces, flipping the setting
+invalidates the collection's cached scan by itself: it re-scans the
+next time it loads, without you running **Rescan Collection**
+(`Ctrl+F5`) by hand.
+
+### Artwork for a grouped item
+
+The grouped item is called `Recital`, but the art beside it is
+usually filed per disc. Both work: an image named for the release
+(`Recital.png`) is matched first, and if there is none, the art
+filed against its **lowest disc** stands in — `Recital (Disc 1).png`,
+or `Recital (CD 2).png` if disc 1 has no art of its own. Nothing has
+to be renamed, and a [manual per-item link](Artwork.md#manual-per-item-links)
+still overrides both. See [Artwork](Artwork.md#artwork-for-multi-disc-releases)
+for the full rule, which applies to any item, grouped or not.
 
 ## Variant inspector
 
@@ -324,9 +432,7 @@ Every collection key, grouped by purpose:
 | `type` | string | empty | Media-type tag (used by the type filter and to pick a scraper). |
 | `scraperProviderId` | string | empty | Pinned metadata scraper id (`tmdb`, `screenscraper`, `musicbrainz`, `openlibrary`). Empty = resolve from `type`. |
 | `mediaDirectory` | path | empty | Folder of items. Empty = parent-only. |
-| `artworkDirectory` | path | empty | Folder of cover images. |
-| `videoDirectory` | path | empty | Folder of preview videos. |
-| `manualDirectory` | path | empty | Folder of per-item manuals. |
+| `artworkDirectory` | path | empty | Root of the media-asset tree: covers at the top level, preview videos under `video/`, manuals under `manual/`, other artwork types in their own named subfolders. The former `videoDirectory` / `manualDirectory` keys are retired — Kartend no longer reads them and strips them from the INI on the next save. |
 | `extensions` | csv | empty | File extensions to scan. Empty = all. |
 | `collectionIcon` | path | empty | Tile icon when this collection is a subcollection. Absolute or `~`-prefixed, `%collection%` expands; takes priority over the artwork-directory convention below. |
 | `placeholderArtwork` | path | empty | Image for missing-artwork tiles. |
@@ -347,13 +453,14 @@ the section structure at load time and are not INI keys.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `includeContentSubfolders` | bool | `false` | Show subfolders as virtual tiles. |
-| `includeArtworkSubfolders` | bool | `false` | Match artwork in subfolders. |
+| `includeArtworkSubfolders` | bool | `false` | Mirror content subfolders into the artwork folder when matching artwork. |
 | `showAllSubfolderItems` | bool | `false` | Flatten subfolder items into parent grid. |
 | `showHiddenFolders` | bool | `false` | Include dot-prefixed folders. |
 | `showAllSubcollectionItems` | bool | `false` | Mix descendants' items into this collection. |
 | `extractArchives` | bool | `false` | Auto-extract `.zip` / `.7z` etc. before launch. |
 | `extractedExtension` | string | empty | Which extension inside the archive to launch. |
 | `watchFilesystem` | bool | `false` | Auto-rescan on filesystem changes (debounced). See [Filesystem watcher](#filesystem-watcher). |
+| `groupMultiDisc` | bool | `false` | Collapse disc-marked parts of one release into a single item. See [Multi-disc grouping](#multi-disc-grouping). |
 
 ### Display options
 
@@ -364,7 +471,7 @@ the section structure at load time and are not INI keys.
 | `titleExclusionPatterns` | csv (regex) | empty | Patterns stripped from displayed titles. |
 | `titleExclusionEnabled` | bool | `false` | Toggle the pattern list. |
 | `headerLogoImage` | path | empty | Logo painted across the top of the grid. |
-| `headerLogoPosition` | enum | `topleft` | `topleft` / `topcenter` / `topright`. |
+| `headerLogoPosition` | enum | `topcenter` | `topleft` / `topcenter` / `topright`. |
 
 The remaining keys (appearance, sidebar styling, colors, list view) are
 covered in [Themes & Appearance](Themes-and-Appearance.md),

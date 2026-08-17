@@ -14,23 +14,25 @@ collections, and individual items can override the default choice via
 right-click.
 
 > **Where to find this** — Settings Dialog → **Launcher** tab.
-> INI keys: `launcherPath`, `launchParameters`, `corePath`,
-> `launcherName`, `additionalLaunchers`, `defaultLauncherIndex`,
-> and `[General] launcherPresets`.
+> Per-collection INI keys: `launcherPath`, `launchParameters`,
+> `corePath`, `launcherName`, `additionalLaunchers`,
+> `defaultLauncherIndex`. Reusable presets live in their own top-level
+> `[Launchers]` array group, and `[General] retroarchConfigPath`
+> points the core picker at a non-standard RetroArch install.
 
 ## How launching works
 
 When you trigger a launch, Kartend:
 
 1. Resolves which launcher to use — primary, an additional, or a
-   per-item override. See [Selection rules](#selection-rules).
+   per-item override. See [Multi-launcher chooser](#multi-launcher-chooser).
 2. Builds an **argument list** (no shell): `<launchParameters>`,
    followed by `-L <corePath>` if the launcher path matches a
    libretro-style binary, followed by the absolute path to the
    item file.
 3. Spawns the process with `QProcess`. By default Kartend detaches and
    forgets it; with **Runtime Detection** enabled (see
-   [Splash & Now Playing](Splash-and-Now-Playing.md#runtime-detection))
+   [Splash & Now Playing](Splash-and-Now-Playing.md#what-runtime-detection-turns-on))
    Kartend tracks the child's lifetime instead.
 4. Records the launch in the database (per-item `play_count` increments,
    `last_played` timestamp, optional history row). See
@@ -59,17 +61,69 @@ You don't need to wrap launch parameters in quotes either.
 
 ### Where the file path goes
 
-The selected item's absolute path is appended **last** by default. If
-your launcher needs the path elsewhere — say, after a `--media` flag —
-use a wrapper script:
+The selected item's absolute path is appended **last** by default. To put
+it somewhere else, name it with a placeholder token — writing `%1` (or
+`%f`) anywhere in `launchParameters` places the path there instead, and
+suppresses the append-at-the-end fallback:
+
+```ini
+launchParameters=--media %1 --extra-flag
+```
+
+### Placeholder tokens
+
+Tokens are substituted **inside** each argument after the parameter
+string has been split, so a token can never introduce a new argument
+boundary — `"%1"` stays one argument even when the path contains spaces.
+Matching is case-insensitive.
+
+| Token | Expands to | Example |
+|-------|-----------|---------|
+| `%1`, `%f` | Full path of the selected item. Suppresses the append-at-end fallback. | `/media/talks/Keynote.mkv` |
+| `%name%` | Display title — the filename without its extension, the same text the grid shows. | `Keynote` |
+| `%filename%` | Filename with extension. | `Keynote.mkv` |
+| `%dir%` | Directory containing the item. | `/media/talks` |
+| `%ext%` | Extension, without the dot. | `mkv` |
+| `%core` | Configured libretro core path. Only meaningful for a libretro launcher. **No trailing `%`** — see the note below. | `/usr/lib/cores/engine.so` |
+| `%collection%` | Name of the collection being launched. Also expanded inside `launcherPath` and `corePath`, not just the parameters. | `Talks` |
+
+> **`%1`, `%f` and `%core` have no closing `%`.** They end at a word
+> boundary instead, so `%core` is the whole token — writing
+> `--core=%core%` leaves a stray `%` on the end of the expanded
+> argument. The `%word%`-delimited tokens (`%name%`, `%filename%`,
+> `%dir%`, `%ext%`, `%collection%`) do take the closing `%`. Getting
+> this wrong is the single most common way to end up with a launcher
+> that "almost" works.
+
+A worked example — passing the title to a player that shows it in the
+window bar, and pointing a subtitle flag at a sibling file:
+
+```ini
+launchParameters=--title=%name% --sub-file=%dir%/%name%.srt %1
+```
+
+Only `%1` and `%f` place the media argument. Naming a *part* of the path
+does not count, so a template that uses `%name%` but never `%1` still
+gets the full path appended at the end.
+
+Two things worth knowing:
+
+- **Launcher-import entries have no file on disk.** Items imported from
+  Steam, Flatpak, Lutris and friends are shortcut stubs that resolve to a
+  target like `steam://rungameid/220`. `%name%` still gives the title, but
+  `%filename%`, `%dir%` and `%ext%` expand to empty. **Preview launch
+  command…** warns when a template asks for them.
+- **Unknown tokens are left alone.** A `%something%` Kartend doesn't
+  recognise is passed through verbatim rather than blanked, and the launch
+  preview flags it as unresolved — so a typo is visible instead of silent.
+
+If you need genuine shell behavior — pipes, globs, conditionals — a
+wrapper script is still the answer:
 
 ```bash
 #!/bin/sh
 exec /usr/bin/some-tool --media "$1" --extra-flag
 ```
-
-There's no built-in `{path}` placeholder syntax in `launchParameters`
-today.
 
 ## Primary launcher
 
@@ -124,7 +178,7 @@ launcherName=mpv
 Settings dialog flow:
 
 1. Open **Launcher** tab → **Additional Launchers** list.
-2. Click **Add Launcher** to open the [Launcher Editor Dialog](#launcher-editor-dialog).
+2. Click **Add Launcher** to open the [Launcher Editor Dialog](#adding-a-launcher-from-a-preset).
 3. Fill in name / path / core / parameters (or pick a preset).
 4. Save. The new launcher appears in the list.
 
@@ -158,20 +212,24 @@ non-default by:
   [Launcher Chooser Dialog](#launcher-chooser-dialog) with the current
   default pre-selected. Picking a launcher creates a per-item override
   (stored in the database, *not* in the INI file).
-- A future "ad hoc launch" workflow may let you pick once without
-  saving an override; today every chooser pick saves.
+Picking once *without* saving is already the default: in a collection
+with more than one launcher, pressing `Enter` on an item that has no
+override opens the same chooser, and the pick applies to that launch
+only. Nothing is persisted unless you went in through **Always launch
+with…**.
 
 To remove a per-item override, right-click → **Clear launcher
 override**.
 
 ### Launcher Chooser Dialog
 
-Modal radio-button list of all launchers for the current collection.
+Modal list of all launchers for the current collection, one row each.
 
 - Pre-selects the current default (or the existing override).
-- Description below each entry shows the resolved name + path + core +
-  parameters (preset references are resolved live).
-- OK / Cancel.
+- Rows show the launcher's resolved display name — preset references
+  are resolved before the list is built. Path, core and parameters are
+  not shown; use **Preview launch command…** if you need to see those.
+- **Launch** / **Cancel**. Double-clicking a row launches too.
 
 ## Launcher presets (global, reusable)
 
@@ -220,8 +278,12 @@ RetroArch is supported as a special case because its CLI takes a core
 via `-L`:
 
 ```
-retroarch -L <corePath> <fullscreenFlags> <fileName>
+retroarch <launchParameters> -L <corePath> <fileName>
 ```
+
+Note the order: your `launchParameters` go **first**, then the
+`-L <core> <file>` triple. A flag that has to follow the core will not
+work from `launchParameters` alone.
 
 Kartend detects "RetroArch-style" launchers by checking whether the
 launcher path's filename contains `retroarch` (case-insensitive). If
@@ -233,19 +295,34 @@ For non-RetroArch launchers `corePath` is ignored — leave it blank.
 
 ## Archive extraction
 
-Some cores can't open zipped content directly. Set the extraction
-options on the **Paths & Extensions** tab:
+Some launchers can't open zipped content directly. Set the extraction
+options on the **Launcher** tab (the extension field stays hidden until
+you tick the checkbox):
 
 | Setting | INI key | Notes |
 |---------|---------|-------|
 | Extract Archives | `extractArchives` | Boolean toggle |
 | Extracted Extension | `extractedExtension` | Which extension inside the archive to launch (e.g. `pdf`, `cbz`) |
 
-When enabled and the selected item is an archive (`.zip`, `.7z`, …),
-Kartend extracts to a temporary directory under `~/.cache/kartend/`,
-finds the first file matching `extractedExtension`, and launches *that*
-file instead of the archive. Temp directories are cleaned up on
-shutdown.
+`extractedExtension` accepts a **comma-separated preference list**, not
+just one value: `cue, bin, iso` launches the `.cue` if there is one and
+falls back to `.bin`, then `.iso`. Kartend makes a single recursive pass
+and picks the highest-priority match it finds, so ordering the list is
+how you express "prefer the index file over the raw image".
+
+Extraction is skipped entirely when `extractedExtension` is empty —
+there would be nothing to launch afterwards.
+
+Recognized archive types: `.zip`, `.7z`, `.rar`, `.gz`, `.tar`, `.bz2`,
+`.xz` (matched on suffix, so `.tar.gz` works).
+
+Extraction goes to `/tmp/kartend_extract/<archive base name>/`, not the
+cache directory, and is **not** cleaned up on shutdown — it is a
+cross-run cache, and re-extracting a large archive on every launch would
+be slow. See
+[File Locations → Extracted archives](File-Locations.md#extracted-archives)
+for the collision and permission guards, and for how to reclaim the
+space.
 
 If the archive contains nothing matching `extractedExtension`, the
 launch fails with an error dialog.
@@ -274,13 +351,18 @@ Kartend performs basic validation before launching:
 - The launcher path is re-validated immediately before `QProcess::start`
   to mitigate TOCTOU (time-of-check / time-of-use) attacks where the
   file is swapped between Kartend's first check and the actual launch.
-- A blacklist blocks launches where the *item path* falls under known
-  sensitive system directories (`/`, `/etc`, `/root`, `/proc`, `/sys`,
-  `/dev`, etc.) — these are rejected with an error dialog. The launcher
-  itself can still live anywhere.
-- All arguments go through `QProcess`'s argument list, never through a
-  shell. There's no command injection surface from item filenames or
-  launch parameters.
+- The **launcher** path is refused if it resolves under `/proc`, `/sys`
+  or `/dev`. The check runs both before and after symlink resolution,
+  so `/proc/self/exe` is caught either way. There is **no** such
+  directory blacklist on the *item* path — an item path is screened for
+  shell metacharacters, NUL bytes, newlines, backslashes and `..`
+  traversal segments, but not for where it lives.
+- On Linux and macOS all arguments go through `QProcess`'s argument
+  list, never through a shell — there is no command-injection surface
+  from item filenames or launch parameters. On **Windows**, a `.cmd` or
+  `.bat` launcher is necessarily routed through `%COMSPEC% /c`, which
+  *is* a command interpreter; arguments are quoted for `cmd.exe` on the
+  way in, but it is not the same guarantee.
 
 If a launch fails, an error dialog reports which step failed (path
 validation, executable check, process start) and the reason.
@@ -314,15 +396,20 @@ esac
 
 ### Pass shell-style flags through Kartend
 
-`launchParameters` is split into argv on whitespace. To embed a literal
-space inside one argument, use a wrapper:
+`launchParameters` is tokenized with shell-style **quoting rules**, so
+an argument containing spaces just needs quoting — no wrapper script:
 
 ```ini
-launchParameters=--title MyApp
+launchParameters=--title "My App" --fullscreen
 ```
 
-passes two args: `--title` and `MyApp`. To pass `My App` as a single
-argument you'd need a wrapper script.
+passes three args: `--title`, `My App`, `--fullscreen`. Single quotes
+work too, and a backslash escapes a quote, a space, or another
+backslash. An explicitly quoted `""` survives as an empty argument.
+
+What is *not* done is shell **expansion** — `~`, `$VAR` and glob
+patterns stay literal, because nothing ever hands the string to a
+shell.
 
 ### Run a libretro core directly with a custom build of RetroArch
 
@@ -343,17 +430,15 @@ command…**.
 ┌────────────────────────────────────────────────────────────┐
 │ Launch preview                                             │
 │                                                            │
-│ Program: /usr/bin/mpv                                      │
-│ Arguments:                                                 │
-│   --fs                                                     │
-│   --really-quiet                                           │
+│ Command:                                                   │
+│   /usr/bin/mpv --fs --really-quiet                         │
 │   "/home/me/Videos/Films/Some Movie (2021).mkv"            │
-│ Working directory: /home/me/Videos/Films                   │
+│                                                            │
+│ Resolved executable: /usr/bin/mpv                          │
 │                                                            │
 │ Warnings                                                   │
-│   ⚠  Argument 2 contains shell metacharacters — Kartend    │
-│      will pass it without quoting; the launcher must       │
-│      handle it.                                            │
+│   ⚠  Core path will be ignored (launcher is not a          │
+│      libretro core launcher).                              │
 │                                                            │
 │                                              [ Close ]     │
 └────────────────────────────────────────────────────────────┘
@@ -361,18 +446,27 @@ command…**.
 
 What it shows:
 
-- **Program** — the resolved launcher executable.
-- **Arguments** — the full argv as Kartend would hand it to
-  `QProcess::start`, with one argument per line. No shell expansion
-  is performed; what you see is what gets passed.
-- **Working directory** — the cwd `QProcess` will use (typically the
-  item's media directory).
-- **Archive extraction** — when `extractArchives=true` and the item
-  is a `.zip` / `.7z` / `.rar`, the preview adds the resolved
-  extracted-file path that Kartend would launch instead.
-- **Warnings** — validation flags surfaced before the actual launch:
-  missing file, launcher not found, suspicious characters,
-  launcher-flag conflicts.
+- **Command** — the full argv as a single joined line, quoting only
+  the arguments that contain whitespace. No shell expansion is
+  performed; what you see is what gets passed.
+- **Resolved executable** — what the launcher path resolves to after
+  the `PATH` lookup and canonicalisation, or "(not found on PATH or
+  disk)".
+- **Archive extraction** — when `extractArchives=true` and the item is
+  an archive, the preview notes that Kartend would extract to a temp
+  directory and launch the configured extension from inside. It does
+  not extract, so it cannot show you the resolved inner path.
+- **Warnings** — the checks that run before a real launch. The full
+  set is: launcher executable not found; file does not exist on disk;
+  archive extraction enabled but the target extension is empty; core
+  path will be ignored (launcher is not a libretro launcher); a
+  `%filename%` / `%dir%` / `%ext%` token that is empty for a
+  launcher-import stub; and an unresolved `%placeholder%`.
+
+The preview does **not** show a working directory, and the cwd is not
+what you might guess: `QProcess` is started in the **launcher's own**
+directory, so a launcher can find sibling libraries and config files
+next to itself.
 
 Useful when iterating on launcher arguments (you don't want to keep
 firing a real launch just to verify the command line), and as a
@@ -387,28 +481,36 @@ list usually explains why.
 | "Launcher not executable" | Launcher path isn't `+x` | `chmod +x /path/to/launcher` or pick a different launcher. |
 | Launcher opens but the file doesn't load | Launcher expects the file at a non-final position | Use a wrapper script that re-arranges arguments. |
 | Item with `&` or spaces in name fails | (Unlikely — should work. Check the launcher's own escape rules.) | Confirm the launcher's CLI handles special characters; wrap if not. |
-| RetroArch launches without a core | `corePath` empty or filename doesn't contain "retroarch" | Set `corePath`; verify the launcher path includes "retroarch". |
+| "No libretro core configured" error, nothing launches | Launcher filename contains "retroarch" but `corePath` is empty | Set `corePath`. Kartend refuses the launch rather than starting RetroArch with no core. |
 | Archive launches the `.zip` instead of the contained file | `extractArchives=false` or `extractedExtension` wrong | Enable extraction and set the right extension. |
 | "Always launch with…" missing from menu | Collection only has one launcher | Add at least one additional launcher. |
 
 ## For developers
 
 - Launch pipeline: [src/modules/input/launch/](../../src/modules/input/launch/)
-  (`LaunchManager`, validators, `LaunchUtils`).
+  — `LaunchManager` (validation, process spawn) and
+  `LaunchCommandBuilder` (the pure argv/token half, unit-testable
+  without a process). The shared helpers are `LauncherUtils`, which
+  lives outside this module in
+  [src/utils/app/collection/launcherconfig.h](../../src/utils/app/collection/launcherconfig.h).
 - Preset resolution: `LauncherUtils::resolvePreset(config, presets)` in
   [src/utils/app/collection/launcherconfig.h](../../src/utils/app/collection/launcherconfig.h)
   — call this before reading path/core/params from a launcher entry.
 - libretro detection: `LauncherUtils::usesLibretroCore(path)`.
 - Per-item override storage: `item_metadata.launcher_index` in SQLite
   (see [Item Metadata](Item-Metadata.md#for-developers)).
-- TOCTOU re-validation: `LaunchManager::launchItem()` calls
-  `validateLaunchPath()` twice — once at queue time, once immediately
-  before `QProcess::start`.
-- Sensitive-directory blacklist: `LaunchPathValidator` in the launch
-  module.
+- TOCTOU re-validation: `LaunchManager::validateLauncherPath()` runs
+  once up front; `finishLaunch()` then re-checks exists/isExecutable
+  immediately before `QProcess::start`. The window is narrowed, not
+  closed — see the comment at the second check.
+- Sensitive-directory list: an inline `static const QStringList
+  sensitiveDirectories` inside `validateLauncherPath` (`/proc`, `/sys`,
+  `/dev`), applied to the *launcher* path only.
 - Adding a new launcher field (e.g. environment variables): extend
   `LauncherConfig` in
   [src/utils/app/collection/launcherconfig.h](../../src/utils/app/collection/launcherconfig.h),
-  add UI in `launchereditordialog`, propagate through serialization in
-  `settingsmanager`, and update
-  [Configuration Reference](Configuration-Reference.md).
+  add UI in `launchereditordialog`, propagate through
+  `launcherprofile_persistence.cpp` (per-collection) and/or
+  `launcher_settings_persistence.cpp` (presets), add it to
+  `kartmanifest.cpp` so `.kart` import/export round-trips it, and
+  update [Configuration Reference](Configuration-Reference.md).

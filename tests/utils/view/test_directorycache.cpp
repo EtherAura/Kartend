@@ -9,6 +9,8 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QHash>
 #include <QObject>
 #include <QSet>
 #include <QTemporaryDir>
@@ -38,8 +40,21 @@ private slots:
   void nonexistentDirectory_cachedAsEmpty();
   void baseNameLookup_doesNotDoubleStripDottedStems();
   void schedulePrewarm_queuesEvenWhenAWalkIsAlreadyInFlight();
-  void artworkLookupDirectories_listsRootThenTypedCoverSubdirs();
+  void artworkLookupDirectories_listsFrontThenRootThenSubdirs();
   void areDirectoriesCached_falseWhileAnyCascadeEntryIsCold();
+
+  void discMarkedArtwork_answersToTheReleaseBaseTitle();
+  void discFallback_takesTheLowestDisc();
+  void discFallback_keepsTheMarkerOutOfADottedStem();
+  void exactMatch_outranksTheDiscFallbackAcrossTheWholeCascade();
+  void discFallback_reachesTypedCoverSubdirs();
+  void discFallback_ignoresTagsThatAreNotDiscMarkers();
+  void discFallback_countsAsArtworkForBulkPredicates();
+  void discFallback_reachesTheDirectLookupOnceTheListingIsWarm();
+
+  void pathMap_agreesWithThePerItemCascade();
+  void pathMap_skipsCachedNegativesAndColdDirectories();
+  void refreshDirectories_replacesAListingCachedEarlier();
 };
 
 void TestDirectoryCache::init() {
@@ -209,20 +224,21 @@ void TestDirectoryCache::schedulePrewarm_queuesEvenWhenAWalkIsAlreadyInFlight() 
 // place that spelling lives, so callers reasoning about the lookup as a whole
 // (is it warm? what should be prewarmed?) agree with what findCachedWithKeys
 // really probes.
-void TestDirectoryCache::artworkLookupDirectories_listsRootThenTypedCoverSubdirs() {
+void TestDirectoryCache::artworkLookupDirectories_listsFrontThenRootThenSubdirs() {
   QCOMPARE(ArtworkUtils::artworkLookupDirectories(QString()), QStringList());
 
   QTemporaryDir root;
   QVERIFY(root.isValid());
   const QStringList dirs = ArtworkUtils::artworkLookupDirectories(root.path());
 
-  // The flat root leads — it is probed first — and every entry after it is a
-  // distinct subdirectory of it.
-  QVERIFY(dirs.size() > 1);
-  QCOMPARE(dirs.first(), root.path());
-  QVERIFY(dirs.contains(QDir(root.path()).absoluteFilePath(QStringLiteral("front"))));
+  // `front/` leads (Kartend-u67w0 — the scraped front cover outranks a
+  // flat-root file), the root itself is second, and every other entry is a
+  // distinct subdirectory of the root.
+  QVERIFY(dirs.size() > 2);
+  QCOMPARE(dirs.first(), QDir(root.path()).absoluteFilePath(QStringLiteral("front")));
+  QCOMPARE(dirs.at(1), root.path());
   QCOMPARE(QSet<QString>(dirs.cbegin(), dirs.cend()).size(), dirs.size());
-  for (const QString &dir : dirs.mid(1)) {
+  for (const QString &dir : dirs) {
     QVERIFY(dir.startsWith(root.path()));
   }
 }
@@ -264,6 +280,273 @@ void TestDirectoryCache::areDirectoriesCached_falseWhileAnyCascadeEntryIsCold() 
   // predicate could never go true for a normal collection.
   cache.prewarmDirectories(cascade);
   QVERIFY(cache.areDirectoriesCached(cascade));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Kartend-knub1: artwork filed per DISC answers to the release's base title.
+//
+// Multi-disc grouping collapses "Recital (Disc 1).flac" + "(Disc 2).flac" into
+// one item backed by a generated playlist named for the release — "Recital".
+// Art beside the media is named per disc, so nothing matches that item exactly
+// and it rendered the placeholder over a fully populated artwork folder. The
+// rule these pin: exact names win everywhere first; only then does a
+// disc-marked file stand in for the release title, lowest disc first.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestDirectoryCache::discMarkedArtwork_answersToTheReleaseBaseTitle() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  writeFile(tmp.filePath(QStringLiteral("Recital (Disc 1).png")));
+  writeFile(tmp.filePath(QStringLiteral("Recital (Disc 2).png")));
+  DirectoryCache::instance().prewarmDirectories({tmp.path()});
+
+  // What the collapsed item asks for: the generated playlist's file name,
+  // which is the base title with the disc tag stripped.
+  QCOMPARE(ArtworkUtils::findArtworkForFileCached(QStringLiteral("Recital.m3u"), tmp.path()),
+           tmp.filePath(QStringLiteral("Recital (Disc 1).png")));
+
+  // The discs themselves keep resolving their own art exactly (grouping off).
+  QCOMPARE(
+      ArtworkUtils::findArtworkForFileCached(QStringLiteral("Recital (Disc 2).flac"), tmp.path()),
+      tmp.filePath(QStringLiteral("Recital (Disc 2).png")));
+}
+
+void TestDirectoryCache::discFallback_takesTheLowestDisc() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  // Deliberately not written in disc order, and mixing the marker spellings:
+  // the answer must come from the parsed order, not from readdir.
+  writeFile(tmp.filePath(QStringLiteral("Suite [Side A].png")));
+  writeFile(tmp.filePath(QStringLiteral("Suite (CD 10).png")));
+  writeFile(tmp.filePath(QStringLiteral("Suite (Disk 2).png")));
+  writeFile(tmp.filePath(QStringLiteral("Suite (Disc 1).png")));
+  DirectoryCache::instance().prewarmDirectories({tmp.path()});
+
+  QCOMPARE(ArtworkUtils::findArtworkForBaseNameCached(QStringLiteral("Suite"), tmp.path()),
+           tmp.filePath(QStringLiteral("Suite (Disc 1).png")));
+}
+
+void TestDirectoryCache::discFallback_keepsTheMarkerOutOfADottedStem() {
+  // The marker has to be parsed off the full file NAME. Stripping the
+  // extension first and parsing the stem re-strips at the dot inside the
+  // title, so "Concert v1.2 (Disc 1).png" would be read as "Concert v1" with
+  // no marker at all and the release would find nothing.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  writeFile(tmp.filePath(QStringLiteral("Concert v1.2 (Disc 1).png")));
+  DirectoryCache::instance().prewarmDirectories({tmp.path()});
+
+  QCOMPARE(ArtworkUtils::findArtworkForBaseNameCached(QStringLiteral("Concert v1.2"), tmp.path()),
+           tmp.filePath(QStringLiteral("Concert v1.2 (Disc 1).png")));
+}
+
+void TestDirectoryCache::exactMatch_outranksTheDiscFallbackAcrossTheWholeCascade() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  writeFile(tmp.filePath(QStringLiteral("Recital.png")));
+  writeFile(tmp.filePath(QStringLiteral("Recital (Disc 1).png")));
+
+  // Art the user filed for the release itself, in a typed subdir this time,
+  // still outranks a disc's art sitting at the flat root — the exact pass
+  // completes over the WHOLE cascade before any fallback runs.
+  QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("front")));
+  writeFile(tmp.filePath(QStringLiteral("front/Encore.png")));
+  writeFile(tmp.filePath(QStringLiteral("Encore (Disc 1).png")));
+  DirectoryCache::instance().prewarmDirectories(ArtworkUtils::artworkLookupDirectories(tmp.path()));
+
+  QCOMPARE(ArtworkUtils::findArtworkForBaseNameCached(QStringLiteral("Recital"), tmp.path()),
+           tmp.filePath(QStringLiteral("Recital.png")));
+  QCOMPARE(ArtworkUtils::findArtworkForBaseNameCached(QStringLiteral("Encore"), tmp.path()),
+           tmp.filePath(QStringLiteral("front/Encore.png")));
+}
+
+void TestDirectoryCache::discFallback_reachesTypedCoverSubdirs() {
+  // Scrapes and hand-sorted libraries put covers under front/ rather than at
+  // the flat root, so the fallback has to walk the same subdir cascade the
+  // exact lookup does.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("front")));
+  writeFile(tmp.filePath(QStringLiteral("front/Anthology (CD1).png")));
+  DirectoryCache::instance().prewarmDirectories(ArtworkUtils::artworkLookupDirectories(tmp.path()));
+
+  QCOMPARE(ArtworkUtils::findArtworkForBaseNameCached(QStringLiteral("Anthology"), tmp.path()),
+           tmp.filePath(QStringLiteral("front/Anthology (CD1).png")));
+}
+
+void TestDirectoryCache::discFallback_ignoresTagsThatAreNotDiscMarkers() {
+  // Same vocabulary MultiDisc::group() collapses on, and no wider: a region or
+  // edition tag is part of the title, not a disc, and letting it fall back
+  // would hand one release's cover to another.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  writeFile(tmp.filePath(QStringLiteral("Sonata (Special Edition).png")));
+  writeFile(tmp.filePath(QStringLiteral("Ballad (USA).png")));
+  writeFile(tmp.filePath(QStringLiteral("Nocturne Disc 1.png"))); // no brackets
+  DirectoryCache::instance().prewarmDirectories({tmp.path()});
+
+  QCOMPARE(ArtworkUtils::findArtworkForBaseNameCached(QStringLiteral("Sonata"), tmp.path()),
+           QString());
+  QCOMPARE(ArtworkUtils::findArtworkForBaseNameCached(QStringLiteral("Ballad"), tmp.path()),
+           QString());
+  QCOMPARE(ArtworkUtils::findArtworkForBaseNameCached(QStringLiteral("Nocturne"), tmp.path()),
+           QString());
+}
+
+void TestDirectoryCache::discFallback_countsAsArtworkForBulkPredicates() {
+  // FilterManager's hide-missing-artwork pass tests membership in this set
+  // instead of running the per-item cascade. If the two disagree, the grouped
+  // item is hidden as artless while painting a cover.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  writeFile(tmp.filePath(QStringLiteral("Recital (Disc 1).png")));
+  DirectoryCache::instance().prewarmDirectories(ArtworkUtils::artworkLookupDirectories(tmp.path()));
+
+  const QSet<QString> keys = ArtworkUtils::buildArtworkKeySet(tmp.path());
+  QVERIFY2(keys.contains(QStringLiteral("Recital")),
+           "the release title resolves a cover per-item but was reported artless in bulk");
+  QVERIFY(keys.contains(QStringLiteral("Recital (Disc 1)")));
+}
+
+void TestDirectoryCache::discFallback_reachesTheDirectLookupOnceTheListingIsWarm() {
+  // findArtworkForFile is the synchronous cold-start / post-prewarm path. It
+  // probes exact candidate paths, and a disc number cannot be derived from the
+  // item's name, so the fallback resolves through the listing: cold means the
+  // pre-Kartend-knub1 answer, and the tile picks the cover up on the
+  // reconfigure that follows the prewarm.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  writeFile(tmp.filePath(QStringLiteral("Recital (Disc 1).png")));
+
+  QCOMPARE(ArtworkUtils::findArtworkForFile(QStringLiteral("Recital.m3u"), tmp.path()), QString());
+
+  DirectoryCache::instance().prewarmDirectories(ArtworkUtils::artworkLookupDirectories(tmp.path()));
+  QCOMPARE(ArtworkUtils::findArtworkForFile(QStringLiteral("Recital.m3u"), tmp.path()),
+           tmp.filePath(QStringLiteral("Recital (Disc 1).png")));
+
+  // An exact match still short-circuits ahead of the fallback on this path too.
+  writeFile(tmp.filePath(QStringLiteral("Recital.png")));
+  QCOMPARE(ArtworkUtils::findArtworkForFile(QStringLiteral("Recital.m3u"), tmp.path()),
+           tmp.filePath(QStringLiteral("Recital.png")));
+}
+
+// Kartend-guyc5. buildArtworkPathMap is the bulk form of the per-item lookup,
+// for callers that must STORE what it resolves (the scan pipeline, filling
+// items.artwork_path). If the two ever disagree, an item is filed against one
+// cover and painted with another — so the map is asserted against
+// findArtworkForFileCached itself rather than against hand-written paths.
+void TestDirectoryCache::pathMap_agreesWithThePerItemCascade() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QDir root(tmp.path());
+  QVERIFY(root.mkpath(QStringLiteral("front")));
+  QVERIFY(root.mkpath(QStringLiteral("box")));
+  // One name per shape the cascade can answer in: flat root, a typed subdir, a
+  // lower-priority typed subdir, the full-file-name key, and a release title
+  // that only disc-marked art answers for.
+  writeFile(root.filePath(QStringLiteral("Flat.png")));
+  writeFile(root.filePath(QStringLiteral("front/Front.png")));
+  writeFile(root.filePath(QStringLiteral("box/Boxed.png")));
+  writeFile(root.filePath(QStringLiteral("Named.bin.png")));
+  writeFile(root.filePath(QStringLiteral("Recital (Disc 2).png")));
+  writeFile(root.filePath(QStringLiteral("Recital (Disc 1).png")));
+  // Both a flat-root cover AND a front/ one: `front/` must win in the map
+  // exactly as it does in the cascade (Kartend-u67w0).
+  writeFile(root.filePath(QStringLiteral("Both.png")));
+  writeFile(root.filePath(QStringLiteral("front/Both.png")));
+
+  DirectoryCache::instance().prewarmDirectories(ArtworkUtils::artworkLookupDirectories(tmp.path()));
+  const QHash<QString, QString> map = ArtworkUtils::buildArtworkPathMap(tmp.path());
+
+  const QStringList itemFiles{QStringLiteral("Flat.bin"),    QStringLiteral("Front.bin"),
+                              QStringLiteral("Boxed.bin"),   QStringLiteral("Named.bin"),
+                              QStringLiteral("Recital.m3u"), QStringLiteral("Both.bin"),
+                              QStringLiteral("Absent.bin")};
+  for (const QString &itemFile : itemFiles) {
+    const QString baseName = QFileInfo(itemFile).completeBaseName();
+    QString viaMap = map.value(ArtworkUtils::baseMatchKey(baseName));
+    if (viaMap.isEmpty()) {
+      viaMap = map.value(ArtworkUtils::baseMatchKey(itemFile));
+    }
+    const QString viaCascade = ArtworkUtils::findArtworkForFileCached(itemFile, tmp.path());
+    QCOMPARE(viaMap, viaCascade);
+  }
+  // Spot-check the two answers that are easy to get subtly wrong.
+  QCOMPARE(map.value(ArtworkUtils::baseMatchKey(QStringLiteral("Both"))),
+           root.filePath(QStringLiteral("front/Both.png")));
+  QCOMPARE(map.value(ArtworkUtils::baseMatchKey(QStringLiteral("Recital"))),
+           root.filePath(QStringLiteral("Recital (Disc 1).png")));
+  QVERIFY(!map.contains(ArtworkUtils::baseMatchKey(QStringLiteral("Absent"))));
+}
+
+// The map reads only what the cache holds. A cached NEGATIVE must not claim a
+// key (the per-item cascade keeps probing the remaining directories after one),
+// and a directory nobody has scanned contributes nothing but gets queued —
+// mirroring findInDirectory's non-blocking contract.
+void TestDirectoryCache::pathMap_skipsCachedNegativesAndColdDirectories() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QDir root(tmp.path());
+  QVERIFY(root.mkpath(QStringLiteral("front")));
+  writeFile(root.filePath(QStringLiteral("front/Solo.png")));
+
+  // Cache the flat root ONLY — refreshDirectories takes the list literally,
+  // where prewarmDirectories would expand it with the typed cover subdirs and
+  // warm front/ along with it. Then miss on the root, which caches a negative
+  // for "Solo" there while the real cover sits in front/.
+  DirectoryCache::instance().refreshDirectories(QStringList{tmp.path()});
+  QCOMPARE(DirectoryCache::instance().findInDirectory(QStringLiteral("Solo"), tmp.path()),
+           QString());
+
+  // front/ is still cold: it contributes nothing and is queued, so the map is
+  // empty rather than wrong.
+  const QHash<QString, QString> cold = ArtworkUtils::buildArtworkPathMap(tmp.path());
+  QVERIFY(!cold.contains(ArtworkUtils::baseMatchKey(QStringLiteral("Solo"))));
+  QVERIFY(DirectoryCache::instance().isDirectoryQueued(root.filePath(QStringLiteral("front"))));
+
+  DirectoryCache::instance().processQueuedDirectories();
+  const QHash<QString, QString> warm = ArtworkUtils::buildArtworkPathMap(tmp.path());
+  QCOMPARE(warm.value(ArtworkUtils::baseMatchKey(QStringLiteral("Solo"))),
+           root.filePath(QStringLiteral("front/Solo.png")));
+}
+
+// prewarmDirectories fills gaps and leaves an existing listing alone, so within
+// one session a listing can be arbitrarily old. refreshDirectories is the
+// re-derive: images added since must appear and images deleted since must go.
+void TestDirectoryCache::refreshDirectories_replacesAListingCachedEarlier() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QDir root(tmp.path());
+  writeFile(root.filePath(QStringLiteral("Stays.png")));
+  writeFile(root.filePath(QStringLiteral("Goes.png")));
+
+  const QStringList cascade = ArtworkUtils::artworkLookupDirectories(tmp.path());
+  DirectoryCache::instance().prewarmDirectories(cascade);
+  QCOMPARE(ArtworkUtils::findArtworkForFileCached(QStringLiteral("Goes.bin"), tmp.path()),
+           root.filePath(QStringLiteral("Goes.png")));
+
+  QVERIFY(QFile::remove(root.filePath(QStringLiteral("Goes.png"))));
+  writeFile(root.filePath(QStringLiteral("Arrives.png")));
+  writeFile(root.filePath(QStringLiteral("Recital (Disc 1).png")));
+
+  // Warming is a no-op on an already-cached directory: the stale answers stand.
+  DirectoryCache::instance().prewarmDirectories(cascade);
+  QCOMPARE(ArtworkUtils::findArtworkForFileCached(QStringLiteral("Goes.bin"), tmp.path()),
+           root.filePath(QStringLiteral("Goes.png")));
+
+  const quint64 before = DirectoryCache::instance().contentsGeneration();
+  DirectoryCache::instance().refreshDirectories(cascade);
+  QVERIFY(DirectoryCache::instance().contentsGeneration() > before);
+
+  const QHash<QString, QString> map = ArtworkUtils::buildArtworkPathMap(tmp.path());
+  QCOMPARE(map.value(ArtworkUtils::baseMatchKey(QStringLiteral("Stays"))),
+           root.filePath(QStringLiteral("Stays.png")));
+  QCOMPARE(map.value(ArtworkUtils::baseMatchKey(QStringLiteral("Arrives"))),
+           root.filePath(QStringLiteral("Arrives.png")));
+  QVERIFY(!map.contains(ArtworkUtils::baseMatchKey(QStringLiteral("Goes"))));
+  // The disc-marked half of the listing is rebuilt too, not just the exact one.
+  QCOMPARE(map.value(ArtworkUtils::baseMatchKey(QStringLiteral("Recital"))),
+           root.filePath(QStringLiteral("Recital (Disc 1).png")));
 }
 
 QTEST_GUILESS_MAIN(TestDirectoryCache)

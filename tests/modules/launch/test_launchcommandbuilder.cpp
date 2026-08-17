@@ -41,6 +41,12 @@ private slots:
   void testFilePlaceholder();
   void testFilePlaceholderKeepsSingleArgWithSpaces();
 
+  // Derived path tokens (Kartend-kvcxd): %name% / %filename% / %dir% / %ext%
+  void testDerivedPathTokens_data();
+  void testDerivedPathTokens();
+  void testDerivedTokenLeadingDashIsRejected();
+  void testDerivedTokensOnKartLinkStub();
+
   // %core placeholder
   void testCorePlaceholder_data();
   void testCorePlaceholder();
@@ -117,6 +123,91 @@ void TestLaunchCommandBuilder::testFilePlaceholderKeepsSingleArgWithSpaces() {
       plainLauncher(QStringLiteral("--fullscreen \"%1\"")), QStringLiteral("Video"), file);
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().arguments, (QStringList{"--fullscreen", file}));
+}
+
+void TestLaunchCommandBuilder::testDerivedPathTokens_data() {
+  QTest::addColumn<QString>("parameters");
+  QTest::addColumn<QStringList>("expectedArguments");
+
+  const QString file = QStringLiteral("/tmp/media/concert.mp4");
+  // Each token names one PART of the item path. None of them places the media
+  // argument, so the append-at-end fallback still fires — the trailing `file`
+  // in these expectations is that fallback, not the token.
+  QTest::newRow("name") << QStringLiteral("--title=%name%")
+                        << QStringList{QStringLiteral("--title=concert"), file};
+  QTest::newRow("filename") << QStringLiteral("--as %filename%")
+                            << QStringList{"--as", "concert.mp4", file};
+  QTest::newRow("dir") << QStringLiteral("--cwd %dir%") << QStringList{"--cwd", "/tmp/media", file};
+  QTest::newRow("ext") << QStringLiteral("--kind %ext%") << QStringList{"--kind", "mp4", file};
+  QTest::newRow("case-insensitive")
+      << QStringLiteral("--title=%NAME%") << QStringList{QStringLiteral("--title=concert"), file};
+  // Composed inside one token: substitution happens after the split, so the
+  // sibling-file idiom stays a single argv entry even though it names two
+  // tokens and the value contains a path separator.
+  QTest::newRow("composed") << QStringLiteral("--sub=%dir%/%name%.srt")
+                            << QStringList{QStringLiteral("--sub=/tmp/media/concert.srt"), file};
+  // %filename% must survive the %name% pass. "%name%" is not a substring of
+  // "%filename%" and the two must never be allowed to alias.
+  QTest::newRow("filename-not-eaten-by-name")
+      << QStringLiteral("%filename% %name%") << QStringList{"concert.mp4", "concert", file};
+  // Naming a part of the path is not placing the media argument: %1 still
+  // decides that, and here it suppresses the fallback so the path appears once.
+  QTest::newRow("with-explicit-media") << QStringLiteral("--title=%name% %1")
+                                       << QStringList{QStringLiteral("--title=concert"), file};
+  // An unrecognised %word% token is passed through verbatim rather than
+  // blanked, so a typo stays visible (the preview flags it as unresolved).
+  QTest::newRow("unknown-token") << QStringLiteral("--x %nope%")
+                                 << QStringList{"--x", "%nope%", file};
+}
+
+void TestLaunchCommandBuilder::testDerivedPathTokens() {
+  QFETCH(QString, parameters);
+  QFETCH(QStringList, expectedArguments);
+
+  const auto result = LaunchCommandBuilder::buildLaunchCommand(
+      plainLauncher(parameters), QStringLiteral("Talks"), QStringLiteral("/tmp/media/concert.mp4"));
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().arguments, expectedArguments);
+}
+
+void TestLaunchCommandBuilder::testDerivedTokenLeadingDashIsRejected() {
+  // A file named "-rf.mkv" yields %name% == "-rf". Substitution can't add an
+  // argument, but it can still hand the launcher a flag where it expected a
+  // value, so a template that names the token is refused outright.
+  const QString hostile = QStringLiteral("/tmp/media/-rf.mkv");
+  const auto rejected = LaunchCommandBuilder::buildLaunchCommand(
+      plainLauncher(QStringLiteral("--title %name%")), QStringLiteral("Talks"), hostile);
+  QVERIFY(rejected.isError());
+
+  // The guard is scoped to tokens the template actually names — the same file
+  // launches normally when nothing asks for that part of the path. Without
+  // this, one oddly-named file would break every item in the collection.
+  const auto allowed = LaunchCommandBuilder::buildLaunchCommand(
+      plainLauncher(QStringLiteral("--fullscreen")), QStringLiteral("Talks"), hostile);
+  QVERIFY2(allowed.isOk(), qPrintable(allowed.isError() ? allowed.error().message : QString()));
+  QCOMPARE(allowed.value().arguments, (QStringList{"--fullscreen", hostile}));
+}
+
+void TestLaunchCommandBuilder::testDerivedTokensOnKartLinkStub() {
+  QTemporaryDir dir;
+  KartLink::LinkData data;
+  data.source = QStringLiteral("steam");
+  data.target = QStringLiteral("steam://rungameid/400");
+  const QString stub = dir.filePath(QStringLiteral("Studio Session.kartlink"));
+  QVERIFY(KartLink::write(stub, data));
+
+  // %name% follows the grid's display title, which for a stub is its filename —
+  // never a fragment of the resolved target. The path-part tokens describe a
+  // media file the stub does not have, so they expand to empty rather than to
+  // something misleading like "400" or the managed stub folder. The title also
+  // shows the boundary rule holding: a space in the value does not split it.
+  const auto cmd = LaunchCommandBuilder::buildLaunchCommand(
+      plainLauncher(QStringLiteral("--title=%name% --dir=%dir% --ext=%ext%")),
+      QStringLiteral("Sessions"), stub);
+  QVERIFY2(cmd.isOk(), qPrintable(cmd.isError() ? cmd.error().message : QString()));
+  const QStringList expected = {QStringLiteral("--title=Studio Session"), QStringLiteral("--dir="),
+                                QStringLiteral("--ext="), QStringLiteral("steam://rungameid/400")};
+  QCOMPARE(cmd.value().arguments, expected);
 }
 
 void TestLaunchCommandBuilder::testCorePlaceholder_data() {

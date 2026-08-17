@@ -10,11 +10,20 @@ Kartend ships with built-in adapters for several services:
 
 | Provider | Categories it applies to | Capabilities |
 |----------|--------------------------|--------------|
-| **TMDB** (The Movie Database) | `video`, `movies`, `tv` | Metadata + media |
-| **MusicBrainz** | `audio`, `music` | Metadata + media |
-| **OpenLibrary** | `book`, `documents`, `reference` | Metadata + media |
-| **ScreenScraper.fr** | `games`, `emulation`, `retro` | Metadata + media (quota-limited) |
-| **Web Search** *(fallback)* | every collection | URL only — opens the matched query in your browser |
+| **TMDB** (The Movie Database) | `video` (`movies`, `tv` normalise onto it) | Metadata + media |
+| **MusicBrainz** | `audio` (`music`) | Metadata + media |
+| **OpenLibrary** | `reference` (`book`, `documents`) | Metadata + media |
+| **ScreenScraper.fr** | `games` (`game`, `rom`, `emulator`) | Metadata + media (quota-limited) |
+| **Steam Store** | `games` | Metadata + media — used by [launcher import](Launcher-Import.md) |
+| **Flathub** | `games` | Metadata only |
+| **MobyGames**, **IGDB** | `games` | URL only — opens a search in your browser |
+| **IMDb** | `video` | URL only |
+| **Discogs** | `audio` | URL only |
+| **Google Books** | `reference` | URL only |
+
+There is no universal fallback provider: every entry declares the
+categories it applies to, so a collection typed `Images`, or with a
+custom type no provider claims, resolves to nothing.
 
 The provider that runs for a collection is normally picked
 automatically from the collection's [`type`](Collections.md). You can
@@ -22,7 +31,7 @@ override the pick per collection — see [Pinning a provider](#pinning-a-provide
 
 > **Where to find this** — Application menu **Tools → Scraper…** for
 > batch / collection scrape, or right-click an item → **Scraper…** for
-> single-item scrape. Credentials live in **Tools → Scraper
+> single-item scrape. Credentials live in **Help → Scraper
 > Credentials…** or **Settings → Scrapers**.
 
 ## Setting up credentials
@@ -33,12 +42,12 @@ results.
 | Provider | What you need |
 |----------|---------------|
 | TMDB | API read-access token |
-| MusicBrainz | Application name + contact (optional but recommended) |
+| MusicBrainz | None — there is no credentials panel for it |
 | OpenLibrary | None |
-| ScreenScraper | `dev_id` + `dev_password` (developer credentials) + optionally a `user_id` / `user_password` (raises your daily quota above the anonymous floor) |
+| ScreenScraper | Optional username + password, which raise your daily quota above the anonymous floor. Developer credentials are bundled with the build and are not user-editable — the panel strips them on save. |
 
-Open **Tools → Scraper Credentials…** or **Settings → Scrapers**.
-Each provider has its own panel with the fields it expects. After
+Open **Help → Scraper Credentials…** or **Settings → Scrapers**.
+Only TMDB and ScreenScraper have credential panels; the others need nothing. After
 saving, the values are stored in the OS keychain when QtKeychain is
 available, or in `~/.config/kartend/kartend.cfg` under `[Scrapers]`
 as plaintext otherwise. See [Keychain](Keychain.md) for the storage
@@ -61,9 +70,9 @@ authenticated?" at a glance.
 |--------|----------|
 | **Provider** | Display name (TMDB, MusicBrainz, OpenLibrary, ScreenScraper, Web Search). |
 | **Categories** | Media types the provider can scrape (Video, Audio, Reference, Games). |
-| **Capabilities** | Hash matching, metadata, artwork, manuals, videos — whichever the provider supports. |
-| **Credentials** | "Configured" if the provider's keychain entry exists for this user; "Not configured" otherwise. |
-| **Test query** | Per-row button that opens the provider's search URL in your browser with a sample query so you can confirm the upstream service is reachable. |
+| **Capabilities** | One or more of `Web` (opens a search URL), `Metadata` (fetches fields), `Media` (downloads assets). |
+| **Credentials** | `configured` if Kartend currently holds a non-empty value for any of the provider's fields; `not configured` otherwise. This reads the loaded settings, so it tells you whether Kartend *has* the credential — not whether the keychain is reachable right now. |
+| **Test query** | Type a query in the field above the list, then double-click a row: the URL that provider would use is shown as text. Nothing is opened in a browser and no request is made — it is there to let you check the URL shape by eye. |
 
 Useful when troubleshooting an "all scrapes fail" state — the dialog
 tells you whether the registry sees the credentials at all (vs the
@@ -112,7 +121,7 @@ when an item already has metadata:
 
 | Mode | What it does | When to use |
 |------|--------------|-------------|
-| **Overwrite** | Always replace existing files and DB rows | Migrating from one provider to another |
+| **Overwrite** | Always replace existing files and DB rows — except artwork types you linked by hand, which are never replaced | Migrating from one provider to another |
 | **Fill missing** *(default)* | Only download / write fields and assets that are missing | Day-to-day catalog top-ups |
 | **Update changed** | Download every field anyway, write only if bytes differ | "I think the source data changed but I want to compare first" — intentionally the slowest mode |
 | **Skip** | Skip the whole item if any metadata exists | Strictly additive scrapes |
@@ -130,15 +139,22 @@ A successful scrape can produce:
   fields. Stored in the `item_metadata` table; visible in the
   [details sidebar](Sidebar-and-Details-Pane.md) and the
   [detail page](Item-Metadata.md).
-- **Cover artwork** — saved to the collection's `artworkDirectory`
-  with the standard fallback filename (see [Artwork](Artwork.md)).
-- **Custom artwork types** — fanart, screenshot, logo, etc., for
-  providers that supply them. Saved into the directory layout
-  Kartend expects so they show up in the artwork gallery.
+- **Artwork** — every image is saved into its **typed subdirectory**,
+  `<artworkDirectory>/<type>/<item base name>.<ext>` — `front/`,
+  `screenshot/`, `fanart/`, `logo/` and so on. Nothing is copied to the
+  artwork root; the grid tile resolves the primary cover straight out
+  of the typed subfolders. Videos land in `video/`, manuals in
+  `manual/`. See [Artwork](Artwork.md).
+- **Metadata sidecar** — alongside the database row, a readable JSON
+  copy is written to `<artworkDirectory>/metadata/<base name>.json`.
 
-Kartend never overwrites a user-supplied artwork file silently — if
-an item already has a manual override via
-[Item Artwork Links](Artwork.md), the scrape skips that asset.
+> **A cover you linked by hand is left alone.** If an item has a manual
+> link for an artwork type — set through **Item Artwork Links** or the
+> **Assign Missing Artwork…** wizard — a scrape skips that type and
+> counts it as skipped, in every re-scrape mode including **Overwrite**.
+> Other types on the same item still scrape normally. The link stops
+> counting once the image it points at is gone, so deleting that file
+> (or clearing the link) lets the next scrape fill the type again.
 
 ## Performance and pacing
 
@@ -174,7 +190,10 @@ To raise the cap:
 
 1. Create an account on screenscraper.fr.
 2. Optionally subscribe to bump your user-level quota.
-3. Enter your `dev_id` + `dev_password` in **Scraper Credentials**;
+3. Enter your ScreenScraper **username and password** in **Scraper
+   Credentials**. (Developer credentials are bundled with the build and
+   are deliberately not exposed — the panel strips any `dev_id` /
+   `dev_password` keys it finds on save.)
    `user_id` + `user_password` raise the cap further.
 
 ## DAT file identification (ROMs)
@@ -229,11 +248,11 @@ metadata yourself.
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| "Please set credentials in Settings → Scrapers" | Provider expects an API key that isn't configured | **Tools → Scraper Credentials…**, fill in the required fields |
+| "Please set credentials in Settings → Scrapers" | Provider expects an API key that isn't configured | **Help → Scraper Credentials…**, fill in the required fields |
 | "Scrape stopped — quota exhausted" (ScreenScraper) | Daily quota hit | Wait for the reset, or add user credentials to raise the cap |
 | Items skipped silently in batch | `Fill missing` or `Skip` mode is honoring the **Skip recent** window | Lower `skipRecentScrapeDays`, or switch to `Overwrite` |
 | Wrong title matched for a ROM | DAT lookup not configured or hash didn't match the DAT entry | Add a more complete DAT file, or override the title with [Item Metadata](Item-Metadata.md) |
-| Artwork not refreshed even with Overwrite | Item has a manual artwork link via [Item Artwork Links](Artwork.md) — those are never overwritten | Remove the link first, or use a different file path |
+| Tile still shows the old cover after a scrape | A cover you linked by hand wins over a scraped one — the scrape leaves that artwork type alone and reports it as skipped | Clear the link in [Item Artwork Links](Artwork.md), then scrape again |
 | `Resume / Discard` prompt every launch | A previous scrape didn't finish | Pick Discard once to clear the snapshot |
 
 ## Where to next

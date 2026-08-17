@@ -12,6 +12,7 @@ target_sources(kartend_utils PRIVATE
   kartlink.cpp
   launcherprobe.cpp
   lutrislibrary.cpp
+  multidisc.cpp
   pathutils.cpp
   retroarchutils.cpp
   romhasher.cpp
@@ -31,6 +32,7 @@ target_sources(kartend_utils PRIVATE
   kartlink.h
   launcherprobe.h
   lutrislibrary.h
+  multidisc.h
   pathutils.h
   retroarchutils.h
   romhasher.h

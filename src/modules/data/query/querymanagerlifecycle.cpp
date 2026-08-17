@@ -9,6 +9,7 @@
 #include "querymanager.h"
 
 #include <QDateTime>
+#include <QDir>
 #include <QLoggingCategory>
 #include <QSet>
 #include <QSqlError>
@@ -29,7 +30,9 @@ using ErrorUtils::ErrorContext;
 
 QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionUuid,
                                                       QHash<QString, QDateTime> *timestamps,
-                                                      QHash<QString, qint64> *sizes) {
+                                                      QHash<QString, qint64> *sizes,
+                                                      QHash<QString, QString> *storedAbsByKey,
+                                                      const QString &mediaDirForOverrides) {
   QStringList filePaths;
 
   if (!m_db.isOpen()) {
@@ -65,19 +68,37 @@ QStringList QueryManager::loadItemsFromDatabaseByUuid(const QString &collectionU
     seenPaths.insert(path);
     filePaths.append(path);
 
+    // Hand back the stored absolute path for rows the media-dir join cannot
+    // reconstruct (Kartend-yxahw). The key stays relative because the
+    // subfolder filtering in loadItems depends on it being relative; only the
+    // ABSOLUTE resolution downstream needs correcting, and only for rows where
+    // the two genuinely disagree.
+    if (storedAbsByKey) {
+      const QString storedAbs = query.value(1).toString();
+      // Record ONLY genuine divergences. For an ordinary row the key is
+      // relative and the stored path absolute, so a bare inequality test would
+      // record an override for every item in the library; what matters is
+      // whether the join RECONSTRUCTS the stored path.
+      const QString rejoined =
+          mediaDirForOverrides.isEmpty() ? path : QDir(mediaDirForOverrides).absoluteFilePath(path);
+      if (!storedAbs.isEmpty() && storedAbs != rejoined) {
+        storedAbsByKey->insert(path, storedAbs);
+      }
+    }
+
     // Hand back the persisted sort metadata so Date/Size sorts don't have to
     // re-stat every file (Kartend-m9r1s). Invalid timestamps and non-positive
     // sizes are intentionally NOT inserted: sortFiles falls back to a stat for
     // missing keys, which keeps rows the streaming scan pipeline persisted
     // without a file_size (DEFAULT 0) sorting by their real on-disk size.
     if (timestamps) {
-      const QDateTime mtime = QDateTime::fromString(query.value(1).toString(), Qt::ISODate);
+      const QDateTime mtime = QDateTime::fromString(query.value(2).toString(), Qt::ISODate);
       if (mtime.isValid()) {
         timestamps->insert(path, mtime);
       }
     }
     if (sizes) {
-      const qint64 size = query.value(2).toLongLong();
+      const qint64 size = query.value(3).toLongLong();
       if (size > 0) {
         sizes->insert(path, size);
       }
@@ -134,13 +155,13 @@ void QueryManager::invalidateUsageSensitiveCaches() {
   m_cachedPlaylistScopeKey.clear();
 }
 
-void QueryManager::runWrite(const std::function<bool(QSqlDatabase &)> &op, const QString &context,
+void QueryManager::runWrite(std::function<bool(QSqlDatabase &)> op, const QString &context,
                             std::function<void()> onSettled) {
   assertOwnerThread();
   if (!op) {
     return;
   }
-  runWriteRung(op, context, std::move(onSettled), /*deferral=*/0);
+  runWriteRung(std::move(op), context, std::move(onSettled), /*deferral=*/0);
 }
 
 void QueryManager::runWriteRung(std::function<bool(QSqlDatabase &)> op, const QString &context,

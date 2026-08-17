@@ -30,6 +30,8 @@ class BatchScrapeRunner;
 /// (stateless file/SQLite reads + atomic stub writes) run on the global
 /// pool for the background passes and inline (wait cursor) for the
 /// dialog-driven initial import.
+class LauncherManifestWatcher;
+
 struct LauncherImportControllerContext {
   std::function<QWidget *()> getParentWindow;
 
@@ -94,6 +96,13 @@ public slots:
   /// Manual re-sync — same pass as startupSync but always reports an
   /// outcome via the status bar.
   void syncLauncherCollections();
+
+  /// Watch the launcher directories behind the imported collections, so a
+  /// game installed while Kartend runs is picked up without a restart
+  /// (Kartend-5vuqy). Idempotent: re-call it after collections change, and
+  /// it re-derives the watch set. A source with no imported collection is
+  /// not watched — there would be nothing to sync into.
+  void startWatchingLaunchers();
 
 private:
   /// UI-thread snapshot handed to the worker: indices resolved, paths
@@ -188,6 +197,8 @@ private:
 
   LauncherImportControllerContext m_ctx;
   QFutureWatcher<QList<SyncOutcome>> m_syncWatcher;
+  /// Owned via QObject parenting; created on the first startWatchingLaunchers().
+  LauncherManifestWatcher *m_manifestWatcher = nullptr;
   /// True while the in-flight background sync came from the manual action —
   /// it then always reports, where the startup pass stays quiet unless
   /// something changed.

@@ -83,8 +83,13 @@ void KartPreflightDialog::populateSummary(const KartPreflight::PreflightReport &
 }
 
 void KartPreflightDialog::populateIssues(const KartPreflight::PreflightReport &report) {
+  // Kartend-kxqqf: the all-clear is reserved for a bundle that asks for
+  // nothing executable. A bundle carrying any launcher field lands in
+  // launcherTrust, so hasIssues() is true and this branch is not reached —
+  // the dialog must never affirm a launcher configuration it only listed.
   if (!report.hasIssues()) {
-    m_statusBanner->setText(tr("No validation issues — every required launcher resolves and no "
+    m_statusBanner->setText(tr("No validation issues — this bundle carries no launcher "
+                               "configuration, every required launcher resolves and no "
                                "externally-controlled paths are flagged."));
     m_statusBanner->setStyleSheet(
         "QLabel { background-color: rgba(80, 180, 100, 0.18); border: 1px solid "
@@ -93,13 +98,43 @@ void KartPreflightDialog::populateIssues(const KartPreflight::PreflightReport &r
     return;
   }
 
-  m_statusBanner->setText(tr("Validation concerns — review each section. You can still proceed "
-                             "but missing launchers or suspicious paths may require attention "
-                             "after import."));
-  m_statusBanner->setStyleSheet(
-      "QLabel { background-color: rgba(220, 160, 50, 0.18); border: 1px solid "
-      "rgba(220, 160, 50, 0.6); border-radius: 4px; }");
+  if (report.hasElevatedLauncherTrust()) {
+    m_statusBanner->setText(tr("This bundle asks to run something unusual. Review the launcher "
+                               "configuration below before importing — a .kart chooses both the "
+                               "program and the arguments it is started with, so importing one "
+                               "you did not make is like running a program you were sent."));
+    m_statusBanner->setStyleSheet(
+        "QLabel { background-color: rgba(210, 80, 70, 0.18); border: 1px solid "
+        "rgba(210, 80, 70, 0.7); border-radius: 4px; }");
+  } else if (!report.launcherIssues.isEmpty() || !report.suspiciousPaths.isEmpty() ||
+             report.nameConflicts) {
+    m_statusBanner->setText(tr("Validation concerns — review each section. You can still proceed "
+                               "but missing launchers or suspicious paths may require attention "
+                               "after import."));
+    m_statusBanner->setStyleSheet(
+        "QLabel { background-color: rgba(220, 160, 50, 0.18); border: 1px solid "
+        "rgba(220, 160, 50, 0.6); border-radius: 4px; }");
+  } else {
+    m_statusBanner->setText(tr("This bundle brings its own launcher configuration — the program "
+                               "it will start, and the arguments it will be started with. Check "
+                               "that it is what you expect before importing."));
+    m_statusBanner->setStyleSheet(
+        "QLabel { background-color: rgba(70, 130, 200, 0.18); border: 1px solid "
+        "rgba(70, 130, 200, 0.6); border-radius: 4px; }");
+  }
   m_issuesTree->setVisible(true);
+
+  if (!report.launcherTrust.isEmpty()) {
+    auto *group = new QTreeWidgetItem(
+        m_issuesTree, {tr("Launcher configuration"), QString::number(report.launcherTrust.size()),
+                       tr("What this bundle will run when you press Launch")});
+    group->setFirstColumnSpanned(false);
+    group->setExpanded(true);
+    for (const kart::KartLauncherFinding &finding : report.launcherTrust) {
+      new QTreeWidgetItem(
+          group, {finding.field, kart::launcherTrustReasonLabel(finding.reason), finding.value});
+    }
+  }
 
   if (!report.launcherIssues.isEmpty()) {
     auto *group = new QTreeWidgetItem(
@@ -117,7 +152,7 @@ void KartPreflightDialog::populateIssues(const KartPreflight::PreflightReport &r
   if (!report.suspiciousPaths.isEmpty()) {
     auto *group = new QTreeWidgetItem(
         m_issuesTree, {tr("Suspicious paths"), QString::number(report.suspiciousPaths.size()),
-                       tr("Externally-controlled paths outside the safe allowlist")});
+                       tr("Icon and placeholder paths outside the safe allowlist")});
     group->setFirstColumnSpanned(false);
     group->setExpanded(true);
     for (const QPair<QString, QString> &p : report.suspiciousPaths) {

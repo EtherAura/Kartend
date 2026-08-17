@@ -125,6 +125,16 @@ struct CollectionConfig {
   /// also pruned to items that have artwork.
   bool hideMissingArtwork = false;
 
+  /// Collapse a release split across discs — files whose names differ only by
+  /// a "(Disc 1)" / "(CD 2)" / "(Side A)" marker — into a single item backed
+  /// by a generated .m3u, so the library shows one thing the user owns rather
+  /// than N tiles that each play a fragment. The playlist is written under
+  /// Kartend's own data directory, never beside the media.
+  ///
+  /// Off by default: enabling it changes tile count and item titles, which an
+  /// existing library should never have happen to it silently on upgrade.
+  bool groupMultiDisc = false;
+
   /// View background / wallpaper cluster — items-page background
   /// (color/image/video), primary/tile/selection palette, header logo,
   /// vignette overlay, wallpaper-parallax controls, and toolbar
@@ -274,13 +284,13 @@ struct CollectionConfig {
            hideSubcollectionTitles == other.hideSubcollectionTitles && filter == other.filter &&
            horizontalAlignment == other.horizontalAlignment && sidebar == other.sidebar &&
            viewType == other.viewType && hideMissingArtwork == other.hideMissingArtwork &&
-           background == other.background && archive == other.archive &&
-           expandMode == other.expandMode && watchFilesystem == other.watchFilesystem &&
-           importSource == other.importSource && importScope == other.importScope &&
-           importSourceKey == other.importSourceKey && folderBrowsing == other.folderBrowsing &&
-           listView == other.listView && customFontFamily == other.customFontFamily &&
-           isPlaylist == other.isPlaylist && playlistId == other.playlistId &&
-           isSmartPlaylist == other.isSmartPlaylist &&
+           groupMultiDisc == other.groupMultiDisc && background == other.background &&
+           archive == other.archive && expandMode == other.expandMode &&
+           watchFilesystem == other.watchFilesystem && importSource == other.importSource &&
+           importScope == other.importScope && importSourceKey == other.importSourceKey &&
+           folderBrowsing == other.folderBrowsing && listView == other.listView &&
+           customFontFamily == other.customFontFamily && isPlaylist == other.isPlaylist &&
+           playlistId == other.playlistId && isSmartPlaylist == other.isSmartPlaylist &&
            playlistReservedKind == other.playlistReservedKind &&
            scraperOverrides == other.scraperOverrides &&
            additionalParentNames == other.additionalParentNames;

@@ -204,9 +204,14 @@ void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
   // finished entries first so the list stays O(itemConcurrency).
   m_inFlightMediaWrites.removeIf(
       [](const QFuture<Scraper::MediaWriteResult> &f) { return f.isFinished(); });
-  const QFuture<Scraper::MediaWriteResult> writeFuture =
-      QtConcurrent::run([artworkDir = m_artworkDir, baseName, writes, effective,
-                         rescrapeMode = m_rescrapeMode, mediaCancel = m_mediaWriteCancel]() {
+  // Read the item's hand-linked types HERE, on the main thread: the worker
+  // below must not touch the database, so the set is computed now and captured
+  // by value (Kartend-yibgw).
+  const QSet<QString> protectedTypes =
+      Scraper::handLinkedArtworkTypes(dbMgr(), m_collectionUuid, state->path, m_artworkDir);
+  const QFuture<Scraper::MediaWriteResult> writeFuture = QtConcurrent::run(
+      [artworkDir = m_artworkDir, baseName, writes, effective, rescrapeMode = m_rescrapeMode,
+       mediaCancel = m_mediaWriteCancel, protectedTypes]() {
         // Cancelled while queued (pool saturated during a long batch):
         // skip the sidecar + media writes entirely.
         if (mediaCancel->load(std::memory_order_acquire)) {
@@ -220,8 +225,8 @@ void BatchScrapeRunner::applyAndFinish(const std::shared_ptr<ItemState> &state,
         // and Written are silent.
         const Scraper::SidecarWriteOutcome sidecarOutcome =
             Scraper::writeMetadataSidecar(artworkDir, baseName, effective, rescrapeMode);
-        Scraper::MediaWriteResult mediaRes =
-            Scraper::writeMediaFiles(artworkDir, baseName, writes, rescrapeMode, mediaCancel);
+        Scraper::MediaWriteResult mediaRes = Scraper::writeMediaFiles(
+            artworkDir, baseName, writes, rescrapeMode, mediaCancel, protectedTypes);
         mediaRes.sidecarFailed = (sidecarOutcome == Scraper::SidecarWriteOutcome::Failed);
         return mediaRes;
       });

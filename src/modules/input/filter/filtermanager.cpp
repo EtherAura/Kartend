@@ -324,14 +324,60 @@ auto FilterManager::mediaItemHasArtwork(int mediaIndex) const -> bool {
     // once its real path has landed.
     return true;
   }
+  // A hand-linked cover settles the question before the name-based key set is
+  // consulted at all (Kartend-1js9j): the grid tile and the cover-flow card
+  // paint that link now, so hiding the item would hide a tile with a real cover
+  // on it. The map is prebuilt and existence-checked, and — unlike the key set
+  // — needs no warm DirectoryCache, so it answers even during the cold-cache
+  // window below. m_filePaths entries can be media-dir-relative, so the key is
+  // resolved through the FileMapCache-backed lookup (an O(1) hash hit, the same
+  // one itemBelongsToTargetCollections already pays per item); the isEmpty()
+  // guard keeps that off the pass entirely for libraries with no links.
+  // Resolved lazily and at most once: the manual-cover lookup and the mirrored
+  // directory both want the absolute path, and m_filePaths entries can be
+  // media-dir-relative. Skipped entirely for the libraries that need neither.
+  QString fullPath;
+  bool fullPathResolved = false;
+  const auto resolvedPath = [&]() -> const QString & {
+    if (!fullPathResolved) {
+      fullPathResolved = true;
+      if (auto *db = dbMgr()) {
+        fullPath = db->resolveFilePath(rawEntry, m_context);
+      }
+      if (fullPath.isEmpty()) {
+        fullPath = rawEntry;
+      }
+    }
+    return fullPath;
+  };
+
+  if (!m_manualCoverPaths.isEmpty()) {
+    if (!m_manualCoverPaths.value(rawEntry).isEmpty()) {
+      return true;
+    }
+    if (!m_manualCoverPaths.value(resolvedPath()).isEmpty()) {
+      return true;
+    }
+  }
   // Membership test against the precomputed artwork key set instead of the
   // per-item findArtworkForFileCached cascade (20 lock-guarded probes plus
   // potential first-miss stat sweeps, for EVERY item on EVERY filter pass).
   // Both name-key variants the cascade probes are tested: the extension-
   // stripped stem and the full filename (an artwork file "Title.iso.png"
   // backs item "Title.iso" through the second key).
-  ensureArtworkKeySet();
-  if (!m_artworkKeySetSettled) {
+  // Under a mirroring layout the answer lives in the artwork subdirectory that
+  // matches the item's own media subfolder, which is where the render path
+  // looks — resolving against the root alone reported every subfolder item as
+  // artless, so hideMissingArtwork silently did nothing for those collections
+  // (Kartend-7f76f). The helper hands back the root unchanged when the
+  // collection does not mirror, so non-mirroring libraries keep hitting the
+  // single set they always did.
+  const ArtworkKeys &artwork =
+      artworkKeysFor(m_context.config.folderBrowsing.includeArtworkSubfolders ||
+                             m_hideMissingArtworkDirectory == m_context.config.mediaDirectory
+                         ? artworkDirectoryForItem(resolvedPath())
+                         : m_hideMissingArtworkDirectory);
+  if (!artwork.settled) {
     // The lookup cascade behind the key set has cold directories, so an
     // empty result means "the cache has not caught up", not "artless" —
     // condemning items on it hid entire freshly-opened collections
@@ -342,10 +388,10 @@ auto FilterManager::mediaItemHasArtwork(int mediaIndex) const -> bool {
   }
   const QString fileName = QFileInfo(rawEntry).fileName();
   const QString baseName = QFileInfo(fileName).completeBaseName();
-  if (m_artworkKeySet.contains(ArtworkUtils::baseMatchKey(baseName))) {
+  if (artwork.keys.contains(ArtworkUtils::baseMatchKey(baseName))) {
     return true;
   }
-  return fileName != baseName && m_artworkKeySet.contains(ArtworkUtils::baseMatchKey(fileName));
+  return fileName != baseName && artwork.keys.contains(ArtworkUtils::baseMatchKey(fileName));
 }
 
 void FilterManager::ensureArtworkKeySet() const {
@@ -357,20 +403,48 @@ void FilterManager::ensureArtworkKeySet() const {
       m_artworkKeySetDirectory == m_hideMissingArtworkDirectory) {
     return;
   }
-  m_artworkKeySet = ArtworkUtils::buildArtworkKeySet(m_hideMissingArtworkDirectory);
-  // Settledness is stamped per generation alongside the set: any prewarm
-  // that warms the cascade bumps the generation, so the flag can only go
-  // stale in the direction that re-runs this rebuild (Kartend-l66sn).
-  m_artworkKeySetSettled = ArtworkUtils::DirectoryCache::instance().areDirectoriesCached(
-      ArtworkUtils::artworkLookupDirectories(m_hideMissingArtworkDirectory));
+  // Drop every directory's set, not just the root's: they were all built
+  // against the generation that just moved.
+  m_artworkKeySets.clear();
   m_artworkKeySetGeneration = generation;
   m_artworkKeySetDirectory = m_hideMissingArtworkDirectory;
   m_artworkKeySetValid = true;
 }
 
-auto FilterManager::artworkKeySetSettled() const -> bool {
+auto FilterManager::artworkKeysFor(const QString &artworkDirectory) const -> const ArtworkKeys & {
   ensureArtworkKeySet();
-  return m_artworkKeySetSettled;
+  auto it = m_artworkKeySets.find(artworkDirectory);
+  if (it != m_artworkKeySets.end()) {
+    return it.value();
+  }
+  ArtworkKeys built;
+  built.keys = ArtworkUtils::buildArtworkKeySet(artworkDirectory);
+  // Settledness is stamped per generation alongside the set: any prewarm that
+  // warms the cascade bumps the generation, so the flag can only go stale in
+  // the direction that re-runs the rebuild (Kartend-l66sn).
+  built.settled = ArtworkUtils::DirectoryCache::instance().areDirectoriesCached(
+      ArtworkUtils::artworkLookupDirectories(artworkDirectory));
+  return m_artworkKeySets.insert(artworkDirectory, std::move(built)).value();
+}
+
+auto FilterManager::artworkDirectoryForItem(const QString &fullPath) const -> QString {
+  // The shared helper decides when NOT to mirror as well — no flag and artwork
+  // not co-located with media, an item outside the media directory, an item at
+  // the media root — and returns the configured root for all of them, which is
+  // exactly the pre-Kartend-7f76f behaviour for those cases.
+  return ArtworkUtils::mirroredArtworkDirectory(
+      m_hideMissingArtworkDirectory, m_context.config.mediaDirectory, fullPath,
+      m_context.config.folderBrowsing.includeArtworkSubfolders);
+}
+
+auto FilterManager::artworkKeySetSettled() const -> bool {
+  // Deliberately the ROOT's settledness, which is what the caller
+  // (ScrollManager's baseline refilter) needs: "has the artwork cache caught
+  // up enough for this pass to be authoritative". Under mirroring an
+  // individual item whose own directory is still cold fails open on its own
+  // inside mediaItemHasArtwork, so a pass declared authoritative can leave an
+  // artless item visible for one more refresh — never hide an arted one.
+  return artworkKeysFor(m_hideMissingArtworkDirectory).settled;
 }
 
 void FilterManager::determineTargetCollections(int subcollectionIndex,
