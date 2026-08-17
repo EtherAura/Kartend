@@ -107,8 +107,13 @@ runs:
 
     - name: Validate AppStream + desktop metadata
       shell: bash
+      # --no-net: keep the validation about OUR metadata, not the internet's
+      # uptime. Without it, appstreamcli fetches every <url> and fails the
+      # whole job on url-not-reachable — which turned Branch Lint red when
+      # GitHub's issues pages 404'd during an incident (2026-08-17) while
+      # the metainfo itself was unchanged and valid.
       run: |
-        appstreamcli validate --pedantic packaging/*.metainfo.xml
+        appstreamcli validate --no-net --pedantic packaging/*.metainfo.xml
         desktop-file-validate packaging/*.desktop
 
     - name: Check translation-source drift (lupdate)
