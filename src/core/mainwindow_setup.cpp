@@ -67,7 +67,9 @@
 #include "playlistmanager.h"
 #include "presentationprofilesdialog.h"
 #include "propertyutils.h"
+#include "scrapercontroller.h"
 #include "scraperprovidersdialog.h"
+#include "screenscrapercompanyregistry.h"
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "toolbarcontroller.h"
@@ -329,6 +331,26 @@ void MainWindow::setupUIReferences() {
   m_mainContentWidget = ui->m_mainContentWidget;
   m_mainHorizontalLayout = ui->m_mainHorizontalLayout;
   m_searchBar = ui->searchBar;
+
+  // Kartend-auh7u: full-height sidebar substrate. itemsPageLayout holds
+  // exactly [itemsTopBar, m_mainContentWidget]; both move into a column
+  // inside a new outermost row, so a FullHeight-justified sidebar can dock
+  // INTO THE ROW (window-height panel, toolbar stopping at its edge) while
+  // BelowToolbar docks keep using m_mainHorizontalLayout unchanged. Widget
+  // identities are untouched — every ui-> pointer stays valid; only the
+  // parent chain gains one level.
+  m_sidebarRowWidget = new QWidget(ui->itemsPage);
+  m_sidebarRowLayout = new QHBoxLayout(m_sidebarRowWidget);
+  m_sidebarRowLayout->setContentsMargins(0, 0, 0, 0);
+  m_sidebarRowLayout->setSpacing(0);
+  m_toolbarColumnWidget = new QWidget(m_sidebarRowWidget);
+  m_toolbarColumnLayout = new QVBoxLayout(m_toolbarColumnWidget);
+  m_toolbarColumnLayout->setContentsMargins(0, 0, 0, 0);
+  m_toolbarColumnLayout->setSpacing(ui->itemsPageLayout->spacing());
+  m_toolbarColumnLayout->addWidget(ui->itemsTopBar);
+  m_toolbarColumnLayout->addWidget(m_mainContentWidget, /*stretch=*/1);
+  m_sidebarRowLayout->addWidget(m_toolbarColumnWidget, /*stretch=*/1);
+  ui->itemsPageLayout->addWidget(m_sidebarRowWidget);
 
   // Hand the toolbar's stateful Qt widgets (layout-picker / filter button /
   // search-bar inline action) over to the controller, then run its setup
@@ -691,11 +713,14 @@ void MainWindow::setupSidebar() {
     DetailsPaneManagerSetup setup;
     setup.ctx = &m_appContext;
     setup.mainLayout = m_mainHorizontalLayout;
-    // outer vertical layout + content widget enable Top/Bottom
-    // dock in Expand mode. Both come straight from the .ui — no new widgets
-    // needed.
-    setup.outerLayout = ui->itemsPageLayout;
+    // Kartend-auh7u: T/B Expand now docks inside the toolbar column (same
+    // geometry as the old itemsPageLayout dock — the column holds exactly
+    // what itemsPageLayout used to), and the outermost row hosts FullHeight
+    // L/R docks.
+    setup.outerLayout = m_toolbarColumnLayout;
     setup.contentWidget = m_mainContentWidget;
+    setup.fullHeightLayout = m_sidebarRowLayout;
+    setup.toolbarColumnWidget = m_toolbarColumnWidget;
     // Kartend-n8kh: the artwork-links dialog runs from here so the media
     // layer (DetailsPaneManager) doesn't #include itemartworklinksdialog.h.
     setup.runArtworkLinksDialog = [this](const ItemArtworkLinksInput &in) {
@@ -733,6 +758,8 @@ void MainWindow::setupCollectionTree() {
   setup.ctx = &m_appContext;
   setup.mainLayout = m_mainHorizontalLayout;
   setup.panelParent = m_mainContentWidget;
+  setup.fullHeightLayout = m_sidebarRowLayout;
+  setup.toolbarColumnWidget = m_toolbarColumnWidget;
   setup.persistCollections = [this]() { requestDebouncedCollectionsSave(); };
   m_collectionTreeController->setupReferences(setup);
   m_collectionTreeController->setupPanel();
@@ -751,6 +778,31 @@ void MainWindow::setupCollectionTree() {
                        ui->actionShowCollectionTree->blockSignals(false);
                      }
                    });
+
+  // A finished scrape run may have written cfg.collectionIcon (platform
+  // entity art riding the collection scrape, manufacturer matching) — the
+  // tree re-reads icons only on rebuild, so route run-completion into the
+  // same chokepoint every other collection-list mutation uses
+  // (Kartend-ob1c9.1).
+  if (m_scraperController) {
+    QObject::connect(m_scraperController.get(), &ScraperController::scrapeRunFinished, this,
+                     [this]() { rebuildHierarchyCache(); });
+  }
+
+  // Startup manufacturer-logo pass (Kartend-cnti4 follow-up): registry +
+  // company art can land on disk while the app is NOT scraping (an earlier
+  // session's harvest, another machine syncing the artwork share) — without
+  // this, only a scrape completion would ever wire them, and an external
+  // config write is clobbered by this process's own saves. Disk-only, no
+  // network; deferred a tick so it runs after the deferred playlist resync
+  // settles the collection list.
+  QTimer::singleShot(0, this, [this]() {
+    if (ScreenScraperCompanyRegistry::applyToCollections(
+            m_collections, ScreenScraperCompanyRegistry::defaultPath())) {
+      requestDebouncedCollectionsSave();
+      rebuildHierarchyCache();
+    }
+  });
 }
 
 void MainWindow::refreshCollectionFilesystemWatcher() {

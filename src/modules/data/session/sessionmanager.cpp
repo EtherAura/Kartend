@@ -77,6 +77,15 @@ void SessionManager::initialize() {
       readCollectionsData(root);
       readGlobalData(root);
       readCachedViewports(root);
+      {
+        // Collection tree expansion keys (root-level string array).
+        QMutexLocker locker(&m_mutex);
+        m_collectionTreeExpandedKeys.clear();
+        for (const auto &v : root[QStringLiteral("collectionTreeExpanded")].toArray()) {
+          const QString key = v.toString();
+          if (!key.isEmpty()) m_collectionTreeExpandedKeys.append(key);
+        }
+      }
     }
     metadataFile.close();
   } else {
@@ -155,6 +164,11 @@ auto SessionManager::buildSessionJson() const -> QJsonObject {
 
   root["collections"] = collections;
   root["global"] = static_cast<double>(globalItemCount);
+  if (!m_collectionTreeExpandedKeys.isEmpty()) {
+    QJsonArray expanded;
+    for (const QString &key : m_collectionTreeExpandedKeys) expanded.append(key);
+    root[QStringLiteral("collectionTreeExpanded")] = expanded;
+  }
 
   // Serialize cached viewports for instant startup
   QJsonObject viewportsObj;
@@ -437,4 +451,14 @@ SessionManager::CachedViewport
 SessionManager::getCachedViewport(const QString &collectionKey) const {
   QMutexLocker locker(&m_mutex);
   return cachedViewports.value(collectionKey);
+}
+
+void SessionManager::setCollectionTreeExpandedKeys(const QStringList &keys) {
+  QMutexLocker locker(&m_mutex);
+  m_collectionTreeExpandedKeys = keys;
+}
+
+QStringList SessionManager::collectionTreeExpandedKeys() const {
+  QMutexLocker locker(&m_mutex);
+  return m_collectionTreeExpandedKeys;
 }

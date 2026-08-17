@@ -82,6 +82,13 @@ public:
   [[nodiscard]] virtual CachedViewport getCachedViewport(const QString &collectionKey) const = 0;
 
   virtual void clearStaleCollections(const QList<CollectionConfig> &currentCollections) = 0;
+
+  /// Collection tree panel expansion memory (Kartend-ob1c9 follow-up, user
+  /// request 2026-08-17): the set of expansion keys (collection UUIDs plus
+  /// the reserved playlists-group literal) whose branches are open. Session
+  /// state, not configuration — hence here and not kartend.cfg.
+  virtual void setCollectionTreeExpandedKeys(const QStringList &keys) = 0;
+  [[nodiscard]] virtual QStringList collectionTreeExpandedKeys() const = 0;
 };
 
 #endif // ISESSIONMANAGER_H

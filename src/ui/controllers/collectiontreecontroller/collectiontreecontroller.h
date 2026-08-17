@@ -41,6 +41,14 @@ struct CollectionTreeControllerSetup {
   /// Parent for the panel widget (the main content widget that owns
   /// mainLayout).
   QWidget *panelParent = nullptr;
+  /// Kartend-auh7u: the outermost sidebar row (MainWindow's
+  /// m_sidebarRowLayout) for FullHeight-justified docks, plus the toolbar
+  /// column widget inside it. The tree claims the row's EXTREMES
+  /// (insertWidget(0)/addWidget) so it always sits outside a full-height
+  /// details pane, which inserts adjacent to the column. Optional —
+  /// without them, FullHeight degrades to the below-toolbar dock.
+  QHBoxLayout *fullHeightLayout = nullptr;
+  QWidget *toolbarColumnWidget = nullptr;
   /// Owner-supplied debounced collections persist
   /// (MainWindow::requestDebouncedCollectionsSave). Null in headless
   /// contexts; call sites guard.
@@ -107,8 +115,29 @@ signals:
   /// Mirrors the panel's effective visibility for menu-action sync.
   void visibilityChanged(bool visible);
 
+protected:
+  /// Drives the width-grip drag (press/move/release on m_grip). The grip is a
+  /// plain child widget rather than a QSplitter because the panel docks by
+  /// plain layout insertion into layouts the controller does not own —
+  /// re-parenting the whole content row into a splitter would entangle this
+  /// panel with the details pane's and toolbar's insertion logic
+  /// (Kartend-auh7u) for one draggable edge.
+  bool eventFilter(QObject *watched, QEvent *event) override;
+
 private:
-  void insertPanelAt(DetailsPanePosition position);
+  void insertPanelAt(DetailsPanePosition position, SidebarJustification justification);
+  /// Places m_grip on the panel's inner edge for @p position and applies
+  /// @p width (clamped) to the panel. Called from applyStateForCollection and
+  /// the drag handler.
+  void applyPanelWidth(int width, DetailsPanePosition position);
+  /// Re-styles every existing row IN PLACE — icon (depth-aware width cap,
+  /// style/tint/silhouette-source selection) and icons-only text handling —
+  /// without clearing the tree. This is what display-option changes, panel
+  /// resizes, and accent re-themes call: a full rebuildTree() on collection
+  /// SWITCH visibly flashed and reset scroll (field report 2026-08-17),
+  /// because the icon prefs are per-collection. rebuildTree() itself ends by
+  /// calling this, so build-time and refresh-time styling cannot drift.
+  void refreshIcons();
   void applyStateForCollection(int collectionIndex);
   void highlightCollection(int collectionIndex);
   void onItemActivated(QTreeWidgetItem *item);
@@ -120,15 +149,40 @@ private:
   const ApplicationContext *m_ctx = nullptr;
   QHBoxLayout *m_mainLayout = nullptr;
   QWidget *m_panelParent = nullptr;
+  QHBoxLayout *m_fullHeightLayout = nullptr;
+  QWidget *m_toolbarColumnWidget = nullptr;
   std::function<void()> m_persistCollections;
 
   QWidget *m_panel = nullptr;
   QLabel *m_header = nullptr;
   QTreeWidget *m_tree = nullptr;
+  /// Drag-to-resize grip on the panel's INNER edge (the side facing the
+  /// content view — right edge when docked Left, left edge when Right).
+  /// Width lives on cfg.collectionTree.treeWidth per collection; the drag
+  /// resizes live and persists on release (user request 2026-08-17).
+  QWidget *m_grip = nullptr;
+  int m_dragStartX = 0;
+  int m_dragStartWidth = 0;
+  /// Active collection's icon display options (user request 2026-08-17),
+  /// cached so applyStateForCollection can detect a change and rebuild —
+  /// rebuildTree() bakes them into the rows.
+  bool m_iconsOnly = false;
+  int m_iconSize = 16;
+  TreeIconStyle m_iconStyle = TreeIconStyle::Normal;
+  QString m_iconTint;
+  /// Panel width the current icon pixmaps were baked against (stamped by
+  /// refreshIcons). Per-collection treeWidth means a collection switch can
+  /// resize the panel; a mismatch here triggers a rebake so wide logos never
+  /// clip at the new edge.
+  int m_bakedPanelWidth = 0;
+  /// Last accent colour applyPrimaryColor delivered — the Tinted style's
+  /// default ink when no explicit tint colour is configured.
+  QString m_accentColor;
 
   /// Where the panel is currently inserted, to avoid churning the layout on
   /// every switch that keeps the side.
   DetailsPanePosition m_insertedPosition = DetailsPanePosition::Left;
+  SidebarJustification m_insertedJustification = SidebarJustification::BelowToolbar;
   bool m_panelInserted = false;
   /// Expansion memory across rebuilds, keyed by collection UUID (stable
   /// across index shuffles). The synthetic Playlists group uses a reserved

@@ -374,6 +374,12 @@ set(_kartend_collectionutils_test_sources
   ${SRC_DIR}/utils/app/collection/launcherconfig.cpp
   ${SRC_DIR}/utils/app/settingsutils.cpp
   ${SRC_DIR}/utils/fs/pathutils.cpp
+  # typehelpers' resolveCollectionTileArtwork (Kartend-ob1c9.1) delegates its
+  # parent-dir fallback to ArtworkUtils, which pulls the three TUs below.
+  ${SRC_DIR}/utils/view/artworkutils.cpp
+  ${SRC_DIR}/utils/fs/extensionutils.cpp
+  ${SRC_DIR}/utils/fs/multidisc.cpp
+  ${SRC_DIR}/utils/app/loggingcategories.cpp
 )
 set(_kartend_collectionutils_test_includes
   ${SRC_DIR}/utils
@@ -390,7 +396,7 @@ set(_kartend_collectionutils_test_includes
 kartend_add_test(NAME CollectionUtilsAlignment
   SOURCES utils/app/test_collectionutils_alignment.cpp
           ${_kartend_collectionutils_test_sources}
-  LINK Qt6::Core Qt6::Widgets
+  LINK Qt6::Core Qt6::Widgets Qt6::Concurrent
 )
 target_include_directories(test_collectionutils_alignment PRIVATE
   ${_kartend_collectionutils_test_includes}
@@ -401,7 +407,7 @@ target_include_directories(test_collectionutils_alignment PRIVATE
 kartend_add_test(NAME CollectionUtilsUuid
   SOURCES utils/app/test_collectionutils_uuid.cpp
           ${_kartend_collectionutils_test_sources}
-  LINK Qt6::Core Qt6::Widgets
+  LINK Qt6::Core Qt6::Widgets Qt6::Concurrent
 )
 target_include_directories(test_collectionutils_uuid PRIVATE
   ${_kartend_collectionutils_test_includes}
@@ -411,7 +417,7 @@ target_include_directories(test_collectionutils_uuid PRIVATE
 kartend_add_test(NAME CollectionUtilsAncestry
   SOURCES utils/app/test_collectionutils_ancestry.cpp
           ${_kartend_collectionutils_test_sources}
-  LINK Qt6::Core Qt6::Widgets
+  LINK Qt6::Core Qt6::Widgets Qt6::Concurrent
 )
 target_include_directories(test_collectionutils_ancestry PRIVATE
   ${_kartend_collectionutils_test_includes}
@@ -421,17 +427,18 @@ target_include_directories(test_collectionutils_ancestry PRIVATE
 kartend_add_test(NAME CollectionUtilsCycles
   SOURCES utils/app/test_collectionutils_cycles.cpp
           ${_kartend_collectionutils_test_sources}
-  LINK Qt6::Core Qt6::Widgets
+  LINK Qt6::Core Qt6::Widgets Qt6::Concurrent
 )
 target_include_directories(test_collectionutils_cycles PRIVATE
   ${_kartend_collectionutils_test_includes}
 )
 
 # resolvedCollectionIcon — the shared collectionIcon seam (Kartend-dkh90)
+# Qt6::Concurrent: pulled in by artworkutils.cpp (see the shared source list).
 kartend_add_test(NAME CollectionUtilsIcon
   SOURCES utils/app/test_collectionutils_icon.cpp
           ${_kartend_collectionutils_test_sources}
-  LINK Qt6::Core Qt6::Widgets
+  LINK Qt6::Core Qt6::Widgets Qt6::Concurrent
 )
 target_include_directories(test_collectionutils_icon PRIVATE
   ${_kartend_collectionutils_test_includes}

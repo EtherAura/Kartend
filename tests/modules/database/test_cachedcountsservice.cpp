@@ -51,6 +51,8 @@ public:
     return {};
   }
   void clearStaleCollections(const QList<CollectionConfig> & /*currentCollections*/) override {}
+  void setCollectionTreeExpandedKeys(const QStringList & /*keys*/) override {}
+  QStringList collectionTreeExpandedKeys() const override { return {}; }
 
   int m_saveCount = 0;
   int m_setGlobalCount = 0;

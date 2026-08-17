@@ -6,7 +6,9 @@
 // check is QDir::exists, which is true only for directories, and would empty
 // every real image file (Kartend-80h8o).
 #include <QDir>
+#include <QFile>
 #include <QString>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include "collection/collectionconfig.h"
@@ -35,6 +37,13 @@ private slots:
   // resolver delegates to; background image/video and header logo route
   // their raw config values through it.
   void assetPathSharesTheIconSeamSemantics();
+
+  // resolveCollectionTileArtwork — the full two-step tile policy
+  // (Kartend-kb2vx order), factored out of ItemWidgetFactoryHelpers so the
+  // collection tree (Kartend-ob1c9.1) shares it rather than copying it.
+  void tileArtworkPrefersOwnIconOverParentDirMatch();
+  void tileArtworkFallsBackToParentDirImageNamedAfterChild();
+  void tileArtworkEmptyForRootsAndUnknownNames();
 };
 
 void TestCollectionUtilsIcon::emptyAndWhitespaceYieldEmpty() {
@@ -94,6 +103,57 @@ void TestCollectionUtilsIcon::assetPathSharesTheIconSeamSemantics() {
   QCOMPARE(CollectionUtils::resolvedCollectionIcon(makeCollection("Films", "~/icons/films.png")),
            CollectionUtils::resolvedAssetPath(QStringLiteral("~/icons/films.png"),
                                               QStringLiteral("Films")));
+}
+
+void TestCollectionUtilsIcon::tileArtworkPrefersOwnIconOverParentDirMatch() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  // Parent dir carries an image named after the child — the FALLBACK. The
+  // child's explicit collectionIcon must still win (Kartend-kb2vx order; the
+  // historical bug was exactly this inverted).
+  QFile parentDirImage(tmp.path() + QStringLiteral("/Child A.png"));
+  QVERIFY(parentDirImage.open(QIODevice::WriteOnly));
+  parentDirImage.write("png");
+  parentDirImage.close();
+  QList<CollectionConfig> collections = {
+      makeCollection(QStringLiteral("Child A"), QStringLiteral("/explicit/icon.png"))};
+  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 0,
+                                                         QStringLiteral("Child A"), tmp.path()),
+           QStringLiteral("/explicit/icon.png"));
+}
+
+void TestCollectionUtilsIcon::tileArtworkFallsBackToParentDirImageNamedAfterChild() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QFile parentDirImage(tmp.path() + QStringLiteral("/Child B.png"));
+  QVERIFY(parentDirImage.open(QIODevice::WriteOnly));
+  parentDirImage.write("png");
+  parentDirImage.close();
+  QList<CollectionConfig> collections = {
+      makeCollection(QStringLiteral("Child B"), /*icon=*/QString())};
+  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 0,
+                                                         QStringLiteral("Child B"), tmp.path()),
+           tmp.path() + QStringLiteral("/Child B.png"));
+}
+
+void TestCollectionUtilsIcon::tileArtworkEmptyForRootsAndUnknownNames() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = {
+      makeCollection(QStringLiteral("Root"), /*icon=*/QString())};
+  // A root has no parent artwork dir — step 2 is skipped, empty means
+  // "text-only row", never an error and never a placeholder.
+  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 0, QStringLiteral("Root"),
+                                                         QString()),
+           QString());
+  // Parent dir present but holds nothing named after the child.
+  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 0, QStringLiteral("Root"),
+                                                         tmp.path()),
+           QString());
+  // Out-of-range index degrades to the name-only fallback, not a crash.
+  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 99,
+                                                         QStringLiteral("Root"), tmp.path()),
+           QString());
 }
 
 QTEST_MAIN(TestCollectionUtilsIcon)

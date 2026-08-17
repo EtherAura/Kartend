@@ -23,6 +23,7 @@ class QStackedWidget;
 class QWidget;
 class QGridLayout;
 class QHBoxLayout;
+class QVBoxLayout;
 class QScrollArea;
 class QLineEdit;
 class QPushButton;
@@ -110,6 +111,15 @@ public:
   QWidget *m_mainContentWidget;
   QGridLayout *m_itemGrid;
   QHBoxLayout *m_mainHorizontalLayout;
+  /// Kartend-auh7u: full-height sidebar substrate built in setupUI — the
+  /// outermost row wraps a column holding [itemsTopBar, m_mainContentWidget],
+  /// so a Left/Right sidebar with FullHeight justification docks into the
+  /// row (spanning the window height, toolbar stopping at its edge) while
+  /// BelowToolbar docks keep using m_mainHorizontalLayout as before.
+  QWidget *m_sidebarRowWidget = nullptr;
+  QHBoxLayout *m_sidebarRowLayout = nullptr;
+  QWidget *m_toolbarColumnWidget = nullptr;
+  QVBoxLayout *m_toolbarColumnLayout = nullptr;
   QLineEdit *m_searchBar;
   EmptyStateWidget *m_loadingLabel;
   LoadingOverlay *m_loadingOverlay = nullptr;

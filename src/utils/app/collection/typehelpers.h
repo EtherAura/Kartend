@@ -108,6 +108,23 @@ namespace CollectionUtils {
  */
 [[nodiscard]] QString resolvedCollectionIcon(const CollectionConfig &collection);
 
+/**
+ * @brief The full collection-tile artwork policy (Kartend-kb2vx order), moved
+ * here from ItemWidgetFactoryHelpers so the collection tree panel
+ * (Kartend-ob1c9.1) is a caller of the SAME chain the Grid/List tiles use
+ * instead of a third copy:
+ *   1. the collection's own collectionIcon via resolvedCollectionIcon();
+ *   2. otherwise an image named after the collection in
+ *      @p parentArtworkDirectory (the pre-collectionIcon convention).
+ * Pass an empty @p parentArtworkDirectory for root collections — step 2 is
+ * skipped and only the explicit icon resolves. Empty result means "no icon";
+ * consumers render text-only rather than a placeholder.
+ */
+[[nodiscard]] QString resolveCollectionTileArtwork(const QList<CollectionConfig> *collections,
+                                                   int collectionIndex,
+                                                   const QString &collectionName,
+                                                   const QString &parentArtworkDirectory);
+
 } // namespace CollectionUtils
 
 #endif // KARTEND_COLLECTION_TYPEHELPERS_H

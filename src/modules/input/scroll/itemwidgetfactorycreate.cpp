@@ -216,20 +216,11 @@ QString ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(
 QString ItemWidgetFactoryHelpers::resolveSubcollectionTileArtwork(
     const QList<CollectionConfig> *collections, int subcollectionIndex,
     const QString &subcollectionName, const QString &parentArtworkDirectory) {
-  // 1. The child's own collectionIcon, resolved through the shared seam all
-  //    three consumers use (Kartend-dkh90).
-  if (collections && subcollectionIndex >= 0 && subcollectionIndex < collections->size()) {
-    const QString icon =
-        CollectionUtils::resolvedCollectionIcon(collections->at(subcollectionIndex));
-    if (!icon.isEmpty()) {
-      return icon;
-    }
-  }
-  // 2. An image named after the child, in the PARENT's artwork directory.
-  if (subcollectionName.isEmpty() || parentArtworkDirectory.isEmpty()) {
-    return {};
-  }
-  return ArtworkUtils::findArtworkForFile(subcollectionName, parentArtworkDirectory);
+  // Policy body moved to CollectionUtils (Kartend-ob1c9.1) so the collection
+  // tree resolves through the SAME chain as these tiles; this wrapper keeps
+  // the scroll-layer call sites stable.
+  return CollectionUtils::resolveCollectionTileArtwork(collections, subcollectionIndex,
+                                                       subcollectionName, parentArtworkDirectory);
 }
 
 QString ItemWidgetFactory::resolvePlaceholderArtworkForCollection(int collectionIndex) const {

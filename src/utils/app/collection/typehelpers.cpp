@@ -11,6 +11,7 @@
 #include <QCryptographicHash>
 #include <QSet>
 
+#include "artworkutils.h"
 #include "pathutils.h"
 
 namespace CollectionUtils {
@@ -54,6 +55,23 @@ QString resolvedAssetPath(const QString &raw, const QString &collectionName) {
 
 QString resolvedCollectionIcon(const CollectionConfig &collection) {
   return resolvedAssetPath(collection.collectionIcon, collection.name);
+}
+
+QString resolveCollectionTileArtwork(const QList<CollectionConfig> *collections,
+                                     int collectionIndex, const QString &collectionName,
+                                     const QString &parentArtworkDirectory) {
+  // 1. The collection's own collectionIcon — an explicit per-collection choice.
+  if (collections && collectionIndex >= 0 && collectionIndex < collections->size()) {
+    const QString icon = resolvedCollectionIcon(collections->at(collectionIndex));
+    if (!icon.isEmpty()) {
+      return icon;
+    }
+  }
+  // 2. An image named after the collection, in the PARENT's artwork directory.
+  if (collectionName.isEmpty() || parentArtworkDirectory.isEmpty()) {
+    return {};
+  }
+  return ArtworkUtils::findArtworkForFile(collectionName, parentArtworkDirectory);
 }
 
 QString effectiveCollectionType(int collectionIndex, const QList<CollectionConfig> &collections) {

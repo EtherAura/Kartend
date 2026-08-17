@@ -59,7 +59,13 @@ public:
 
   void clearStaleCollections(const QList<CollectionConfig> &currentCollections) override;
 
+  void setCollectionTreeExpandedKeys(const QStringList &keys) override;
+  [[nodiscard]] QStringList collectionTreeExpandedKeys() const override;
+
 private:
+  /// Collection tree expansion keys (see ISessionManager). Round-trips
+  /// through the session JSON as a root-level string array.
+  QStringList m_collectionTreeExpandedKeys;
   static QString getCacheDirectory();
   void readCollectionsData(const QJsonObject &root);
   void readGlobalData(const QJsonObject &root);
