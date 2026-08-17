@@ -14,6 +14,11 @@ private slots:
   // Toggling the tree off shows the marker; clicking the marker restores
   // the tree and hides the marker again.
   void foldMarker_appearsWhenTreeHidden_andClickRestores();
+
+  // Every branch opens EXPANDED on a fresh session (collapsed-set memory,
+  // user decision 2026-08-17) — and childless rows never poison the
+  // collapse memory during staged startup rebuilds.
+  void tree_opensFullyExpanded_onFreshSession();
 };
 
 #endif // TEST_COLLECTIONTREEPANEL_H

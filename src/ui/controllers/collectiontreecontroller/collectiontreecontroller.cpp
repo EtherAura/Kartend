@@ -48,6 +48,36 @@ const QString kPlaylistsGroupKey = QStringLiteral("::playlists-group::");
 /// children/open states yields just the arrow. Toggled via the
 /// "kartendShowLines" dynamic property so the controller's member type can
 /// stay QTreeWidget*.
+/// The fold marker: a slim vertical tab painted with a rotated label and
+/// chevron. A bare 14px autoRaise arrow proved invisible in practice on
+/// dark themes (field report 2026-08-17, twice) — a labelled tab is the
+/// smallest thing that is genuinely discoverable.
+class FoldMarkerButton : public QToolButton {
+public:
+  using QToolButton::QToolButton;
+
+protected:
+  void paintEvent(QPaintEvent * /*event*/) override {
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const bool hover = underMouse();
+    painter.setPen(palette().color(QPalette::Mid));
+    painter.setBrush(hover ? palette().color(QPalette::Highlight)
+                           : palette().color(QPalette::Button));
+    painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), 4, 4);
+    painter.setPen(hover ? palette().color(QPalette::HighlightedText)
+                         : palette().color(QPalette::ButtonText));
+    const QChar chevron = arrowType() == Qt::LeftArrow ? QChar(0x25C2) : QChar(0x25B8);
+    const QString label = QString(chevron) + QLatin1Char(' ') +
+                          CollectionTreeController::tr("Collections") + QLatin1Char(' ') +
+                          QString(chevron);
+    painter.translate(width() / 2.0, height() / 2.0);
+    painter.rotate(-90);
+    painter.drawText(QRectF(-height() / 2.0, -width() / 2.0, height(), width()), Qt::AlignCenter,
+                     label);
+  }
+};
+
 class TreeBranchView : public QTreeWidget {
 public:
   using QTreeWidget::QTreeWidget;
@@ -251,21 +281,12 @@ void CollectionTreeController::setupPanel() {
 
   // The fold marker lives OUTSIDE the panel (sibling in the dock layout):
   // it must stay visible precisely when the panel is not.
-  m_foldMarker = new QToolButton(m_panelParent);
+  m_foldMarker = new FoldMarkerButton(m_panelParent);
   m_foldMarker->setObjectName(QStringLiteral("collectionTreeFoldMarker"));
-  m_foldMarker->setAutoRaise(true);
-  m_foldMarker->setFixedWidth(14);
+  m_foldMarker->setFixedWidth(20);
   m_foldMarker->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
   m_foldMarker->setCursor(Qt::PointingHandCursor);
   m_foldMarker->setToolTip(tr("Show collection tree"));
-  // A bare autoRaise arrow is nearly invisible on dark themes — give the
-  // strip a full-height band so the unfold affordance is discoverable, and
-  // an accent hover so it reads as clickable.
-  m_foldMarker->setStyleSheet(
-      QStringLiteral("QToolButton#collectionTreeFoldMarker {"
-                     " border: none; background: palette(mid); }"
-                     "QToolButton#collectionTreeFoldMarker:hover {"
-                     " background: palette(highlight); }"));
   m_foldMarker->setVisible(false);
   connect(m_foldMarker, &QToolButton::clicked, this, [this]() { toggleVisible(); });
 
@@ -454,6 +475,14 @@ void CollectionTreeController::rebuildTree() {
   for (QTreeWidgetItemIterator liveIt(m_tree); *liveIt; ++liveIt) {
     const QString key = (*liveIt)->data(0, kRoleExpansionKey).toString();
     if (key.isEmpty()) continue;
+    // Childless rows cannot testify: Qt reports a childless item as
+    // not-expanded no matter what, and during startup the hierarchy
+    // populates in waves — an early build's childless shell rows would be
+    // captured as "user collapsed" here, poisoning the collapse memory on
+    // every launch (field report 2026-08-17: "collapsed by default" with an
+    // EMPTY session collapse list). Rows with no children keep whatever
+    // state the memory already holds.
+    if ((*liveIt)->childCount() == 0) continue;
     if ((*liveIt)->isExpanded()) {
       m_collapsedUuids.remove(key);
     } else {
@@ -488,8 +517,23 @@ void CollectionTreeController::rebuildTree() {
     item->setData(0, kRoleCollectionIndex, index);
     item->setData(0, kRoleParentCollection, current.parentCollectionIndex);
     item->setData(0, kRoleName, cfg.name);
-    const QString uuid = hierarchy.collectionUuid(index);
-    item->setData(0, kRoleExpansionKey, uuid);
+    // Shells without a media directory have NO uuid (the hierarchy cache
+    // only computes one when mediaDir is set), which silently excluded them
+    // from ALL expansion memory — restore, capture, and persistence skip
+    // empty keys — so exactly the grouping rows opened collapsed and forgot
+    // everything (field report 2026-08-17). Fall back to a stable
+    // name-derived key: parent name + own name survives restarts and index
+    // shuffles for hand-made shells.
+    QString expansionKey = hierarchy.collectionUuid(index);
+    if (expansionKey.isEmpty()) {
+      const QString parentName = (current.parentCollectionIndex >= 0 &&
+                                  current.parentCollectionIndex < collections.size())
+                                     ? collections.at(current.parentCollectionIndex).name
+                                     : QString();
+      expansionKey =
+          QStringLiteral("::name::") + parentName + QLatin1Char('/') + cfg.name;
+    }
+    item->setData(0, kRoleExpansionKey, expansionKey);
     item->setData(0, kRoleIsCategory, !current.node->children.isEmpty());
     // Expansion applied in the single post-pass below, once children exist.
     // Reverse-append so takeLast() preserves the model's child order.
@@ -515,7 +559,11 @@ void CollectionTreeController::rebuildTree() {
       item->setData(0, kRoleCollectionIndex, index);
       item->setData(0, kRoleParentCollection, -1);
       item->setData(0, kRoleName, collections.at(index).name);
-      item->setData(0, kRoleExpansionKey, hierarchy.collectionUuid(index));
+      QString playlistKey = hierarchy.collectionUuid(index);
+      if (playlistKey.isEmpty()) {
+        playlistKey = QStringLiteral("::name::playlists/") + collections.at(index).name;
+      }
+      item->setData(0, kRoleExpansionKey, playlistKey);
     }
   }
 
@@ -971,7 +1019,7 @@ void CollectionTreeController::onItemExpandedCollapsed(QTreeWidgetItem *item, bo
     return;
   }
   const QString key = item->data(0, kRoleExpansionKey).toString();
-  if (key.isEmpty()) {
+  if (key.isEmpty() || item->childCount() == 0) {
     return;
   }
   // Collapsed-set semantics (user decision 2026-08-17): only deliberate

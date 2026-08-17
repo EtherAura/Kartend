@@ -7,6 +7,8 @@
 
 #include <QTest>
 #include <QToolButton>
+#include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QWidget>
 
 void TestCollectionTreePanel::foldMarker_appearsWhenTreeHidden_andClickRestores() {
@@ -43,4 +45,31 @@ void TestCollectionTreePanel::foldMarker_appearsWhenTreeHidden_andClickRestores(
   marker->click();
   QVERIFY2(panel->isVisible(), "clicking the marker must unfold the tree");
   QVERIFY2(!marker->isVisible(), "marker hides again once the tree is back");
+}
+
+void TestCollectionTreePanel::tree_opensFullyExpanded_onFreshSession() {
+  CollectionConfig shell;
+  shell.name = QStringLiteral("Shell");
+  CollectionConfig child;
+  child.name = QStringLiteral("Child");
+  child.parentCollectionIndex = 0;
+  KartendTest::MockedMainWindowFixture fixture({shell, child});
+  MainWindow *win = fixture.window();
+  QVERIFY(win);
+  win->show();
+  QVERIFY(QTest::qWaitForWindowExposed(win));
+
+  auto *tree = win->findChild<QTreeWidget *>(QStringLiteral("collectionTreeWidget"));
+  QVERIFY(tree);
+  bool sawParentRow = false;
+  for (QTreeWidgetItemIterator it(tree); *it; ++it) {
+    if ((*it)->childCount() == 0) {
+      continue;
+    }
+    sawParentRow = true;
+    QVERIFY2((*it)->isExpanded(),
+             qPrintable(QStringLiteral("row '%1' must open expanded on a fresh session")
+                            .arg((*it)->text(0))));
+  }
+  QVERIFY2(sawParentRow, "seeded parent/child must produce at least one branch row");
 }
