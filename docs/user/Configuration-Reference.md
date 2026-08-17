@@ -125,7 +125,8 @@ facing names and rebinding workflow.
 | `gamepadUseLeftStick` | bool | `true` | Enable left-stick navigation. |
 | `gamepadConfirmButton` | string | `A` | Confirm / launch button name. |
 | `gamepadBackButton` | string | `B` | Back / escape button. |
-| `gamepadToggleSidebarButton` | string | `Y` | Toggle sidebar button. |
+| `gamepadToggleSidebarButton` | string | `R1` | Toggle the details pane (right sidebar). |
+| `gamepadToggleCollectionTreeButton` | string | `L1` | Toggle the collection tree (left sidebar). |
 
 Button names are the SDL / Qt6::Gamepad standard labels (`A`, `B`, `X`,
 `Y`, `LB`, `RB`, etc.).

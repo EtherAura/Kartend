@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edge. The details pane's existing Position control keeps working — it
   and the new page edit the same setting.
 
+- **The shoulder buttons now toggle the sidebars.** On a gamepad, L1
+  folds the left sidebar (the collection tree) and R1 the right one (the
+  details pane) — matching their physical sides. Existing custom bindings
+  are preserved; the old Y-button default migrates automatically. Keyboard
+  shortcuts remain F6 and F9, and both bindings stay remappable under
+  Settings → Controls.
+
 - **The collection tree opens fully unfolded and reads better at a
   glance.** Every branch now starts expanded — only the branches you close
   are remembered (across sessions). Category rows — anything with children,

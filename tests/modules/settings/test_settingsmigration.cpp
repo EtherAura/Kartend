@@ -37,6 +37,7 @@ private slots:
   void currentVersionIni_doesNotInvokeAnyMigration();
   void misfiledSchemaIni_recognisedViaScraperOptionsFallback();
   void v2Ini_iconStyleNormalBecomesTinted_deliberateChoiceKept();
+  void v3Ini_gamepadTogglesMoveToShoulders_customBindingsKept();
 
 private:
   void installFixture(const QString &fixtureName);
@@ -203,6 +204,26 @@ void TestSettingsMigration::v2Ini_iconStyleNormalBecomesTinted_deliberateChoiceK
   QCOMPARE(byName.value(QStringLiteral("NormalCol")), TreeIconStyle::Tinted);
   QCOMPARE(byName.value(QStringLiteral("BareCol")), TreeIconStyle::Tinted);
   QCOMPARE(byName.value(QStringLiteral("MonoCol")), TreeIconStyle::MonochromeDark);
+}
+
+void TestSettingsMigration::v3Ini_gamepadTogglesMoveToShoulders_customBindingsKept() {
+  installFixture(QStringLiteral("v3_gamepad.ini"));
+  {
+    SettingsManager mgr(nullptr, nullptr);
+    GeneralSettings settings;
+    mgr.loadGeneralSettings(settings);
+    QCOMPARE(settings.gamepad.gamepadToggleSidebarButton, QStringLiteral("R1"));
+    QCOMPARE(settings.gamepad.gamepadToggleCollectionTreeButton, QStringLiteral("L1"));
+  }
+  installFixture(QStringLiteral("v3_gamepad_custom.ini"));
+  {
+    SettingsManager mgr(nullptr, nullptr);
+    GeneralSettings settings;
+    mgr.loadGeneralSettings(settings);
+    // Deliberate rebinds survive the shoulder migration untouched.
+    QCOMPARE(settings.gamepad.gamepadToggleSidebarButton, QStringLiteral("X"));
+    QCOMPARE(settings.gamepad.gamepadToggleCollectionTreeButton, QStringLiteral("Start"));
+  }
 }
 
 void TestSettingsMigration::misfiledSchemaIni_recognisedViaScraperOptionsFallback() {

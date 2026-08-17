@@ -109,6 +109,33 @@ const std::vector<MigrationStep> &registeredSteps() {
           "v2->v3: tree icon style 'tinted' stamped over the old 'normal' "
           "default on every collection section",
       },
+      MigrationStep{
+          /*from=*/3,
+          /*to=*/4,
+          [](QSettings &settings) {
+            // User request 2026-08-17: shoulder buttons toggle the
+            // sidebars — L1 folds the left panel (collection tree), R1 the
+            // right one (details pane), matching their physical sides.
+            // Migrate only the OLD DEFAULTS ('Y' sidebar, empty tree); a
+            // deliberate custom binding is preserved.
+            settings.beginGroup(QStringLiteral("General"));
+            const QString sidebar =
+                settings.value(QStringLiteral("gamepadToggleSidebarButton")).toString();
+            if (sidebar.isEmpty() || sidebar == QStringLiteral("Y")) {
+              settings.setValue(QStringLiteral("gamepadToggleSidebarButton"),
+                                QStringLiteral("R1"));
+            }
+            const QString tree =
+                settings.value(QStringLiteral("gamepadToggleCollectionTreeButton")).toString();
+            if (tree.isEmpty()) {
+              settings.setValue(QStringLiteral("gamepadToggleCollectionTreeButton"),
+                                QStringLiteral("L1"));
+            }
+            settings.endGroup();
+          },
+          "v3->v4: gamepad sidebar toggles move to the shoulders (L1 tree / "
+          "R1 details pane); custom bindings preserved",
+      },
   };
   return steps;
 }

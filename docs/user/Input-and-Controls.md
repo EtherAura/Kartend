@@ -282,7 +282,8 @@ distro-specific [Launchers + dependencies](../../readme.md#dependencies).
 | Left stick | Move selection | `gamepadUseLeftStick` (toggle) |
 | `A` (or equivalent) | Confirm / launch | `gamepadConfirmButton` |
 | `B` (or equivalent) | Back / close | `gamepadBackButton` |
-| `Y` (or equivalent) | Toggle sidebar | `gamepadToggleSidebarButton` |
+| `R1` (or equivalent) | Toggle the details pane (right sidebar) | `gamepadToggleSidebarButton` |
+| `L1` (or equivalent) | Toggle the collection tree (left sidebar) | `gamepadToggleCollectionTreeButton` |
 
 D-pad and left stick can be enabled / disabled independently. Held
 input repeats at the same cadence as keyboard repeat

@@ -11,10 +11,14 @@ void load(QSettings &settings, GamepadSettings &opts) {
   opts.gamepadUseLeftStick = settings.value(keys::kGamepadUseLeftStick, true).toBool();
   opts.gamepadConfirmButton = settings.value(keys::kGamepadConfirmButton, QString("A")).toString();
   opts.gamepadBackButton = settings.value(keys::kGamepadBackButton, QString("B")).toString();
+  // Shoulder-button defaults (user request 2026-08-17): L1/R1 mirror the
+  // panels' sides — left shoulder folds the left sidebar (collection
+  // tree), right shoulder the right one (details pane). Keyboard
+  // equivalents stay F6/F9.
   opts.gamepadToggleSidebarButton =
-      settings.value(keys::kGamepadToggleSidebarButton, QString("Y")).toString();
+      settings.value(keys::kGamepadToggleSidebarButton, QString("R1")).toString();
   opts.gamepadToggleCollectionTreeButton =
-      settings.value(keys::kGamepadToggleCollectionTreeButton, QString()).toString();
+      settings.value(keys::kGamepadToggleCollectionTreeButton, QString("L1")).toString();
 }
 
 void save(QSettings &settings, const GamepadSettings &opts) {

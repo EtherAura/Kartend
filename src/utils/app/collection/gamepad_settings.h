@@ -11,11 +11,11 @@ struct GamepadSettings {
   bool gamepadUseLeftStick = true;
   QString gamepadConfirmButton = "A";
   QString gamepadBackButton = "B";
-  QString gamepadToggleSidebarButton = "Y";
+  QString gamepadToggleSidebarButton = "R1";
   /// Toggles the collection tree panel (Kartend-ob1c9). Default empty =
   /// unbound — Y is taken by the details pane, and a surprise binding on
   /// upgrade would be worse than none.
-  QString gamepadToggleCollectionTreeButton;
+  QString gamepadToggleCollectionTreeButton = "L1";
   // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
   // settings dirty-check field-complete automatically (Kartend-6oqat).
   bool operator==(const GamepadSettings &) const = default;

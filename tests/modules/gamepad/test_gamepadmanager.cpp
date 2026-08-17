@@ -179,11 +179,21 @@ void TestGamepadManager::button_defaultBackEmitsEscape() {
 }
 
 void TestGamepadManager::button_defaultToggleSidebarEmitsToggle() {
+  // Shoulder defaults since 2026-08-17: R1 toggles the details pane (right
+  // sidebar), L1 the collection tree (left sidebar); the old Y default is
+  // unbound.
   QSignalSpy toggle(m_mgr.get(), &GamepadManager::requestToggleSidebarAction);
+  QSignalSpy tree(m_mgr.get(), &GamepadManager::requestToggleCollectionTreeAction);
+
+  m_mgr->handleMappedButtonPress(QStringLiteral("R1"));
+  QCOMPARE(toggle.count(), 1);
+  QCOMPARE(tree.count(), 0);
+
+  m_mgr->handleMappedButtonPress(QStringLiteral("L1"));
+  QCOMPARE(tree.count(), 1);
 
   m_mgr->handleMappedButtonPress(QStringLiteral("Y"));
-
-  QCOMPARE(toggle.count(), 1);
+  QCOMPARE(toggle.count(), 1); // Y no longer bound
 }
 
 void TestGamepadManager::button_remappedConfirmFollowsSettings() {
