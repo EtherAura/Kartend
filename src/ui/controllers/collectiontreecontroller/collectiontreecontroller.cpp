@@ -92,15 +92,31 @@ protected:
     if (!model() || !model()->hasChildren(index)) {
       return;
     }
-    QStyleOption opt;
-    opt.initFrom(this);
+    // Paint the chevron OURSELVES: delegating to PE_IndicatorBranch with
+    // only the children/open states draws nothing at all on some styles
+    // (field report 2026-08-17 — Breeze), leaving branches with no fold
+    // indicator. A small solid triangle in the palette text colour is
+    // style-independent and always visible.
     const int unit = indentation();
-    opt.rect = QRect(rect.right() - unit + 1, rect.top(), unit, rect.height());
-    opt.state |= QStyle::State_Children;
+    const QRectF cell(rect.right() - unit + 1, rect.top(), unit, rect.height());
+    const QPointF c = cell.center();
+    const qreal r = qMin(cell.width(), cell.height()) * 0.22;
+    QPolygonF triangle;
     if (isExpanded(index)) {
-      opt.state |= QStyle::State_Open;
+      triangle << QPointF(c.x() - r, c.y() - r * 0.6) << QPointF(c.x() + r, c.y() - r * 0.6)
+               << QPointF(c.x(), c.y() + r);
+    } else {
+      triangle << QPointF(c.x() - r * 0.6, c.y() - r) << QPointF(c.x() - r * 0.6, c.y() + r)
+               << QPointF(c.x() + r, c.y());
     }
-    style()->drawPrimitive(QStyle::PE_IndicatorBranch, &opt, painter, this);
+    painter->save();
+    painter->setRenderHint(QPainter::Antialiasing);
+    QColor ink = palette().color(QPalette::Text);
+    ink.setAlpha(190);
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(ink);
+    painter->drawPolygon(triangle);
+    painter->restore();
   }
 };
 
@@ -774,15 +790,35 @@ void CollectionTreeController::refreshIcons() {
           break;
         }
         if (ink.isValid()) {
-          QPixmap silhouette(pm.width(), pm.height());
-          silhouette.fill(Qt::transparent);
-          {
-            QPainter painter(&silhouette);
-            painter.drawPixmap(0, 0, pm);
-            painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-            painter.fillRect(silhouette.rect(), ink);
+          // Luminance-PRESERVING conversion (field report 2026-08-17: the
+          // flat SourceIn fill turned every logo into a solid blob — the
+          // Nintendo pill's text, counters, and inner detail all vanished).
+          // Map each pixel's luminance into a band anchored at the ink:
+          // light ink -> [ink-115 .. ink], dark ink -> [ink .. ink+115];
+          // Tinted keeps the tint's hue and varies lightness. Alpha is
+          // untouched, so real monochrome sources pass through unchanged.
+          QImage img = pm.toImage().convertToFormat(QImage::Format_ARGB32);
+          const bool lightInk = qGray(ink.rgb()) >= 128;
+          const float tintHue = ink.hslHueF();
+          const float tintSat = ink.hslSaturationF();
+          for (int y = 0; y < img.height(); ++y) {
+            auto *line = reinterpret_cast<QRgb *>(img.scanLine(y));
+            for (int x = 0; x < img.width(); ++x) {
+              const int a = qAlpha(line[x]);
+              if (a == 0) continue;
+              const int g = qGray(line[x]);
+              if (m_iconStyle == TreeIconStyle::Tinted) {
+                const QColor c = QColor::fromHslF(
+                    tintHue < 0 ? 0 : tintHue, tintSat,
+                    0.30F + 0.55F * (static_cast<float>(g) / 255.0F));
+                line[x] = qRgba(c.red(), c.green(), c.blue(), a);
+              } else {
+                const int v = lightInk ? 140 + g * 115 / 255 : g * 115 / 255;
+                line[x] = qRgba(v, v, v, a);
+              }
+            }
           }
-          pm = silhouette;
+          pm = QPixmap::fromImage(img);
         }
       }
       if (!pm.isNull() && m_tree) {
