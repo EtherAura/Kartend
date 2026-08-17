@@ -182,6 +182,11 @@ private:
   /// resize the panel; a mismatch here triggers a rebake so wide logos never
   /// clip at the new edge.
   int m_bakedPanelWidth = 0;
+  /// Viewport width the icons were baked against. The scrollbar appearing or
+  /// vanishing resizes the VIEWPORT without touching the panel width, and a
+  /// stale bake clips centered logos at the new edge (field report
+  /// 2026-08-17) — a viewport resize triggers a rebake via eventFilter.
+  int m_bakedViewportWidth = 0;
   /// Last accent colour applyPrimaryColor delivered — the Tinted style's
   /// default ink when no explicit tint colour is configured.
   QString m_accentColor;

@@ -12,6 +12,7 @@
 #include <QRegularExpression>
 #include <QStyle>
 #include <QStyleOption>
+#include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -40,6 +41,13 @@ constexpr int kRoleIsCategory = Qt::UserRole + 4; // bool; row has children (inc
 /// Expansion-memory key for the synthetic Playlists group row. UUIDs are
 /// derived from name+mediaDirectory, so a literal that can't collide.
 const QString kPlaylistsGroupKey = QStringLiteral("::playlists-group::");
+
+/// Thin-logo height boost (user direction 2026-08-17: "thinner than usual
+/// icons should be made taller to compensate"): a wordmark whose aspect
+/// exceeds the reference may exceed the configured icon height, up to the
+/// boost cap — rows are non-uniform, so only those rows grow.
+constexpr qreal kThinAspectRef = 3.0;
+constexpr qreal kThinHeightBoost = 1.6;
 
 /// QTreeWidget whose branch column can hide the connector lines while
 /// keeping the expand chevrons (user request 2026-08-17: tree lines off by
@@ -308,6 +316,9 @@ void CollectionTreeController::setupPanel() {
   // alignment jitter returns (round 8). No other call site may set it.
   m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
   m_tree->setFocusPolicy(Qt::ClickFocus);
+  if (m_tree->viewport()) {
+    m_tree->viewport()->installEventFilter(this);
+  }
   layout->addWidget(m_tree, /*stretch=*/1);
 
   connect(m_tree, &QTreeWidget::itemActivated, this,
@@ -605,6 +616,20 @@ void CollectionTreeController::applyPanelWidth(int width, DetailsPanePosition po
 }
 
 bool CollectionTreeController::eventFilter(QObject *watched, QEvent *event) {
+  if (m_tree && watched == m_tree->viewport()) {
+    if (event->type() == QEvent::Resize &&
+        m_tree->viewport()->width() != m_bakedViewportWidth && m_bakedViewportWidth != 0) {
+      // Deferred: icon swaps inside a resize re-enter layout. The width
+      // check keeps the scrollbar-toggle feedback loop convergent.
+      QTimer::singleShot(0, this, [this]() {
+        if (m_tree && m_tree->viewport() &&
+            m_tree->viewport()->width() != m_bakedViewportWidth) {
+          refreshIcons();
+        }
+      });
+    }
+    return false;
+  }
   if (watched != m_grip || !m_panel) {
     return QObject::eventFilter(watched, event);
   }
@@ -676,7 +701,12 @@ void CollectionTreeController::refreshIcons() {
   // the LARGEST (depth-1) canvas so Qt never scales a canvas to fit.
   const int chrome = 8;
   const int breathing = 12;
-  m_tree->setIconSize(QSize(qMax(24, viewportWidth - chrome - indentation), m_iconSize));
+  m_bakedViewportWidth = viewportWidth;
+  // Height carries the thin-logo boost headroom so Qt never downscales a
+  // boosted canvas; rows without boost stay at their canvas height
+  // (non-uniform rows).
+  m_tree->setIconSize(QSize(qMax(24, viewportWidth - chrome - indentation),
+                            qRound(m_iconSize * kThinHeightBoost)));
   QHash<QString, QIcon> cache; // path|maxW — style/size/tint are uniform per pass
 
   for (QTreeWidgetItemIterator it(m_tree); *it; ++it) {
@@ -746,19 +776,25 @@ void CollectionTreeController::refreshIcons() {
         // 2026-08-17: "alignment is still off in mono/tinted mode" — the
         // mono styles are exactly the ones that swap to SVG sources). The
         // oversized render keeps the post-trim downscale sharp.
-        pm = QIcon(path).pixmap(QSize(devWidth * 2, devHeight * 2));
+        pm = QIcon(path).pixmap(
+            QSize(devWidth * 2, qRound(devHeight * kThinHeightBoost) * 2));
       }
       if (pm.isNull()) {
         pm = QPixmap(path);
       }
       pm = trimTransparentBorders(pm);
       if (!pm.isNull()) {
-        // Box-fit (user direction 2026-08-17, superseding the brief
-        // area-damping experiment): every logo scales to FILL the available
-        // box — width-bound for thin wordmarks so they use the panel width
-        // that is otherwise wasted, height-bound (the icon-height setting)
-        // for square marks. Aspect is always preserved, so nothing crops.
-        pm = pm.scaled(devWidth, devHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        // Box-fit with a thin-logo height boost (user directions
+        // 2026-08-17): every logo fills the available box, and a wordmark
+        // wider than the reference aspect earns a taller box —
+        // aspect/kThinAspectRef, capped at kThinHeightBoost — so thin marks
+        // stop reading smaller than square ones. Aspect is always
+        // preserved and the box is a hard bound, so nothing crops.
+        const qreal aspect =
+            pm.height() > 0 ? static_cast<qreal>(pm.width()) / pm.height() : 1.0;
+        const qreal boost = std::clamp(aspect / kThinAspectRef, 1.0, kThinHeightBoost);
+        const int allowedDevH = qMax(1, qRound(devHeight * boost));
+        pm = pm.scaled(devWidth, allowedDevH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
       }
       if (!pm.isNull() && m_iconStyle != TreeIconStyle::Normal) {
         QColor ink;
@@ -814,8 +850,9 @@ void CollectionTreeController::refreshIcons() {
         // The halo pads by 2px; shrink back into the canvas box rather than
         // letting the compose step clip it (user: "i just dont want anything
         // cropped").
-        if (pm.height() > qRound(m_iconSize * dpr)) {
-          pm = pm.scaledToHeight(qRound(m_iconSize * dpr), Qt::SmoothTransformation);
+        const int maxDevH = qRound(m_iconSize * kThinHeightBoost * dpr);
+        if (pm.height() > maxDevH) {
+          pm = pm.scaledToHeight(maxDevH, Qt::SmoothTransformation);
         }
         if (pm.width() > canvasDevW) {
           pm = pm.scaledToWidth(canvasDevW, Qt::SmoothTransformation);
@@ -827,7 +864,7 @@ void CollectionTreeController::refreshIcons() {
         // The canvas is still uniform per depth so Qt's decoration rect
         // geometry stays stable and nothing drifts row-to-row; centering
         // happens INSIDE the canvas, deterministically.
-        QPixmap canvas(canvasDevW, qRound(m_iconSize * dpr));
+        QPixmap canvas(canvasDevW, qMax(qRound(m_iconSize * dpr), pm.height()));
         canvas.fill(Qt::transparent);
         {
           QPainter painter(&canvas);
