@@ -233,6 +233,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A selection made with the mouse wheel no longer snaps back a moment
+  later.** Scrolling the wheel moved the selection but — unlike the
+  arrow keys — never recorded the new position as the collection's
+  remembered selection. Anything that reloads the view a moment later
+  (a background rescan finishing, a settings save, the
+  remember-selection restore) would then politely put the selection
+  back where the record said it should be: wherever you were *before*
+  the wheel. Wheel moves are now recorded exactly like keyboard moves,
+  in every view. Cover Flow, where this was most visible, also no
+  longer runs the grid's scroll animation against its hidden item
+  grid — that animation's completion could re-center the carousel on
+  stale geometry a second and a half after the wheel stopped, and its
+  half-armed scroll state was left dangling with nothing to clear it.
+
 - **A real front cover now beats the composite image on the tile.** Two
   separate leftovers of older scrapes conspired to keep the multi-panel
   composite (`mixrbv`) image on grid tiles and cover-flow cards even

@@ -183,7 +183,7 @@ public:
                                                 bool skipCenter);
   void handleSuccessfulSelection(int index);
   [[nodiscard]] QString titleForIndexInColl(int coll, int idx) const;
-  void persistSelectionForIndex(int coll, int idx);
+  void persistSelectionForIndex(int coll, int idx) override;
 
   // Try to select widget with retry
   void trySelectWidget(int index, const QList<int> &subcollections, int attempt);

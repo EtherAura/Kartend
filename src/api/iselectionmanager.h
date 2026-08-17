@@ -30,6 +30,15 @@ public:
 
   // Selection restore operations
   virtual void cancelPendingSelectionRestore() = 0;
+
+  /// Persist @p idx as @p coll's remembered selection (settings + session
+  /// store), deriving the title discriminator itself. Every user-driven
+  /// selection move must both cancel pending restores AND persist its landing
+  /// index — a canceled restore only protects until the next reload schedules
+  /// a fresh one against the stale persisted value (Kartend-2sdjp: the
+  /// cover-flow wheel snap-back; the keyboard path has always persisted via
+  /// handleSuccessfulSelection).
+  virtual void persistSelectionForIndex(int coll, int idx) = 0;
   [[nodiscard]] virtual int targetRestoreIndex() const = 0;
   virtual void setRestoringSelection(bool restoring) = 0;
   virtual void setTargetRestoreIndex(int index) = 0;
