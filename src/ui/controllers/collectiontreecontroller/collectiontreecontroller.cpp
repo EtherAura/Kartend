@@ -1,6 +1,7 @@
 #include "collectiontreecontroller.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <QEvent>
 #include <QFileInfo>
@@ -753,7 +754,21 @@ void CollectionTreeController::refreshIcons() {
       }
       pm = trimTransparentBorders(pm);
       if (!pm.isNull()) {
-        pm = pm.scaledToHeight(devHeight, Qt::SmoothTransformation);
+        // Visual-weight normalisation (user request 2026-08-17): wide
+        // wordmarks and square marks scaled to one HEIGHT read as wildly
+        // different sizes. Logos at or under the reference aspect keep the
+        // full height; wider ones damp toward equal area — at 0.35 a 6:1
+        // wordmark lands ~20% shorter (pure equal-area is 0.5, which
+        // over-shrinks). Only ever shrinks, so nothing can crop.
+        constexpr qreal kRefAspect = 3.0;
+        constexpr qreal kAreaDamping = 0.35;
+        qreal targetH = devHeight;
+        const qreal aspect =
+            pm.height() > 0 ? static_cast<qreal>(pm.width()) / pm.height() : 1.0;
+        if (aspect > kRefAspect) {
+          targetH = devHeight * std::pow(kRefAspect / aspect, kAreaDamping);
+        }
+        pm = pm.scaledToHeight(qMax(1, qRound(targetH)), Qt::SmoothTransformation);
         if (pm.width() > devWidth) {
           pm = pm.scaledToWidth(devWidth, Qt::SmoothTransformation);
         }
@@ -809,6 +824,15 @@ void CollectionTreeController::refreshIcons() {
       }
       if (!pm.isNull() && m_tree) {
         pm = ensureContrastAgainst(pm, m_tree->palette().color(QPalette::Base), dpr);
+        // The halo pads by 2px; shrink back into the canvas box rather than
+        // letting the compose step clip it (user: "i just dont want anything
+        // cropped").
+        if (pm.height() > qRound(m_iconSize * dpr)) {
+          pm = pm.scaledToHeight(qRound(m_iconSize * dpr), Qt::SmoothTransformation);
+        }
+        if (pm.width() > canvasDevW) {
+          pm = pm.scaledToWidth(canvasDevW, Qt::SmoothTransformation);
+        }
       }
       if (!pm.isNull()) {
         // Uniform-width, LEFT-ALIGNED canvas (field report 2026-08-17: Qt
