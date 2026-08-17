@@ -72,6 +72,43 @@ QString SettingsManager::sanitizeLoadedPath(const QString &value, const QString 
 // section to its settingsmanager_<section>.cpp helper. The [General]-group
 // helpers run while this function holds that group open; launcher presets and
 // the scraper section manage their own groups.
+void SettingsManager::migrateSettingsFileIfNeeded(QSettings &s, const QString &configPath,
+                                                  const QString &origin) {
+  // Re-read the version here rather than taking it as a parameter: the
+  // second caller in a boot (loadCollections runs first, loadGeneralSettings
+  // second) must see the stamp the first one wrote and no-op.
+  const auto schemaVersionKey = [](const char *group) {
+    return QString::fromLatin1(group) + QLatin1Char('/') + QLatin1String(keys::kSchemaVersion);
+  };
+  if (!QFileInfo::exists(configPath)) {
+    return; // fresh install — current schema by definition (Kartend audit S-09)
+  }
+  const int loadedSchemaVersion =
+      s.value(schemaVersionKey(keys::kGroupGeneral),
+              s.value(schemaVersionKey(keys::kGroupScraperOptions), 0))
+          .toInt();
+  if (loadedSchemaVersion >= kSettingsSchemaVersion) {
+    return;
+  }
+  // Drive in-place migration before any value() reads consume the
+  // (potentially renamed/restructured) keys.
+  const int reached = kartend::settings::migrations::applyMigrations(
+      s, loadedSchemaVersion, kSettingsSchemaVersion, origin);
+  if (reached != loadedSchemaVersion) {
+    // Stamp the reached version so the migration runs ONCE, not on every load
+    // until the next full save happens to rewrite the file.
+    s.setValue(schemaVersionKey(keys::kGroupGeneral), reached);
+    // A migration mutated keys in `s`. Persist atomically now (temp-file +
+    // rename) and fsync the parent dir, instead of relying on the
+    // non-durable QSettings destructor flush. Kartend audit S-02.
+    s.sync();
+    if (!PathUtils::syncDirectory(QFileInfo(configPath).path())) {
+      qCWarning(lcSettingsManager)
+          << "syncDirectory failed after settings migration for" << QFileInfo(configPath).path();
+    }
+  }
+}
+
 void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
   const QString configPath = SettingsUtils::getConfigPath();
   const bool configExists = QFile::exists(configPath);
@@ -150,23 +187,7 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
         << "but this build only understands up to" << kSettingsSchemaVersion
         << "— unknown keys will be ignored on load and overwritten on save;" << snapshotMsg;
   } else if (loadedSchemaVersion < kSettingsSchemaVersion) {
-    // Drive in-place migration before any value() reads consume the
-    // (potentially renamed/restructured) keys. The dispatcher is a no-op
-    // when no steps are registered for the current span, so this is cheap
-    // on every load until a real migration lands.
-    const int reached = kartend::settings::migrations::applyMigrations(
-        s, loadedSchemaVersion, kSettingsSchemaVersion,
-        QStringLiteral("SettingsManager::loadGeneralSettings"));
-    if (reached != loadedSchemaVersion) {
-      // A migration mutated keys in `s`. Persist atomically now (temp-file +
-      // rename) and fsync the parent dir, instead of relying on the
-      // non-durable QSettings destructor flush. Kartend audit S-02.
-      s.sync();
-      if (!PathUtils::syncDirectory(QFileInfo(configPath).path())) {
-        qCWarning(lcSettingsManager)
-            << "syncDirectory failed after settings migration for" << QFileInfo(configPath).path();
-      }
-    }
+    migrateSettingsFileIfNeeded(s, configPath, QStringLiteral("SettingsManager::loadGeneralSettings"));
   }
 
   s.beginGroup(keys::kGroupGeneral);

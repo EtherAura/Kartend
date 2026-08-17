@@ -23,6 +23,42 @@ struct CollectionTreeSettings {
   /// shared DetailsPanePosition enum so "like the other sidebar" stays
   /// literally true in the INI vocabulary.
   DetailsPanePosition treePosition = DetailsPanePosition::Left;
+  /// Kartend-auh7u: whether the panel sits under the full-width toolbar or
+  /// spans the entire window height with the toolbar stopping at its edge.
+  /// Default FULL-HEIGHT (user decision 2026-08-17; the v1->v2 settings
+  /// migration stamps the same onto existing collections) — the navigation
+  /// sidebar reads as a full-height file-manager-style panel, unlike the
+  /// details pane whose default stays below-toolbar.
+  SidebarJustification treeJustification = SidebarJustification::FullHeight;
+  /// Panel width in px, set by dragging the panel's inner-edge grip
+  /// (Kartend-ob1c9.1 follow-on; user request 2026-08-17). Per-collection
+  /// like the rest of the block. The persistence layer clamps to
+  /// [kMinWidth, kMaxWidth] so a hand-edited INI can't collapse the panel
+  /// to nothing or push the content view off-screen.
+  int treeWidth = 240;
+
+  static constexpr int kMinWidth = 140;
+  static constexpr int kMaxWidth = 600;
+
+  /// Icons-only mode (user request 2026-08-17): rows whose icon resolves show
+  /// ONLY the icon (name demoted to a tooltip); rows with no icon keep their
+  /// text — a blank unlabelled row would be unusable, so text is the fallback,
+  /// not a casualty.
+  bool treeIconsOnly = false;
+  /// Row icon edge length in px (user request 2026-08-17). Clamped by the
+  /// persistence layer like treeWidth.
+  int treeIconSize = 16;
+
+  static constexpr int kMinIconSize = 12;
+  static constexpr int kMaxIconSize = 64;
+
+  /// Icon rendering style (user request 2026-08-17): as-is, a fixed
+  /// dark/light monochrome silhouette, or tinted.
+  TreeIconStyle treeIconStyle = TreeIconStyle::Normal;
+  /// Tint colour for TreeIconStyle::Tinted, as a hex string. EMPTY means
+  /// "the collection's accent colour" (the same primary colour the rest of
+  /// the chrome re-themes with) — the requested default.
+  QString treeIconTintColor;
 
   bool operator==(const CollectionTreeSettings &other) const = default;
 };

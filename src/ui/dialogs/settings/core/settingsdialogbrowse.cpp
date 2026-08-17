@@ -237,6 +237,7 @@ void SettingsDialog::loadCollectionToUI(int index) {
   ui->subfoldersPanel->load();
   ui->appearanceLayoutPanel->load();
   ui->sidebarPanel->load();
+  ui->sidebarsLayoutPanel->load();
   ui->appearanceTitlesPanel->load();
 
   // Background / palette / list-row colors / vignette owned by
@@ -277,6 +278,7 @@ void SettingsDialog::clearCollectionUI() {
   ui->subfoldersPanel->clear();
   ui->appearanceLayoutPanel->clear();
   ui->sidebarPanel->clear();
+  ui->sidebarsLayoutPanel->clear();
   if (ui->configurationPanel->parentCollectionComboBox())
     ui->configurationPanel->parentCollectionComboBox()->clear();
 

@@ -35,6 +35,15 @@ void load(QSettings &settings, SidebarAppearance &sidebar, const QString &collec
         << "Collection '" << collectionName << "': unknown " << keys::kSidebarPosition << " value '"
         << rawSidebarPosition << "' — falling back to 'right'. Fix the INI to silence.";
   }
+  bool sidebarJustificationFallback = false;
+  sidebar.sidebarJustification = CollectionUtils::stringToSidebarJustification(
+      settings.value(keys::kSidebarJustification, "below-toolbar").toString(),
+      &sidebarJustificationFallback);
+  if (sidebarJustificationFallback) {
+    qCWarning(lcSettingsManager).nospace()
+        << "Collection '" << collectionName << "': unknown " << keys::kSidebarJustification
+        << " value — falling back to 'below-toolbar'. Fix the INI to silence.";
+  }
   const QString rawSidebarBackgroundType =
       settings.value(keys::kSidebarBackgroundType, "color").toString();
   bool sidebarBackgroundTypeFallback = false;
@@ -85,6 +94,8 @@ void save(QSettings &settings, const SidebarAppearance &sidebar, const PathSanit
                     (sidebar.sidebarMode == DetailsPaneMode::Expand) ? "fixed" : "overlay");
   settings.setValue(keys::kSidebarPosition,
                     CollectionUtils::detailsPanePositionToString(sidebar.sidebarPosition));
+  settings.setValue(keys::kSidebarJustification,
+                    CollectionUtils::sidebarJustificationToString(sidebar.sidebarJustification));
   settings.setValue(
       keys::kSidebarBackgroundType,
       CollectionUtils::detailsPaneBackgroundTypeToString(sidebar.sidebarBackgroundType));

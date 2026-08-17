@@ -34,6 +34,10 @@ private slots:
   void uuidCollisionCapturedForStartupWarning();
   // Kartend-ob1c9: the collection tree panel's per-collection block.
   void collectionTreeBlock_roundTripsAndClampsPosition();
+  /// v1->v2 stamps the 2026-08-17 sidebar layout defaults onto every
+  /// existing collection ONCE — and never again after the version stamp, so
+  /// a user's post-migration edit survives the next boot.
+  void migration_v1StampsSidebarLayoutOntoCollectionsOnce();
 
 private:
   static void writeConfigIni(const QString &iniContents);
@@ -321,7 +325,8 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   // Kartend-ob1c9: visibility + dock side survive load→save→load, and a
   // position outside the tree's left/right vocabulary (including the
   // details pane's "top"/"bottom") clamps to left instead of importing.
-  writeConfigIni(QStringLiteral("[TreeCol]\n"
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+                                "[TreeCol]\n"
                                 "name=TreeCol\n"
                                 "mediaDirectory=/tmp/media\n"
                                 "collectionTreeVisible=false\n"
@@ -344,7 +349,8 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   QVERIFY(reloaded[0].collectionTree.treeVisible);
   QCOMPARE(reloaded[0].collectionTree.treePosition, DetailsPanePosition::Left);
 
-  writeConfigIni(QStringLiteral("[TreeCol]\n"
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+                                "[TreeCol]\n"
                                 "name=TreeCol\n"
                                 "mediaDirectory=/tmp/media\n"
                                 "collectionTreePosition=top\n"));
@@ -353,6 +359,138 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   QCOMPARE(clamped.size(), 1);
   QCOMPARE(clamped[0].collectionTree.treePosition, DetailsPanePosition::Left);
   QVERIFY(clamped[0].collectionTree.treeVisible); // default ON
+  // Absent justification defaults FULL-HEIGHT for the tree (2026-08-17
+  // defaults decision) — unlike the details pane, whose absent-key default
+  // stays below-toolbar (asserted further down).
+  QCOMPARE(clamped[0].collectionTree.treeJustification, SidebarJustification::FullHeight);
+
+  // Width (grip resize, Kartend-ob1c9.1 follow-on): round-trips, absent key
+  // defaults, and out-of-range values clamp to the struct bounds instead of
+  // importing a collapsed or runaway panel.
+  QCOMPARE(clamped[0].collectionTree.treeWidth, CollectionTreeSettings{}.treeWidth);
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreeWidth=320\n"));
+  QList<CollectionConfig> widthLoaded;
+  mgr.loadCollections(widthLoaded);
+  QCOMPARE(widthLoaded[0].collectionTree.treeWidth, 320);
+  mgr.saveCollections(widthLoaded);
+  QList<CollectionConfig> widthReloaded;
+  mgr.loadCollections(widthReloaded);
+  QCOMPARE(widthReloaded[0].collectionTree.treeWidth, 320);
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreeWidth=9\n"
+                                "collectionTreeIconsOnly=true\n"
+                                "collectionTreeIconSize=200\n"));
+  QList<CollectionConfig> widthClamped;
+  mgr.loadCollections(widthClamped);
+  QCOMPARE(widthClamped[0].collectionTree.treeWidth, CollectionTreeSettings::kMinWidth);
+  // Icon options (user request 2026-08-17): bool round-trips, size clamps.
+  QVERIFY(widthClamped[0].collectionTree.treeIconsOnly);
+  QCOMPARE(widthClamped[0].collectionTree.treeIconSize, CollectionTreeSettings::kMaxIconSize);
+  mgr.saveCollections(widthClamped);
+  QList<CollectionConfig> iconReloaded;
+  mgr.loadCollections(iconReloaded);
+  QVERIFY(iconReloaded[0].collectionTree.treeIconsOnly);
+  QCOMPARE(iconReloaded[0].collectionTree.treeIconSize, CollectionTreeSettings::kMaxIconSize);
+
+  // Icon style + tint (user request 2026-08-17): round-trip, unknown style
+  // clamps to normal, absent tint reads empty (= accent default).
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreeIconStyle=tinted\n"
+                                "collectionTreeIconTint=#e0a030\n"));
+  QList<CollectionConfig> styled;
+  mgr.loadCollections(styled);
+  QCOMPARE(styled[0].collectionTree.treeIconStyle, TreeIconStyle::Tinted);
+  QCOMPARE(styled[0].collectionTree.treeIconTintColor, QStringLiteral("#e0a030"));
+  mgr.saveCollections(styled);
+  QList<CollectionConfig> styledReloaded;
+  mgr.loadCollections(styledReloaded);
+  QCOMPARE(styledReloaded[0].collectionTree.treeIconStyle, TreeIconStyle::Tinted);
+  QCOMPARE(styledReloaded[0].collectionTree.treeIconTintColor, QStringLiteral("#e0a030"));
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreeIconStyle=sepia\n"));
+  QList<CollectionConfig> styleClamped;
+  mgr.loadCollections(styleClamped);
+  QCOMPARE(styleClamped[0].collectionTree.treeIconStyle, TreeIconStyle::Normal);
+  QVERIFY(styleClamped[0].collectionTree.treeIconTintColor.isEmpty());
+
+  // Kartend-auh7u: justification round-trips for BOTH panels, absent keys
+  // default to below-toolbar, and an unknown value clamps instead of
+  // importing.
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreeJustification=full-height\n"
+                                "sidebarJustification=full-height\n"));
+  QList<CollectionConfig> justified;
+  mgr.loadCollections(justified);
+  QCOMPARE(justified.size(), 1);
+  QCOMPARE(justified[0].collectionTree.treeJustification, SidebarJustification::FullHeight);
+  QCOMPARE(justified[0].sidebar.sidebarJustification, SidebarJustification::FullHeight);
+
+  mgr.saveCollections(justified);
+  QList<CollectionConfig> justifiedReloaded;
+  mgr.loadCollections(justifiedReloaded);
+  QCOMPARE(justifiedReloaded[0].collectionTree.treeJustification, SidebarJustification::FullHeight);
+  QCOMPARE(justifiedReloaded[0].sidebar.sidebarJustification, SidebarJustification::FullHeight);
+
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=2\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreeJustification=sideways\n"));
+  QList<CollectionConfig> clampedJustification;
+  mgr.loadCollections(clampedJustification);
+  QCOMPARE(clampedJustification[0].collectionTree.treeJustification,
+           SidebarJustification::BelowToolbar);
+  QCOMPARE(clampedJustification[0].sidebar.sidebarJustification,
+           SidebarJustification::BelowToolbar); // absent key → default
+}
+
+void TestSettingsRoundtrip::migration_v1StampsSidebarLayoutOntoCollectionsOnce() {
+  // A v1 file with the OPPOSITE of every 2026-08-17 default: the migration
+  // must flip all four keys on the collection section (that's the "apply to
+  // all existing collections" half of the user decision — defaults alone
+  // never reach an INI whose save path writes every key explicitly).
+  writeConfigIni(QStringLiteral("[General]\n"
+                                "schemaVersion=1\n\n"
+                                "[MigrateCol]\n"
+                                "name=MigrateCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreePosition=right\n"
+                                "collectionTreeJustification=below-toolbar\n"
+                                "sidebarPosition=left\n"
+                                "sidebarJustification=full-height\n"));
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> collections;
+  mgr.loadCollections(collections);
+  QCOMPARE(collections.size(), 1);
+  QCOMPARE(collections[0].collectionTree.treePosition, DetailsPanePosition::Left);
+  QCOMPARE(collections[0].collectionTree.treeJustification, SidebarJustification::FullHeight);
+  QCOMPARE(collections[0].sidebar.sidebarPosition, DetailsPanePosition::Right);
+  QCOMPARE(collections[0].sidebar.sidebarJustification, SidebarJustification::BelowToolbar);
+
+  // ONCE only: the gate stamped schemaVersion, so an edit the user makes
+  // AFTER the migration survives the next load instead of being re-flipped.
+  collections[0].collectionTree.treePosition = DetailsPanePosition::Right;
+  mgr.saveCollections(collections);
+  QList<CollectionConfig> reloaded;
+  mgr.loadCollections(reloaded);
+  QCOMPARE(reloaded.size(), 1);
+  QCOMPARE(reloaded[0].collectionTree.treePosition, DetailsPanePosition::Right);
 }
 
 // Expanded QTEST_GUILESS_MAIN so the macOS HOME sandbox is installed before

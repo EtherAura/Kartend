@@ -94,7 +94,15 @@ private:
   // builds wrote it into [ScraperOptions]; load tolerates both). A higher value
   // than this build understands triggers a warn-on-load; a lower value drives
   // the migration dispatcher. See settingsmigrations.*.
-  static constexpr int kSettingsSchemaVersion = 1;
+  static constexpr int kSettingsSchemaVersion = 2;
+
+  // Drives the migration dispatcher for @p s when its stored schemaVersion is
+  // behind this build, stamping the reached version and fsyncing on change.
+  // Called from BOTH loadGeneralSettings and loadCollections: startup loads
+  // collections FIRST, so gating only the general-settings path would hand
+  // the first post-upgrade boot un-migrated collection sections
+  // (Kartend-ob1c9 sidebar-defaults migration was the first to hit this).
+  void migrateSettingsFileIfNeeded(QSettings &s, const QString &configPath, const QString &origin);
 
   // Path-security filter applied to hand-editable path fields on load (shared
   // by the startup + launcher-preset loaders). Returns "" for an insecure

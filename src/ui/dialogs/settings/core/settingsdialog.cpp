@@ -150,6 +150,15 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
   ui->sidebarPanel->setModel(&m_model);
   connect(ui->sidebarPanel, &SidebarPanel::changed, this, &SettingsDialog::checkForChanges);
 
+  // Sidebars layout section (Kartend-auh7u) — side + justification for both
+  // side panels, hosted on the SAME "Sidebar" page as the details-pane panel
+  // below it (folded per user decision 2026-08-17). Its pane-side combo
+  // intentionally aliases that panel's Position — last edit wins, both write
+  // cfg.sidebar.sidebarPosition.
+  ui->sidebarsLayoutPanel->setModel(&m_model);
+  connect(ui->sidebarsLayoutPanel, &SidebarsLayoutPanel::changed, this,
+          &SettingsDialog::checkForChanges);
+
   // Subfolders panel: per-collection load/save; visibility of the dependent
   // options is internal to the panel.
   ui->subfoldersPanel->setModel(&m_model);

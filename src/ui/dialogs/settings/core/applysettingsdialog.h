@@ -38,7 +38,15 @@ public:
                           // sidebarMode
     Colors = 1u << 3,     // background type/color/image, primary/tile/selection
     ListView = 1u << 4,   // listFontSize, listRowHeight, list row colors
-    All = GridLayout | ItemText | Visibility | Colors | ListView,
+    Sidebars = 1u << 5,   // the ENTIRE details-pane (cfg.sidebar) and
+                          // navigation-sidebar (cfg.collectionTree) blocks —
+                          // position, justification, width, tabs, backgrounds,
+                          // icon options. Added 2026-08-17 after the field
+                          // report that "Copy Settings From" silently dropped
+                          // sidebar prefs: the curated lists had drifted from
+                          // the structs, so whole-struct copies here keep new
+                          // sidebar fields transferrable BY DEFAULT.
+    All = GridLayout | ItemText | Visibility | Colors | ListView | Sidebars,
   };
   Q_DECLARE_FLAGS(FieldCategories, FieldCategory)
 

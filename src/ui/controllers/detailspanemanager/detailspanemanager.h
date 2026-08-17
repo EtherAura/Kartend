@@ -70,6 +70,13 @@ struct DetailsPaneManagerSetup {
   /// the insertion index when docking the pane above (Top) or below (Bottom)
   /// it in `outerLayout`.
   QWidget *contentWidget = nullptr;
+  /// Kartend-auh7u: the outermost sidebar row (MainWindow's
+  /// m_sidebarRowLayout) hosting full-height L/R docks, and the toolbar
+  /// column widget inside it that anchors adjacent insertion. Optional —
+  /// without them, FullHeight justification degrades to the below-toolbar
+  /// dock so older callers keep working.
+  QHBoxLayout *fullHeightLayout = nullptr;
+  QWidget *toolbarColumnWidget = nullptr;
   QScrollArea *scrollArea = nullptr;
   QList<CollectionConfig> *collections = nullptr;
 
@@ -193,6 +200,9 @@ private:
   /// the widget owning `m_mainHorizontalLayout`. Used to anchor
   /// the pane's insertion index in `m_outerLayout`.
   QWidget *m_mainContentWidget = nullptr;
+  /// Kartend-auh7u: full-height dock substrate (see the setup struct).
+  QHBoxLayout *m_fullHeightLayout = nullptr;
+  QWidget *m_toolbarColumnWidget = nullptr;
   QScrollArea *m_itemScrollArea;
   // ctx is the single source of truth for sibling managers (SettingsManager,
   // ArtworkManager, DatabaseManager).

@@ -1,7 +1,10 @@
 #include "collectiontreesettings_persistence.h"
 
+#include <algorithm>
+
 #include <QLoggingCategory>
 
+#include "collection/enumstringhelpers.h"
 #include "settingskeys.h"
 
 namespace keys = kartend::settings::keys;
@@ -36,11 +39,58 @@ void load(QSettings &settings, CollectionTreeSettings &tree, const QString &coll
              "to silence.";
     }
   }
+  // Width: clamp rather than warn — a slightly-off value (resized on a
+  // different DPI, hand-tweaked INI) has an obvious best interpretation,
+  // unlike the enum keys above where a typo means intent is unknown.
+  const int rawWidth =
+      settings.value(keys::kCollectionTreeWidth, CollectionTreeSettings{}.treeWidth).toInt();
+  tree.treeWidth =
+      std::clamp(rawWidth, CollectionTreeSettings::kMinWidth, CollectionTreeSettings::kMaxWidth);
+  tree.treeIconsOnly =
+      settings.value(keys::kCollectionTreeIconsOnly, CollectionTreeSettings{}.treeIconsOnly)
+          .toBool();
+  const int rawIconSize =
+      settings.value(keys::kCollectionTreeIconSize, CollectionTreeSettings{}.treeIconSize).toInt();
+  tree.treeIconSize = std::clamp(rawIconSize, CollectionTreeSettings::kMinIconSize,
+                                 CollectionTreeSettings::kMaxIconSize);
+  bool styleFallback = false;
+  tree.treeIconStyle = CollectionUtils::stringToTreeIconStyle(
+      settings.value(keys::kCollectionTreeIconStyle, QStringLiteral("normal")).toString(),
+      &styleFallback);
+  if (styleFallback) {
+    qCWarning(lcSettingsManager).nospace()
+        << "Collection '" << collectionName << "': unknown " << keys::kCollectionTreeIconStyle
+        << " value — falling back to 'normal'. Fix the INI to silence.";
+  }
+  // Free-form hex; consumers validate via QColor and fall back to the accent
+  // on garbage, so no clamp here beyond trimming.
+  tree.treeIconTintColor = settings.value(keys::kCollectionTreeIconTint).toString().trimmed();
+  // Absent key defaults to FULL-HEIGHT (the struct default; user decision
+  // 2026-08-17) — an UNKNOWN value still clamps to below-toolbar via the
+  // shared string helper, whose fallback is deliberately the conservative
+  // classic layout.
+  bool justificationFallback = false;
+  tree.treeJustification = CollectionUtils::stringToSidebarJustification(
+      settings.value(keys::kCollectionTreeJustification, QStringLiteral("full-height")).toString(),
+      &justificationFallback);
+  if (justificationFallback) {
+    qCWarning(lcSettingsManager).nospace()
+        << "Collection '" << collectionName << "': unknown " << keys::kCollectionTreeJustification
+        << " value — falling back to 'below-toolbar'. Fix the INI to silence.";
+  }
 }
 
 void save(QSettings &settings, const CollectionTreeSettings &tree) {
   settings.setValue(keys::kCollectionTreeVisible, tree.treeVisible);
   settings.setValue(keys::kCollectionTreePosition, positionToString(tree.treePosition));
+  settings.setValue(keys::kCollectionTreeWidth, tree.treeWidth);
+  settings.setValue(keys::kCollectionTreeIconsOnly, tree.treeIconsOnly);
+  settings.setValue(keys::kCollectionTreeIconSize, tree.treeIconSize);
+  settings.setValue(keys::kCollectionTreeIconStyle,
+                    CollectionUtils::treeIconStyleToString(tree.treeIconStyle));
+  settings.setValue(keys::kCollectionTreeIconTint, tree.treeIconTintColor);
+  settings.setValue(keys::kCollectionTreeJustification,
+                    CollectionUtils::sidebarJustificationToString(tree.treeJustification));
 }
 
 } // namespace CollectionTreeSettingsPersistence

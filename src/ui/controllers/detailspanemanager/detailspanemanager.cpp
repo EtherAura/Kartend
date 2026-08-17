@@ -92,6 +92,8 @@ void DetailsPaneManager::setupReferences(const DetailsPaneManagerSetup &setup) {
   m_mainHorizontalLayout = setup.mainLayout;
   m_outerLayout = setup.outerLayout;
   m_mainContentWidget = setup.contentWidget;
+  m_fullHeightLayout = setup.fullHeightLayout;
+  m_toolbarColumnWidget = setup.toolbarColumnWidget;
   m_itemScrollArea = setup.getScrollArea();
   m_collections = setup.getCollections();
   m_runArtworkLinksDialog = setup.runArtworkLinksDialog;
@@ -476,6 +478,7 @@ void DetailsPaneManager::updateSidebarLayout(int currentCollectionIndex) {
 
   bool isFixedMode = false;
   DetailsPanePosition position = DetailsPanePosition::Right;
+  SidebarJustification justification = SidebarJustification::BelowToolbar;
   int desiredWidth = UIConstants::DetailsPane::FIXED_WIDTH;
   int desiredHeight = UIConstants::DetailsPane::FIXED_HEIGHT;
   if (m_collections && currentCollectionIndex >= 0 &&
@@ -483,18 +486,23 @@ void DetailsPaneManager::updateSidebarLayout(int currentCollectionIndex) {
     const CollectionConfig &collection = (*m_collections)[currentCollectionIndex];
     isFixedMode = (collection.sidebar.sidebarMode == DetailsPaneMode::Expand);
     position = collection.sidebar.sidebarPosition;
+    justification = collection.sidebar.sidebarJustification;
     desiredWidth = std::max(collection.sidebar.sidebarWidth, UIConstants::DetailsPane::MIN_WIDTH);
     desiredHeight =
         std::max(collection.sidebar.sidebarHeight, UIConstants::DetailsPane::MIN_HEIGHT);
   }
 
   // tracking "in some layout" rather than just the horizontal
-  // one — Top/Bottom Expand puts the pane in m_outerLayout instead.
+  // one — Top/Bottom Expand puts the pane in m_outerLayout instead, and a
+  // FullHeight L/R dock in m_fullHeightLayout (Kartend-auh7u).
   auto inAnyLayout = [this]() {
     if (m_mainHorizontalLayout && m_mainHorizontalLayout->indexOf(m_DetailsPane) != -1) {
       return true;
     }
     if (m_outerLayout && m_outerLayout->indexOf(m_DetailsPane) != -1) {
+      return true;
+    }
+    if (m_fullHeightLayout && m_fullHeightLayout->indexOf(m_DetailsPane) != -1) {
       return true;
     }
     return false;
@@ -505,6 +513,9 @@ void DetailsPaneManager::updateSidebarLayout(int currentCollectionIndex) {
     }
     if (m_outerLayout && m_outerLayout->indexOf(m_DetailsPane) != -1) {
       m_outerLayout->removeWidget(m_DetailsPane);
+    }
+    if (m_fullHeightLayout && m_fullHeightLayout->indexOf(m_DetailsPane) != -1) {
+      m_fullHeightLayout->removeWidget(m_DetailsPane);
     }
   };
   // swap the size policy so a Top/Bottom-docked pane stretches
@@ -564,6 +575,20 @@ void DetailsPaneManager::updateSidebarLayout(int currentCollectionIndex) {
           } else {
             m_outerLayout->addWidget(m_DetailsPane);
           }
+        }
+      } else if (justification == SidebarJustification::FullHeight && m_fullHeightLayout &&
+                 m_toolbarColumnWidget &&
+                 (position == DetailsPanePosition::Left ||
+                  position == DetailsPanePosition::Right)) {
+        // Kartend-auh7u: full-height dock — insert ADJACENT to the toolbar
+        // column, so any panel already at the row's extremes (the collection
+        // tree claims outermost) stays outside the pane.
+        const int columnIndex = m_fullHeightLayout->indexOf(m_toolbarColumnWidget);
+        if (position == DetailsPanePosition::Left) {
+          m_fullHeightLayout->insertWidget(columnIndex >= 0 ? columnIndex : 0, m_DetailsPane);
+        } else {
+          m_fullHeightLayout->insertWidget(
+              columnIndex >= 0 ? columnIndex + 1 : m_fullHeightLayout->count(), m_DetailsPane);
         }
       } else if (position == DetailsPanePosition::Left) {
         m_mainHorizontalLayout->insertWidget(0, m_DetailsPane);

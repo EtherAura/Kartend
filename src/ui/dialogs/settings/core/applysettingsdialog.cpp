@@ -44,6 +44,10 @@ constexpr std::array kCategoryEntries = std::to_array<CategoryEntry>({
      QT_TRANSLATE_NOOP("ApplySettingsDialog",
                        "List-mode font size, row height, primary and alternate row colors. "
                        "Only meaningful when the target is in list view.")},
+    {ApplySettingsDialog::Sidebars, QT_TRANSLATE_NOOP("ApplySettingsDialog", "Sidebars"),
+     QT_TRANSLATE_NOOP("ApplySettingsDialog",
+                       "Every details-pane and navigation-sidebar preference: visibility, "
+                       "side, justification, width, tabs, backgrounds, icon options.")},
 });
 
 } // namespace

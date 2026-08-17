@@ -46,22 +46,42 @@ const std::vector<MigrationStep> &registeredSteps() {
           },
           "v0->v1: legacy unversioned INIs (no key-shape change required)",
       },
-      // Template for the first real schema bump:
-      //
-      // MigrationStep{
-      //     /*from=*/1,
-      //     /*to=*/2,
-      //     [](QSettings &settings) {
-      //       settings.beginGroup(QStringLiteral("General"));
-      //       const QVariant legacy = settings.value(QStringLiteral("oldKey"));
-      //       if (legacy.isValid()) {
-      //         settings.setValue(QStringLiteral("newKey"), legacy);
-      //         settings.remove(QStringLiteral("oldKey"));
-      //       }
-      //       settings.endGroup();
-      //     },
-      //     "v1->v2: rename oldKey to newKey under [General]",
-      // },
+      MigrationStep{
+          /*from=*/1,
+          /*to=*/2,
+          [](QSettings &settings) {
+            // User decision 2026-08-17: the navigation sidebar (collection
+            // tree) docks LEFT and FULL-HEIGHT; the details pane docks RIGHT
+            // and BELOW-TOOLBAR — applied to ALL existing collections, not
+            // just future defaults (the save path writes every key
+            // explicitly, so a default change alone would never reach an
+            // existing INI). Values are the raw INI vocabulary of the two
+            // persistence modules (collectiontreesettings_persistence /
+            // sidebarappearance_persistence).
+            //
+            // A collection section is recognised by its `name` key — the one
+            // key every collection writes and no reserved top-level group
+            // ([General], [ScraperOptions], ...) carries. Matching on the
+            // reserved-list would couple this step to a list that grows;
+            // matching on `name` stays true by construction.
+            const QStringList groups = settings.childGroups();
+            for (const QString &group : groups) {
+              settings.beginGroup(group);
+              if (settings.contains(QStringLiteral("name"))) {
+                settings.setValue(QStringLiteral("collectionTreePosition"),
+                                  QStringLiteral("left"));
+                settings.setValue(QStringLiteral("collectionTreeJustification"),
+                                  QStringLiteral("full-height"));
+                settings.setValue(QStringLiteral("sidebarPosition"), QStringLiteral("right"));
+                settings.setValue(QStringLiteral("sidebarJustification"),
+                                  QStringLiteral("below-toolbar"));
+              }
+              settings.endGroup();
+            }
+          },
+          "v1->v2: navigation sidebar left+full-height, details pane "
+          "right+below-toolbar, stamped onto every collection section",
+      },
   };
   return steps;
 }

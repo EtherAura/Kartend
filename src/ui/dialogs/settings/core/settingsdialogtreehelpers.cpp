@@ -66,6 +66,16 @@ void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig
     dst.listView.listRowColor = src.listView.listRowColor;
     dst.listView.listAltRowColor = src.listView.listAltRowColor;
   }
+  if (categories.testFlag(ApplySettingsDialog::Sidebars)) {
+    // WHOLE-STRUCT copies, deliberately (field report 2026-08-17: sidebar
+    // prefs silently dropped by this workflow). The per-field lists above
+    // drift every time a struct gains a member; these two blocks are pure
+    // per-collection preference — no media/artwork paths, no launchers, no
+    // scan flags — so everything in them is transferrable, including
+    // whatever gets added next.
+    dst.sidebar = src.sidebar;
+    dst.collectionTree = src.collectionTree;
+  }
   dst.clampValues();
 }
 

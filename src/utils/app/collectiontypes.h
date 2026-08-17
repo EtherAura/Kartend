@@ -23,6 +23,22 @@ enum class DetailsPaneMode { Overlay = 0, Expand = 1 };
 /// orientation; in Overlay mode the anchor edge is swapped.
 enum class DetailsPanePosition { Right = 0, Left = 1, Top = 2, Bottom = 3 };
 
+/// Kartend-auh7u: vertical extent of a left/right-docked sidebar panel (the
+/// details pane's Fixed L/R dock and the collection tree). BelowToolbar is
+/// the classic layout — the items toolbar spans the full window width and
+/// the panel lives under it. FullHeight hoists the panel outside the
+/// toolbar+content column, so the panel runs the entire window height and
+/// the toolbar stops at the panel's edge. Top/Bottom docks and Overlay mode
+/// ignore it.
+enum class SidebarJustification { BelowToolbar = 0, FullHeight = 1 };
+
+/// How the collection tree panel renders its row icons (user request
+/// 2026-08-17). Normal shows the artwork as-is; the monochrome pair recolour
+/// the icon's alpha silhouette to a fixed dark/light ink; Tinted recolours it
+/// with `treeIconTintColor` (or the collection's accent when that is empty).
+/// Enum order is the settings combo's row order — keep them in sync.
+enum class TreeIconStyle { Normal = 0, MonochromeDark = 1, MonochromeLight = 2, Tinted = 3 };
+
 /// how the details-pane background is rendered. Color and Image
 /// mirror the main-view BackgroundType values. Pattern adds a
 /// procedurally-drawn pattern (currently only Crosshatch) tinted by

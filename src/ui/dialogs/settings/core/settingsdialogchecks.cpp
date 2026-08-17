@@ -59,6 +59,7 @@ auto SettingsDialog::extractUIFieldValues() -> CollectionConfig {
   ui->appearanceLayoutPanel->save();
   ui->appearanceTitlesPanel->save();
   ui->sidebarPanel->save();
+  ui->sidebarsLayoutPanel->save();
 
   // Background / palette / list-row colors / vignette owned by
   // AppearanceColorsPanel.

@@ -101,7 +101,11 @@ void SettingsDialog::setupNavigation() {
            2, true);
   addEntry(tr("Launcher"), {"system-run", "application-x-executable"}, 3, true);
   addEntry(tr("Subfolders"), {"folder", "folder-open"}, 4, true);
-  addEntry(tr("Details Pane"),
+  // ONE entry for everything sidebar-shaped (user decision 2026-08-17): the
+  // page holds the Kartend-auh7u layout section (side + justification for the
+  // details pane AND the navigation sidebar) above the details-pane settings.
+  // The separate "Sidebars" page briefly split these across two entries.
+  addEntry(tr("Sidebar"),
            {"view-split-left-right", "format-justify-right", "sidebar-expand-right"}, 5, true);
 
   addHeader(tr("Application"));

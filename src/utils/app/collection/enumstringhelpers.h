@@ -125,6 +125,53 @@ stringToDetailsPanePosition(const QString &str, bool *unknownFallback = nullptr)
   return pos == DetailsPanePosition::Top || pos == DetailsPanePosition::Bottom;
 }
 
+/// Kartend-auh7u: one vocabulary for the sidebar justification everywhere it
+/// round-trips (INI blocks for both panels, the kart manifest JSON, and the
+/// Sidebars settings page).
+[[nodiscard]] inline QString sidebarJustificationToString(SidebarJustification justification) {
+  return justification == SidebarJustification::FullHeight ? QStringLiteral("full-height")
+                                                           : QStringLiteral("below-toolbar");
+}
+
+/// Mirrors stringToDetailsPanePosition's fallback contract: @p unknownFallback
+/// (optional) reports a non-empty unrecognized value so callers can warn
+/// instead of silently defaulting.
+[[nodiscard]] inline SidebarJustification
+stringToSidebarJustification(const QString &str, bool *unknownFallback = nullptr) {
+  const QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
+  if (lower == "full-height") return SidebarJustification::FullHeight;
+  if (lower == "below-toolbar") return SidebarJustification::BelowToolbar;
+  if (unknownFallback && !str.isEmpty()) *unknownFallback = true;
+  return SidebarJustification::BelowToolbar;
+}
+
+[[nodiscard]] inline QString treeIconStyleToString(TreeIconStyle style) {
+  switch (style) {
+  case TreeIconStyle::MonochromeDark:
+    return QStringLiteral("monochrome-dark");
+  case TreeIconStyle::MonochromeLight:
+    return QStringLiteral("monochrome-light");
+  case TreeIconStyle::Tinted:
+    return QStringLiteral("tinted");
+  case TreeIconStyle::Normal:
+    break;
+  }
+  return QStringLiteral("normal");
+}
+
+[[nodiscard]] inline TreeIconStyle stringToTreeIconStyle(const QString &str,
+                                                         bool *unknownFallback = nullptr) {
+  const QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
+  if (lower == "monochrome-dark") return TreeIconStyle::MonochromeDark;
+  if (lower == "monochrome-light") return TreeIconStyle::MonochromeLight;
+  if (lower == "tinted") return TreeIconStyle::Tinted;
+  if (lower == "normal") return TreeIconStyle::Normal;
+  if (unknownFallback && !str.isEmpty()) *unknownFallback = true;
+  return TreeIconStyle::Normal;
+}
+
 [[nodiscard]] inline QString detailsPaneBackgroundTypeToString(DetailsPaneBackgroundType type) {
   switch (type) {
   case DetailsPaneBackgroundType::Image:

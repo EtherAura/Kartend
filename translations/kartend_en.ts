@@ -1573,12 +1573,12 @@ Skipped %3 items that already had artwork.</source>
 <context>
     <name>CollectionTreeController</name>
     <message>
-        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+52"/>
+        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+54"/>
         <source>Collections</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+92"/>
+        <location line="+114"/>
         <source>Playlists</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8333,7 +8333,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/data/scraper/providers/screenscraperprovider.cpp" line="+406"/>
+        <location filename="../src/modules/data/scraper/providers/screenscraperprovider.cpp" line="+482"/>
         <source>Extracting archive for hash ID…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9212,29 +9212,29 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+99"/>
-        <location line="+20"/>
-        <location line="+21"/>
+        <location line="+137"/>
+        <location line="+17"/>
+        <location line="+8"/>
         <source>Scrape collection artwork</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-40"/>
+        <location line="-24"/>
         <source>A scrape is already running — wait for it to finish.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+20"/>
+        <location line="+17"/>
         <source>No scraper is configured for &quot;%1&quot;.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+21"/>
+        <location line="+8"/>
         <source>The scraper for &quot;%1&quot; has no collection- or platform-level artwork to fetch.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+95"/>
+        <location line="+106"/>
         <source>Scraper</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9934,6 +9934,11 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+4"/>
+        <source>Sidebars</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+3"/>
         <source>Application</source>
         <translation type="unfinished"></translation>
@@ -10069,7 +10074,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+19"/>
+        <location line="+34"/>
         <source>Save</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10089,12 +10094,12 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-12"/>
+        <location line="-16"/>
         <source>Collection settings</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+19"/>
         <source>Attract Mode</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10104,7 +10109,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+354"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+361"/>
         <source>deselecting</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11187,6 +11192,85 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     <message>
         <location line="+17"/>
         <source>Select Details Pane Font</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>SidebarsLayoutPanel</name>
+    <message>
+        <location filename="../src/ui/dialogs/settings/appearance/sidebarslayoutpanel.ui" line="+12"/>
+        <source>Details pane</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <location line="+25"/>
+        <source>Side:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-22"/>
+        <source>Same setting as Position on the Details Pane page — the two controls stay in sync.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <location line="+26"/>
+        <source>Right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-25"/>
+        <location line="+24"/>
+        <source>Left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-23"/>
+        <source>Top</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Bottom</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <location line="+23"/>
+        <source>Justification:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-20"/>
+        <source>Full height makes the pane span the whole window, with the toolbar stopping at its edge. Applies to Left/Right docks; Top/Bottom and Overlay ignore it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <location line="+23"/>
+        <source>Below toolbar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-22"/>
+        <location line="+23"/>
+        <source>Full height</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-15"/>
+        <source>Navigation sidebar (collection tree)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Same setting as View → Collection Tree Position.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Full height makes the tree span the whole window, with the toolbar stopping at its edge.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

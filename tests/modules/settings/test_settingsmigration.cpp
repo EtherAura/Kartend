@@ -30,11 +30,11 @@ private slots:
   void init();
 
   void legacyIni_loadsAllKnownKeysWithoutWarning();
-  void v1Ini_loadsCleanlyWithCurrentSchemaVersion();
+  void currentIni_loadsCleanlyWithCurrentSchemaVersion();
   void futureIni_warnsButStillLoadsAllKnownKeys();
   void futureIni_snapshotsConfigBeforeOverwrite();
   void legacyIni_invokesV0ToV1Migration();
-  void v1Ini_doesNotInvokeAnyMigration();
+  void currentVersionIni_doesNotInvokeAnyMigration();
   void misfiledSchemaIni_recognisedViaScraperOptionsFallback();
 
 private:
@@ -83,8 +83,8 @@ void TestSettingsMigration::legacyIni_loadsAllKnownKeysWithoutWarning() {
   QCOMPARE(settings.appearance.titleTintSaturation, 120);
 }
 
-void TestSettingsMigration::v1Ini_loadsCleanlyWithCurrentSchemaVersion() {
-  installFixture(QStringLiteral("v1.ini"));
+void TestSettingsMigration::currentIni_loadsCleanlyWithCurrentSchemaVersion() {
+  installFixture(QStringLiteral("current.ini"));
 
   SettingsManager mgr(nullptr, nullptr);
   GeneralSettings settings;
@@ -154,13 +154,13 @@ void TestSettingsMigration::legacyIni_invokesV0ToV1Migration() {
   QCOMPARE(settings.media.pixmapCacheSizeMB, 128);
 }
 
-void TestSettingsMigration::v1Ini_doesNotInvokeAnyMigration() {
+void TestSettingsMigration::currentVersionIni_doesNotInvokeAnyMigration() {
   // The dispatcher's short-circuit must fire when loadedVersion ==
   // currentVersion. Verify by failing the test if the v0->v1 step's
   // qCInfo line appears. QTest treats unexpected qInfo via failOnWarning,
   // which we drive by tee-ing the migration category through a temporary
   // message handler that records its invocations.
-  installFixture(QStringLiteral("v1.ini"));
+  installFixture(QStringLiteral("current.ini"));
 
   static QStringList capturedMigrationMessages;
   capturedMigrationMessages.clear();
@@ -179,7 +179,7 @@ void TestSettingsMigration::v1Ini_doesNotInvokeAnyMigration() {
   qInstallMessageHandler(previousHandler);
 
   QVERIFY2(capturedMigrationMessages.isEmpty(),
-           qPrintable(QStringLiteral("Expected no migration log for v1 INI but got: %1")
+           qPrintable(QStringLiteral("Expected no migration log for a current-version INI but got: %1")
                           .arg(capturedMigrationMessages.join(QStringLiteral(" | ")))));
   QCOMPARE(settings.input.rememberSelection, true);
   QCOMPARE(settings.media.pixmapCacheSizeMB, 64);
@@ -191,8 +191,9 @@ void TestSettingsMigration::misfiledSchemaIni_recognisedViaScraperOptionsFallbac
   // looked unversioned (v0) on every load and would re-run the v0->v1 step
   // forever. The tolerant dual-location read falls back to the
   // [ScraperOptions] copy when [General] lacks the key, so such a file must be
-  // recognised as its true version (1) and must NOT trigger the migration.
-  // Mirror v1Ini_doesNotInvokeAnyMigration: capture the migration category and
+  // recognised as its true version (kept equal to the current build's
+  // version in the fixture) and must NOT trigger any migration.
+  // Mirror currentVersionIni_doesNotInvokeAnyMigration: capture the migration category and
   // assert it stayed silent.
   installFixture(QStringLiteral("misfiled_schema.ini"));
 

@@ -156,6 +156,8 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   o["horizontal_alignment"] = CollectionUtils::alignmentToString(c.horizontalAlignment);
   o["sidebar_mode"] = sidebarModeToString(c.sidebar.sidebarMode);
   o["sidebar_position"] = CollectionUtils::detailsPanePositionToString(c.sidebar.sidebarPosition);
+  o["sidebar_justification"] =
+      CollectionUtils::sidebarJustificationToString(c.sidebar.sidebarJustification);
   o["sidebar_background_type"] =
       CollectionUtils::detailsPaneBackgroundTypeToString(c.sidebar.sidebarBackgroundType);
   o["sidebar_background_color"] = c.sidebar.sidebarBackgroundColor;
@@ -287,6 +289,10 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.sidebar.sidebarMode = stringToSidebarMode(o["sidebar_mode"].toString());
   c.sidebar.sidebarPosition =
       CollectionUtils::stringToDetailsPanePosition(o["sidebar_position"].toString());
+  // Absent key (pre-auh7u bundle) reads as an empty string, which the helper
+  // maps to the BelowToolbar default — old bundles import unchanged.
+  c.sidebar.sidebarJustification =
+      CollectionUtils::stringToSidebarJustification(o["sidebar_justification"].toString());
   const QString rawSidebarBgType = o["sidebar_background_type"].toString();
   bool sidebarBgTypeFallback = false;
   c.sidebar.sidebarBackgroundType =

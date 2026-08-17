@@ -94,6 +94,13 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
   collections.clear();
 
   QSettings settings(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
+  // Startup loads collections BEFORE general settings, so the migration gate
+  // must run here too or the first post-upgrade boot reads un-migrated
+  // collection sections (the v1->v2 sidebar-defaults stamp was the first
+  // migration to touch per-collection keys). Idempotent: the gate stamps the
+  // reached version, so whichever loader runs second no-ops.
+  migrateSettingsFileIfNeeded(settings, SettingsUtils::getConfigPath(),
+                              QStringLiteral("SettingsManager::loadCollections"));
   QHash<QString, CollectionConfig> tempCollections;
   bool needsRewrite = false;
 

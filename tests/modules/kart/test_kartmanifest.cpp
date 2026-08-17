@@ -29,6 +29,8 @@ private slots:
   void testPlaylistRoundTrip();
   void testV1ManifestParsesWithEmptyPlaylists();
 
+  // Kartend-auh7u: sidebar justification manifest compat.
+  void testSidebarJustificationDefaultsWhenKeyAbsent();
   // Kartend-fh3ab: the user-state fields and hand-linked artwork carriers.
   void testUserStateFieldsDefaultWhenKeysAbsent();
   void testUserStateRatingIsClamped();
@@ -168,6 +170,9 @@ void TestKartManifest::testCollectionConfigAllFieldsRoundTrip() {
   c.horizontalAlignment = HorizontalAlignment::Right;
   c.sidebar.sidebarMode = DetailsPaneMode::Expand;
   c.sidebar.sidebarPosition = DetailsPanePosition::Left;
+  // Kartend-auh7u: non-default so the operator== round-trip below proves the
+  // manifest carries it.
+  c.sidebar.sidebarJustification = SidebarJustification::FullHeight;
   c.sidebar.sidebarBackgroundType = DetailsPaneBackgroundType::Pattern;
   c.sidebar.sidebarBackgroundColor = "#112233";
   c.sidebar.sidebarBackgroundImage = "bg.png";
@@ -455,6 +460,19 @@ void TestKartManifest::testV1ManifestParsesWithEmptyPlaylists() {
 }
 
 // ----- Kartend-fh3ab: user-state fields + artwork links -----
+
+void TestKartManifest::testSidebarJustificationDefaultsWhenKeyAbsent() {
+  // Kartend-auh7u: a pre-justification bundle carries no
+  // sidebar_justification key — it must import as BelowToolbar (the classic
+  // layout), not whatever an empty string might coerce to.
+  const QByteArray json = "{\"format_version\":1,\"uuid\":\"u\",\"name\":\"n\","
+                          "\"collection_config\":{\"name\":\"C\",\"sidebar_position\":\"left\"}}";
+  auto result = KartManifest::parse(json);
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  QCOMPARE(result.value().collectionConfig.sidebar.sidebarJustification,
+           SidebarJustification::BelowToolbar);
+  QCOMPARE(result.value().collectionConfig.sidebar.sidebarPosition, DetailsPanePosition::Left);
+}
 
 void TestKartManifest::testUserStateFieldsDefaultWhenKeysAbsent() {
   // A bundle written before these fields were serialized carries none of the

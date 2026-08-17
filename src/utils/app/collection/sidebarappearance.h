@@ -33,6 +33,13 @@ struct SidebarAppearance {
   /// in Fixed mode this swaps the QHBoxLayout insertion index, in Overlay
   /// mode it swaps the X anchor in positionSidebarOverlay().
   DetailsPanePosition sidebarPosition = DetailsPanePosition::Right;
+  /// Kartend-auh7u: vertical extent of the Left/Right Fixed dock — under the
+  /// full-width toolbar (default) or spanning the window height with the
+  /// toolbar stopping at the pane's edge. Ignored by Overlay mode and by
+  /// Top/Bottom positions. Round-trips through the INI AND the kart
+  /// manifest JSON (`sidebar_justification`); absent keys default to
+  /// BelowToolbar so pre-auh7u bundles import unchanged.
+  SidebarJustification sidebarJustification = SidebarJustification::BelowToolbar;
   /// Background rendering mode for the sidebar. Color and Image mirror the
   /// main-view background pattern. Pattern fills with `sidebarBackgroundColor`
   /// (or system Window when blank) and overlays the chosen procedural

@@ -9,6 +9,7 @@ target_sources(kartend_ui PRIVATE
   layoutprofilesdialog.cpp
   presentationprofilesdialog.cpp
   sidebarpanel.cpp
+  sidebarslayoutpanel.cpp
   splashpanel.cpp
   toolbarpanel.cpp
   appearancecolorspanel.h
@@ -21,6 +22,7 @@ target_sources(kartend_ui PRIVATE
   layoutprofilesdialog.h
   presentationprofilesdialog.h
   sidebarpanel.h
+  sidebarslayoutpanel.h
   splashpanel.h
   toolbarpanel.h
   appearancecolorspanel.ui
@@ -31,6 +33,7 @@ target_sources(kartend_ui PRIVATE
   appearancetoolbarpanel.ui
   fontspanel.ui
   sidebarpanel.ui
+  sidebarslayoutpanel.ui
   splashpanel.ui
   toolbarpanel.ui
 )
