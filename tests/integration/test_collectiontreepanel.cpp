@@ -87,6 +87,12 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAndUnclipped() 
     art.fill(QColor(255, 0, 0));
     QVERIFY(art.save(iconPath));
   }
+  const QString squarePath = artDir.path() + QStringLiteral("/square.png");
+  {
+    QImage art(24, 24, QImage::Format_ARGB32);
+    art.fill(QColor(0, 0, 255));
+    QVERIFY(art.save(squarePath));
+  }
 
   // Depth-3 probe at MINIMUM panel width — the exact conditions of the
   // field report (2026-08-17): the deeper the row and the narrower the
@@ -100,6 +106,7 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAndUnclipped() 
   CollectionConfig child;
   child.name = QStringLiteral("Child");
   child.parentCollectionIndex = 0;
+  child.collectionIcon = squarePath; // square: must NOT inherit boost height
   child.collectionTree.treeIconStyle = TreeIconStyle::Normal;
   child.collectionTree.treeWidth = CollectionTreeSettings::kMinWidth;
   CollectionConfig grand;
@@ -165,4 +172,19 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAndUnclipped() 
                           .arg(rowStart)
                           .arg(frame.width())
                           .arg(dpr)));
+
+  // Row DENSITY (field report 2026-08-17: every row ballooned to the boost
+  // headroom): a square icon's row must hug the base icon height, not the
+  // 1.6x boosted decoration. Logical units throughout (visualItemRect).
+  QTreeWidgetItem *shellItem = tree->topLevelItem(0);
+  QVERIFY(shellItem);
+  QVERIFY(shellItem->childCount() >= 1);
+  QTreeWidgetItem *childItem = shellItem->child(0);
+  const int baseIconSize = CollectionTreeSettings{}.treeIconSize;
+  const int childRowH = tree->visualItemRect(childItem).height();
+  QVERIFY2(childRowH <= baseIconSize + 10,
+           qPrintable(QStringLiteral("square-icon row is %1px tall for a %2px icon — the boost "
+                                     "headroom is leaking into unboosted rows")
+                          .arg(childRowH)
+                          .arg(baseIconSize)));
 }

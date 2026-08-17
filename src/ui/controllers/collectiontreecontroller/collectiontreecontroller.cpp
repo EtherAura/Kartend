@@ -707,7 +707,11 @@ void CollectionTreeController::refreshIcons() {
   // (non-uniform rows).
   m_tree->setIconSize(QSize(qMax(24, viewportWidth - chrome - indentation),
                             qRound(m_iconSize * kThinHeightBoost)));
-  QHash<QString, QIcon> cache; // path|maxW — style/size/tint are uniform per pass
+  struct BakedIcon {
+    QIcon icon;
+    int logicalHeight = 0;
+  };
+  QHash<QString, BakedIcon> cache; // path|visibleW — style/size/tint are uniform per pass
 
   for (QTreeWidgetItemIterator it(m_tree); *it; ++it) {
     QTreeWidgetItem *item = *it;
@@ -760,6 +764,7 @@ void CollectionTreeController::refreshIcons() {
       item->setIcon(0, QIcon());
       item->setText(0, name);
       item->setToolTip(0, QString());
+      item->setSizeHint(0, QSize()); // text-only rows: default metrics
       continue;
     }
     // Every style renders the SAME source art (field report 2026-08-17:
@@ -884,11 +889,28 @@ void CollectionTreeController::refreshIcons() {
         canvas.setDevicePixelRatio(dpr);
         pm = canvas;
       }
-      cached = cache.insert(cacheKey, pm.isNull() ? QIcon() : QIcon(pm));
+      BakedIcon baked;
+      if (!pm.isNull()) {
+        baked.icon = QIcon(pm);
+        baked.logicalHeight = qMax(1, qRound(pm.height() / dpr));
+      }
+      cached = cache.insert(cacheKey, baked);
     }
 
-    const QIcon &icon = cached.value();
+    const QIcon &icon = cached.value().icon;
     item->setIcon(0, icon);
+    // Explicit per-row height (field report 2026-08-17, "continued
+    // failure" screenshot): the view iconSize HEIGHT carries the 1.6x
+    // boost headroom, and without a size hint Qt hands that full
+    // decoration height to EVERY row — unboosted rows ballooned, the
+    // list overflowed into a scrollbar, and the panel read as sparse
+    // drift. Each row now hugs its own icon plus a 4px breathing gap;
+    // boosted rows are taller, square rows stay tight.
+    if (!icon.isNull()) {
+      item->setSizeHint(0, QSize(0, cached.value().logicalHeight + 4));
+    } else {
+      item->setSizeHint(0, QSize());
+    }
     // Icons-only mode: the name moves to the tooltip. Rows whose icon did
     // NOT resolve keep their text — a blank row would be unusable.
     if (!icon.isNull() && m_iconsOnly) {
