@@ -925,12 +925,14 @@ void CollectionTreeController::refreshIcons() {
     const QPixmap &baked = cached.value().pixmap;
     item->setIcon(0, QIcon()); // TreeIconDelegate paints; no decoration
     item->setData(0, kRoleBakedPixmap, baked.isNull() ? QVariant() : QVariant(baked));
-    // Per-row height hugs the baked pixmap (+4px breathing): boosted
-    // wordmark rows are taller, square rows stay tight — the view-wide
-    // decoration height must never set row heights again (2026-08-17,
-    // "continued failure": every row ballooned to the boost headroom).
+    // Per-row height hugs the baked pixmap plus a breathing gap that
+    // scales with the icon size (field reports 2026-08-17: the view-wide
+    // decoration height ballooned every row; a flat 4px then read "too
+    // cramped vertically"). Boosted wordmark rows stay taller, square
+    // rows tighter, and the gap keeps big logos from touching.
     if (!baked.isNull()) {
-      item->setSizeHint(0, QSize(0, cached.value().logicalHeight + 4));
+      const int rowPad = qMax(10, m_iconSize / 2);
+      item->setSizeHint(0, QSize(0, cached.value().logicalHeight + rowPad));
     } else {
       item->setSizeHint(0, QSize());
     }

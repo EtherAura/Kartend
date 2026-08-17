@@ -187,7 +187,8 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAndUnclipped() 
   QTreeWidgetItem *childItem = shellItem->child(0);
   const int baseIconSize = CollectionTreeSettings{}.treeIconSize;
   const int childRowH = tree->visualItemRect(childItem).height();
-  QVERIFY2(childRowH <= baseIconSize + 10,
+  // Base icon height + the proportional row pad (max(10, size/2)) + slack.
+  QVERIFY2(childRowH <= baseIconSize + qMax(10, baseIconSize / 2) + 6,
            qPrintable(QStringLiteral("square-icon row is %1px tall for a %2px icon — the boost "
                                      "headroom is leaking into unboosted rows")
                           .arg(childRowH)
