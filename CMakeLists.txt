@@ -388,6 +388,13 @@ endif()
 # APP_* defines are read from every layer (logging, error reporting,
 # update checks, AboutDialog). Push them onto kartend_utils PUBLIC so they
 # propagate to every per-area lib through the link DAG.
+#
+# BUILD_DATE is deliberately NOT in this list: build.sh stamps a fresh
+# timestamp on every configure, and a PUBLIC define here changes the compile
+# command of EVERY TU — each install build became a full recompile with a
+# 100% ccache miss rate (field report 2026-08-17: "builds take too long").
+# It is scoped below to the single TU that reads it, so a new stamp costs
+# one recompile plus the links.
 target_compile_definitions(kartend_utils
   PUBLIC
     APP_ID="${KARTEND_APP_ID}"
@@ -395,8 +402,10 @@ target_compile_definitions(kartend_utils
     APP_DISPLAY_NAME="Kartend"
     APP_VERSION="${PROJECT_VERSION}"
     APP_AUTHOR="EtherAura"
-    BUILD_DATE="${BUILD_DATE}"
 )
+set_source_files_properties(${SRC_DIR}/core/mainwindow_dialogs.cpp
+  TARGET_DIRECTORY kartend_core
+  PROPERTIES COMPILE_DEFINITIONS "BUILD_DATE=\"${BUILD_DATE}\"")
 
 # Per-area compile-flag application — single source of truth (Kartend-9fdsd).
 # kartend_apply_area_flags() (cmake/CompilerFlags.cmake) applies, to every
