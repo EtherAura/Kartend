@@ -77,6 +77,7 @@ private slots:
   void isActive_followsViewType();
   void publicMethods_noopWithoutSetup();
   void ensureWidget_noopWithoutScrollArea();
+  void clearedSelection_doesNotSnapCarouselToItemZero();
 
   // Pending-artwork retry (Kartend-6x8tn)
   void retry_fillsArtworkAfterPrewarm();
@@ -160,6 +161,34 @@ void TestCoverFlowController::ensureWidget_noopWithoutScrollArea() {
   controller.setupReferences(setup);
   controller.ensureWidget();
   QCOMPARE(controller.widget(), nullptr);
+}
+
+// Kartend-g7hbx: a cleared canonical selection (-1) is a transient — the
+// restore pipeline clears before re-selecting, search transitions clear
+// between filters, and (before its own fix) the hidden grid's empty-click
+// path cleared too. CoverFlowWidget clamps negatives to 0, so forwarding the
+// clear glided the carousel to the FIRST item with a phantom selection
+// border while the toolbar counter kept the old index. The controller must
+// hold the carousel in place instead.
+void TestCoverFlowController::clearedSelection_doesNotSnapCarouselToItemZero() {
+  QTemporaryDir artDir;
+  QTemporaryDir mediaDir;
+  QVERIFY(artDir.isValid() && mediaDir.isValid());
+
+  CoverFlowHarness h(artDir.path(), mediaDir.path());
+  h.store.filePaths() << mediaDir.filePath(QStringLiteral("clip0.mp4"))
+                      << mediaDir.filePath(QStringLiteral("clip1.mp4"))
+                      << mediaDir.filePath(QStringLiteral("clip2.mp4"));
+  h.controller.ensureWidget();
+  QVERIFY(h.controller.widget() != nullptr);
+  h.controller.rebuildCards();
+  QCOMPARE(h.controller.widget()->cardCount(), 3);
+
+  h.controller.onSelectionChanged(2);
+  QCOMPARE(h.controller.widget()->selectedIndex(), 2);
+
+  h.controller.onSelectionChanged(-1);
+  QCOMPARE(h.controller.widget()->selectedIndex(), 2);
 }
 
 // ----- Pending-artwork retry (Kartend-6x8tn) -----

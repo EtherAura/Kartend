@@ -285,6 +285,16 @@ void CoverFlowController::onSelectionChanged(int selectedIndex) {
   if (!m_widget || !isActive()) {
     return;
   }
+  // A cleared selection (-1) is a transient the pipeline emits on its way
+  // somewhere else — prepareForRestore clears before re-selecting, search
+  // transitions clear between filters. The widget clamps negatives to 0, so
+  // passing it through glided the carousel to the FIRST item with a phantom
+  // selection border while the toolbar counter kept the old index
+  // (Kartend-g7hbx). Hold the carousel where it is instead; the next real
+  // selection re-syncs it, and rebuilds handle the genuinely-empty case.
+  if (selectedIndex < 0) {
+    return;
+  }
   m_widget->setSelectedIndex(selectedIndex, true);
   // Lazy video-path + gallery resolution: scanning the video directory and
   // loading per-item artwork rows for every one of N items at rebuild time

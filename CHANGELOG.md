@@ -233,6 +233,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Clicking empty space in Cover Flow no longer throws the carousel
+  back to the first item.** A left-click that missed every card — easy
+  to do given the carousel's large margins, or when clicking the window
+  just to focus it — fell through to the item grid's click handling.
+  The grid is hidden while Cover Flow is showing, so the click found
+  nothing there and cleared the selection, which the carousel rendered
+  by gliding to the first item with a selection border while the
+  position counter and thumbnail strip still showed the item you were
+  on. Clicks that miss the cards are now simply ignored in Cover Flow,
+  and a cleared selection no longer masquerades as "the first item is
+  selected" — the carousel holds its place until a real selection
+  arrives.
+
 - **A selection made with the mouse wheel no longer snaps back a moment
   later.** Scrolling the wheel moved the selection but — unlike the
   arrow keys — never recorded the new position as the collection's

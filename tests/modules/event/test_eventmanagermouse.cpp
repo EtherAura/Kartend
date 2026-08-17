@@ -79,6 +79,7 @@ private slots:
 
   void leftClickInsideTileEmitsWidgetClicked();
   void leftClickOnEmptyAreaEmitsClearSelection();
+  void leftClickInCoverFlowNeverRunsTheGridClickPath();
   void leftClickOnItemsTopBarIsRejected();
 
   void handleWheelEventBlockedWhileModalScrapeDialogVisible();
@@ -465,6 +466,39 @@ void TestEventManagerMouse::leftClickOnEmptyAreaEmitsClearSelection() {
   QVERIFY(consumed);
   QVERIFY(evt.isAccepted());
   QCOMPARE(clearSel.count(), 1);
+  QCOMPARE(clicked.count(), 0);
+}
+
+void TestEventManagerMouse::leftClickInCoverFlowNeverRunsTheGridClickPath() {
+  // Kartend-g7hbx: with cover flow active the grid is HIDDEN and
+  // CoverFlowWidget owns all click hit-testing. The grid click path used to
+  // run anyway for clicks that fell through to the items page: it mapped the
+  // position into the hidden gridContainer, found no widget, and emitted
+  // clearSelectionRequested — clearing the canonical selection and snapping
+  // the carousel to item 0. handleMousePress must decline left-clicks
+  // entirely in cover flow, clear nothing, and leave the event to Qt.
+  QStackedWidget stack;
+  auto *itemsPage = new QWidget;
+  stack.addWidget(itemsPage);
+  stack.setCurrentWidget(itemsPage);
+  auto *gridContainer = new QWidget(itemsPage);
+  gridContainer->resize(400, 400);
+  QScrollArea scrollArea;
+  stack.show();
+
+  m_collections[0].viewType = ViewType::CoverFlow;
+  m_scroll.activeWidgets.clear();
+  m_scroll.totalItems = 0;
+  wireWithUi(&scrollArea, gridContainer, &stack, itemsPage);
+
+  QSignalSpy clicked(&m_mgr, &EventManager::widgetClicked);
+  QSignalSpy clearSel(&m_mgr, &EventManager::clearSelectionRequested);
+  QMouseEvent evt(QEvent::MouseButtonPress, QPointF(60, 60), QPointF(60, 60), Qt::LeftButton,
+                  Qt::LeftButton, Qt::NoModifier);
+  const bool consumed = m_mgr.handleMousePress(gridContainer, &evt);
+
+  QVERIFY(!consumed);
+  QCOMPARE(clearSel.count(), 0);
   QCOMPARE(clicked.count(), 0);
 }
 
