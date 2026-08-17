@@ -1,7 +1,6 @@
 #include "collectiontreecontroller.h"
 
 #include <algorithm>
-#include <cmath>
 
 #include <QEvent>
 #include <QFileInfo>
@@ -754,24 +753,12 @@ void CollectionTreeController::refreshIcons() {
       }
       pm = trimTransparentBorders(pm);
       if (!pm.isNull()) {
-        // Visual-weight normalisation (user request 2026-08-17): wide
-        // wordmarks and square marks scaled to one HEIGHT read as wildly
-        // different sizes. Logos at or under the reference aspect keep the
-        // full height; wider ones damp toward equal area — at 0.35 a 6:1
-        // wordmark lands ~20% shorter (pure equal-area is 0.5, which
-        // over-shrinks). Only ever shrinks, so nothing can crop.
-        constexpr qreal kRefAspect = 3.0;
-        constexpr qreal kAreaDamping = 0.35;
-        qreal targetH = devHeight;
-        const qreal aspect =
-            pm.height() > 0 ? static_cast<qreal>(pm.width()) / pm.height() : 1.0;
-        if (aspect > kRefAspect) {
-          targetH = devHeight * std::pow(kRefAspect / aspect, kAreaDamping);
-        }
-        pm = pm.scaledToHeight(qMax(1, qRound(targetH)), Qt::SmoothTransformation);
-        if (pm.width() > devWidth) {
-          pm = pm.scaledToWidth(devWidth, Qt::SmoothTransformation);
-        }
+        // Box-fit (user direction 2026-08-17, superseding the brief
+        // area-damping experiment): every logo scales to FILL the available
+        // box — width-bound for thin wordmarks so they use the panel width
+        // that is otherwise wasted, height-bound (the icon-height setting)
+        // for square marks. Aspect is always preserved, so nothing crops.
+        pm = pm.scaled(devWidth, devHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
       }
       if (!pm.isNull() && m_iconStyle != TreeIconStyle::Normal) {
         QColor ink;
@@ -835,19 +822,17 @@ void CollectionTreeController::refreshIcons() {
         }
       }
       if (!pm.isNull()) {
-        // Uniform-width, LEFT-ALIGNED canvas (field report 2026-08-17: Qt
-        // centres each pixmap inside the view's decoration rect, so
-        // per-row pixmap widths made narrow logos drift right and wide
-        // ones overflow the panel edge — "horribly cut off"). Every icon
-        // ships at canvasDevW wide with the logo at x=0; rows at any depth
-        // then share one decoration geometry, the transparent overhang on
-        // deep rows clips invisibly, and the visible logo always fits its
-        // per-row cap.
+        // Uniform-width canvas with the logo CENTERED (user direction
+        // 2026-08-17: "more centered" — supersedes the left-aligned pass).
+        // The canvas is still uniform per depth so Qt's decoration rect
+        // geometry stays stable and nothing drifts row-to-row; centering
+        // happens INSIDE the canvas, deterministically.
         QPixmap canvas(canvasDevW, qRound(m_iconSize * dpr));
         canvas.fill(Qt::transparent);
         {
           QPainter painter(&canvas);
-          painter.drawPixmap(0, (canvas.height() - pm.height()) / 2, pm);
+          painter.drawPixmap((canvas.width() - pm.width()) / 2,
+                             (canvas.height() - pm.height()) / 2, pm);
         }
         canvas.setDevicePixelRatio(dpr);
         pm = canvas;
