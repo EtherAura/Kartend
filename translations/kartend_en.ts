@@ -5646,12 +5646,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+2"/>
-        <location line="+66"/>
+        <location line="+80"/>
         <source>Launchers</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-64"/>
+        <location line="-78"/>
         <source>Bundled metadata</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5673,7 +5673,25 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+8"/>
+        <source>a new folder “%1” inside the destination you choose next</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Extracts to</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+2"/>
+        <source>%n file(s) into %1</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+13"/>
         <source>No validation issues — this bundle carries no launcher configuration, every required launcher resolves and no externally-controlled paths are flagged.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11952,18 +11970,19 @@ Continue?</source>
 <context>
     <name>kart::KartManager</name>
     <message>
-        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+591"/>
+        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+659"/>
         <location line="+1"/>
         <location line="+7"/>
-        <location line="+95"/>
+        <location line="+94"/>
+        <location line="+35"/>
         <location line="+38"/>
         <source>Import Kart</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-141"/>
+        <location line="-175"/>
         <location line="+2"/>
-        <location line="+63"/>
+        <location line="+72"/>
         <location line="+2"/>
         <source>Kart files (*.kart)</source>
         <translation type="unfinished"></translation>
@@ -11977,14 +11996,14 @@ Continue?</source>
     <message>
         <location line="+11"/>
         <location line="+5"/>
-        <location line="+117"/>
+        <location line="+142"/>
         <location line="+9"/>
         <location line="+37"/>
         <source>Export Kart</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-168"/>
+        <location line="-193"/>
         <source>KartManager not wired</source>
         <translation type="unfinished"></translation>
     </message>
@@ -12000,7 +12019,8 @@ Continue?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+19"/>
+        <location line="+21"/>
+        <location line="+23"/>
         <source>Importing Kart</source>
         <translation type="unfinished"></translation>
     </message>

@@ -135,6 +135,24 @@ public:
   [[nodiscard]] ErrorUtils::Result<KartReader::ExtractResult> extractKart(const QString &kartPath,
                                                                           const QString &destDir);
 
+  /// Kartend-qbfk1: directory name a bundle's content is extracted into,
+  /// derived from the manifest name. Path separators become '_', Windows
+  /// segment quirks (trailing dots/spaces, reserved device names) are
+  /// defused, and an empty or fully-consumed name falls back to "kart" —
+  /// the same fallback importInteractive's suggested destination uses.
+  [[nodiscard]] static QString importSubdirNameFor(const QString &bundleName);
+
+  /// Kartend-qbfk1: every import entry point extracts into a FRESH
+  /// subdirectory of the caller-chosen directory, never into that directory
+  /// itself — a hostile bundle needs no traversal to plant
+  /// '.config/autostart/…' when the destination is $HOME. Peeks the
+  /// manifest for the bundle name, appends importSubdirNameFor()'s
+  /// derivation to @p parentDir, and refuses when that subdirectory already
+  /// exists with content (KartReader::extractTo re-checks emptiness as the
+  /// hard backstop). Returns the destination extractTo should receive.
+  [[nodiscard]] static ErrorUtils::Result<QString>
+  deriveImportDestination(const QString &kartPath, const QString &parentDir);
+
   [[nodiscard]] ErrorUtils::Result<QString> finalizeImport(const KartReader::ExtractResult &result,
                                                            bool registerCollection,
                                                            const ConflictResolver &resolver);

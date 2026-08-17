@@ -184,6 +184,61 @@ ErrorUtils::Result<KartManifest::Manifest> peekManifest(const QString &kartPath)
   return readManifest(f);
 }
 
+ErrorUtils::Result<quint32> countEntries(const QString &kartPath) {
+  QFile f(kartPath);
+  if (!f.open(QIODevice::ReadOnly)) {
+    return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileReadError,
+                                           "Cannot open Kart file for reading",
+                                           "KartReader::countEntries")
+        .withDetails(f.errorString());
+  }
+  if (auto magicRes = validateMagic(f); magicRes.isError()) return magicRes.error();
+  if (auto manifestRes = readManifest(f); manifestRes.isError()) return manifestRes.error();
+
+  quint32 count = 0;
+  while (!f.atEnd()) {
+    if (count >= KartFormat::MAX_ENTRY_COUNT) {
+      return readError("Kart bundle has too many entries",
+                       QString("count=%1 max=%2").arg(count + 1).arg(KartFormat::MAX_ENTRY_COUNT));
+    }
+    // Same header layout extractTo consumes: flags u8, compression u8,
+    // path_len u16, path, original_size u64, payload_size u64, sha256,
+    // payload. Only the two lengths matter here — everything else is
+    // seeked over, so the walk costs header reads, not payload I/O.
+    if (auto r = readU8(f); r.isError()) return r.error();
+    if (auto r = readU8(f); r.isError()) return r.error();
+    auto pathLenRes = readU16LE(f);
+    if (pathLenRes.isError()) return pathLenRes.error();
+    if (pathLenRes.value() == 0 || pathLenRes.value() > KartFormat::MAX_PATH_LEN) {
+      return readError("Entry path length out of range", QString("len=%1").arg(pathLenRes.value()));
+    }
+    if (!f.seek(f.pos() + pathLenRes.value())) {
+      return readError("Truncated entry header", QString("at offset=%1").arg(f.pos()));
+    }
+    if (auto r = readU64LE(f); r.isError()) return r.error();
+    auto payloadSizeRes = readU64LE(f);
+    if (payloadSizeRes.isError()) return payloadSizeRes.error();
+    // Bound before the seek arithmetic: a hostile payload_size near 2^64
+    // would overflow the qint64 sum below.
+    if (payloadSizeRes.value() > KartFormat::MAX_ENTRY_SIZE) {
+      return readError(
+          "Entry size out of range",
+          QString("payload=%1 max=%2").arg(payloadSizeRes.value()).arg(KartFormat::MAX_ENTRY_SIZE));
+    }
+    const qint64 after = f.pos() + static_cast<qint64>(KartFormat::SHA256_SIZE) +
+                         static_cast<qint64>(payloadSizeRes.value());
+    if (after > f.size() || !f.seek(after)) {
+      return readError("Declared length exceeds remaining file size",
+                       QString("requested=%1 remaining=%2 at offset=%3")
+                           .arg(payloadSizeRes.value())
+                           .arg(f.size() - f.pos())
+                           .arg(f.pos()));
+    }
+    ++count;
+  }
+  return count;
+}
+
 Extractor::Extractor(QObject *parent) : QObject(parent) {}
 
 ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
@@ -204,7 +259,22 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
   if (manifestRes.isError()) return manifestRes.error();
 
   QDir dest(destDir);
-  if (!dest.exists() && !dest.mkpath(".")) {
+  if (dest.exists()) {
+    // Kartend-qbfk1: extraction only ever targets a fresh directory. The
+    // traversal guards below keep every entry INSIDE the destination, but
+    // that is no protection when the destination itself is full of the
+    // user's files — a bundle needs no traversal at all to land
+    // '.config/autostart/evil.desktop' once the destination is $HOME. The
+    // explicit Hidden|System filters are the point: QDir::isEmpty()'s
+    // defaults skip dotfiles, and a home directory populated only by
+    // dotfiles must not count as empty.
+    if (!dest.isEmpty(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System)) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidFilePath,
+                                             "Destination directory is not empty",
+                                             "KartReader::extractTo")
+          .withDetails(destDir);
+    }
+  } else if (!dest.mkpath(".")) {
     return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
                                            "Cannot create destination directory",
                                            "KartReader::extractTo")
@@ -226,6 +296,12 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
   // launchmanagerarchive's cumulative MAX_EXTRACTION_BYTES.
   quint64 entryCount = 0;
   quint64 totalExtractedBytes = 0;
+  // Kartend-qbfk1: one entry must not overwrite another within the same
+  // bundle. Keys are cleaned and lowercased so a pair that collides only on
+  // a case-insensitive filesystem (Windows, default macOS) is rejected on
+  // every platform — the same portable-.kart rule as the Windows segment
+  // checks in isSegmentSafe, and the same over-report direction.
+  QSet<QString> seenEntryPaths;
 
   while (!f.atEnd()) {
     if (m_cancel.loadRelaxed()) {
@@ -290,6 +366,12 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
     if (!isPathSafe(relPath)) {
       return readError("Unsafe entry path (traversal or absolute)", relPath);
     }
+
+    const QString dupKey = QDir::cleanPath(relPath).toLower();
+    if (seenEntryPaths.contains(dupKey)) {
+      return readError("Duplicate entry path in Kart bundle", relPath);
+    }
+    seenEntryPaths.insert(dupKey);
 
     const QString destPath = dest.absoluteFilePath(relPath);
     const QString cleaned = QDir::cleanPath(destPath);
@@ -362,6 +444,19 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
                                              "Cannot create entry parent directory",
                                              "KartReader::extractTo")
           .withDetails(fi.absolutePath());
+    }
+    // Kartend-qbfk1: nothing may already exist where an entry wants to land.
+    // The destination started empty and duplicates were rejected above, so a
+    // hit here is an entry colliding with a directory an earlier entry's
+    // parent chain created ('a/b' followed by 'a'), or something external
+    // racing the extraction. QSaveFile::commit() renames over its target, so
+    // without this check either would be silently replaced. isSymLink()
+    // covers the dangling link exists() reports false for.
+    if (fi.exists() || fi.isSymLink()) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::FileWriteError,
+                                             "Entry would overwrite an existing path",
+                                             "KartReader::extractTo")
+          .withDetails(relPath);
     }
     QSaveFile out(cleaned);
     if (!out.open(QIODevice::WriteOnly)) {

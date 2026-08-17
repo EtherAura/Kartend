@@ -57,6 +57,14 @@ struct PreflightReport {
   int launcherCount = 0;
   bool hasArtworkOverrides = false;
   bool hasMetadata = false;
+  /// Kartend-qbfk1: extraction-policy facts the dialog surfaces so the user
+  /// knows what lands on disk before choosing a destination. Set by the
+  /// import flow (they need container I/O and the manager's name derivation,
+  /// which buildReport — a pure manifest pass — deliberately doesn't do).
+  /// bundleEntryCount is -1 when the container walk failed; the name of the
+  /// fresh subdirectory everything extracts into is empty when unknown.
+  int bundleEntryCount = -1;
+  QString extractionSubdirName;
 
   // ─── Issues to surface ────────────────────────────────────
   QList<LauncherIssue> launcherIssues;

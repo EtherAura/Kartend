@@ -151,10 +151,14 @@ the hierarchy afterwards; see
 5. After import, the new collection appears in the tree (typically at
    the destination you chose, or root by default).
 
-A **destination directory** can be picked during import — Kartend may
-update the imported collection's `mediaDirectory` to point at this
-destination if it doesn't exist on the target system. Useful when
-moving between your own machines with different paths.
+A **destination directory** can be picked during import. The bundle's
+content is never extracted loose into that directory: Kartend creates a
+**new folder named for the bundle** inside it and unpacks there (the
+preflight dialog shows the folder name and file count up front). If a
+non-empty folder with that name already exists, the import is refused
+rather than writing over anything. The imported collection's
+`mediaDirectory` points inside the new folder — useful when moving
+between your own machines with different paths.
 
 ### From the command line
 
@@ -167,7 +171,7 @@ kartend --import-kart ~/backups/films.kart \
 | Flag | Description |
 |------|-------------|
 | `--import-kart <path>` | Path to the `.kart` file. |
-| `--to <dir>` | (Optional) Destination directory; updates `mediaDirectory` to this path if originally pointed elsewhere. |
+| `--to <dir>` | (Optional) Destination directory; the bundle is unpacked into a new folder named for it under this path, and `mediaDirectory` is updated to match. |
 | `--on-conflict <policy>` | `skip` (default) / `overwrite` / `merge`. See [policies](#conflict-policies). |
 
 Headless. Exit `0` on success, `2` on failure (bad path, unknown
@@ -229,8 +233,10 @@ confirmation lists the same rows and defaults to **Cancel**.
 > to make at the confirmation above — see the warning at the top of this
 > page.
 >
-> Prefer an empty destination directory, so an import cannot land on
-> top of files you already have.
+> An import also cannot land on top of files you already have: content
+> only ever unpacks into a fresh bundle-named folder, extraction into a
+> non-empty target is refused outright, and a bundle that tries to write
+> the same file twice is rejected as malformed.
 
 You can **Accept** to continue (which then hands off to the merge
 dialog if needed) or **Reject** to cancel without touching the
