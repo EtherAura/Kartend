@@ -79,6 +79,24 @@ KartMergeDialog::KartMergeDialog(const QString &itemPath,
          incoming.launcherIndex >= 0 ? QString::number(incoming.launcherIndex) : QString(),
          &m_policy.preferIncomingLauncherIndex);
   addRow(tr("Source"), existing.source, incoming.source, &m_policy.preferIncomingSource);
+  // Kartend-fh3ab: the user-state fields the manifest now round-trips. A
+  // false flag renders as an empty side (indistinguishable from "never
+  // toggled"), matching how unset strings and numbers read above; the
+  // merge unions flags unless "use incoming" is ticked, which copies the
+  // incoming value exactly and can therefore clear a local toggle.
+  const auto flagLabel = [this](bool set) { return set ? tr("set") : QString(); };
+  addRow(tr("Notes"), existing.notes, incoming.notes, &m_policy.preferIncomingNotes);
+  addRow(tr("Source URL"), existing.sourceUrl, incoming.sourceUrl,
+         &m_policy.preferIncomingSourceUrl);
+  addRow(tr("Rating"), existing.rating >= 0 ? QString::number(existing.rating) : QString(),
+         incoming.rating >= 0 ? QString::number(incoming.rating) : QString(),
+         &m_policy.preferIncomingRating);
+  addRow(tr("Pinned"), flagLabel(existing.isPinned), flagLabel(incoming.isPinned),
+         &m_policy.preferIncomingIsPinned);
+  addRow(tr("Hidden"), flagLabel(existing.isHidden), flagLabel(incoming.isHidden),
+         &m_policy.preferIncomingIsHidden);
+  addRow(tr("Continue later"), flagLabel(existing.continueLater), flagLabel(incoming.continueLater),
+         &m_policy.preferIncomingContinueLater);
   root->addWidget(fields);
 
   m_applyToAllCheck = new QCheckBox(tr("Apply this choice to all remaining conflicts"), this);

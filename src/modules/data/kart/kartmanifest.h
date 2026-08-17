@@ -13,6 +13,19 @@
 
 namespace KartManifest {
 
+/// One bundled hand-linked artwork file — an `item_artwork` row whose
+/// manual_path file travels inside the .kart (Kartend-fh3ab). `type` is the
+/// artwork_type EXACTLY as stored (custom types included; only the payload
+/// filename is sanitized), `path` is the in-bundle payload path
+/// (`item_artwork/<item index>/<type>.<ext>`). On import the extracted file
+/// becomes the new collection's manual link for that type.
+struct ArtworkLink {
+  QString type;
+  QString path;
+
+  bool operator==(const ArtworkLink &other) const = default;
+};
+
 struct Item {
   QString mediaPath;
   QString artworkPath;
@@ -21,6 +34,7 @@ struct Item {
   QString title;
   ItemMetadataStore::ItemMetadata metadata;
   int launcherIndex = -1;
+  QList<ArtworkLink> artworkLinks;
 
   bool operator==(const Item &other) const = default;
 };

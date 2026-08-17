@@ -430,10 +430,17 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
   auto persistRes =
       persistImportedMetadata(db, result.manifest, result.destDir, collectionUuid,
                               resolver ? resolver : makeFixedChoiceResolver(MergeChoice::Skip));
-  closeMediaDbConnection(db);
-
   if (persistRes.isError()) {
+    closeMediaDbConnection(db);
     return persistRes.error();
+  }
+  // Kartend-fh3ab: point item_artwork rows at the bundled hand-linked
+  // artwork the extraction just wrote, so imported covers survive the
+  // machine move exactly like the rest of the metadata.
+  auto linksRes = persistImportedArtworkLinks(db, result.manifest, result.destDir, collectionUuid);
+  closeMediaDbConnection(db);
+  if (linksRes.isError()) {
+    return linksRes.error();
   }
 
   // Kartend-kmj1: restore bundled playlists onto the freshly-registered

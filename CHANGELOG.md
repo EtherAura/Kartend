@@ -248,6 +248,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A .kart backup no longer forgets your notes, ratings, pins — or your
+  hand-picked covers.** Exporting a collection silently dropped the
+  personal half of each item's metadata: notes, rating, source URL and
+  the pinned / hidden / continue-later flags never entered the bundle,
+  and hand-linked artwork (covers you attached through the links dialog
+  or the Artwork Wizard) wasn't bundled at all — so an export-then-import
+  quietly lost exactly the data you can't re-scrape. All of it now
+  round-trips: the six fields travel in the manifest (older bundles
+  still import, with those fields simply unset), linked artwork files
+  are copied into the bundle and re-linked on import — without ever
+  replacing a link you already made on the importing machine — and the
+  merge dialog offers the new fields per-side like every other field,
+  with the safety rule that a merge never silently clears a local pin.
+  The backup guide's "lost on a round-trip" warning is gone because the
+  loss is gone.
+
 - **Clicking empty space in Cover Flow no longer throws the carousel
   back to the first item.** A left-click that missed every card — easy
   to do given the carousel's large margins, or when clicking the window

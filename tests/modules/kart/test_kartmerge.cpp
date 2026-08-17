@@ -1,9 +1,12 @@
+#include <QDir>
+#include <QFile>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QTest>
 
 #include "dbmigrations.h"
+#include "itemartwork.h"
 #include "itemmetadata.h"
 #include "kartmanifest.h"
 #include "kartmerge.h"
@@ -26,6 +29,14 @@ private slots:
   void testPersistMergeModeAppliesPolicy();
   void testPersistSkipModeKeepsExisting();
   void testPersistApplyToAllSuppressesFurtherPrompts();
+
+  // Kartend-fh3ab: user-state fields in the merge, and hand-linked artwork
+  // restoration.
+  void testUserStateFieldsMergeSemantics();
+  void testPersistRoundTripsUserStateFields();
+  void testArtworkLinkRestoreWritesRow();
+  void testArtworkLinkRestoreNeverClobbersLocalLink();
+  void testArtworkLinkRestoreSkipsHostileAndMissingPaths();
 };
 
 namespace {
@@ -356,6 +367,177 @@ void TestKartMerge::testPersistApplyToAllSuppressesFurtherPrompts() {
     auto loaded = ItemMetadataStore::load(
         db, "u", QDir(destRoot.path()).filePath(QString("media/x%1.bin").arg(i)));
     QCOMPARE(loaded.value().title, QString("New %1").arg(i));
+  }
+
+  closeMemoryDb(db, conn);
+}
+
+// ----- Kartend-fh3ab: user-state fields + artwork link restoration -----
+
+void TestKartMerge::testUserStateFieldsMergeSemantics() {
+  ItemMetadataStore::ItemMetadata existing;
+  existing.notes = "mine";
+  existing.rating = 8;
+  existing.isPinned = true;
+
+  ItemMetadataStore::ItemMetadata incoming;
+  incoming.notes = "theirs";
+  incoming.sourceUrl = "https://example.org";
+  incoming.rating = 3;
+  incoming.isHidden = true;
+
+  // Default policy: existing wins where set, unset fills from incoming, and
+  // flags union — a merge can never silently lose a local pin.
+  kart::MergePolicy keep;
+  auto merged = kart::mergeItemMetadata(existing, incoming, keep);
+  QCOMPARE(merged.notes, QString("mine"));
+  QCOMPARE(merged.sourceUrl, QString("https://example.org")); // filled from incoming
+  QCOMPARE(merged.rating, 8);
+  QVERIFY(merged.isPinned); // local flag survives
+  QVERIFY(merged.isHidden); // incoming flag unions in
+  QVERIFY(!merged.continueLater);
+
+  // "Prefer incoming" copies the incoming value exactly — including a false
+  // flag, which deliberately CAN clear a local toggle.
+  kart::MergePolicy prefer;
+  prefer.preferIncomingNotes = true;
+  prefer.preferIncomingRating = true;
+  prefer.preferIncomingIsPinned = true;
+  merged = kart::mergeItemMetadata(existing, incoming, prefer);
+  QCOMPARE(merged.notes, QString("theirs"));
+  QCOMPARE(merged.rating, 3);
+  QVERIFY(!merged.isPinned); // incoming false wins under prefer-incoming
+}
+
+void TestKartMerge::testPersistRoundTripsUserStateFields() {
+  const QString conn = "fh3ab-userstate";
+  QSqlDatabase db = openMemoryDb(conn);
+
+  ItemMetadataStore::ItemMetadata meta;
+  meta.notes = "round-trip notes";
+  meta.sourceUrl = "https://example.org/item";
+  meta.rating = 9;
+  meta.isPinned = true;
+  meta.isHidden = true;
+  meta.continueLater = true;
+
+  auto res =
+      kart::persistImportedMetadata(db, manifestWithSingleItem(meta), "/dest", "uuid-1", nullptr);
+  QVERIFY2(res.isOk(), qPrintable(res.error().message));
+  QCOMPARE(res.value().written, 1);
+
+  auto loaded = ItemMetadataStore::load(db, "uuid-1", "/dest/media/x.bin");
+  QVERIFY2(loaded.isOk(), qPrintable(loaded.error().message));
+  QCOMPARE(loaded.value().notes, meta.notes);
+  QCOMPARE(loaded.value().sourceUrl, meta.sourceUrl);
+  QCOMPARE(loaded.value().rating, 9);
+  QVERIFY(loaded.value().isPinned);
+  QVERIFY(loaded.value().isHidden);
+  QVERIFY(loaded.value().continueLater);
+
+  closeMemoryDb(db, conn);
+}
+
+namespace {
+KartManifest::Manifest manifestWithArtworkLink(const QString &type, const QString &bundlePath) {
+  ItemMetadataStore::ItemMetadata meta;
+  meta.title = "X";
+  KartManifest::Manifest m = manifestWithSingleItem(meta);
+  m.items.first().artworkLinks.append({type, bundlePath});
+  return m;
+}
+} // namespace
+
+void TestKartMerge::testArtworkLinkRestoreWritesRow() {
+  const QString conn = "fh3ab-artlink";
+  QSqlDatabase db = openMemoryDb(conn);
+
+  QTemporaryDir dest;
+  QVERIFY(dest.isValid());
+  QDir(dest.path()).mkpath("item_artwork/0");
+  const QString payload = QDir(dest.path()).filePath("item_artwork/0/front.png");
+  {
+    QFile f(payload);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write(QByteArray(32, 'p'));
+  }
+
+  const auto m = manifestWithArtworkLink("front", "item_artwork/0/front.png");
+  auto res = kart::persistImportedArtworkLinks(db, m, dest.path(), "uuid-1");
+  QVERIFY2(res.isOk(), qPrintable(res.error().message));
+  QCOMPARE(res.value().written, 1);
+  QCOMPARE(res.value().skipped, 0);
+
+  auto row =
+      ItemArtworkStore::load(db, "uuid-1", QDir(dest.path()).filePath("media/x.bin"), "front");
+  QVERIFY2(row.isOk(), qPrintable(row.error().message));
+  QCOMPARE(row.value().manualPath, payload);
+
+  closeMemoryDb(db, conn);
+}
+
+void TestKartMerge::testArtworkLinkRestoreNeverClobbersLocalLink() {
+  const QString conn = "fh3ab-noclobber";
+  QSqlDatabase db = openMemoryDb(conn);
+
+  QTemporaryDir dest;
+  QVERIFY(dest.isValid());
+  QDir(dest.path()).mkpath("item_artwork/0");
+  {
+    QFile f(QDir(dest.path()).filePath("item_artwork/0/front.png"));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("bundled");
+  }
+
+  ItemArtworkStore::ItemArtwork local;
+  local.collectionUuid = "uuid-1";
+  local.path = QDir(dest.path()).filePath("media/x.bin");
+  local.artworkType = "front";
+  local.manualPath = "/home/user/precious-cover.png";
+  QVERIFY(ItemArtworkStore::save(db, local).isOk());
+
+  const auto m = manifestWithArtworkLink("front", "item_artwork/0/front.png");
+  auto res = kart::persistImportedArtworkLinks(db, m, dest.path(), "uuid-1");
+  QVERIFY2(res.isOk(), qPrintable(res.error().message));
+  QCOMPARE(res.value().written, 0);
+  QCOMPARE(res.value().skipped, 1);
+
+  auto row = ItemArtworkStore::load(db, "uuid-1", local.path, "front");
+  QVERIFY2(row.isOk(), qPrintable(row.error().message));
+  QCOMPARE(row.value().manualPath, QString("/home/user/precious-cover.png"));
+
+  closeMemoryDb(db, conn);
+}
+
+void TestKartMerge::testArtworkLinkRestoreSkipsHostileAndMissingPaths() {
+  const QString conn = "fh3ab-hostile";
+  QSqlDatabase db = openMemoryDb(conn);
+
+  QTemporaryDir dest;
+  QVERIFY(dest.isValid());
+
+  ItemMetadataStore::ItemMetadata meta;
+  meta.title = "X";
+  KartManifest::Manifest m = manifestWithSingleItem(meta);
+  // The extractor never produces any of these shapes, so a manifest carrying
+  // them was authored by hand — none may become a link row.
+  m.items.first().artworkLinks.append(
+      KartManifest::ArtworkLink{QStringLiteral("front"), QStringLiteral("../outside.png")});
+  m.items.first().artworkLinks.append(
+      KartManifest::ArtworkLink{QStringLiteral("box"), QStringLiteral("/etc/passwd")});
+  m.items.first().artworkLinks.append(KartManifest::ArtworkLink{
+      QStringLiteral("title"), QStringLiteral("item_artwork/0/never-extracted.png")});
+
+  auto res = kart::persistImportedArtworkLinks(db, m, dest.path(), "uuid-1");
+  QVERIFY2(res.isOk(), qPrintable(res.error().message));
+  QCOMPARE(res.value().written, 0);
+  QCOMPARE(res.value().skipped, 3);
+
+  const QString itemPath = QDir(dest.path()).filePath("media/x.bin");
+  for (const char *type : {"front", "box", "title"}) {
+    auto row = ItemArtworkStore::load(db, "uuid-1", itemPath, type);
+    QVERIFY2(row.isOk(), qPrintable(row.error().message));
+    QVERIFY(row.value().manualPath.isEmpty());
   }
 
   closeMemoryDb(db, conn);

@@ -5544,7 +5544,42 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+6"/>
+        <source>set</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Notes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Source URL</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Rating</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+3"/>
+        <source>Pinned</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Hidden</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Continue later</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
         <source>Apply this choice to all remaining conflicts</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5646,12 +5681,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+2"/>
-        <location line="+80"/>
+        <location line="+79"/>
         <source>Launchers</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-78"/>
+        <location line="-77"/>
         <source>Bundled metadata</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5673,7 +5708,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+7"/>
         <source>a new folder “%1” inside the destination you choose next</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8183,7 +8218,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/kart/kartmergedialog.cpp" line="-75"/>
+        <location filename="../src/ui/dialogs/kart/kartmergedialog.cpp" line="-93"/>
         <source>(empty)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11970,7 +12005,7 @@ Continue?</source>
 <context>
     <name>kart::KartManager</name>
     <message>
-        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+659"/>
+        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+667"/>
         <location line="+1"/>
         <location line="+7"/>
         <location line="+94"/>

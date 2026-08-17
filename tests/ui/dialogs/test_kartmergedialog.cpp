@@ -74,8 +74,14 @@ QList<bool> policyFlags(const kart::MergePolicy &p) {
       p.preferIncomingDeveloper,     p.preferIncomingPublisher,    p.preferIncomingReleaseDate,
       p.preferIncomingContentRating, p.preferIncomingPlayers,      p.preferIncomingRuntimeSeconds,
       p.preferIncomingTags,          p.preferIncomingCustomFields, p.preferIncomingManualPath,
-      p.preferIncomingLauncherIndex, p.preferIncomingSource};
+      p.preferIncomingLauncherIndex, p.preferIncomingSource,       p.preferIncomingNotes,
+      p.preferIncomingSourceUrl,     p.preferIncomingRating,       p.preferIncomingIsPinned,
+      p.preferIncomingIsHidden,      p.preferIncomingContinueLater};
 }
+
+/// One entry per dialog form row, same order as policyFlags(). Kartend-fh3ab
+/// grew the grid from 14 rows to 20.
+constexpr int kFieldRowCount = 20;
 
 ItemMetadataStore::ItemMetadata makeMeta(const QString &title) {
   ItemMetadataStore::ItemMetadata m;
@@ -147,13 +153,16 @@ void TestKartMergeDialog::secondMergeClickMapsCheckedRowsOntoPolicy() {
   KartMergeDialog dlg(QStringLiteral("/m/a.mkv"), makeMeta(QStringLiteral("Old")),
                       makeMeta(QStringLiteral("New")));
   const QList<QCheckBox *> checks = fieldChecks(dlg);
-  QCOMPARE(checks.size(), 14);
+  QCOMPARE(checks.size(), kFieldRowCount);
 
-  // Title (0), Genre (2), Tags (9), Source (13) → incoming; rest existing.
+  // Title (0), Genre (2), Tags (9), Source (13), Rating (16), Pinned (17)
+  // → incoming; rest existing. The last two cover the Kartend-fh3ab rows.
   checks[0]->setChecked(true);
   checks[2]->setChecked(true);
   checks[9]->setChecked(true);
   checks[13]->setChecked(true);
+  checks[16]->setChecked(true);
+  checks[17]->setChecked(true);
 
   QSignalSpy accepted(&dlg, &QDialog::accepted);
   QPushButton *merge = mergeButton(dlg);
@@ -164,7 +173,7 @@ void TestKartMergeDialog::secondMergeClickMapsCheckedRowsOntoPolicy() {
   QCOMPARE(dlg.choice(), kart::MergeChoice::Merge);
 
   const QList<bool> flags = policyFlags(dlg.policy());
-  const QList<int> expectedOn{0, 2, 9, 13};
+  const QList<int> expectedOn{0, 2, 9, 13, 16, 17};
   for (int i = 0; i < flags.size(); ++i) {
     QCOMPARE(flags[i], expectedOn.contains(i));
   }
@@ -174,11 +183,11 @@ void TestKartMergeDialog::everyFieldRowMapsToExactlyItsOwnPolicyFlag() {
   // Full bijection sweep: checking row i must set flag i and nothing else.
   // A swapped pair in the addRow sequence (e.g. developer/publisher) would
   // silently merge the wrong field and pass any single-spot check.
-  for (int i = 0; i < 14; ++i) {
+  for (int i = 0; i < kFieldRowCount; ++i) {
     KartMergeDialog dlg(QStringLiteral("/m/a.mkv"), makeMeta(QStringLiteral("Old")),
                         makeMeta(QStringLiteral("New")));
     const QList<QCheckBox *> checks = fieldChecks(dlg);
-    QCOMPARE(checks.size(), 14);
+    QCOMPARE(checks.size(), kFieldRowCount);
     checks[i]->setChecked(true);
 
     QPushButton *merge = mergeButton(dlg);

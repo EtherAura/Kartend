@@ -11,6 +11,7 @@
 #include <QSqlDatabase>
 
 #include "extensionutils.h"
+#include "itemartwork.h"
 #include "itemmetadata.h"
 #include "kartcompression.h"
 #include "kartformat.h"
@@ -19,6 +20,36 @@
 namespace KartWriter {
 
 namespace {
+
+// Kartend-fh3ab: filename-safe rendering of an artwork_type for the
+// in-bundle payload path. Only the FILENAME is sanitized — the manifest
+// carries the exact type string. The output must pass the reader's
+// isSegmentSafe: lowercase [a-z0-9_-] only, and a stem that lands on a
+// Windows reserved device name gets a prefix so the bundle this writer
+// produces is one the reader will accept.
+QString artworkTypeFileStem(const QString &type) {
+  QString stem;
+  stem.reserve(type.size());
+  for (const QChar &c : type) {
+    const QChar low = c.toLower();
+    const char16_t u = low.unicode();
+    const bool keep =
+        (u >= u'a' && u <= u'z') || (u >= u'0' && u <= u'9') || u == u'-' || u == u'_';
+    stem.append(keep ? low : QLatin1Char('_'));
+  }
+  if (stem.isEmpty()) {
+    stem = QStringLiteral("type");
+  }
+  static const QSet<QString> kReserved = {"con", "prn", "aux", "nul"};
+  const bool reservedComLpt =
+      stem.size() == 4 &&
+      (stem.startsWith(QLatin1String("com")) || stem.startsWith(QLatin1String("lpt"))) &&
+      stem.at(3) >= QLatin1Char('1') && stem.at(3) <= QLatin1Char('9');
+  if (kReserved.contains(stem) || reservedComLpt) {
+    stem.prepend(QStringLiteral("t_"));
+  }
+  return stem;
+}
 
 const QSet<QString> &compressedExtensions() {
   static const QSet<QString> set = {
@@ -354,6 +385,7 @@ ErrorUtils::Result<void> Writer::writeKart(const QString &outPath, const WriterP
       if (!it.artworkAbs.isEmpty()) ++n;
       if (!it.videoAbs.isEmpty()) ++n;
       if (!it.manualAbs.isEmpty()) ++n;
+      n += static_cast<int>(it.artworkLinkAbs.size());
     }
     return n;
   }();
@@ -414,6 +446,15 @@ ErrorUtils::Result<void> Writer::writeKart(const QString &outPath, const WriterP
     }
     if (!item.manualAbs.isEmpty() && !item.manifestItem.manualPath.isEmpty()) {
       auto r = writeOne(item.manualAbs, item.manifestItem.manualPath, KartFormat::Flag_Manual);
+      if (r.isError()) return r.error();
+    }
+    // Kartend-fh3ab: hand-linked artwork payloads, index-aligned with the
+    // manifest's artworkLinks (prepareFromCollection builds both together).
+    const qsizetype linkCount =
+        qMin(item.artworkLinkAbs.size(), item.manifestItem.artworkLinks.size());
+    for (qsizetype li = 0; li < linkCount; ++li) {
+      auto r = writeOne(item.artworkLinkAbs.at(li), item.manifestItem.artworkLinks.at(li).path,
+                        KartFormat::Flag_Artwork);
       if (r.isError()) return r.error();
     }
   }
@@ -516,6 +557,46 @@ ErrorUtils::Result<WriterParams> prepareFromCollection(const CollectionConfig &c
         item.manifestItem.metadata.path.clear();
         item.manifestItem.metadata.updatedAt.clear();
         item.manifestItem.launcherIndex = item.manifestItem.metadata.launcherIndex;
+      }
+
+      // Kartend-fh3ab: bundle the item's hand-linked artwork. The sibling
+      // scan above only finds name-matched files under artworkDirectory; an
+      // item_artwork manual link can point anywhere on disk, and those files
+      // are exactly what a backup must carry. Payloads are laid out
+      // item_artwork/<item index>/<type>.<ext> — the index namespaces items
+      // (two items may link files with colliding names), the manifest keeps
+      // the exact type string, and only the filename is sanitized. A dead
+      // link (file since deleted) is skipped, matching how the UI resolves
+      // it to nothing rather than erroring.
+      auto links = ItemArtworkStore::loadAllForItem(*db, collectionUuid, item.mediaAbs);
+      if (links.isOk()) {
+        QSet<QString> usedNames;
+        for (const ItemArtworkStore::ItemArtwork &row : links.value()) {
+          if (item.manifestItem.artworkLinks.size() >=
+              KartFormat::MAX_MANIFEST_ARTWORK_LINKS_PER_ITEM) {
+            break; // reader-enforced ceiling — never write a bundle it rejects
+          }
+          if (row.manualPath.isEmpty()) continue;
+          const QString abs = PathUtils::expandPathWithoutExistenceCheck(row.manualPath);
+          if (!QFileInfo::exists(abs)) continue;
+          const QString suffix = QFileInfo(abs).suffix().toLower();
+          const QString base = artworkTypeFileStem(row.artworkType) +
+                               (suffix.isEmpty() ? QString() : QStringLiteral(".") + suffix);
+          // Distinct types can sanitize to the same filename; bump until
+          // free so the extractor's duplicate-entry guard never trips on a
+          // bundle this writer produced.
+          QString name = base;
+          int bump = 2;
+          while (usedNames.contains(name)) {
+            name = QString::number(bump++) + QStringLiteral("-") + base;
+          }
+          usedNames.insert(name);
+          KartManifest::ArtworkLink link;
+          link.type = row.artworkType;
+          link.path = QStringLiteral("item_artwork/%1/%2").arg(params.items.size()).arg(name);
+          item.manifestItem.artworkLinks.append(link);
+          item.artworkLinkAbs.append(abs);
+        }
       }
     }
 

@@ -46,13 +46,17 @@ Bundled per item — exactly these fields, no others:
   `release_date`, `content_rating`, `players`, `runtime_seconds`
 - `tags`, `custom_fields`
 - `manual_path`, `launcher_index`, `source`
+- `notes`, `rating`, `source_url`, and the pinned / hidden /
+  continue-later state flags
+- **Hand-linked artwork**: every `item_artwork` link whose file still
+  exists is copied into the bundle (under `item_artwork/`) and
+  re-linked on import, so hand-picked covers survive a machine move.
+  A link whose file has since been deleted is skipped, and an import
+  never replaces a link you already made locally.
 
-> **Not bundled per item, and lost on a round-trip:** notes, rating,
-> source URL, and the pinned / hidden / continue-later state flags.
-> Per-item **artwork links** are not bundled either — the `item_artwork`
-> table is not touched by the kart format at all. If any of those
-> matter to you, back up `media.db` as well; a `.kart` is not a
-> substitute. (Tracked as a defect, not a design choice.)
+> Older bundles (written before the user-state fields and artwork
+> links were added) still import cleanly — the missing fields simply
+> stay unset, exactly as they were exported.
 
 Bundled per collection:
 
@@ -305,9 +309,14 @@ collection:
 - The grid has one row per metadata field (title, description, genre,
   developer, publisher, release date, content rating, players,
   runtime, tags, custom fields, manual path, launcher override,
-  source), each with a "use incoming" checkbox that **Merge…** honours.
+  source, notes, source URL, rating, pinned, hidden, continue later),
+  each with a "use incoming" checkbox that **Merge…** honours.
 - **Skip** and **Overwrite** ignore the checkboxes and take one side
   whole.
+- For the three state flags, **Merge…** without "use incoming" keeps a
+  flag set on either side (a merge can never silently lose a local
+  pin); ticking "use incoming" copies the incoming value exactly, which
+  can clear a local toggle.
 - **Apply this choice to all remaining conflicts** turns your answer
   into the policy for the rest of the import.
 
