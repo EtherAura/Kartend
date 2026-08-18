@@ -203,6 +203,13 @@ void InteractionManager::connectGamepadManagerSignals() {
           tree->toggleVisible();
         }
       });
+  connect(m_gamepadManager.get(), &GamepadManager::requestFocusSectionMove, this,
+          [this](int dx, int dy) {
+            if (modalInputGateActive()) {
+              return;
+            }
+            moveFocusSection(dx, dy);
+          });
   connect(m_gamepadManager.get(), &GamepadManager::requestScrollAnimationStop, this, [this]() {
     if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
       m_animationManager->verticalAnimation()->stop();

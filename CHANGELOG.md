@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edge. The details pane's existing Position control keeps working — it
   and the new page edit the same setting.
 
+- **Hold Select and press a direction to move between sections.** With
+  the Select/Create button held, the d-pad or stick hops keyboard focus
+  spatially: left to the collection tree, right to the details pane, up to
+  the toolbar row, and back to the grid — hidden panels are skipped. Once
+  a sidebar has focus, directions and Enter operate it natively.
+
 - **The shoulder buttons now toggle the sidebars.** On a gamepad, L1
   folds the left sidebar (the collection tree) and R1 the right one (the
   details pane) — matching their physical sides. Existing custom bindings

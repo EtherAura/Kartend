@@ -157,6 +157,12 @@ class InteractionManager : public QObject, public IInteractionManager {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(InteractionManager)
 public:
+  /// Select+direction section chord (user request 2026-08-17): move the
+  /// keyboard focus between the app's sections — grid, toolbar row, left
+  /// sidebar (collection tree), right sidebar (details pane) — honouring
+  /// each section's visibility. dx/dy are -1/0/+1. Public for the
+  /// integration tests.
+  void moveFocusSection(int dx, int dy);
   explicit InteractionManager(QObject *parent = nullptr);
   ~InteractionManager() override;
   void setupReferences(const InteractionManagerSetup &setup);

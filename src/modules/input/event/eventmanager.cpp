@@ -15,6 +15,7 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
+#include "idetailspane.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "collection/hierarchyhelpers.h"
@@ -296,6 +297,20 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
   // every key into grid-selection navigation instead.
   if (m_ctx && m_ctx->ui.collectionTreeWidget && m_ctx->ui.collectionTreeWidget->hasFocus()) {
     return false;
+  }
+
+  // Same stand-down while the details pane or the top bar hold focus — the
+  // Select+direction section chord parks focus there deliberately
+  // (2026-08-17), and the owning widgets handle keys natively.
+  if (m_ctx) {
+    QWidget *fw = QApplication::focusWidget();
+    auto *paneW = dynamic_cast<QWidget *>(m_ctx->ui.sidebar);
+    const auto within = [fw](QWidget *w) {
+      return w && fw && (w == fw || w->isAncestorOf(fw));
+    };
+    if (within(paneW) || within(m_ctx->ui.itemsTopBar)) {
+      return false;
+    }
   }
 
   // Delegate to KeyboardManager for key handling

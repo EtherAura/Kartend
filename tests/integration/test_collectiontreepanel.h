@@ -25,6 +25,10 @@ private slots:
   // inside the viewport. Guards the decoration-rect geometry that clipped
   // icons at the panel edge (field reports 2026-08-17).
   void icons_onIndentedRows_renderCenteredAndUnclipped();
+
+  // Select+direction section chord (2026-08-17): left focuses the tree,
+  // right returns to the grid; a hidden tree is skipped.
+  void focusSectionChord_movesBetweenTreeAndGrid();
 };
 
 #endif // TEST_COLLECTIONTREEPANEL_H

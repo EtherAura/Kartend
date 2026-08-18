@@ -284,6 +284,7 @@ distro-specific [Launchers + dependencies](../../readme.md#dependencies).
 | `B` (or equivalent) | Back / close | `gamepadBackButton` |
 | `R1` (or equivalent) | Toggle the details pane (right sidebar) | `gamepadToggleSidebarButton` |
 | `L1` (or equivalent) | Toggle the collection tree (left sidebar) | `gamepadToggleCollectionTreeButton` |
+| `Select` + direction | Move focus between sections (grid, toolbar, sidebars) | — |
 
 D-pad and left stick can be enabled / disabled independently. Held
 input repeats at the same cadence as keyboard repeat

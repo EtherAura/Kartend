@@ -1,7 +1,9 @@
 #include "test_collectiontreepanel.h"
 
 #include "collection/collectionconfig.h"
+#include "applicationmanager.h"
 #include "collectiontreecontroller.h"
+#include "interactionmanager.h"
 #include "mainwindow.h"
 #include "mocks/mockedmainwindowfixture.h"
 
@@ -193,4 +195,40 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAndUnclipped() 
                                      "headroom is leaking into unboosted rows")
                           .arg(childRowH)
                           .arg(baseIconSize)));
+}
+
+void TestCollectionTreePanel::focusSectionChord_movesBetweenTreeAndGrid() {
+  CollectionConfig shell;
+  shell.name = QStringLiteral("Shell");
+  CollectionConfig child;
+  child.name = QStringLiteral("Child");
+  child.parentCollectionIndex = 0;
+  KartendTest::MockedMainWindowFixture fixture({shell, child});
+  MainWindow *win = fixture.window();
+  QVERIFY(win);
+  win->show();
+  QVERIFY(QTest::qWaitForWindowExposed(win));
+  QApplication::setActiveWindow(win);
+
+  auto *im = win->getApplicationManager()->getInteractionManager();
+  QVERIFY(im);
+  auto *tree = win->findChild<QTreeWidget *>(QStringLiteral("collectionTreeWidget"));
+  QVERIFY(tree);
+  QVERIFY(tree->isVisible());
+
+  im->moveFocusSection(-1, 0); // grid -> left sidebar
+  QVERIFY2(tree->hasFocus(), "Select+Left must focus the collection tree");
+
+  im->moveFocusSection(1, 0); // tree -> grid
+  QVERIFY2(!tree->hasFocus(), "Select+Right must hand focus back to the grid");
+
+  // Hidden tree is skipped: fold the panel, chord left again — focus must
+  // NOT land on a hidden section.
+  auto *controller = win->findChild<CollectionTreeController *>();
+  QVERIFY(controller);
+  if (controller->isPanelVisible()) {
+    controller->toggleVisible();
+  }
+  im->moveFocusSection(-1, 0);
+  QVERIFY2(!tree->hasFocus(), "a folded tree must not receive chord focus");
 }

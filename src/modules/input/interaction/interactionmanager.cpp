@@ -533,3 +533,72 @@ void InteractionManager::trySelectWidget(int index, const QList<int> &subcollect
 
 // Cycles search mode regardless of search text; only updates results when there
 // is search text
+
+void InteractionManager::moveFocusSection(int dx, int dy) {
+  if (!m_ctx) {
+    return;
+  }
+  // Section chord (user request 2026-08-17): spatial moves between the
+  // grid, the top bar, and the two sidebars, from wherever focus is now.
+  enum class Section { Grid, Tree, Pane, Toolbar };
+  QWidget *fw = QApplication::focusWidget();
+  QWidget *treeW = m_ctx->ui.collectionTreeWidget;
+  auto *paneW = dynamic_cast<QWidget *>(m_ctx->ui.sidebar);
+  QWidget *toolbarW = m_ctx->ui.itemsTopBar;
+  QWidget *gridW = m_ctx->ui.itemScrollArea;
+
+  const auto within = [fw](QWidget *w) {
+    return w && fw && (w == fw || w->isAncestorOf(fw));
+  };
+  Section cur = Section::Grid;
+  if (within(treeW)) {
+    cur = Section::Tree;
+  } else if (within(paneW)) {
+    cur = Section::Pane;
+  } else if (within(toolbarW)) {
+    cur = Section::Toolbar;
+  }
+
+  const auto usable = [](QWidget *w) { return w && w->isVisible(); };
+  Section target = cur;
+  if (dy < 0 && cur != Section::Toolbar && usable(toolbarW)) {
+    target = Section::Toolbar;
+  } else if (dy > 0 && cur == Section::Toolbar) {
+    target = Section::Grid;
+  } else if (dx < 0) {
+    if (cur == Section::Pane) {
+      target = Section::Grid;
+    } else if (cur != Section::Tree && usable(treeW)) {
+      target = Section::Tree;
+    }
+  } else if (dx > 0) {
+    if (cur == Section::Tree) {
+      target = Section::Grid;
+    } else if (cur != Section::Pane && usable(paneW)) {
+      target = Section::Pane;
+    }
+  }
+  if (target == cur) {
+    return;
+  }
+  QWidget *dest = target == Section::Tree     ? treeW
+                  : target == Section::Pane   ? paneW
+                  : target == Section::Toolbar ? toolbarW
+                                               : gridW;
+  if (!dest) {
+    return;
+  }
+  // Containers (pane, top bar) hand focus to their first visible focusable
+  // child; setFocus works programmatically regardless of policy otherwise.
+  QWidget *focusTarget = dest;
+  if (dest->focusPolicy() == Qt::NoFocus) {
+    const auto children = dest->findChildren<QWidget *>();
+    for (QWidget *child : children) {
+      if (child->isVisible() && child->focusPolicy() != Qt::NoFocus) {
+        focusTarget = child;
+        break;
+      }
+    }
+  }
+  focusTarget->setFocus(Qt::OtherFocusReason);
+}

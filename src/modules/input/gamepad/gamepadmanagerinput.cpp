@@ -82,6 +82,20 @@ void GamepadManager::applyActiveDirection(Direction newDirection) {
     kb->stopRepeat(true);
   }
 
+  // Select-held chord (user request 2026-08-17): the direction press moves
+  // the focus SECTION, not the selection — and must not start the keyboard
+  // repeat pipeline (section hops don't auto-repeat).
+  if (m_buttonBack) {
+    const int dx = newDirection == Direction::Left ? -1
+                   : newDirection == Direction::Right ? 1
+                                                      : 0;
+    const int dy = newDirection == Direction::Up ? -1 : newDirection == Direction::Down ? 1 : 0;
+    if (dx != 0 || dy != 0) {
+      emit requestFocusSectionMove(dx, dy);
+    }
+    return;
+  }
+
   // Start/restart keyboard repeat pipeline for held input.
   if (kb) {
     kb->setPhysicalKeyDown(true);

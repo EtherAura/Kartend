@@ -154,6 +154,9 @@ void GamepadManager::onButtonR1Changed(bool pressed) {
 }
 
 void GamepadManager::onButtonSelectChanged(bool pressed) {
+  // Held state feeds the Select+direction section chord; record BOTH
+  // edges (the SDL poll path maintains this in pollSdlState).
+  m_buttonBack = pressed;
   if (!pressed || shuttingDown()) {
     return;
   }

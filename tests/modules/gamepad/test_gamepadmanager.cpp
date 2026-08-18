@@ -86,6 +86,7 @@ private slots:
   void button_whitespaceNameIgnored();
   void button_droppedWhileSuspended();
   void button_droppedWhenShuttingDown();
+  void chord_selectHeldDirectionMovesFocusSectionNotSelection();
 
   // Binding-capture mode
   void capture_buttonRoutedToCaptureSignalOnly();
@@ -194,6 +195,31 @@ void TestGamepadManager::button_defaultToggleSidebarEmitsToggle() {
 
   m_mgr->handleMappedButtonPress(QStringLiteral("Y"));
   QCOMPARE(toggle.count(), 1); // Y no longer bound
+}
+
+void TestGamepadManager::chord_selectHeldDirectionMovesFocusSectionNotSelection() {
+  QSignalSpy focusMove(m_mgr.get(), &GamepadManager::requestFocusSectionMove);
+  QSignalSpy selMove(m_mgr.get(), &GamepadManager::requestSelectionMove);
+
+  m_mgr->m_buttonBack = true; // Select held
+  m_mgr->applyActiveDirection(GamepadHelpers::Direction::Left);
+  QCOMPARE(focusMove.count(), 1);
+  QCOMPARE(focusMove.at(0).at(0).toInt(), -1);
+  QCOMPARE(focusMove.at(0).at(1).toInt(), 0);
+  QCOMPARE(selMove.count(), 0);
+
+  m_mgr->applyActiveDirection(GamepadHelpers::Direction::None);
+  m_mgr->applyActiveDirection(GamepadHelpers::Direction::Up);
+  QCOMPARE(focusMove.count(), 2);
+  QCOMPARE(focusMove.at(1).at(1).toInt(), -1);
+  QCOMPARE(selMove.count(), 0);
+
+  // Select released: directions drive the selection again.
+  m_mgr->applyActiveDirection(GamepadHelpers::Direction::None);
+  m_mgr->m_buttonBack = false;
+  m_mgr->applyActiveDirection(GamepadHelpers::Direction::Left);
+  QCOMPARE(focusMove.count(), 2);
+  QCOMPARE(selMove.count(), 1);
 }
 
 void TestGamepadManager::button_remappedConfirmFollowsSettings() {

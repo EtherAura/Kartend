@@ -74,6 +74,11 @@ signals:
   /// GamepadSettings::gamepadToggleCollectionTreeButton (default unbound).
   void requestToggleCollectionTreeAction();
   void requestScrollAnimationStop();
+  /// Select-held chord (user request 2026-08-17): while the Select/Back
+  /// button is HELD, a direction moves the keyboard-focus SECTION
+  /// (grid / toolbar / left / right sidebar) instead of the selection.
+  /// dx/dy are -1/0/+1 in screen orientation.
+  void requestFocusSectionMove(int dx, int dy);
 
   void bindingCaptureButtonPressed(const QString &buttonName);
 
