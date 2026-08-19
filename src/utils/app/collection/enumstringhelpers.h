@@ -146,7 +146,33 @@ stringToSidebarJustification(const QString &str, bool *unknownFallback = nullptr
   return SidebarJustification::BelowToolbar;
 }
 
-[[nodiscard]] inline QString treeIconStyleToString(TreeIconStyle style) {
+[[nodiscard]] [[nodiscard]] inline QString toolbarColorSourceToString(ToolbarColorSource source) {
+  switch (source) {
+  case ToolbarColorSource::Titlebar:
+    return QStringLiteral("titlebar");
+  case ToolbarColorSource::Accent:
+    return QStringLiteral("accent");
+  case ToolbarColorSource::Highlight:
+    return QStringLiteral("highlight");
+  case ToolbarColorSource::CollectionPrimary:
+    break;
+  }
+  return QStringLiteral("collection");
+}
+
+[[nodiscard]] inline ToolbarColorSource stringToToolbarColorSource(const QString &value,
+                                                                  bool *fellBack = nullptr) {
+  const QString lower = value.trimmed().toLower();
+  if (fellBack) *fellBack = false;
+  if (lower == QLatin1String("titlebar")) return ToolbarColorSource::Titlebar;
+  if (lower == QLatin1String("accent")) return ToolbarColorSource::Accent;
+  if (lower == QLatin1String("highlight")) return ToolbarColorSource::Highlight;
+  if (lower == QLatin1String("collection")) return ToolbarColorSource::CollectionPrimary;
+  if (fellBack) *fellBack = !lower.isEmpty();
+  return ToolbarColorSource::Titlebar;
+}
+
+inline QString treeIconStyleToString(TreeIconStyle style) {
   switch (style) {
   case TreeIconStyle::MonochromeDark:
     return QStringLiteral("monochrome-dark");

@@ -18,11 +18,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edge. The details pane's existing Position control keeps working — it
   and the new page edit the same setting.
 
-- **Hold Select and press a direction to move between sections.** With
-  the Select/Create button held, the d-pad or stick hops keyboard focus
-  spatially: left to the collection tree, right to the details pane, up to
-  the toolbar row, and back to the grid — hidden panels are skipped. Once
-  a sidebar has focus, directions and Enter operate it natively.
+- **Attract mode holds still while you are looking at artwork.** With an
+  artwork open fullscreen, auto-advance stops — from either the grid's
+  preview or the details pane's — and dismissing it starts a fresh idle
+  countdown rather than advancing immediately.
+- **Scroll over the sidebar's artwork strip to change the picture.**
+  Hovering the media gallery in the details pane and scrolling now steps
+  that item's artwork, stopping at the last one instead of looping.
+- **Slim overlay scrollbars.** A new option under Settings → General
+  replaces the chunky bars on the item grid, collection tree and details
+  pane with a thin handle drawn *on top* of the content — no groove, no
+  divider line. It reserves no space, so items never shift when it appears,
+  and it fades in while scrolling or hovering and fades out when idle.
+- **Choose what colours the toolbar.** A new Toolbar colour option on the
+  Appearance page picks between the desktop titlebar, the desktop accent,
+  the highlight colour, or the collection's own primary colour. It
+  defaults to matching the titlebar — the accent and the titlebar are
+  different colours under Plasma's accent-from-wallpaper, which is why
+  accent-tinted chrome never lined up with the window decoration.
+- **Sidebar icons keep the size you set.** The icon height now follows the
+  option exactly instead of shrinking with a narrower sidebar, and
+  resizing the sidebar applies to every collection, so clicking an entry
+  no longer resizes the panel under you.
+- **The toolbar and sidebars share one tone.** The top bar took the item
+  grid's colour, which read as two-tone against the sidebars; all the
+  chrome now uses the same role, and the collection tree's top-level rows
+  match the toolbar's height so the two line up.
+- **Items with no artwork show the familiar hatched tile.** Stepping
+  through the library full-screen no longer leaves the previous item's
+  picture up when the next one has nothing scraped — it shows the same
+  cross-hatch placeholder the grid uses, titled.
+- **Expanded artwork now owns the controller.** With an artwork open
+  fullscreen, Back closes the artwork instead of leaving the collection,
+  and the directions — from gamepad, keyboard, or the mouse wheel (one
+  artwork per flick, however hard you spin it) — cycle that item's artwork — then, instead of looping
+  back to the first picture, carry on to the previous or next **item** and
+  its artwork. Gamepad and keyboard take the same path, so they behave
+  identically. The expanded view also receives
+  the sidebar's full artwork strip, so there is something to cycle
+  through. This affected the keyboard too: the app-level key routing did
+  not recognise the details pane's expanded view and was claiming its keys.
+- **The collection you are viewing can keep its colours.** A new Sidebar
+  option renders the active collection's logo in full colour while the
+  rest of the tree stays monochrome or tinted, so your place in the list
+  is obvious at a glance.
+- **Pointing at artwork previews it.** Moving the ring onto an artwork
+  tile swaps the sidebar's main preview immediately — no button press —
+  and after a second of no stick input the pane hands control back to the
+  grid on its own.
+- **Confirming an artwork tile opens it fullscreen.** Ringing a tile in
+  the details pane and pressing confirm now both swaps the pane's main
+  preview and expands the artwork, instead of only swapping it.
+- **Traversing collections from the tree keeps the tree in hand.** The
+  collection switch no longer returns focus to the window, so the right
+  stick carries on moving through collections instead of silently handing
+  itself to the details pane after the first switch.
+- **Collection tree rows highlight across the full panel width**, instead
+  of stopping short at the indent column.
+- **The right stick drives the details pane, with the selection ringed.**
+  Up and down now travel the whole pane: the selected region scrolls, and
+  once it reaches its end the selection steps on to the next one — artwork
+  strip, description, metadata — so the stick reaches every part of the
+  pane rather than only the metadata. A thin, rounded, pulsing outline
+  marks whatever is selected. Left and right still move focus between the
+  sidebars and the grid, a focused collection tree keeps up/down for its
+  own rows, and a focused toolbar keeps left/right for its buttons.
+- **Holding Select is now the only way the stick reaches the toolbar.**
+  With the modifier held, directions switch sections (up to the toolbar)
+  and the display shows where focus is: the focused section stays sharp
+  and ringed while everything else softens to a blurred, gently
+  desaturated backdrop, with a pill naming it. Confirm activates the
+  focused row or button rather than launching the grid's selection. The
+  d-pad and left stick always control the grid, pulling focus back to it.
 
 - **The shoulder buttons now toggle the sidebars.** On a gamepad, L1
   folds the left sidebar (the collection tree) and R1 the right one (the
@@ -40,9 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   option on the Sidebar page brings them back. The mouse wheel now scrolls
   the tree when the pointer is over it, instead of changing the selected
   item in the grid — and once the tree hits its top or bottom, further
-  ticks do nothing rather than leaking into the grid. When the tree is
-  hidden, a slim arrow marker stays at its dock edge; clicking it brings
-  the tree back (same per-collection memory as F6). And the hairline outline that keeps low-contrast logos
+  ticks do nothing rather than leaking into the grid. And the hairline outline that keeps low-contrast logos
   readable in the tree is applied to item tiles and cards too — only for
   logo-like art that would blend into the card colour; photos and covers
   are never touched.

@@ -11,9 +11,10 @@
 class TestCollectionTreePanel : public QObject {
   Q_OBJECT
 private slots:
-  // Toggling the tree off shows the marker; clicking the marker restores
-  // the tree and hides the marker again.
-  void foldMarker_appearsWhenTreeHidden_andClickRestores();
+  // A hidden tree leaves NO on-screen affordance (user decision
+  // 2026-08-18): it comes back via the shortcut, the gamepad, or the View
+  // menu — never a floating tab.
+  void hiddenTree_leavesNoIndicatorBehind();
 
   // Every branch opens EXPANDED on a fresh session (collapsed-set memory,
   // user decision 2026-08-17) — and childless rows never poison the
@@ -29,6 +30,65 @@ private slots:
   // Select+direction section chord (2026-08-17): left focuses the tree,
   // right returns to the grid; a hidden tree is skipped.
   void focusSectionChord_movesBetweenTreeAndGrid();
+
+  // Modifier HUD (2026-08-18): holding the gamepad modifier shows the
+  // desaturating overlay with a section indicator; releasing hides it.
+  void focusModifierHud_showsWhileHeldAndHidesOnRelease();
+
+  // Right-stick routing (2026-08-18): up from the grid lands on the
+  // toolbar, and once a section owns focus the stick drives that section's
+  // list instead of switching sections.
+  void rightStick_upFocusesToolbar_andDrivesTheFocusedSection();
+
+  // 2026-08-18: vertical reaches the toolbar ONLY with the modifier held;
+  // unheld it drives the details pane, and the pulsing ring marks what is
+  // selected.
+  void rightStick_verticalReachesToolbarOnlyWithModifier();
+
+  // 2026-08-18: traversing collections from the tree must not hand focus
+  // back to the window, or the stick stops driving the tree mid-traversal.
+  void treeTraversal_keepsTreeFocusedAcrossCollectionSwitch();
+
+  // 2026-08-18: expand mode owns the gamepad — Back dismisses the artwork
+  // instead of leaving the collection behind it.
+  void expandedArtwork_backDismissesInsteadOfLeavingCollection();
+
+  // 2026-08-18: a second of no stick input hands focus back to the grid
+  // and drops the pane ring.
+  void paneSelection_idleReturnsFocusToGrid();
+
+  // 2026-08-18: cycling artwork stops at the ends and reports a boundary
+  // (the interaction layer steps to the neighbouring item) instead of
+  // wrapping back to the same item's first picture.
+  void expandedArtwork_cyclesThenReportsBoundaryInsteadOfWrapping();
+
+  // 2026-08-18: the boundary hand-off must be connected however expand
+  // mode was opened — keyboard and wheel reach the overlay directly and
+  // never ask the interaction layer for anything.
+  void expandedArtwork_boundaryIsHookedRegardlessOfInput();
+
+  // 2026-08-18: one artwork per wheel gesture, however hard the scroll.
+  void expandedArtwork_wheelAdvancesOneArtworkPerGesture();
+
+  // 2026-08-18: an item with no artwork shows the grid's hatched
+  // placeholder instead of leaving the previous item's picture up, and the
+  // wheel never leaks to the grid behind the overlay.
+  void expandedArtwork_artlessItemShowsPlaceholder_andWheelNeverLeaks();
+
+  // 2026-08-18: a kinetic wheel streams events for as long as it coasts.
+  // The gallery must advance ONCE for the whole stream, not once per
+  // cooldown period — that steady march was the filmed runaway.
+  void expandedArtwork_kineticWheelStreamAdvancesOnlyOnce();
+
+  // 2026-08-18: stepping items programmatically must not leave the
+  // keyboard's "key is held" flag armed — that phantom hold is what kept
+  // the grid scrolling after a traversal.
+  void expandedArtwork_itemStepLeavesNoPhantomKeyHeld();
+
+  // 2026-08-18 styling contract, measured rather than asserted by eye:
+  // overlay scrollbars really replace the native ones on the tree, the
+  // first row matches the toolbar's height, and the chrome is one colour.
+  void navPanel_matchesToolbarHeightAndTone_andHidesNativeScrollbar();
 };
 
 #endif // TEST_COLLECTIONTREEPANEL_H

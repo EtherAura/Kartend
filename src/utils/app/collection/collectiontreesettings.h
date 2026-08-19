@@ -54,7 +54,11 @@ struct CollectionTreeSettings {
   int treeIconSize = 16;
 
   static constexpr int kMinIconSize = 12;
-  static constexpr int kMaxIconSize = 64;
+  /// Raised from 64 on 2026-08-18: 64 logical px was a sensible ceiling on
+  /// a 1080p panel and far too small on a 4K one. The ceiling now only
+  /// exists to keep a typo'd config from producing a single row taller
+  /// than any screen; pick the size that suits the display.
+  static constexpr int kMaxIconSize = 512;
 
   /// Icon rendering style (user request 2026-08-17): as-is, a fixed
   /// dark/light monochrome silhouette, or tinted. Tinted (accent-coloured,
@@ -62,6 +66,11 @@ struct CollectionTreeSettings {
   /// clash with per-collection theming; the v2->v3 migration stamps it
   /// onto existing sections still on 'normal'.
   TreeIconStyle treeIconStyle = TreeIconStyle::Tinted;
+  /// Monochrome/tinted styles only (user request 2026-08-18): render the
+  /// ACTIVE collection's logo in its original colour so the one you are
+  /// viewing stands out of the uniform row. Ignored by the Normal style,
+  /// where every logo is already in colour.
+  bool treeColorizeSelected = false;
   /// Tint colour for TreeIconStyle::Tinted, as a hex string. EMPTY means
   /// "the collection's accent colour" (the same primary colour the rest of
   /// the chrome re-themes with) — the requested default.

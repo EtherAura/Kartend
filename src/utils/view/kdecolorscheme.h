@@ -41,6 +41,26 @@ struct SchemeInfo {
   bool isBundled = false;
 };
 
+/// The window-manager titlebar colour of the CURRENT desktop session,
+/// read from kdeglobals' `[WM] activeBackground`.
+///
+/// This is deliberately not the accent colour: with Plasma's
+/// accent-from-wallpaper the two differ (measured 2026-08-18 on the
+/// reporter's desktop — titlebar 146,67,13 against accent 196,81,3), and
+/// chrome tinted with the accent visibly failed to match the titlebar.
+/// Returns an invalid colour off KDE or when the key is absent, so
+/// callers can fall back to a palette role.
+[[nodiscard]] QColor activeTitlebarColor();
+
+/// The desktop ACCENT colour (kdeglobals `AccentColor`). Distinct from
+/// the titlebar above — with accent-from-wallpaper the two differ.
+[[nodiscard]] QColor desktopAccentColor();
+
+/// The titlebar's TEXT colour (kdeglobals `[WM] activeForeground`) — what
+/// reads correctly against activeTitlebarColor(), and therefore the right
+/// ink for controls tinted from it.
+[[nodiscard]] QColor activeTitlebarTextColor();
+
 /// All discovered schemes, deduplicated by displayName (system entries
 /// win over bundled ones with the same name so user customizations
 /// shadow our fallbacks). Sorted: bundled first (so a fresh non-KDE

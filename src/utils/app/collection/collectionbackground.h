@@ -32,6 +32,10 @@ struct CollectionBackground {
   /// backgroundImage.
   QString backgroundVideo;
   QString primaryColor;   // Primary UI color for toolbar, menubar, search bar
+  /// Which colour fills the TOOLBAR (user request 2026-08-18). Defaults to
+  /// the desktop titlebar so the chrome matches the window decoration;
+  /// `CollectionPrimary` restores the per-collection colour above.
+  ToolbarColorSource toolbarColorSource = ToolbarColorSource::Titlebar;
   QString tileColor;      // Color for item tiles/placeholders (if blank, uses default)
   QString selectionColor; // Color for selection rectangle and glide overlay border
 

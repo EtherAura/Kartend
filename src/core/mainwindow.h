@@ -186,6 +186,10 @@ public:
   void resyncPlaylistCollections();
 
   void showStartupSplash();
+  /// Apply the hover-only scrollbar preference to every scrollable
+  /// surface (user request 2026-08-18). Idempotent; call after any
+  /// settings change.
+  void applyHoverOnlyScrollbars();
 
   /// Apply per-button visibility flags and custom-text overrides from
   /// m_generalSettings to the items-page toolbar. Idempotent — invoked on

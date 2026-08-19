@@ -10,6 +10,7 @@
 // rolling our own avoids a tempfile-shuffle dance and lets us treat
 // resource and filesystem schemes uniformly.
 #include "kdecolorscheme.h"
+#include <QSettings>
 
 #include <algorithm>
 
@@ -29,6 +30,54 @@ using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
 namespace KdeColorScheme {
+
+namespace {
+/// Shared "r,g,b" reader for kdeglobals keys. QSettings hands back an
+/// unquoted triple as a QStringList, so the list form is tried first.
+QColor readKdeGlobalsColor(const QString &key) {
+  const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) +
+                       QStringLiteral("/kdeglobals");
+  if (!QFileInfo::exists(path)) {
+    return {};
+  }
+  QSettings globals(path, QSettings::IniFormat);
+  const QVariant raw = globals.value(key);
+  QStringList parts = raw.toStringList();
+  if (parts.size() < 3) {
+    parts = raw.toString().split(QLatin1Char(','), Qt::SkipEmptyParts);
+  }
+  if (parts.size() < 3) {
+    return {};
+  }
+  bool okR = false;
+  bool okG = false;
+  bool okB = false;
+  const int r = parts.at(0).trimmed().toInt(&okR);
+  const int g = parts.at(1).trimmed().toInt(&okG);
+  const int b = parts.at(2).trimmed().toInt(&okB);
+  if (!okR || !okG || !okB) {
+    return {};
+  }
+  return QColor(qBound(0, r, 255), qBound(0, g, 255), qBound(0, b, 255));
+}
+} // namespace
+
+QColor desktopAccentColor() {
+  static const QColor cached = readKdeGlobalsColor(QStringLiteral("General/AccentColor"));
+  return cached;
+}
+
+QColor activeTitlebarTextColor() {
+  static const QColor cached = readKdeGlobalsColor(QStringLiteral("WM/activeForeground"));
+  return cached;
+}
+
+QColor activeTitlebarColor() {
+  // Cached: this is read on every re-theme and the session's decoration
+  // colour does not change without a restart of the colour scheme anyway.
+  static const QColor cached = readKdeGlobalsColor(QStringLiteral("WM/activeBackground"));
+  return cached;
+}
 
 namespace {
 

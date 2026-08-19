@@ -43,6 +43,8 @@
 #include "imainwindow.h"
 #include "iscrolldatasource.h"
 #include "isettingsmanager.h"
+#include "overlayscrollbars.h"
+#include "idetailspane.h"
 #include "itemwidget.h"
 #include "launchertabpanel.h"
 #include "marqueepanel.h"
@@ -565,6 +567,14 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     // since this used to be a live-apply side-effect and the panel pattern
     // makes the field deferred-save.
     ItemWidget::setShowTitleInPlaceholder(m_generalSettings.view.showTitleInPlaceholder);
+    // Same live-apply reasoning for the hover-only scrollbar preference:
+    // toggling it in the dialog must take effect without a restart.
+    if (m_ctx) {
+      OverlayScrollbars::applyToSurfaces(
+          m_ctx->ui.itemScrollArea, m_ctx->ui.collectionTreeWidget,
+          m_ctx->ui.sidebar ? m_ctx->ui.sidebar->asWidget() : nullptr,
+          m_generalSettings.view.scrollbarsOnHoverOnly);
+    }
     if (auto *scrollManager = m_ctx->scrollData()) {
       const auto &activeWidgets = scrollManager->getActiveWidgets();
       for (auto it = activeWidgets.constBegin(); it != activeWidgets.constEnd(); ++it) {

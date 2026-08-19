@@ -46,6 +46,8 @@ AppearanceColorsPanel::AppearanceColorsPanel(QWidget *parent)
   });
   connect(ui->backgroundValueEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { emit changed(); });
+  connect(ui->toolbarColorSourceComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          [this](int) { emit changed(); });
   connect(ui->primaryColorEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { emit changed(); });
   connect(ui->tileColorEdit, &QLineEdit::textChanged, this,
@@ -126,6 +128,20 @@ void AppearanceColorsPanel::load() {
   updateBackgroundButtonForType();
 
   ui->primaryColorEdit->setText(config.background.primaryColor);
+  ui->toolbarColorSourceComboBox->setCurrentIndex(
+      [&]() {
+        switch (config.background.toolbarColorSource) {
+        case ToolbarColorSource::Titlebar:
+          return 0;
+        case ToolbarColorSource::Accent:
+          return 1;
+        case ToolbarColorSource::Highlight:
+          return 2;
+        case ToolbarColorSource::CollectionPrimary:
+          return 3;
+        }
+        return 0;
+      }());
   ui->tileColorEdit->setText(config.background.tileColor);
   ui->selectionColorEdit->setText(config.background.selectionColor);
   ui->listRowColorEdit->setText(config.listView.listRowColor);
@@ -139,6 +155,7 @@ void AppearanceColorsPanel::clear() {
   ui->backgroundValueEdit->clear();
   updateBackgroundButtonForType();
   ui->primaryColorEdit->clear();
+  ui->toolbarColorSourceComboBox->setCurrentIndex(0);
   ui->tileColorEdit->clear();
   ui->selectionColorEdit->clear();
   ui->listRowColorEdit->clear();
@@ -177,6 +194,20 @@ void AppearanceColorsPanel::save() {
   }
 
   config.background.primaryColor = ui->primaryColorEdit->text().trimmed();
+  switch (ui->toolbarColorSourceComboBox->currentIndex()) {
+  case 1:
+    config.background.toolbarColorSource = ToolbarColorSource::Accent;
+    break;
+  case 2:
+    config.background.toolbarColorSource = ToolbarColorSource::Highlight;
+    break;
+  case 3:
+    config.background.toolbarColorSource = ToolbarColorSource::CollectionPrimary;
+    break;
+  default:
+    config.background.toolbarColorSource = ToolbarColorSource::Titlebar;
+    break;
+  }
   config.background.tileColor = ui->tileColorEdit->text().trimmed();
   config.background.selectionColor = ui->selectionColorEdit->text().trimmed();
   config.listView.listRowColor = ui->listRowColorEdit->text().trimmed();

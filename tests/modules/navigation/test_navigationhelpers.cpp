@@ -411,8 +411,12 @@ void TestNavigationHelpers::titleHtmlOutOfRangeIndexIsEmpty() {
 void TestNavigationHelpers::titleHtmlPlainRootIsEscapedName() {
   QList<CollectionConfig> cs = {makeCollection("Docs & Manuals")};
   // Root collection outside a subfolder: plain text, HTML-escaped, no link.
+  // The current collection is a LINK now (user request 2026-08-18:
+  // clicking the toolbar's collection name must navigate to it). It used
+  // to be plain text, which is exactly why the click did nothing.
   QCOMPARE(NavigationHelpers::buildTitleBreadcrumbHtml(0, cs, kColor),
-           QStringLiteral("Docs &amp; Manuals"));
+           QStringLiteral("<a href=\"collection:0\" style=\"color:#aabbcc; "
+                          "text-decoration:none;\">Docs &amp; Manuals</a>"));
 }
 
 void TestNavigationHelpers::titleHtmlRootInSubfolderLinksToRoot() {
@@ -430,14 +434,17 @@ void TestNavigationHelpers::titleHtmlSubcollectionLinksAncestorChain() {
                                 makeCollection("Classics", 1)};
   cs[1].isSubcollection = true;
   cs[2].isSubcollection = true;
-  // Grandchild breadcrumb: both ancestors clickable (root-most first), the
-  // current collection as plain text, joined with " › ".
+  // Grandchild breadcrumb: every segment clickable (root-most first),
+  // joined with " › ". The trailing segment became a link on 2026-08-18 —
+  // clicking the toolbar's collection name has to navigate to it.
   QCOMPARE(NavigationHelpers::buildTitleBreadcrumbHtml(2, cs, kColor),
            QStringLiteral(
                "<a href=\"collection:0\" style=\"color:#aabbcc; text-decoration:none;\">Movies</a>"
                " › "
                "<a href=\"collection:1\" style=\"color:#aabbcc; text-decoration:none;\">Action</a>"
-               " › Classics"));
+               " › "
+               "<a href=\"collection:2\" style=\"color:#aabbcc; "
+               "text-decoration:none;\">Classics</a>"));
 }
 
 void TestNavigationHelpers::titleHtmlSubcollectionInSubfolderLinksSelf() {

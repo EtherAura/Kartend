@@ -86,6 +86,17 @@
         <item><spacer name="baseColorSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </item>
+      <item row="0" column="2"><widget class="QLabel" name="label_toolbarColorSource"><property name="text"><string>Toolbar colour:</string></property></widget></item>
+      <item row="0" column="3">
+       <widget class="QComboBox" name="toolbarColorSourceComboBox">
+        <property name="maximumWidth"><number>240</number></property>
+        <property name="toolTip"><string>Which colour fills the toolbar. Titlebar and Accent follow the desktop; Highlight uses the selection colour; Collection uses the Primary Color set here.</string></property>
+        <item><property name="text"><string>Match titlebar</string></property></item>
+        <item><property name="text"><string>Desktop accent</string></property></item>
+        <item><property name="text"><string>Highlight colour</string></property></item>
+        <item><property name="text"><string>Collection primary colour</string></property></item>
+       </widget>
+      </item>
       <item row="1" column="0"><widget class="QLabel" name="label_primaryColor"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Primary Color:</string></property></widget></item>
       <item row="1" column="1">
        <layout class="QHBoxLayout" name="primaryColorLayout">

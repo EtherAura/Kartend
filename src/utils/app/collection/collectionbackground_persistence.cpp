@@ -30,6 +30,8 @@ void load(QSettings &settings, CollectionBackground &bg, const QString &collecti
   bg.backgroundVideo = sanitize(settings.value(keys::kBackgroundVideo).toString(),
                                 QStringLiteral("backgroundVideo"));
   bg.primaryColor = settings.value(keys::kPrimaryColor).toString();
+  bg.toolbarColorSource = CollectionUtils::stringToToolbarColorSource(
+      settings.value(keys::kToolbarColorSource).toString());
   bg.tileColor = settings.value(keys::kTileColor).toString();
   bg.selectionColor = settings.value(keys::kSelectionColor).toString();
   bg.headerLogoImage = sanitize(settings.value(keys::kHeaderLogoImage).toString(),
@@ -67,6 +69,8 @@ void save(QSettings &settings, const CollectionBackground &bg, const PathSanitiz
   settings.setValue(keys::kBackgroundVideo,
                     sanitize(bg.backgroundVideo, QStringLiteral("backgroundVideo")));
   settings.setValue(keys::kPrimaryColor, bg.primaryColor);
+  settings.setValue(keys::kToolbarColorSource,
+                    CollectionUtils::toolbarColorSourceToString(bg.toolbarColorSource));
   settings.setValue(keys::kTileColor, bg.tileColor);
   settings.setValue(keys::kSelectionColor, bg.selectionColor);
   settings.setValue(keys::kHeaderLogoImage,

@@ -19,6 +19,10 @@ void load(QSettings &settings, ViewSettings &opts) {
   opts.showTitleInPlaceholder = settings.value(keys::kShowTitleInPlaceholder, false).toBool();
   opts.showMenuBar = settings.value(keys::kShowMenuBar, true).toBool();
   opts.showToolbar = settings.value(keys::kShowToolbar, true).toBool();
+  opts.scrollbarsOnHoverOnly =
+      settings.value(keys::kScrollbarsOnHoverOnly, ViewSettings{}.scrollbarsOnHoverOnly).toBool();
+  opts.showToolbarBreadcrumbs =
+      settings.value(keys::kShowToolbarBreadcrumbs, ViewSettings{}.showToolbarBreadcrumbs).toBool();
   opts.fullscreen = settings.value(keys::kFullscreen, false).toBool();
 }
 
@@ -32,6 +36,8 @@ void save(QSettings &settings, const ViewSettings &opts) {
   settings.setValue(keys::kShowTitleInPlaceholder, opts.showTitleInPlaceholder);
   settings.setValue(keys::kShowMenuBar, opts.showMenuBar);
   settings.setValue(keys::kShowToolbar, opts.showToolbar);
+  settings.setValue(keys::kScrollbarsOnHoverOnly, opts.scrollbarsOnHoverOnly);
+  settings.setValue(keys::kShowToolbarBreadcrumbs, opts.showToolbarBreadcrumbs);
   settings.setValue(keys::kFullscreen, opts.fullscreen);
 }
 

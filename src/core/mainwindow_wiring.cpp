@@ -200,6 +200,7 @@
 #include "pathutils.h"
 #include "scrapercontroller.h"
 #include "scrolleventscontroller.h"
+#include "attractmanager.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"

@@ -61,6 +61,8 @@ void GeneralSettingsPanel::load() {
   SettingsFormBinding::loadInto(ui->wrapNavigationCheckBox, s->input.wrapNavigation);
   SettingsFormBinding::loadInto(ui->selectItemOnHoverCheckBox, s->input.selectItemOnHover);
   SettingsFormBinding::loadInto(ui->showTitleInPlaceholderCheckBox, s->view.showTitleInPlaceholder);
+  SettingsFormBinding::loadInto(ui->scrollbarsOnHoverOnlyCheckBox, s->view.scrollbarsOnHoverOnly);
+  SettingsFormBinding::loadInto(ui->showToolbarBreadcrumbsCheckBox, s->view.showToolbarBreadcrumbs);
 
   // Input & Scroll Timing
   SettingsFormBinding::loadInto(ui->mouseWheelSpeedSpinBox, s->input.mouseWheelRows);
@@ -159,6 +161,8 @@ void GeneralSettingsPanel::save() {
   s->input.wrapNavigation = ui->wrapNavigationCheckBox->isChecked();
   s->input.selectItemOnHover = ui->selectItemOnHoverCheckBox->isChecked();
   s->view.showTitleInPlaceholder = ui->showTitleInPlaceholderCheckBox->isChecked();
+  s->view.scrollbarsOnHoverOnly = ui->scrollbarsOnHoverOnlyCheckBox->isChecked();
+  s->view.showToolbarBreadcrumbs = ui->showToolbarBreadcrumbsCheckBox->isChecked();
 
   // Input & Scroll Timing
   s->input.mouseWheelRows = ui->mouseWheelSpeedSpinBox->value();
@@ -206,7 +210,9 @@ void GeneralSettingsPanel::connectChangeSignals() {
 
   // Selection & Display
   for (auto *box : {ui->rememberSelectionCheckBox, ui->wrapNavigationCheckBox,
-                    ui->selectItemOnHoverCheckBox, ui->showTitleInPlaceholderCheckBox}) {
+                    ui->selectItemOnHoverCheckBox, ui->showTitleInPlaceholderCheckBox,
+                    ui->scrollbarsOnHoverOnlyCheckBox,
+                    ui->showToolbarBreadcrumbsCheckBox}) {
     connect(box, &QCheckBox::toggled, this, [this](bool) { save(); });
   }
 

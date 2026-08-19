@@ -6,6 +6,7 @@
 #include "collection/typehelpers.h"
 #include "headerlogooverlay.h"
 #include "itemwidget.h"
+#include "kdecolorscheme.h"
 #include "vignetteoverlay.h"
 #include <QAbstractSlider>
 #include <QBoxLayout>
@@ -246,12 +247,71 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
   const bool blurActive = collection.background.toolbarBackdropBlur &&
                           collection.background.backgroundType == BackgroundType::Image &&
                           !collection.background.backgroundImage.isEmpty();
-  // Apply primary color to toolbar/top bar (exact color, not tinted)
+  // Toolbar fill. The desktop's TITLEBAR colour wins over the collection's
+  // primary colour here (user request 2026-08-18: "i want the toolbar to
+  // be the same color as the title bar"). A stylesheet beats the palette,
+  // so setting the palette alone in MainWindow was silently overridden by
+  // this line for any collection with a primary colour. The collection's
+  // colour still drives the menu bar, the header logo tint and the rest
+  // of the accents below; only the top bar's fill is claimed.
+  // Resolved once and reused: the toolbar's own fill is what the controls
+  // sitting ON it should be tinted from (user request 2026-08-18: the
+  // buttons, volume track and search field were dark collection-coloured
+  // boxes on a titlebar-coloured bar — far too contrasting).
+  QString chromeFill;
+  {
+    QString fill;
+    switch (collection.background.toolbarColorSource) {
+    case ToolbarColorSource::Titlebar:
+      if (const QColor c = KdeColorScheme::activeTitlebarColor(); c.isValid()) {
+        fill = c.name();
+      }
+      break;
+    case ToolbarColorSource::Accent:
+      if (const QColor c = KdeColorScheme::desktopAccentColor(); c.isValid()) {
+        fill = c.name();
+      }
+      break;
+    case ToolbarColorSource::Highlight:
+      if (m_itemsTopBar) {
+        fill = m_itemsTopBar->palette().color(QPalette::Highlight).name();
+      }
+      break;
+    case ToolbarColorSource::CollectionPrimary:
+      break;
+    }
+    // Any desktop source that is unavailable (non-KDE, key absent) falls
+    // back to the collection's own colour rather than going blank.
+    if (fill.isEmpty() && hasPrimaryColor) {
+      fill = collection.background.primaryColor;
+    }
+    chromeFill = fill;
+  }
+
   if (m_itemsTopBar) {
     QString toolbarStyle;
-    if (hasPrimaryColor && !blurActive) {
-      toolbarStyle = QString("QWidget#itemsTopBar { background-color: %1; }")
-                         .arg(collection.background.primaryColor);
+    if (!blurActive && !chromeFill.isEmpty()) {
+      const QColor base(chromeFill);
+      // Controls sit a step off the bar rather than in a contrasting
+      // colour: light enough to find, close enough to belong.
+      const QString control = base.lighter(118).name();
+      const QString edge = base.darker(118).name();
+      const QString knob = base.lighter(155).name();
+      toolbarStyle =
+          QString("QWidget#itemsTopBar { background-color: %1; }"
+                  // Padding + a floor on the width: an icon-only button
+                  // (the info "i") otherwise collapsed to a sliver next to
+                  // its wider neighbours (field report 2026-08-18).
+                  "QWidget#itemsTopBar QToolButton, QWidget#itemsTopBar QPushButton {"
+                  " background-color: %2; border: 1px solid %3; border-radius: 4px;"
+                  " padding: 4px 8px; min-width: 18px; }"
+                  "QWidget#itemsTopBar QToolButton:hover,"
+                  " QWidget#itemsTopBar QPushButton:hover { background-color: %4; }"
+                  "QWidget#itemsTopBar QSlider::groove:horizontal {"
+                  " background: %2; height: 4px; border-radius: 2px; }"
+                  "QWidget#itemsTopBar QSlider::handle:horizontal {"
+                  " background: %4; width: 12px; margin: -5px 0; border-radius: 6px; }")
+              .arg(chromeFill, control, edge, knob);
     }
     m_itemsTopBar->setStyleSheet(toolbarStyle);
   }
@@ -272,16 +332,32 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
   // Apply primary color to search bar background
   if (m_searchBar) {
     QString searchBarStyle;
-    if (hasPrimaryColor) {
-      // Tint the primary color slightly for the search bar background
-      QColor baseColor(collection.background.primaryColor);
-      QColor bgColor = baseColor.lighter(130);
+    if (!chromeFill.isEmpty()) {
+      // Tinted from the TOOLBAR's colour, not the collection's — the
+      // field sits on the bar, so that is what it has to harmonise with.
+      QColor baseColor(chromeFill);
+      QColor bgColor = baseColor.lighter(118);
+      // Text in the SAME ink as the search icon beside it (user request
+      // 2026-08-18) — the titlebar's own foreground, which is what reads
+      // correctly on a titlebar-tinted field. Placeholder is the same
+      // colour softened, so the two never fight.
+      const QColor ink = KdeColorScheme::activeTitlebarTextColor().isValid()
+                             ? KdeColorScheme::activeTitlebarTextColor()
+                             : m_searchBar->palette().color(QPalette::Text);
+      QColor placeholder = ink;
+      placeholder.setAlpha(150);
       searchBarStyle = QString("QLineEdit { background-color: %1; border: 1px "
-                               "solid %2; border-radius: 4px; padding: 4px; }"
+                               "solid %2; border-radius: 4px; padding: 4px;"
+                               " color: %4; }"
                                "QLineEdit:focus { border-color: %3; }")
                            .arg(bgColor.name())
                            .arg(baseColor.darker(110).name())
-                           .arg(baseColor.name());
+                           .arg(baseColor.name())
+                           .arg(ink.name());
+      m_searchBar->setPlaceholderText(m_searchBar->placeholderText());
+      QPalette searchPalette = m_searchBar->palette();
+      searchPalette.setColor(QPalette::PlaceholderText, placeholder);
+      m_searchBar->setPalette(searchPalette);
     }
     m_searchBar->setStyleSheet(searchBarStyle);
   }

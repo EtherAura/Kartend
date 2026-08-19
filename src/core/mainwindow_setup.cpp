@@ -57,6 +57,8 @@
 #include "libraryonboardingwizard.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
+#include <QAbstractScrollArea>
+#include "overlayscrollbars.h"
 #include "marqueecontroller.h"
 #include "menucontroller.h"
 #include "metadataqueue.h"
@@ -769,6 +771,11 @@ void MainWindow::setupCollectionTree() {
   // through the role slot.
   m_appContext.ui.collectionTreeWidget = m_collectionTreeController->treeWidget();
   m_appContext.managers.collectionTreeController = m_collectionTreeController;
+  // AFTER the tree panel exists. This used to run during early setup,
+  // hundreds of lines before the tree controller was constructed, so
+  // treeWidget() was null and the nav bar kept its native scrollbar
+  // forever (field report 2026-08-18).
+  applyHoverOnlyScrollbars();
 
   QObject::connect(m_collectionTreeController, &CollectionTreeController::visibilityChanged, this,
                    [this](bool visible) {
@@ -872,4 +879,15 @@ void MainWindow::setupEventFilters() {
   // that used to live here were harmless at runtime (Qt dedupes delivery)
   // but guaranteed drift: only the manager-side set is removed in
   // ~InteractionManager, and only it tracks viewport recreation.
+}
+
+void MainWindow::applyHoverOnlyScrollbars() {
+  // One switch over every scrollable surface the user actually points at
+  // (user request 2026-08-18). Re-applied on settings save, and safe to
+  // call repeatedly: the helper is idempotent and restores the original
+  // policies when switched back off.
+  OverlayScrollbars::applyToSurfaces(
+      ui->itemScrollArea,
+      m_collectionTreeController ? m_collectionTreeController->treeWidget() : nullptr,
+      m_MetadataSidebar, m_generalSettings.view.scrollbarsOnHoverOnly);
 }

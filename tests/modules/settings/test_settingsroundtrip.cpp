@@ -13,6 +13,7 @@
 
 #include "../../support/machomesandbox.h"
 #include "collection/collectionconfig.h"
+#include "collection/generalsettings.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
 
@@ -34,6 +35,8 @@ private slots:
   void uuidCollisionCapturedForStartupWarning();
   // Kartend-ob1c9: the collection tree panel's per-collection block.
   void collectionTreeBlock_roundTripsAndClampsPosition();
+  void viewSetting_scrollbarsOnHoverOnly_roundTrips();
+  void toolbarColorSource_roundTripsAndFallsBackOnGarbage();
   /// v1->v2 stamps the 2026-08-17 sidebar layout defaults onto every
   /// existing collection ONCE — and never again after the version stamp, so
   /// a user's post-migration edit survives the next boot.
@@ -138,6 +141,51 @@ void TestSettingsRoundtrip::importSourceKey_survivesLoadSave() {
   mgr.loadCollections(reloaded);
   QCOMPARE(reloaded.size(), 1);
   QCOMPARE(reloaded[0].importSourceKey, QStringLiteral("snes"));
+}
+
+void TestSettingsRoundtrip::viewSetting_scrollbarsOnHoverOnly_roundTrips() {
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=4\n"
+                                "scrollbarsOnHoverOnly=true\n"));
+  SettingsManager mgr(nullptr, nullptr);
+  GeneralSettings loaded;
+  mgr.loadGeneralSettings(loaded);
+  QVERIFY(loaded.view.scrollbarsOnHoverOnly);
+
+  loaded.view.scrollbarsOnHoverOnly = false;
+  mgr.saveGeneralSettings(loaded);
+  GeneralSettings reloaded;
+  mgr.loadGeneralSettings(reloaded);
+  QVERIFY2(!reloaded.view.scrollbarsOnHoverOnly, "the off state must survive a save/load cycle");
+}
+
+void TestSettingsRoundtrip::toolbarColorSource_roundTripsAndFallsBackOnGarbage() {
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=4\n\n"
+                                "[Accent]\nname=Accent\nmediaDirectory=/tmp/media\n"
+                                "toolbarColorSource=accent\n\n"
+                                "[Junk]\nname=Junk\nmediaDirectory=/tmp/media\n"
+                                "toolbarColorSource=wallpaper-ish\n"));
+  SettingsManager mgr(nullptr, nullptr);
+  QList<CollectionConfig> loaded;
+  mgr.loadCollections(loaded);
+  QCOMPARE(loaded.size(), 2);
+  QHash<QString, ToolbarColorSource> bySection;
+  for (const CollectionConfig &cfg : loaded) {
+    bySection[cfg.name] = cfg.background.toolbarColorSource;
+  }
+  QCOMPARE(bySection.value(QStringLiteral("Accent")), ToolbarColorSource::Accent);
+  // An unrecognised value must not leave the toolbar unpainted — it lands
+  // on the default rather than something undefined.
+  QCOMPARE(bySection.value(QStringLiteral("Junk")), ToolbarColorSource::Titlebar);
+
+  mgr.saveCollections(loaded);
+  QList<CollectionConfig> reloaded;
+  mgr.loadCollections(reloaded);
+  QCOMPARE(reloaded.size(), 2);
+  for (const CollectionConfig &cfg : reloaded) {
+    if (cfg.name == QStringLiteral("Accent")) {
+      QCOMPARE(cfg.background.toolbarColorSource, ToolbarColorSource::Accent);
+    }
+  }
 }
 
 void TestSettingsRoundtrip::uuidCollisionCapturedForStartupWarning() {
@@ -387,7 +435,8 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
                                 "collectionTreeWidth=9\n"
                                 "collectionTreeIconsOnly=true\n"
                                 "collectionTreeShowLines=true\n"
-                                "collectionTreeIconSize=200\n"));
+                                "collectionTreeColorizeSelected=true\n"
+                                "collectionTreeIconSize=9000\n"));
   QList<CollectionConfig> widthClamped;
   mgr.loadCollections(widthClamped);
   QCOMPARE(widthClamped[0].collectionTree.treeWidth, CollectionTreeSettings::kMinWidth);
@@ -395,14 +444,17 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   // Tree lines default OFF; absence of the key must read false.
   QVERIFY(widthClamped[0].collectionTree.treeIconsOnly);
   QVERIFY(widthClamped[0].collectionTree.treeShowLines);
+  QVERIFY(widthClamped[0].collectionTree.treeColorizeSelected);
   QCOMPARE(widthClamped[0].collectionTree.treeIconSize, CollectionTreeSettings::kMaxIconSize);
   mgr.saveCollections(widthClamped);
   QList<CollectionConfig> iconReloaded;
   mgr.loadCollections(iconReloaded);
   QVERIFY(iconReloaded[0].collectionTree.treeIconsOnly);
   QVERIFY(iconReloaded[0].collectionTree.treeShowLines);
+  QVERIFY(iconReloaded[0].collectionTree.treeColorizeSelected);
   QCOMPARE(iconReloaded[0].collectionTree.treeIconSize, CollectionTreeSettings::kMaxIconSize);
   QVERIFY(!widthLoaded[0].collectionTree.treeShowLines); // key absent -> default off
+  QVERIFY(!widthLoaded[0].collectionTree.treeColorizeSelected);
 
   // Icon style + tint (user request 2026-08-17): round-trip, unknown style
   // clamps to normal, absent tint reads empty (= accent default).

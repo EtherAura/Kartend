@@ -284,7 +284,15 @@ distro-specific [Launchers + dependencies](../../readme.md#dependencies).
 | `B` (or equivalent) | Back / close | `gamepadBackButton` |
 | `R1` (or equivalent) | Toggle the details pane (right sidebar) | `gamepadToggleSidebarButton` |
 | `L1` (or equivalent) | Toggle the collection tree (left sidebar) | `gamepadToggleCollectionTreeButton` |
-| `Select` + direction | Move focus between sections (grid, toolbar, sidebars) | — |
+| D-pad / left stick | Always move the grid selection (pulls focus back to the grid) | `gamepadUseDpad` / `gamepadUseLeftStick` |
+| Directions (artwork expanded) | Cycle that item's artwork; past the ends, move to the previous/next item | — |
+| Mouse wheel (artwork expanded) | Same as the directions — one artwork per flick, then steps items | — |
+| Right stick up/down | Drive the details pane — scrolls the selected region and steps between artwork, description, and metadata; the selection is ringed | `gamepadRightStickSections` |
+| Right stick left/right | Move focus between the sidebars and the grid | `gamepadRightStickSections` |
+| Right stick (tree focused) | Up/down moves the collection tree's rows | `gamepadRightStickSections` |
+| Right stick (toolbar focused) | Left/right steps across the toolbar buttons | `gamepadRightStickSections` |
+| `Select` (held) + direction | Move focus between sections — the only way up reaches the toolbar. Shows the focus ring plus a dimmed, blurred backdrop | — |
+| Confirm (A) | Activates the focused section — tree row or toolbar button — instead of launching the grid item | `gamepadConfirmButton` |
 
 D-pad and left stick can be enabled / disabled independently. Held
 input repeats at the same cadence as keyboard repeat

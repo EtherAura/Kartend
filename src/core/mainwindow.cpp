@@ -54,6 +54,7 @@
 #include "librarytoolscontroller.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
+#include "kdecolorscheme.h"
 #include "marqueecontroller.h"
 #include "menucontroller.h"
 #include "navigationmanager.h"
@@ -116,12 +117,22 @@ MainWindow::MainWindow(QWidget *parent)
   m_overlayZOrderRegistry = std::make_unique<OverlayZOrderRegistry>(nullptr);
 
   ui->setupUi(this);
-  // The top bar (hamburger/home/title/search) sits on QPalette::Window while
-  // the item grid's viewport paints QPalette::Base — in dark themes the two
-  // tones differ just enough to draw a full-width seam across the top of the
-  // grid (field report 2026-08-17: "unwanted divider"). Painting the bar
-  // with the viewport's role fuses the two surfaces.
-  ui->itemsTopBar->setBackgroundRole(QPalette::Base);
+  // Chrome tone (field reports 2026-08-17/18). The top bar first took the
+  // GRID's role to kill a seam above the grid; the user then read the
+  // result as two-tone against the sidebars, which paint Window. One role
+  // for all the chrome — top bar and sidebars — is what actually reads as
+  // uniform, and the seam stays gone because the bar and the tree now
+  // match each other rather than the grid.
+  // The TITLEBAR's colour, not the accent: with accent-from-wallpaper the
+  // two differ (titlebar 146,67,13 vs accent 196,81,3 on the reporter's
+  // desktop), which is why accent-tinted chrome kept failing to match
+  // (field reports 2026-08-18). Falls back to the window role off KDE.
+  ui->itemsTopBar->setBackgroundRole(QPalette::Window);
+  if (const QColor titlebar = KdeColorScheme::activeTitlebarColor(); titlebar.isValid()) {
+    QPalette barPalette = ui->itemsTopBar->palette();
+    barPalette.setColor(QPalette::Window, titlebar);
+    ui->itemsTopBar->setPalette(barPalette);
+  }
   ui->itemsTopBar->setAutoFillBackground(true);
   setupUI();
 }

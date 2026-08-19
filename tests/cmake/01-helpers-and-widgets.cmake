@@ -151,6 +151,12 @@ kartend_add_test(NAME CollectionTreeModel
   LINK kartend_utils
 )
 
+# The desktop titlebar colour feeding the chrome tint (2026-08-18).
+kartend_add_test(NAME KdeColorSchemeTitlebar
+  SOURCES utils/app/test_kdecolorscheme_titlebar.cpp
+  LINK kartend_utils
+)
+
 # CollectionHealth tests (Kartend-lprv). Pure analyzer over fixture rows.
 kartend_add_test(NAME CollectionHealth
   SOURCES utils/db/test_collectionhealth.cpp

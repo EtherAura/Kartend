@@ -12,7 +12,6 @@
 #include "icollectiontreecontroller.h"
 
 class QHBoxLayout;
-class QToolButton;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QWidget;
@@ -138,10 +137,6 @@ private:
   /// because the icon prefs are per-collection. rebuildTree() itself ends by
   /// calling this, so build-time and refresh-time styling cannot drift.
   void refreshIcons();
-  /// Shows the slim edge marker exactly when the panel is hidden (user
-  /// request 2026-08-17: a hidden tree needs a visible way back). Call after
-  /// anything that changes the panel's visibility.
-  void syncFoldMarker();
   void applyStateForCollection(int collectionIndex);
   void highlightCollection(int collectionIndex);
   void onItemActivated(QTreeWidgetItem *item);
@@ -164,10 +159,9 @@ private:
   /// Width lives on cfg.collectionTree.treeWidth per collection; the drag
   /// resizes live and persists on release (user request 2026-08-17).
   QWidget *m_grip = nullptr;
-  /// Slim clickable strip shown at the panel's dock edge while the panel is
-  /// HIDDEN — the visible "unfold" affordance. Clicking toggles the tree
-  /// back on (same path as F6, so per-collection visibility persists).
-  QToolButton *m_foldMarker = nullptr;
+  /// True between press and release inside the tree's inner-edge drag
+  /// zone. Without it a plain click on a row would be read as a resize.
+  bool m_resizingPanel = false;
   int m_dragStartX = 0;
   int m_dragStartWidth = 0;
   /// Active collection's icon display options (user request 2026-08-17),
@@ -177,6 +171,9 @@ private:
   int m_iconSize = 16;
   TreeIconStyle m_iconStyle = TreeIconStyle::Normal;
   QString m_iconTint;
+  /// Render the ACTIVE collection's logo in colour even under a
+  /// monochrome/tinted style (user request 2026-08-18).
+  bool m_colorizeSelected = false;
   /// Panel width the current icon pixmaps were baked against (stamped by
   /// refreshIcons). Per-collection treeWidth means a collection switch can
   /// resize the panel; a mismatch here triggers a rebake so wide logos never

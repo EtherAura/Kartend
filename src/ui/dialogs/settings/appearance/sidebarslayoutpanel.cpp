@@ -24,6 +24,8 @@ SidebarsLayoutPanel::SidebarsLayoutPanel(QWidget *parent)
   }
   connect(ui->treeIconsOnlyCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
   connect(ui->treeShowLinesCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
+  connect(ui->treeColorizeSelectedCheckBox, &QCheckBox::toggled, this,
+          [this](bool) { emit changed(); });
   connect(ui->treeIconSizeSpinBox, QOverload<int>::of(&QSpinBox::valueChanged), this,
           [this](int) { emit changed(); });
   connect(ui->treeIconStyleComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
@@ -54,6 +56,7 @@ void SidebarsLayoutPanel::load() {
       static_cast<int>(current->collectionTree.treeJustification));
   ui->treeIconsOnlyCheckBox->setChecked(current->collectionTree.treeIconsOnly);
   ui->treeShowLinesCheckBox->setChecked(current->collectionTree.treeShowLines);
+  ui->treeColorizeSelectedCheckBox->setChecked(current->collectionTree.treeColorizeSelected);
   ui->treeIconSizeSpinBox->setValue(current->collectionTree.treeIconSize);
   ui->treeIconStyleComboBox->setCurrentIndex(static_cast<int>(current->collectionTree.treeIconStyle));
   ui->treeIconTintEdit->setText(current->collectionTree.treeIconTintColor);
@@ -71,6 +74,7 @@ void SidebarsLayoutPanel::clear() {
       static_cast<int>(CollectionTreeSettings{}.treeJustification));
   ui->treeIconsOnlyCheckBox->setChecked(CollectionTreeSettings{}.treeIconsOnly);
   ui->treeShowLinesCheckBox->setChecked(CollectionTreeSettings{}.treeShowLines);
+  ui->treeColorizeSelectedCheckBox->setChecked(CollectionTreeSettings{}.treeColorizeSelected);
   ui->treeIconSizeSpinBox->setValue(CollectionTreeSettings{}.treeIconSize);
   ui->treeIconStyleComboBox->setCurrentIndex(static_cast<int>(CollectionTreeSettings{}.treeIconStyle));
   ui->treeIconTintEdit->clear();
@@ -94,6 +98,7 @@ void SidebarsLayoutPanel::save() {
       static_cast<SidebarJustification>(ui->treeJustificationComboBox->currentIndex());
   current->collectionTree.treeIconsOnly = ui->treeIconsOnlyCheckBox->isChecked();
   current->collectionTree.treeShowLines = ui->treeShowLinesCheckBox->isChecked();
+  current->collectionTree.treeColorizeSelected = ui->treeColorizeSelectedCheckBox->isChecked();
   current->collectionTree.treeIconSize = ui->treeIconSizeSpinBox->value();
   current->collectionTree.treeIconStyle =
       static_cast<TreeIconStyle>(ui->treeIconStyleComboBox->currentIndex());

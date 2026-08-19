@@ -178,21 +178,27 @@ auto buildTitleBreadcrumbHtml(int collectionIndex, const QList<CollectionConfig>
       const QString name = collections[idx].name.toHtmlEscaped();
       segments << linkTemplate.arg(QString::number(idx), linkColorHex, name);
     }
-    if (inSubfolder) {
-      // Current collection is clickable (returns to its root via `root:`)
-      // only when we've navigated into a virtual subfolder below it.
-      segments << rootLinkTemplate.arg(linkColorHex, config.name.toHtmlEscaped());
-    } else {
-      segments << config.name.toHtmlEscaped();
-    }
+    // The current collection is ALWAYS clickable (field report
+    // 2026-08-18: "clicking collection name in toolbar doesnt navigate").
+    // In a subfolder it returns to the collection root; otherwise it
+    // re-enters the collection itself, which is what re-selects it after
+    // browsing elsewhere.
+    segments << (inSubfolder
+                     ? rootLinkTemplate.arg(linkColorHex, config.name.toHtmlEscaped())
+                     : QStringLiteral("<a href=\"collection:%1\" style=\"color:%2; "
+                                      "text-decoration:none;\">%3</a>")
+                           .arg(QString::number(collectionIndex), linkColorHex,
+                                config.name.toHtmlEscaped()));
     return segments.join(QStringLiteral(" › "));
   }
 
-  // Root collection — clickable only when in a subfolder.
+  // Root collection — clickable either way (see above).
   if (inSubfolder) {
     return rootLinkTemplate.arg(linkColorHex, config.name.toHtmlEscaped());
   }
-  return config.name.toHtmlEscaped();
+  return QStringLiteral("<a href=\"collection:%1\" style=\"color:%2; "
+                        "text-decoration:none;\">%3</a>")
+      .arg(QString::number(collectionIndex), linkColorHex, config.name.toHtmlEscaped());
 }
 
 auto buildSubfolderBreadcrumbHtml(const QString &subfolder, const QString &linkColorHex)

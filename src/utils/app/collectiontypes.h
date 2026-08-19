@@ -37,6 +37,16 @@ enum class SidebarJustification { BelowToolbar = 0, FullHeight = 1 };
 /// the icon's alpha silhouette to a fixed dark/light ink; Tinted recolours it
 /// with `treeIconTintColor` (or the collection's accent when that is empty).
 /// Enum order is the settings combo's row order — keep them in sync.
+/// Where the toolbar's fill colour comes from (user request 2026-08-18).
+/// The desktop-derived options exist because the collection's own colour
+/// cannot match the window titlebar, which is what prompted this.
+enum class ToolbarColorSource {
+  CollectionPrimary, ///< The collection's primaryColor — the long-standing behaviour.
+  Titlebar,          ///< The desktop titlebar (kdeglobals [WM] activeBackground).
+  Accent,            ///< The desktop accent (kdeglobals AccentColor).
+  Highlight,         ///< The palette's highlight/selection colour.
+};
+
 enum class TreeIconStyle { Normal = 0, MonochromeDark = 1, MonochromeLight = 2, Tinted = 3 };
 
 /// how the details-pane background is rendered. Color and Image

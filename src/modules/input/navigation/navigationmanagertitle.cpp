@@ -48,6 +48,17 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
     return;
   }
 
+  // The breadcrumb can be turned off entirely (user request 2026-08-18);
+  // hide both labels and stop here so nothing is rebuilt unseen.
+  if (m_generalSettings && !m_generalSettings->view.showToolbarBreadcrumbs) {
+    titleLabel->setVisible(false);
+    if (subfolderLabel) {
+      subfolderLabel->setVisible(false);
+    }
+    return;
+  }
+  titleLabel->setVisible(true);
+
   if (collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     titleLabel->clear();
     if (subfolderLabel) subfolderLabel->setVisible(false);

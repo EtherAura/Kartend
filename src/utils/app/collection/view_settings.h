@@ -28,6 +28,15 @@ struct ViewSettings {
   // "all visible, not fullscreen" state.
   bool showMenuBar = true;
   bool showToolbar = true;
+  /// Scrollbars stay hidden until the pointer is over their area (user
+  /// request 2026-08-18). Applies to the item grid, the collection tree
+  /// and the details pane; keyboard/gamepad scrolling is unaffected since
+  /// only the bar's visibility changes, never the scrolling itself.
+  bool scrollbarsOnHoverOnly = false;
+  /// Show the collection name / breadcrumb path in the toolbar (user
+  /// request 2026-08-18). Off hides both the title and the subfolder path,
+  /// leaving the toolbar to its controls.
+  bool showToolbarBreadcrumbs = true;
   bool fullscreen = false;
   // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
   // settings dirty-check field-complete automatically (Kartend-6oqat).

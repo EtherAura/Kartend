@@ -127,6 +127,10 @@ facing names and rebinding workflow.
 | `gamepadBackButton` | string | `B` | Back / escape button. |
 | `gamepadToggleSidebarButton` | string | `R1` | Toggle the details pane (right sidebar). |
 | `gamepadToggleCollectionTreeButton` | string | `L1` | Toggle the collection tree (left sidebar). |
+| `gamepadRightStickSections` | bool | `true` | Right-stick flicks move focus between sections. |
+| `scrollbarsOnHoverOnly` | bool | `false` | Slim overlay scrollbars that fade in and reserve no space. |
+| `toolbarColorSource` | string | `titlebar` | Toolbar fill: `titlebar`, `accent`, `highlight` or `collection`. |
+| `collectionTreeColorizeSelected` | bool | `false` | With a monochrome/tinted tree style, show the active collection's logo in colour. |
 
 Button names are the SDL / Qt6::Gamepad standard labels (`A`, `B`, `X`,
 `Y`, `LB`, `RB`, etc.).
