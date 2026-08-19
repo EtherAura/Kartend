@@ -26,7 +26,7 @@ constexpr int kEdgeMargin = 3;
 constexpr int kMinHandlePx = 28;
 constexpr int kFadeMs = 90; // snappier show/hide (user request 2026-08-18)
 constexpr int kIdleHideMs = 700;
-constexpr int kHandleAlpha = 170;
+constexpr int kHandleAlpha = 210; // the titlebar colour, only slightly translucent
 
 /// ONE colour for every overlay bar, wherever it lives (user request
 /// 2026-08-18: "all scrollbars should be same color so it blends in").
@@ -35,12 +35,13 @@ constexpr int kHandleAlpha = 170;
 /// Derived from the desktop titlebar so it sits in the same family as the
 /// rest of the chrome, with the app palette as the off-KDE fallback.
 QColor handleColor() {
+  // The TITLEBAR colour itself (user decision 2026-08-18) — not lightened,
+  // not a neutral ink. Same source as the toolbar and the tree selection,
+  // so every scrollbar belongs to the same chrome family wherever it is
+  // drawn. Palette highlight is the off-KDE fallback.
   static const QColor cached = []() {
-    QColor base = KdeColorScheme::activeTitlebarColor();
-    if (!base.isValid()) {
-      base = QApplication::palette().color(QPalette::Highlight);
-    }
-    return base.lighter(150);
+    const QColor titlebar = KdeColorScheme::activeTitlebarColor();
+    return titlebar.isValid() ? titlebar : QApplication::palette().color(QPalette::Highlight);
   }();
   QColor ink = cached;
   ink.setAlpha(kHandleAlpha);
