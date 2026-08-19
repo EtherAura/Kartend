@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include <QApplication>
 #include <QEvent>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -10,7 +11,6 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QRegularExpression>
-#include <QApplication>
 #include <QStyle>
 #include <QStyledItemDelegate>
 #include <QStyleOption>
@@ -37,11 +37,11 @@ namespace {
 constexpr int kPanelWidth = 240;
 
 /// Item data roles.
-constexpr int kRoleCollectionIndex = Qt::UserRole;  // int; -1 for the group header
-constexpr int kRoleExpansionKey = Qt::UserRole + 1; // QString; UUID or reserved key
+constexpr int kRoleCollectionIndex = Qt::UserRole;      // int; -1 for the group header
+constexpr int kRoleExpansionKey = Qt::UserRole + 1;     // QString; UUID or reserved key
 constexpr int kRoleParentCollection = Qt::UserRole + 2; // int; -1 for roots/playlists
 constexpr int kRoleName = Qt::UserRole + 3; // QString; cfg.name (text may be blank in icons-only)
-constexpr int kRoleIsCategory = Qt::UserRole + 4; // bool; row has children (incl. group header)
+constexpr int kRoleIsCategory = Qt::UserRole + 4;  // bool; row has children (incl. group header)
 constexpr int kRoleBakedPixmap = Qt::UserRole + 5; // QPixmap; painted by TreeIconDelegate
 /// Symmetric horizontal margin the icons keep from the panel edges
 /// (widened from 8 on 2026-08-18 — logos ran too close to both edges).
@@ -74,10 +74,12 @@ void drawChevron(QPainter *painter, const QStyleOptionViewItem &option, const QM
   QPolygonF triangle;
   if (view->isExpanded(index)) {
     triangle << QPointF(centre.x() - r, centre.y() - r * 0.6)
-             << QPointF(centre.x() + r, centre.y() - r * 0.6) << QPointF(centre.x(), centre.y() + r);
+             << QPointF(centre.x() + r, centre.y() - r * 0.6)
+             << QPointF(centre.x(), centre.y() + r);
   } else {
     triangle << QPointF(centre.x() - r * 0.6, centre.y() - r)
-             << QPointF(centre.x() - r * 0.6, centre.y() + r) << QPointF(centre.x() + r, centre.y());
+             << QPointF(centre.x() - r * 0.6, centre.y() + r)
+             << QPointF(centre.x() + r, centre.y());
   }
   painter->save();
   painter->setRenderHint(QPainter::Antialiasing);
@@ -161,8 +163,7 @@ public:
   using QTreeWidget::QTreeWidget;
 
 protected:
-  void drawBranches(QPainter *painter, const QRect &rect,
-                    const QModelIndex &index) const override {
+  void drawBranches(QPainter *painter, const QRect &rect, const QModelIndex &index) const override {
     if (property("kartendShowLines").toBool()) {
       QTreeWidget::drawBranches(painter, rect, index);
       return;
@@ -362,7 +363,6 @@ void CollectionTreeController::setupPanel() {
   m_grip->setCursor(Qt::SplitHCursor);
   m_grip->installEventFilter(this);
   // NOT added to the layout — it would reserve width again.
-
 
   // No "Collections" header label (user request 2026-08-17: "we all know
   // they are collections") — the tree starts at the panel's top edge.
@@ -594,12 +594,11 @@ void CollectionTreeController::rebuildTree() {
     // shuffles for hand-made shells.
     QString expansionKey = hierarchy.collectionUuid(index);
     if (expansionKey.isEmpty()) {
-      const QString parentName = (current.parentCollectionIndex >= 0 &&
-                                  current.parentCollectionIndex < collections.size())
-                                     ? collections.at(current.parentCollectionIndex).name
-                                     : QString();
-      expansionKey =
-          QStringLiteral("::name::") + parentName + QLatin1Char('/') + cfg.name;
+      const QString parentName =
+          (current.parentCollectionIndex >= 0 && current.parentCollectionIndex < collections.size())
+              ? collections.at(current.parentCollectionIndex).name
+              : QString();
+      expansionKey = QStringLiteral("::name::") + parentName + QLatin1Char('/') + cfg.name;
     }
     item->setData(0, kRoleExpansionKey, expansionKey);
     item->setData(0, kRoleIsCategory, !current.node->children.isEmpty());
@@ -672,13 +671,12 @@ bool CollectionTreeController::eventFilter(QObject *watched, QEvent *event) {
     return false;
   }
   if (m_tree && watched == m_tree->viewport()) {
-    if (event->type() == QEvent::Resize &&
-        m_tree->viewport()->width() != m_bakedViewportWidth && m_bakedViewportWidth != 0) {
+    if (event->type() == QEvent::Resize && m_tree->viewport()->width() != m_bakedViewportWidth &&
+        m_bakedViewportWidth != 0) {
       // Deferred: icon swaps inside a resize re-enter layout. The width
       // check keeps the scrollbar-toggle feedback loop convergent.
       QTimer::singleShot(0, this, [this]() {
-        if (m_tree && m_tree->viewport() &&
-            m_tree->viewport()->width() != m_bakedViewportWidth) {
+        if (m_tree && m_tree->viewport() && m_tree->viewport()->width() != m_bakedViewportWidth) {
           refreshIcons();
         }
       });
@@ -695,8 +693,7 @@ bool CollectionTreeController::eventFilter(QObject *watched, QEvent *event) {
   const auto inGripZone = [this](const QPoint &pos) {
     const int zone = UIConstants::DetailsPane::RESIZE_GRIP_PX;
     const int w = m_tree ? m_tree->width() : 0;
-    return m_insertedPosition == DetailsPanePosition::Right ? pos.x() <= zone
-                                                            : pos.x() >= w - zone;
+    return m_insertedPosition == DetailsPanePosition::Right ? pos.x() <= zone : pos.x() >= w - zone;
   };
   if (event->type() == QEvent::MouseMove && !m_resizingPanel) {
     auto *move = static_cast<QMouseEvent *>(event);
@@ -781,9 +778,9 @@ void CollectionTreeController::refreshIcons() {
   // grip, scrollbar, frame, and theme margins, so measure instead of
   // estimating). Depth indentation is subtracted PER ROW below; 8px covers
   // the item's own decoration margin.
-  const int viewportWidth =
-      m_tree->viewport() && m_tree->viewport()->width() > 0 ? m_tree->viewport()->width()
-                                                            : m_bakedPanelWidth - 29;
+  const int viewportWidth = m_tree->viewport() && m_tree->viewport()->width() > 0
+                                ? m_tree->viewport()->width()
+                                : m_bakedPanelWidth - 29;
   // HARD INVARIANT (user directive 2026-08-17): no icon may be wider than
   // the sidebar. Leaf budgets are viewport minus the symmetric
   // kPanelChrome margins; category budgets additionally stop short of the
@@ -848,8 +845,8 @@ void CollectionTreeController::refreshIcons() {
       toolbarHeight = qMax(bar->height(), bar->sizeHint().height());
     }
 
-    QString path = CollectionUtils::resolveCollectionTileArtwork(&collections, index, name,
-                                                                 parentArtworkDir);
+    QString path =
+        CollectionUtils::resolveCollectionTileArtwork(&collections, index, name, parentArtworkDir);
     if (path.isEmpty()) {
       item->setData(0, kRoleBakedPixmap, QVariant());
       item->setIcon(0, QIcon());
@@ -873,9 +870,8 @@ void CollectionTreeController::refreshIcons() {
     // The row you are VIEWING can keep its colours while the rest stay
     // monochrome/tinted (user request 2026-08-18) — the cache key carries
     // the decision so the two renderings never share an entry.
-    const bool colourThisRow =
-        m_iconStyle == TreeIconStyle::Normal ||
-        (m_colorizeSelected && index == activeCollectionIndex());
+    const bool colourThisRow = m_iconStyle == TreeIconStyle::Normal ||
+                               (m_colorizeSelected && index == activeCollectionIndex());
     const QString cacheKey = path + QLatin1Char('|') + QString::number(maxWidth) +
                              (colourThisRow ? QLatin1String("|c") : QLatin1String("|m"));
     auto cached = cache.find(cacheKey);
@@ -890,8 +886,7 @@ void CollectionTreeController::refreshIcons() {
         // 2026-08-17: "alignment is still off in mono/tinted mode" — the
         // mono styles are exactly the ones that swap to SVG sources). The
         // oversized render keeps the post-trim downscale sharp.
-        pm = QIcon(path).pixmap(
-            QSize(devWidth * 2, qRound(devHeight * kThinHeightBoost) * 2));
+        pm = QIcon(path).pixmap(QSize(devWidth * 2, qRound(devHeight * kThinHeightBoost) * 2));
       }
       if (pm.isNull()) {
         pm = QPixmap(path);
@@ -906,8 +901,7 @@ void CollectionTreeController::refreshIcons() {
         // icon to the configured size; the width clamp below only engages
         // for a logo too wide to fit at that height, which is the one case
         // where something has to give.
-        const qreal aspect =
-            pm.height() > 0 ? static_cast<qreal>(pm.width()) / pm.height() : 1.0;
+        const qreal aspect = pm.height() > 0 ? static_cast<qreal>(pm.width()) / pm.height() : 1.0;
         const qreal boost = std::clamp(aspect / kThinAspectRef, 1.0, kThinHeightBoost);
         const int allowedDevH = qMax(1, qRound(devHeight * boost));
         pm = pm.scaledToHeight(allowedDevH, Qt::SmoothTransformation);
@@ -951,9 +945,8 @@ void CollectionTreeController::refreshIcons() {
               if (a == 0) continue;
               const int g = qGray(line[x]);
               if (m_iconStyle == TreeIconStyle::Tinted) {
-                const QColor c = QColor::fromHslF(
-                    tintHue < 0 ? 0 : tintHue, tintSat,
-                    0.30F + 0.55F * (static_cast<float>(g) / 255.0F));
+                const QColor c = QColor::fromHslF(tintHue < 0 ? 0 : tintHue, tintSat,
+                                                  0.30F + 0.55F * (static_cast<float>(g) / 255.0F));
                 line[x] = qRgba(c.red(), c.green(), c.blue(), a);
               } else {
                 const int v = lightInk ? 140 + g * 115 / 255 : g * 115 / 255;
@@ -1118,7 +1111,7 @@ void CollectionTreeController::toggleVisible() {
     cfg->collectionTree.treeVisible = !cfg->collectionTree.treeVisible;
     m_panel->setVisible(cfg->collectionTree.treeVisible);
     emit visibilityChanged(cfg->collectionTree.treeVisible);
-      if (m_persistCollections) {
+    if (m_persistCollections) {
       m_persistCollections();
     }
     return;

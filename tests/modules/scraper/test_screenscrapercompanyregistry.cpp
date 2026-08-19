@@ -71,8 +71,7 @@ void TestScreenScraperCompanyRegistry::parse_rejectsHostileIds() {
 }
 
 void TestScreenScraperCompanyRegistry::load_missingFileIsEmptySuccess() {
-  auto result =
-      ScreenScraperCompanyRegistry::load(QStringLiteral("/nonexistent/companies.json"));
+  auto result = ScreenScraperCompanyRegistry::load(QStringLiteral("/nonexistent/companies.json"));
   QVERIFY(result.isOk());
   QVERIFY(result.value().isEmpty());
 }
@@ -99,8 +98,8 @@ void TestScreenScraperCompanyRegistry::merge_newIdChangesMap_existingDoesNot() {
   QVERIFY(!ScreenScraperCompanyRegistry::merge(map, QStringLiteral("3"),
                                                QStringLiteral("Different Text")));
   QCOMPARE(map.value(QStringLiteral("3")), QStringLiteral("Maker")); // first-seen kept
-  QVERIFY(!ScreenScraperCompanyRegistry::merge(map, QStringLiteral("../evil"),
-                                               QStringLiteral("Bad")));
+  QVERIFY(
+      !ScreenScraperCompanyRegistry::merge(map, QStringLiteral("../evil"), QStringLiteral("Bad")));
   QCOMPARE(map.size(), 1);
 }
 
@@ -166,16 +165,15 @@ void TestScreenScraperCompanyRegistry::logoForCollectionName_matchesNameToArtOnD
   map.insert(QStringLiteral("3"), QStringLiteral("Maker A"));
   map.insert(QStringLiteral("20"), QStringLiteral("Maker A")); // no art for this arm
   // Name matches but nothing scraped yet — a normal early state, not an error.
-  QVERIFY(ScreenScraperCompanyRegistry::logoForCollectionName(map, QStringLiteral("Maker A"),
-                                                              {root})
-              .isEmpty());
+  QVERIFY(
+      ScreenScraperCompanyRegistry::logoForCollectionName(map, QStringLiteral("Maker A"), {root})
+          .isEmpty());
   const QString art = seedArt(root, QStringLiteral("pictocouleur"), QStringLiteral("3"));
   // Sorted id order tries 20 (no art) then 3 (hit): partial art still resolves.
-  QCOMPARE(ScreenScraperCompanyRegistry::logoForCollectionName(map, QStringLiteral("maker a"),
-                                                               {root}),
-           art);
-  QVERIFY(ScreenScraperCompanyRegistry::logoForCollectionName(map, QStringLiteral("Nobody"),
-                                                              {root})
+  QCOMPARE(
+      ScreenScraperCompanyRegistry::logoForCollectionName(map, QStringLiteral("maker a"), {root}),
+      art);
+  QVERIFY(ScreenScraperCompanyRegistry::logoForCollectionName(map, QStringLiteral("Nobody"), {root})
               .isEmpty());
 }
 
@@ -196,7 +194,7 @@ void TestScreenScraperCompanyRegistry::applyToCollections_wiresShellsAndRespects
     return c;
   };
   QList<CollectionConfig> collections;
-  collections.append(makeCfg(QStringLiteral("Maker")));   // shell — prefix match, empty icon
+  collections.append(makeCfg(QStringLiteral("Maker"))); // shell — prefix match, empty icon
   CollectionConfig platform = makeCfg(QStringLiteral("Maker Corporation Ltd"));
   platform.collectionIcon = QStringLiteral("/x/_shared/wheel/platform_7.png"); // platform art
   collections.append(platform);
@@ -208,13 +206,13 @@ void TestScreenScraperCompanyRegistry::applyToCollections_wiresShellsAndRespects
   collections.append(playlist);
 
   QVERIFY(ScreenScraperCompanyRegistry::applyToCollections(collections, regPath));
-  QCOMPARE(collections[0].collectionIcon, art);                 // shell wired
+  QCOMPARE(collections[0].collectionIcon, art); // shell wired
   QCOMPARE(collections[0].background.headerLogoImage, art);
   QCOMPARE(collections[1].collectionIcon,
-           QStringLiteral("/x/_shared/wheel/platform_7.png"));  // platform art kept
+           QStringLiteral("/x/_shared/wheel/platform_7.png")); // platform art kept
   QCOMPARE(collections[2].collectionIcon,
-           QStringLiteral("/home/user/my-icon.png"));           // user icon kept
-  QVERIFY(collections[3].collectionIcon.isEmpty());             // playlists untouched
+           QStringLiteral("/home/user/my-icon.png")); // user icon kept
+  QVERIFY(collections[3].collectionIcon.isEmpty());   // playlists untouched
 
   // Idempotent: a second pass changes nothing.
   QVERIFY(!ScreenScraperCompanyRegistry::applyToCollections(collections, regPath));

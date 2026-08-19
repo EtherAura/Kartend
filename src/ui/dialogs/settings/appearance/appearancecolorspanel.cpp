@@ -128,20 +128,19 @@ void AppearanceColorsPanel::load() {
   updateBackgroundButtonForType();
 
   ui->primaryColorEdit->setText(config.background.primaryColor);
-  ui->toolbarColorSourceComboBox->setCurrentIndex(
-      [&]() {
-        switch (config.background.toolbarColorSource) {
-        case ToolbarColorSource::Titlebar:
-          return 0;
-        case ToolbarColorSource::Accent:
-          return 1;
-        case ToolbarColorSource::Highlight:
-          return 2;
-        case ToolbarColorSource::CollectionPrimary:
-          return 3;
-        }
-        return 0;
-      }());
+  ui->toolbarColorSourceComboBox->setCurrentIndex([&]() {
+    switch (config.background.toolbarColorSource) {
+    case ToolbarColorSource::Titlebar:
+      return 0;
+    case ToolbarColorSource::Accent:
+      return 1;
+    case ToolbarColorSource::Highlight:
+      return 2;
+    case ToolbarColorSource::CollectionPrimary:
+      return 3;
+    }
+    return 0;
+  }());
   ui->tileColorEdit->setText(config.background.tileColor);
   ui->selectionColorEdit->setText(config.background.selectionColor);
   ui->listRowColorEdit->setText(config.listView.listRowColor);

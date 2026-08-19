@@ -1,8 +1,8 @@
 #include "overlayscrollbars.h"
 
-#include <QApplication>
 #include "kdecolorscheme.h"
 #include <QAbstractScrollArea>
+#include <QApplication>
 #include <QEvent>
 #include <QMouseEvent>
 #include <QPainter>
@@ -149,10 +149,10 @@ protected:
     const int handleLen =
         qMax(kMinHandlePx, static_cast<int>(static_cast<qreal>(span) * bar->pageStep() / range));
     const int travel = span - handleLen;
-    const qreal progress = bar->maximum() > bar->minimum()
-                               ? static_cast<qreal>(bar->value() - bar->minimum()) /
-                                     (bar->maximum() - bar->minimum())
-                               : 0.0;
+    const qreal progress =
+        bar->maximum() > bar->minimum()
+            ? static_cast<qreal>(bar->value() - bar->minimum()) / (bar->maximum() - bar->minimum())
+            : 0.0;
     const int offset = static_cast<int>(travel * progress);
 
     QColor ink = handleColor();
@@ -161,9 +161,8 @@ protected:
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(Qt::NoPen);
     painter.setBrush(ink);
-    const QRectF handle = m_orientation == Qt::Vertical
-                              ? QRectF(0, offset, kThickness, handleLen)
-                              : QRectF(offset, 0, handleLen, kThickness);
+    const QRectF handle = m_orientation == Qt::Vertical ? QRectF(0, offset, kThickness, handleLen)
+                                                        : QRectF(offset, 0, handleLen, kThickness);
     painter.drawRoundedRect(handle, kThickness / 2.0, kThickness / 2.0);
   }
 
@@ -189,8 +188,7 @@ private:
     }
     const qreal along = m_orientation == Qt::Vertical ? pos.y() : pos.x();
     const qreal fraction = qBound(0.0, along / span, 1.0);
-    bar->setValue(bar->minimum() +
-                  static_cast<int>((bar->maximum() - bar->minimum()) * fraction));
+    bar->setValue(bar->minimum() + static_cast<int>((bar->maximum() - bar->minimum()) * fraction));
   }
 
   void flash() {

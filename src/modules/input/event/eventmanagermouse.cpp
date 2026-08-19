@@ -11,9 +11,9 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
-#include "idetailspane.h"
 #include "collection/validationhelpers.h"
 #include "hoverscrollhandler.h"
+#include "idetailspane.h"
 #include "ifilecollectionlookup.h"
 #include "igridlayoutscroll.h"
 #include "imouseholdcontrol.h"
@@ -68,9 +68,9 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
         continue;
       }
       auto *wheel = static_cast<QWheelEvent *>(event);
-      const int dy = wheel ? (wheel->angleDelta().y() != 0 ? wheel->angleDelta().y()
-                                                           : wheel->pixelDelta().y())
-                           : 0;
+      const int dy =
+          wheel ? (wheel->angleDelta().y() != 0 ? wheel->angleDelta().y() : wheel->pixelDelta().y())
+                : 0;
       if (dy != 0 && m_ctx->ui.sidebar->cycleGalleryPreviewForWheel(dy > 0 ? -1 : 1)) {
         event->accept();
         return true;
@@ -99,13 +99,12 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
       const int dx =
           wheel->angleDelta().x() != 0 ? wheel->angleDelta().x() : wheel->pixelDelta().x();
       if (const QScrollBar *bar = scrollArea->verticalScrollBar(); bar && dy != 0) {
-        canScroll = (dy > 0 && bar->value() > bar->minimum()) ||
-                    (dy < 0 && bar->value() < bar->maximum());
+        canScroll =
+            (dy > 0 && bar->value() > bar->minimum()) || (dy < 0 && bar->value() < bar->maximum());
       }
-      if (const QScrollBar *bar = scrollArea->horizontalScrollBar();
-          bar && !canScroll && dx != 0) {
-        canScroll = (dx > 0 && bar->value() > bar->minimum()) ||
-                    (dx < 0 && bar->value() < bar->maximum());
+      if (const QScrollBar *bar = scrollArea->horizontalScrollBar(); bar && !canScroll && dx != 0) {
+        canScroll =
+            (dx > 0 && bar->value() > bar->minimum()) || (dx < 0 && bar->value() < bar->maximum());
       }
     }
     if (canScroll) {

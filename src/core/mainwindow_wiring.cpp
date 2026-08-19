@@ -180,6 +180,7 @@
 
 #include "applicationmanager.h"
 #include "artworkmanager.h"
+#include "attractmanager.h"
 #include "collection/collectionconfig.h"
 #include "collection/enumstringhelpers.h"
 #include "collection/typehelpers.h"
@@ -200,7 +201,6 @@
 #include "pathutils.h"
 #include "scrapercontroller.h"
 #include "scrolleventscontroller.h"
-#include "attractmanager.h"
 #include "scrollmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"

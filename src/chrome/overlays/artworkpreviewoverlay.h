@@ -1,8 +1,8 @@
 #ifndef ARTWORKPREVIEWOVERLAY_H
 #define ARTWORKPREVIEWOVERLAY_H
 
-#include <QString>
 #include <QElapsedTimer>
+#include <QString>
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -73,7 +73,6 @@ private:
   [[nodiscard]] bool wheelGestureIsNew();
 
 public:
-
   /// Show the overlay playing the video at @p absoluteVideoPath. The video
   /// loops muted at ~80% of the parent size. Closing the overlay (Escape,
   /// click-outside, or the close button) stops playback.

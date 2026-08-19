@@ -58,11 +58,10 @@ void GamepadManager::updateRightStickSection() {
   if (shuttingDown() || m_suspended || m_bindingCaptureActive) {
     return;
   }
-  const bool enabled =
-      !m_generalSettings || m_generalSettings->gamepad.gamepadRightStickSections;
+  const bool enabled = !m_generalSettings || m_generalSettings->gamepad.gamepadRightStickSections;
   const auto stick = GamepadHelpers::axisToDirections(
-      m_axisRightX, m_axisRightY, m_rightStickDirection,
-      UIConstants::Gamepad::AXIS_DEADZONE_ON, UIConstants::Gamepad::AXIS_DEADZONE_OFF, enabled);
+      m_axisRightX, m_axisRightY, m_rightStickDirection, UIConstants::Gamepad::AXIS_DEADZONE_ON,
+      UIConstants::Gamepad::AXIS_DEADZONE_OFF, enabled);
   const Direction dir =
       GamepadHelpers::combineToDirection(false, false, false, false, /*useDpad=*/false, stick);
 
@@ -134,9 +133,7 @@ void GamepadManager::applyActiveDirection(Direction newDirection) {
   // the focus SECTION, not the selection — and must not start the keyboard
   // repeat pipeline (section hops don't auto-repeat).
   if (m_buttonBack) {
-    const int dx = newDirection == Direction::Left ? -1
-                   : newDirection == Direction::Right ? 1
-                                                      : 0;
+    const int dx = newDirection == Direction::Left ? -1 : newDirection == Direction::Right ? 1 : 0;
     const int dy = newDirection == Direction::Up ? -1 : newDirection == Direction::Down ? 1 : 0;
     if (dx != 0 || dy != 0) {
       emit requestFocusSectionMove(dx, dy);

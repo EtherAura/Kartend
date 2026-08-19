@@ -180,9 +180,10 @@ void TestSettingsMigration::currentVersionIni_doesNotInvokeAnyMigration() {
 
   qInstallMessageHandler(previousHandler);
 
-  QVERIFY2(capturedMigrationMessages.isEmpty(),
-           qPrintable(QStringLiteral("Expected no migration log for a current-version INI but got: %1")
-                          .arg(capturedMigrationMessages.join(QStringLiteral(" | ")))));
+  QVERIFY2(
+      capturedMigrationMessages.isEmpty(),
+      qPrintable(QStringLiteral("Expected no migration log for a current-version INI but got: %1")
+                     .arg(capturedMigrationMessages.join(QStringLiteral(" | ")))));
   QCOMPARE(settings.input.rememberSelection, true);
   QCOMPARE(settings.media.pixmapCacheSizeMB, 64);
 }

@@ -1,28 +1,28 @@
 #include "test_collectiontreepanel.h"
 
-#include "collection/collectionconfig.h"
 #include "applicationmanager.h"
+#include "artworkpreviewoverlay.h"
+#include "collection/collectionconfig.h"
 #include "collectiontreecontroller.h"
+#include "detailspane.h"
 #include "interactionmanager.h"
 #include "keyboardmanager.h"
-#include "artworkpreviewoverlay.h"
-#include "overlayscrollbars.h"
-#include "detailspane.h"
 #include "mainwindow.h"
 #include "mocks/mockedmainwindowfixture.h"
+#include "overlayscrollbars.h"
 
 #include <QDir>
 #include <QImage>
+#include <QLabel>
 #include <QPainter>
 #include <QScrollBar>
 #include <QSignalSpy>
-#include <QLabel>
-#include <QWheelEvent>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
+#include <QWheelEvent>
 #include <QWidget>
 
 void TestCollectionTreePanel::hiddenTree_leavesNoIndicatorBehind() {
@@ -71,9 +71,10 @@ void TestCollectionTreePanel::tree_opensFullyExpanded_onFreshSession() {
       continue;
     }
     sawParentRow = true;
-    QVERIFY2((*it)->isExpanded(),
-             qPrintable(QStringLiteral("row '%1' must open expanded on a fresh session")
-                            .arg((*it)->text(0))));
+    QVERIFY2(
+        (*it)->isExpanded(),
+        qPrintable(
+            QStringLiteral("row '%1' must open expanded on a fresh session").arg((*it)->text(0))));
   }
   QVERIFY2(sawParentRow, "seeded parent/child must produce at least one branch row");
 }
@@ -267,8 +268,7 @@ void TestCollectionTreePanel::focusModifierHud_showsWhileHeldAndHidesOnRelease()
   // writes the composited window so the HUD can be reviewed, not just
   // asserted.
   if (const QByteArray dumpDir = qgetenv("KARTEND_TEST_DUMP_DIR"); !dumpDir.isEmpty()) {
-    win->grab().toImage().save(QString::fromLocal8Bit(dumpDir) +
-                               QStringLiteral("/focus-hud.png"));
+    win->grab().toImage().save(QString::fromLocal8Bit(dumpDir) + QStringLiteral("/focus-hud.png"));
   }
 
   im->setFocusModifierActive(false);
@@ -361,8 +361,7 @@ void TestCollectionTreePanel::rightStick_verticalReachesToolbarOnlyWithModifier(
   auto *ring = win->findChild<QWidget *>(QStringLiteral("selectionIndicator"));
   QVERIFY2(ring && ring->isVisible(), "chord mode must show the focus ring");
   if (const QByteArray dumpDir = qgetenv("KARTEND_TEST_DUMP_DIR"); !dumpDir.isEmpty()) {
-    win->grab().toImage().save(QString::fromLocal8Bit(dumpDir) +
-                               QStringLiteral("/chord-ring.png"));
+    win->grab().toImage().save(QString::fromLocal8Bit(dumpDir) + QStringLiteral("/chord-ring.png"));
   }
   im->setFocusModifierActive(false);
 }

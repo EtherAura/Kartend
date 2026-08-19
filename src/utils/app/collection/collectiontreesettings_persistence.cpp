@@ -52,11 +52,10 @@ void load(QSettings &settings, CollectionTreeSettings &tree, const QString &coll
   tree.treeShowLines =
       settings.value(keys::kCollectionTreeShowLines, CollectionTreeSettings{}.treeShowLines)
           .toBool();
-  tree.treeColorizeSelected =
-      settings
-          .value(keys::kCollectionTreeColorizeSelected,
-                 CollectionTreeSettings{}.treeColorizeSelected)
-          .toBool();
+  tree.treeColorizeSelected = settings
+                                  .value(keys::kCollectionTreeColorizeSelected,
+                                         CollectionTreeSettings{}.treeColorizeSelected)
+                                  .toBool();
   const int rawIconSize =
       settings.value(keys::kCollectionTreeIconSize, CollectionTreeSettings{}.treeIconSize).toInt();
   tree.treeIconSize = std::clamp(rawIconSize, CollectionTreeSettings::kMinIconSize,

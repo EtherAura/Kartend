@@ -35,11 +35,11 @@ void DetailsPane::setupTabBar() {
   // sat slightly off the label and read as a misalignment). Selection is
   // carried by weight and colour instead, which cannot drift from the
   // text it marks.
-  m_tabBar->setStyleSheet(QStringLiteral(
-      "QTabBar::tab { background: transparent; border: none; padding: 6px 10px; }"
-      "QTabBar::tab:selected { background: transparent; border: none;"
-      " font-weight: bold; color: palette(highlight); }"
-      "QTabBar::tab:!selected { color: palette(text); }"));
+  m_tabBar->setStyleSheet(
+      QStringLiteral("QTabBar::tab { background: transparent; border: none; padding: 6px 10px; }"
+                     "QTabBar::tab:selected { background: transparent; border: none;"
+                     " font-weight: bold; color: palette(highlight); }"
+                     "QTabBar::tab:!selected { color: palette(text); }"));
   mainLayout->insertWidget(0, m_tabBar);
 
   connect(m_tabBar, &QTabBar::currentChanged, this, [this](int index) {

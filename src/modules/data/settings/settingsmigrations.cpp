@@ -68,8 +68,7 @@ const std::vector<MigrationStep> &registeredSteps() {
             for (const QString &group : groups) {
               settings.beginGroup(group);
               if (settings.contains(QStringLiteral("name"))) {
-                settings.setValue(QStringLiteral("collectionTreePosition"),
-                                  QStringLiteral("left"));
+                settings.setValue(QStringLiteral("collectionTreePosition"), QStringLiteral("left"));
                 settings.setValue(QStringLiteral("collectionTreeJustification"),
                                   QStringLiteral("full-height"));
                 settings.setValue(QStringLiteral("sidebarPosition"), QStringLiteral("right"));
@@ -122,8 +121,7 @@ const std::vector<MigrationStep> &registeredSteps() {
             const QString sidebar =
                 settings.value(QStringLiteral("gamepadToggleSidebarButton")).toString();
             if (sidebar.isEmpty() || sidebar == QStringLiteral("Y")) {
-              settings.setValue(QStringLiteral("gamepadToggleSidebarButton"),
-                                QStringLiteral("R1"));
+              settings.setValue(QStringLiteral("gamepadToggleSidebarButton"), QStringLiteral("R1"));
             }
             const QString tree =
                 settings.value(QStringLiteral("gamepadToggleCollectionTreeButton")).toString();

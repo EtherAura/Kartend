@@ -32,31 +32,31 @@
 #include "selectionmanager.h"
 #include "viewportmanager.h"
 
+#include "artworkpreviewoverlay.h"
 #include "collection/hierarchyhelpers.h"
 #include "collection/validationhelpers.h"
 #include "collectiontypes.h"
 #include "databasemanager.h"
+#include "focussectionoverlay.h"
 #include "gridutils.h"
-#include "interactionhelpers.h"
-#include "pathutils.h"
 #include "iartworkmanager.h"
 #include "iartworkpreviewscroll.h"
 #include "idetailspane.h"
-#include <QAbstractButton>
-#include <QToolButton>
-#include <QAbstractScrollArea>
-#include "artworkpreviewoverlay.h"
-#include "focussectionoverlay.h"
-#include "selectionindicator.h"
+#include "interactionhelpers.h"
 #include "itemwidget.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
+#include "pathutils.h"
 #include "scrollmanager.h"
+#include "selectionindicator.h"
 #include "sessionmanager.h"
 #include "settingsmanager.h"
 #include "settingsutils.h"
 #include "timerutils.h"
 #include "uiconstants/timing.h"
+#include <QAbstractButton>
+#include <QAbstractScrollArea>
+#include <QToolButton>
 
 #include <QLoggingCategory>
 Q_LOGGING_CATEGORY(lcInteractionManager, "kartend.interactionmanager")
@@ -875,8 +875,8 @@ bool InteractionManager::activateFocusedSection() {
         tile->click();
         const QString path = tile->property("kartendGalleryPath").toString();
         if (!path.isEmpty() && m_ctx && m_ctx->ui.sidebar) {
-          m_ctx->ui.sidebar->openArtworkExpanded(
-              path, tile->property("kartendGalleryIsVideo").toBool());
+          m_ctx->ui.sidebar->openArtworkExpanded(path,
+                                                 tile->property("kartendGalleryIsVideo").toBool());
         }
       }
       return true;
@@ -1053,8 +1053,8 @@ bool InteractionManager::driveDetailsPane(int steps, bool allowAdvance) {
     showSelectionIndicatorFor(area);
     return true; // at the end, but a held stick must not run away
   }
-  const int next = std::clamp(m_paneRegionIndex + (steps > 0 ? 1 : -1), 0,
-                              static_cast<int>(regions.size()) - 1);
+  const int next =
+      std::clamp(m_paneRegionIndex + (steps > 0 ? 1 : -1), 0, static_cast<int>(regions.size()) - 1);
   m_paneRegionIndex = next;
   revealInsideScrollArea(regions.at(next));
   showSelectionIndicatorFor(regions.at(next));
@@ -1159,7 +1159,8 @@ void InteractionManager::refreshExpandedArtwork() {
     return;
   }
   const CollectionConfig &owner = (*m_collections)[ownerIdx];
-  const QString artworkDir = SettingsUtils::expandConfigVariables(owner.artworkDirectory, owner.name);
+  const QString artworkDir =
+      SettingsUtils::expandConfigVariables(owner.artworkDirectory, owner.name);
   const QString videoDir = SettingsUtils::expandConfigVariables(owner.videoDirectory, owner.name);
 
   // The GRID's overlay goes through the scroll layer so manual covers and

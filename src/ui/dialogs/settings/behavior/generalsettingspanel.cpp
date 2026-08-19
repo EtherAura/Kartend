@@ -211,8 +211,7 @@ void GeneralSettingsPanel::connectChangeSignals() {
   // Selection & Display
   for (auto *box : {ui->rememberSelectionCheckBox, ui->wrapNavigationCheckBox,
                     ui->selectItemOnHoverCheckBox, ui->showTitleInPlaceholderCheckBox,
-                    ui->scrollbarsOnHoverOnlyCheckBox,
-                    ui->showToolbarBreadcrumbsCheckBox}) {
+                    ui->scrollbarsOnHoverOnlyCheckBox, ui->showToolbarBreadcrumbsCheckBox}) {
     connect(box, &QCheckBox::toggled, this, [this](bool) { save(); });
   }
 

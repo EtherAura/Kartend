@@ -160,10 +160,11 @@ void TestExtensionUtils::svgSuffixAndSniffResolveToSvg() {
            QStringLiteral("svg"));
   // Sniff path (suffix lost through a redirect): xml-prologue and bare <svg
   // forms both resolve; a plain XML that is NOT svg stays the png default.
-  QCOMPARE(ExtensionUtils::imageExtensionForBytes(
-               QStringLiteral("/cover.php"),
-               QByteArrayLiteral("<?xml version=\"1.0\"?>\n<!DOCTYPE svg PUBLIC>\n<svg width=\"5\"/>")),
-           QStringLiteral("svg"));
+  QCOMPARE(
+      ExtensionUtils::imageExtensionForBytes(
+          QStringLiteral("/cover.php"),
+          QByteArrayLiteral("<?xml version=\"1.0\"?>\n<!DOCTYPE svg PUBLIC>\n<svg width=\"5\"/>")),
+      QStringLiteral("svg"));
   QCOMPARE(ExtensionUtils::imageExtensionForBytes(QStringLiteral("/cover.php"),
                                                   QByteArrayLiteral("<svg xmlns=\"x\"/>")),
            QStringLiteral("svg"));

@@ -297,21 +297,20 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
       const QString control = base.lighter(118).name();
       const QString edge = base.darker(118).name();
       const QString knob = base.lighter(155).name();
-      toolbarStyle =
-          QString("QWidget#itemsTopBar { background-color: %1; }"
-                  // Padding + a floor on the width: an icon-only button
-                  // (the info "i") otherwise collapsed to a sliver next to
-                  // its wider neighbours (field report 2026-08-18).
-                  "QWidget#itemsTopBar QToolButton, QWidget#itemsTopBar QPushButton {"
-                  " background-color: %2; border: 1px solid %3; border-radius: 4px;"
-                  " padding: 4px 8px; min-width: 18px; }"
-                  "QWidget#itemsTopBar QToolButton:hover,"
-                  " QWidget#itemsTopBar QPushButton:hover { background-color: %4; }"
-                  "QWidget#itemsTopBar QSlider::groove:horizontal {"
-                  " background: %2; height: 4px; border-radius: 2px; }"
-                  "QWidget#itemsTopBar QSlider::handle:horizontal {"
-                  " background: %4; width: 12px; margin: -5px 0; border-radius: 6px; }")
-              .arg(chromeFill, control, edge, knob);
+      toolbarStyle = QString("QWidget#itemsTopBar { background-color: %1; }"
+                             // Padding + a floor on the width: an icon-only button
+                             // (the info "i") otherwise collapsed to a sliver next to
+                             // its wider neighbours (field report 2026-08-18).
+                             "QWidget#itemsTopBar QToolButton, QWidget#itemsTopBar QPushButton {"
+                             " background-color: %2; border: 1px solid %3; border-radius: 4px;"
+                             " padding: 4px 8px; min-width: 18px; }"
+                             "QWidget#itemsTopBar QToolButton:hover,"
+                             " QWidget#itemsTopBar QPushButton:hover { background-color: %4; }"
+                             "QWidget#itemsTopBar QSlider::groove:horizontal {"
+                             " background: %2; height: 4px; border-radius: 2px; }"
+                             "QWidget#itemsTopBar QSlider::handle:horizontal {"
+                             " background: %4; width: 12px; margin: -5px 0; border-radius: 6px; }")
+                         .arg(chromeFill, control, edge, knob);
     }
     m_itemsTopBar->setStyleSheet(toolbarStyle);
   }

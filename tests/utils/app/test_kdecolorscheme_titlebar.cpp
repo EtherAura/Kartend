@@ -18,7 +18,8 @@ private slots:
 
 void TestKdeColorSchemeTitlebar::activeTitlebarColor_parsesWmSection() {
   QStandardPaths::setTestModeEnabled(true);
-  const QString configRoot = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+  const QString configRoot =
+      QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
   QDir().mkpath(configRoot);
   const QString path = configRoot + QStringLiteral("/kdeglobals");
   {

@@ -183,12 +183,11 @@ auto buildTitleBreadcrumbHtml(int collectionIndex, const QList<CollectionConfig>
     // In a subfolder it returns to the collection root; otherwise it
     // re-enters the collection itself, which is what re-selects it after
     // browsing elsewhere.
-    segments << (inSubfolder
-                     ? rootLinkTemplate.arg(linkColorHex, config.name.toHtmlEscaped())
-                     : QStringLiteral("<a href=\"collection:%1\" style=\"color:%2; "
-                                      "text-decoration:none;\">%3</a>")
-                           .arg(QString::number(collectionIndex), linkColorHex,
-                                config.name.toHtmlEscaped()));
+    segments << (inSubfolder ? rootLinkTemplate.arg(linkColorHex, config.name.toHtmlEscaped())
+                             : QStringLiteral("<a href=\"collection:%1\" style=\"color:%2; "
+                                              "text-decoration:none;\">%3</a>")
+                                   .arg(QString::number(collectionIndex), linkColorHex,
+                                        config.name.toHtmlEscaped()));
     return segments.join(QStringLiteral(" › "));
   }
 

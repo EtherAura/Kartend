@@ -39,15 +39,15 @@
 #include "extensionutils.h"
 #include "fontspanel.h"
 #include "gamepadcapturecontroller.h"
+#include "idetailspane.h"
 #include "iinteractionmanager.h"
 #include "imainwindow.h"
 #include "iscrolldatasource.h"
 #include "isettingsmanager.h"
-#include "overlayscrollbars.h"
-#include "idetailspane.h"
 #include "itemwidget.h"
 #include "launchertabpanel.h"
 #include "marqueepanel.h"
+#include "overlayscrollbars.h"
 #include "pathutils.h"
 #include "settingsdialog.h"
 #include "settingsformbinding.h"
@@ -570,10 +570,10 @@ ErrorUtils::Result<void> SettingsDialog::saveGeneralSettingsFromUI() {
     // Same live-apply reasoning for the hover-only scrollbar preference:
     // toggling it in the dialog must take effect without a restart.
     if (m_ctx) {
-      OverlayScrollbars::applyToSurfaces(
-          m_ctx->ui.itemScrollArea, m_ctx->ui.collectionTreeWidget,
-          m_ctx->ui.sidebar ? m_ctx->ui.sidebar->asWidget() : nullptr,
-          m_generalSettings.view.scrollbarsOnHoverOnly);
+      OverlayScrollbars::applyToSurfaces(m_ctx->ui.itemScrollArea, m_ctx->ui.collectionTreeWidget,
+                                         m_ctx->ui.sidebar ? m_ctx->ui.sidebar->asWidget()
+                                                           : nullptr,
+                                         m_generalSettings.view.scrollbarsOnHoverOnly);
     }
     if (auto *scrollManager = m_ctx->scrollData()) {
       const auto &activeWidgets = scrollManager->getActiveWidgets();

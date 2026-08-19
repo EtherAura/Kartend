@@ -3,9 +3,9 @@
 #include <cmath>
 
 #include <QAbstractScrollArea>
-#include <QScrollArea>
 #include <QPainter>
 #include <QPainterPath>
+#include <QScrollArea>
 
 namespace {
 
@@ -89,9 +89,8 @@ void SelectionIndicator::syncGeometry() {
     break;
   }
 
-  QRect ringRect =
-      QRect(m_target->mapTo(host, QPoint(0, 0)), m_target->size()).adjusted(-kMargin, -kMargin,
-                                                                           kMargin, kMargin);
+  QRect ringRect = QRect(m_target->mapTo(host, QPoint(0, 0)), m_target->size())
+                       .adjusted(-kMargin, -kMargin, kMargin, kMargin);
   // Clip to every scroll viewport above the target: without this the ring
   // for a still-off-screen tile floated outside the pane and drew over the
   // item grid (field report 2026-08-18).
@@ -128,7 +127,7 @@ void SelectionIndicator::paintEvent(QPaintEvent * /*event*/) {
 
   painter.setPen(QPen(ink, kPenWidth));
   painter.setBrush(Qt::NoBrush);
-  const QRectF stroke = QRectF(rect()).adjusted(kPenWidth / 2.0, kPenWidth / 2.0,
-                                                -kPenWidth / 2.0, -kPenWidth / 2.0);
+  const QRectF stroke =
+      QRectF(rect()).adjusted(kPenWidth / 2.0, kPenWidth / 2.0, -kPenWidth / 2.0, -kPenWidth / 2.0);
   painter.drawRoundedRect(stroke, kRadius, kRadius);
 }

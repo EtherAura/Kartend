@@ -19,8 +19,7 @@ void load(QSettings &settings, GamepadSettings &opts) {
       settings.value(keys::kGamepadToggleSidebarButton, QString("R1")).toString();
   opts.gamepadToggleCollectionTreeButton =
       settings.value(keys::kGamepadToggleCollectionTreeButton, QString("L1")).toString();
-  opts.gamepadRightStickSections =
-      settings.value(keys::kGamepadRightStickSections, true).toBool();
+  opts.gamepadRightStickSections = settings.value(keys::kGamepadRightStickSections, true).toBool();
 }
 
 void save(QSettings &settings, const GamepadSettings &opts) {

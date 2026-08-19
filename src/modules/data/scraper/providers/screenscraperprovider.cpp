@@ -6,8 +6,8 @@
 #include "screenscraperprovider.h"
 
 #include <algorithm>
-#include <limits>
 #include <atomic>
+#include <limits>
 #include <utility>
 
 #include <QCoreApplication>
@@ -866,12 +866,12 @@ void ScreenScraperProvider::recordCompanies(const Scraper::ScrapedItem &item) co
   }
   bool changed = false;
   if (!item.publisherId.isEmpty()) {
-    changed |= ScreenScraperCompanyRegistry::merge(m_companyRegistry, item.publisherId,
-                                                   item.publisher);
+    changed |=
+        ScreenScraperCompanyRegistry::merge(m_companyRegistry, item.publisherId, item.publisher);
   }
   if (!item.developerId.isEmpty()) {
-    changed |= ScreenScraperCompanyRegistry::merge(m_companyRegistry, item.developerId,
-                                                   item.developer);
+    changed |=
+        ScreenScraperCompanyRegistry::merge(m_companyRegistry, item.developerId, item.developer);
   }
   if (changed) {
     // Fire-and-forget: a failed write is logged by the cache helper and the

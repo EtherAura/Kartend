@@ -36,7 +36,8 @@ QPixmap desaturatedSnapshot(QWidget *content) {
   const QImage original = grabbed.toImage();
   const QImage grey =
       original.convertToFormat(QImage::Format_Grayscale8).convertToFormat(QImage::Format_ARGB32);
-  const QSize small(qMax(1, grey.width() / kBlurDownscale), qMax(1, grey.height() / kBlurDownscale));
+  const QSize small(qMax(1, grey.width() / kBlurDownscale),
+                    qMax(1, grey.height() / kBlurDownscale));
   const QImage blurred = grey.scaled(small, Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
                              .scaled(grey.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
   QPixmap out(grabbed.size());

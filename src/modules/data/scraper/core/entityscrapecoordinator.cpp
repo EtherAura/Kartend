@@ -18,8 +18,8 @@
 #include "collection/typehelpers.h"
 #include "isettingsmanager.h"
 #include "pathutils.h"
-#include "screenscrapercompanyregistry.h"
 #include "scraperservice.h"
+#include "screenscrapercompanyregistry.h"
 #include "wikidatalogoprovider.h"
 
 namespace Scraper {

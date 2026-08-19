@@ -83,10 +83,9 @@ void SettingsManager::migrateSettingsFileIfNeeded(QSettings &s, const QString &c
   if (!QFileInfo::exists(configPath)) {
     return; // fresh install — current schema by definition (Kartend audit S-09)
   }
-  const int loadedSchemaVersion =
-      s.value(schemaVersionKey(keys::kGroupGeneral),
-              s.value(schemaVersionKey(keys::kGroupScraperOptions), 0))
-          .toInt();
+  const int loadedSchemaVersion = s.value(schemaVersionKey(keys::kGroupGeneral),
+                                          s.value(schemaVersionKey(keys::kGroupScraperOptions), 0))
+                                      .toInt();
   if (loadedSchemaVersion >= kSettingsSchemaVersion) {
     return;
   }
@@ -187,7 +186,8 @@ void SettingsManager::loadGeneralSettings(GeneralSettings &settings) {
         << "but this build only understands up to" << kSettingsSchemaVersion
         << "— unknown keys will be ignored on load and overwritten on save;" << snapshotMsg;
   } else if (loadedSchemaVersion < kSettingsSchemaVersion) {
-    migrateSettingsFileIfNeeded(s, configPath, QStringLiteral("SettingsManager::loadGeneralSettings"));
+    migrateSettingsFileIfNeeded(s, configPath,
+                                QStringLiteral("SettingsManager::loadGeneralSettings"));
   }
 
   s.beginGroup(keys::kGroupGeneral);

@@ -161,7 +161,7 @@ stringToSidebarJustification(const QString &str, bool *unknownFallback = nullptr
 }
 
 [[nodiscard]] inline ToolbarColorSource stringToToolbarColorSource(const QString &value,
-                                                                  bool *fellBack = nullptr) {
+                                                                   bool *fellBack = nullptr) {
   const QString lower = value.trimmed().toLower();
   if (fellBack) *fellBack = false;
   if (lower == QLatin1String("titlebar")) return ToolbarColorSource::Titlebar;

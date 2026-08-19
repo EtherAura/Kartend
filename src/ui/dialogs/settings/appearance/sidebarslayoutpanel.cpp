@@ -58,7 +58,8 @@ void SidebarsLayoutPanel::load() {
   ui->treeShowLinesCheckBox->setChecked(current->collectionTree.treeShowLines);
   ui->treeColorizeSelectedCheckBox->setChecked(current->collectionTree.treeColorizeSelected);
   ui->treeIconSizeSpinBox->setValue(current->collectionTree.treeIconSize);
-  ui->treeIconStyleComboBox->setCurrentIndex(static_cast<int>(current->collectionTree.treeIconStyle));
+  ui->treeIconStyleComboBox->setCurrentIndex(
+      static_cast<int>(current->collectionTree.treeIconStyle));
   ui->treeIconTintEdit->setText(current->collectionTree.treeIconTintColor);
 }
 
@@ -76,7 +77,8 @@ void SidebarsLayoutPanel::clear() {
   ui->treeShowLinesCheckBox->setChecked(CollectionTreeSettings{}.treeShowLines);
   ui->treeColorizeSelectedCheckBox->setChecked(CollectionTreeSettings{}.treeColorizeSelected);
   ui->treeIconSizeSpinBox->setValue(CollectionTreeSettings{}.treeIconSize);
-  ui->treeIconStyleComboBox->setCurrentIndex(static_cast<int>(CollectionTreeSettings{}.treeIconStyle));
+  ui->treeIconStyleComboBox->setCurrentIndex(
+      static_cast<int>(CollectionTreeSettings{}.treeIconStyle));
   ui->treeIconTintEdit->clear();
 }
 

@@ -1,7 +1,7 @@
 // Artwork / video preview overlay (+).
 #include "artworkpreviewoverlay.h"
-#include "itemwidget.h"
 #include "itemplaceholderrenderer.h"
+#include "itemwidget.h"
 
 #include "artworkutils.h"
 #include "extensionutils.h"

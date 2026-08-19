@@ -530,10 +530,24 @@ void TestScreenScraperProvider::fetchEntity_catalogSkipsTypesTheSystemDoesNotHav
   // Has wheel + photo. Deliberately NO logo-monochrome, illustration, or
   // background — the three that must be skipped.
   sys.media = {
-      {QStringLiteral("wheel"), QStringLiteral("wheel(wor)"), QStringLiteral("wor"), {},
-       QStringLiteral("png"), {}, {}, {}, false},
-      {QStringLiteral("photo"), QStringLiteral("photo(wor)"), QStringLiteral("wor"), {},
-       QStringLiteral("png"), {}, {}, {}, false},
+      {QStringLiteral("wheel"),
+       QStringLiteral("wheel(wor)"),
+       QStringLiteral("wor"),
+       {},
+       QStringLiteral("png"),
+       {},
+       {},
+       {},
+       false},
+      {QStringLiteral("photo"),
+       QStringLiteral("photo(wor)"),
+       QStringLiteral("wor"),
+       {},
+       QStringLiteral("png"),
+       {},
+       {},
+       {},
+       false},
   };
   QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
 
@@ -576,10 +590,24 @@ void TestScreenScraperProvider::fetchEntity_catalogHonorsPreferredRegion() {
   sys.id = 42;
   sys.displayName = QStringLiteral("Test Platform");
   sys.media = {
-      {QStringLiteral("wheel"), QStringLiteral("wheel(wor)"), QStringLiteral("wor"), {},
-       QStringLiteral("png"), {}, {}, {}, false},
-      {QStringLiteral("wheel"), QStringLiteral("wheel(jp)"), QStringLiteral("jp"), {},
-       QStringLiteral("png"), {}, {}, {}, false},
+      {QStringLiteral("wheel"),
+       QStringLiteral("wheel(wor)"),
+       QStringLiteral("wor"),
+       {},
+       QStringLiteral("png"),
+       {},
+       {},
+       {},
+       false},
+      {QStringLiteral("wheel"),
+       QStringLiteral("wheel(jp)"),
+       QStringLiteral("jp"),
+       {},
+       QStringLiteral("png"),
+       {},
+       {},
+       {},
+       false},
   };
   QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
 

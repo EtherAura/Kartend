@@ -70,9 +70,8 @@ QImage outlineLowContrastArtwork(const QImage &art, const QColor &background) {
   if (art.isNull() || !art.hasAlphaChannel()) {
     return art;
   }
-  const QImage img = art.format() == QImage::Format_ARGB32
-                         ? art
-                         : art.convertToFormat(QImage::Format_ARGB32);
+  const QImage img =
+      art.format() == QImage::Format_ARGB32 ? art : art.convertToFormat(QImage::Format_ARGB32);
   const int bgLum = qGray(background.rgb());
   qint64 opaque = 0;
   qint64 lowContrast = 0;

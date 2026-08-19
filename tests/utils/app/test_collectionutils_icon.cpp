@@ -117,8 +117,8 @@ void TestCollectionUtilsIcon::tileArtworkPrefersOwnIconOverParentDirMatch() {
   parentDirImage.close();
   QList<CollectionConfig> collections = {
       makeCollection(QStringLiteral("Child A"), QStringLiteral("/explicit/icon.png"))};
-  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 0,
-                                                         QStringLiteral("Child A"), tmp.path()),
+  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 0, QStringLiteral("Child A"),
+                                                         tmp.path()),
            QStringLiteral("/explicit/icon.png"));
 }
 
@@ -131,8 +131,8 @@ void TestCollectionUtilsIcon::tileArtworkFallsBackToParentDirImageNamedAfterChil
   parentDirImage.close();
   QList<CollectionConfig> collections = {
       makeCollection(QStringLiteral("Child B"), /*icon=*/QString())};
-  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 0,
-                                                         QStringLiteral("Child B"), tmp.path()),
+  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 0, QStringLiteral("Child B"),
+                                                         tmp.path()),
            tmp.path() + QStringLiteral("/Child B.png"));
 }
 
@@ -151,8 +151,8 @@ void TestCollectionUtilsIcon::tileArtworkEmptyForRootsAndUnknownNames() {
                                                          tmp.path()),
            QString());
   // Out-of-range index degrades to the name-only fallback, not a crash.
-  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 99,
-                                                         QStringLiteral("Root"), tmp.path()),
+  QCOMPARE(CollectionUtils::resolveCollectionTileArtwork(&collections, 99, QStringLiteral("Root"),
+                                                         tmp.path()),
            QString());
 }
 

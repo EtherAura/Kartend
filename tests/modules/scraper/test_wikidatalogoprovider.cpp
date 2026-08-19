@@ -125,9 +125,8 @@ void TestWikidataLogoProvider::fetchEntity_happyPathBuildsSvgLogoAsset() {
 void TestWikidataLogoProvider::fetchEntity_noEntityIsNotFound() {
   ProviderBase::setFetchFunctionForTesting(
       [](const QUrl &, const Scraper::HttpClient::RawHeaders &,
-         Scraper::HttpClient::ResponseCallback cb, const QStringList &) {
-        cb(QByteArrayLiteral(R"({"search":[]})"));
-      });
+         Scraper::HttpClient::ResponseCallback cb,
+         const QStringList &) { cb(QByteArrayLiteral(R"({"search":[]})")); });
   CollectionConfig cfg;
   cfg.name = QStringLiteral("Utterly Unknown");
   WikidataLogoProvider provider([&cfg]() -> const CollectionConfig * { return &cfg; });

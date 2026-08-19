@@ -88,8 +88,11 @@ ErrorUtils::Result<QString> parseEntitySearch(const QByteArray &json) {
 ErrorUtils::Result<QString> parseLogoClaim(const QByteArray &json) {
   auto root = rootObject(json, "WikidataLogoParser::parseLogoClaim");
   if (root.isError()) return root.error();
-  const QJsonArray claims =
-      root.value().value(QStringLiteral("claims")).toObject().value(QStringLiteral("P154")).toArray();
+  const QJsonArray claims = root.value()
+                                .value(QStringLiteral("claims"))
+                                .toObject()
+                                .value(QStringLiteral("P154"))
+                                .toArray();
   for (const auto &claim : claims) {
     const QJsonValue value = claim.toObject()
                                  .value(QStringLiteral("mainsnak"))
@@ -99,8 +102,8 @@ ErrorUtils::Result<QString> parseLogoClaim(const QByteArray &json) {
                                  .value(QStringLiteral("value"));
     // P154 is a Commons-media property: the value is the bare filename
     // string. Tolerate an object shape defensively.
-    QString filename =
-        value.isString() ? value.toString() : value.toObject().value(QStringLiteral("id")).toString();
+    QString filename = value.isString() ? value.toString()
+                                        : value.toObject().value(QStringLiteral("id")).toString();
     filename = filename.trimmed();
     if (filename.startsWith(QLatin1String("File:"), Qt::CaseInsensitive)) {
       filename = filename.mid(5).trimmed();

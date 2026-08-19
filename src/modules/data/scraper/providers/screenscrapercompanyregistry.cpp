@@ -92,9 +92,9 @@ bool save(const QString &filePath, const CompanyMap &companies) {
   }
   QJsonObject root;
   root[QStringLiteral("companies")] = arr;
-  return ScreenScraperJsonCache::writeJsonCompact(
-      filePath, root, "ScreenScraperCompanyRegistry::save",
-      "Failed to write ScreenScraper company registry");
+  return ScreenScraperJsonCache::writeJsonCompact(filePath, root,
+                                                  "ScreenScraperCompanyRegistry::save",
+                                                  "Failed to write ScreenScraper company registry");
 }
 
 bool merge(CompanyMap &into, const QString &id, const QString &name) {
@@ -217,8 +217,7 @@ bool applyToCollections(QList<CollectionConfig> &collections, const QString &reg
       cfg.collectionIcon = logo;
       changed = true;
     }
-    if (matchWritable(cfg.background.headerLogoImage) &&
-        cfg.background.headerLogoImage != logo) {
+    if (matchWritable(cfg.background.headerLogoImage) && cfg.background.headerLogoImage != logo) {
       cfg.background.headerLogoImage = logo;
       changed = true;
     }

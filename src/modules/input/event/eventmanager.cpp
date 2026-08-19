@@ -15,7 +15,6 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
-#include "idetailspane.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "collection/hierarchyhelpers.h"
@@ -25,6 +24,7 @@
 #include "gridutils.h"
 #include "hoverscrollhandler.h"
 #include "iartworkpreviewscroll.h"
+#include "idetailspane.h"
 #include "igridlayoutscroll.h"
 #include "ikeyeventsink.h"
 #include "imouseholdcontrol.h"
@@ -315,9 +315,7 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
   if (m_ctx) {
     QWidget *fw = QApplication::focusWidget();
     QWidget *paneW = m_ctx->ui.sidebar ? m_ctx->ui.sidebar->asWidget() : nullptr;
-    const auto within = [fw](QWidget *w) {
-      return w && fw && (w == fw || w->isAncestorOf(fw));
-    };
+    const auto within = [fw](QWidget *w) { return w && fw && (w == fw || w->isAncestorOf(fw)); };
     if (within(paneW) || within(m_ctx->ui.itemsTopBar)) {
       return false;
     }

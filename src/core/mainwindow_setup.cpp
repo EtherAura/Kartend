@@ -57,14 +57,13 @@
 #include "libraryonboardingwizard.h"
 #include "loadingoverlay.h"
 #include "mainwindow.h"
-#include <QAbstractScrollArea>
-#include "overlayscrollbars.h"
 #include "marqueecontroller.h"
 #include "menucontroller.h"
 #include "metadataqueue.h"
 #include "metadatareviewdialog.h"
 #include "mousemanager.h"
 #include "navigationmanager.h"
+#include "overlayscrollbars.h"
 #include "pathutils.h"
 #include "playlistmanager.h"
 #include "presentationprofilesdialog.h"
@@ -78,6 +77,7 @@
 #include "variantgrouping.h"
 #include "variantgroupingdialog.h"
 #include "viewportmanager.h"
+#include <QAbstractScrollArea>
 
 #include "collectiontreecontroller.h"
 #include "detailpageoverlay.h"

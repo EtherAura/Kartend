@@ -100,7 +100,6 @@ signals:
   void scrapeRunFinished();
 
 public:
-
   void setContext(const ScraperControllerContext &context);
 
 public slots:

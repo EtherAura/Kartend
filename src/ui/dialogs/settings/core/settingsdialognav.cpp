@@ -105,8 +105,8 @@ void SettingsDialog::setupNavigation() {
   // page holds the Kartend-auh7u layout section (side + justification for the
   // details pane AND the navigation sidebar) above the details-pane settings.
   // The separate "Sidebars" page briefly split these across two entries.
-  addEntry(tr("Sidebar"),
-           {"view-split-left-right", "format-justify-right", "sidebar-expand-right"}, 5, true);
+  addEntry(tr("Sidebar"), {"view-split-left-right", "format-justify-right", "sidebar-expand-right"},
+           5, true);
 
   addHeader(tr("Application"));
   addEntry(tr("General"), {"preferences-other", "configure", "settings-configure"}, 6, false);
