@@ -2,6 +2,7 @@
 #define ARTWORKPREVIEWOVERLAY_H
 
 #include <QString>
+#include <QElapsedTimer>
 #include <QWidget>
 
 QT_BEGIN_NAMESPACE
@@ -62,6 +63,17 @@ public:
   /// unconnected.
   void showArtworkAtPath(const QString &absoluteArtworkPath);
 
+private:
+  /// Render the grid's hatched placeholder, titled from @p filePath, when
+  /// an item has no artwork to show (user request 2026-08-18).
+  void showPlaceholderForFile(const QString &filePath);
+  /// True when this wheel event begins a NEW gesture (the wheel has been
+  /// still long enough). Always updates the gesture clock, so a coasting
+  /// stream keeps returning false until it stops.
+  [[nodiscard]] bool wheelGestureIsNew();
+
+public:
+
   /// Show the overlay playing the video at @p absoluteVideoPath. The video
   /// loops muted at ~80% of the parent size. Closing the overlay (Escape,
   /// click-outside, or the close button) stops playback.
@@ -98,6 +110,13 @@ signals:
   /// overlay is displaying (may be empty for gallery thumbnail previews
   /// that don't carry an associated media path).
   void launchRequested(const QString &filePath);
+
+  /// Emitted instead of wrapping when the user cycles past the first or
+  /// last artwork (user decision 2026-08-18: "instead of looping the
+  /// selected item's artwork ... go back/next to the previous/next item").
+  /// The overlay itself has no notion of the item list, so the interaction
+  /// layer decides what stepping means. @p direction is -1 or +1.
+  void galleryBoundaryReached(int direction);
 
   /// bug #7: emitted from showEvent / hideEvent so consumers
   /// (specifically DetailsPaneManager) can lower the sidebar while the overlay
@@ -145,6 +164,13 @@ private:
   /// (e.g. opened via the old sidebar gallery click path that didn't
   /// supply entries). Cycle wraps modulo m_galleryEntries.size().
   int m_galleryIndex = -1;
+  /// Wheel rate limit (user request 2026-08-18): ONE artwork per gesture,
+  /// however hard the wheel is spun. A single physical flick emits a burst
+  /// of wheel events — high-resolution wheels and trackpads especially —
+  /// and honouring each one skated through the whole gallery. Ticks inside
+  /// the cooldown are swallowed, not queued, so the artwork never keeps
+  /// moving after the user stops.
+  QElapsedTimer m_wheelCooldown;
   OverlayZOrderRegistry *m_layerManager = nullptr;
   /// In-flight main-preview decode (mirrors MarqueeController's watcher).
   /// Null when no decode is pending. A newer request supersedes the current

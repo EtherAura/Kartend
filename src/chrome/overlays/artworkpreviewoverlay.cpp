@@ -1,5 +1,7 @@
 // Artwork / video preview overlay (+).
 #include "artworkpreviewoverlay.h"
+#include "itemwidget.h"
+#include "itemplaceholderrenderer.h"
 
 #include "artworkutils.h"
 #include "extensionutils.h"
@@ -31,6 +33,10 @@
 #include <QWheelEvent>
 
 ArtworkPreviewOverlay::ArtworkPreviewOverlay(QWidget *parent) : QWidget(parent) {
+  // Named so input routing can find the visible overlay without linking
+  // against this class (2026-08-18: gamepad Back/directions have to reach
+  // expand mode rather than the collection behind it).
+  setObjectName(QStringLiteral("artworkPreviewOverlay"));
   setupUI();
   hide();
 }
@@ -81,20 +87,42 @@ void ArtworkPreviewOverlay::showArtworkForFile(const QString &filePath,
   QString artworkPath =
       ArtworkUtils::findArtworkForFile(QFileInfo(filePath).fileName(), artworkDirectory);
 
-  if (artworkPath.isEmpty()) {
-    return;
-  }
-
   // Gate before QPixmap — Qt's libqpdf imageformats plugin is PDFium-
   // backed and abort()s on some inputs, killing the main thread
   // (Kartend-wquq). findArtworkForFile scans the artwork directory and
   // can return a manual `.pdf` when no image variant exists; without
   // this guard a click here crashes the whole app.
-  if (!ExtensionUtils::isDecodableImagePath(artworkPath)) {
+  if (!artworkPath.isEmpty() && !ExtensionUtils::isDecodableImagePath(artworkPath)) {
+    artworkPath.clear();
+  }
+  if (artworkPath.isEmpty()) {
+    // Nothing to show for this item — but returning here left the PREVIOUS
+    // item's picture on screen while stepping through the library. Show
+    // the SAME hatched placeholder the grid uses, titled, so an artless
+    // item reads as itself (user request 2026-08-18).
+    m_currentArtworkPath.clear();
+    showPlaceholderForFile(filePath);
     return;
   }
   m_currentArtworkPath = artworkPath;
   startPreviewLoad(artworkPath);
+}
+
+void ArtworkPreviewOverlay::showPlaceholderForFile(const QString &filePath) {
+  QWidget *host = parentWidget();
+  if (!host) {
+    return;
+  }
+  // Same renderer the grid tiles use, so the hatch, tint and corner radius
+  // match exactly rather than being re-approximated here.
+  const int width = qMax(120, static_cast<int>(host->width() * 0.35));
+  const int height = qMax(120, static_cast<int>(host->height() * 0.5));
+  QPixmap tile = ItemWidget::buildPlaceholderTile(width, height, /*cornerRadius=*/12);
+  ItemPlaceholderRenderer::TitleStyle style;
+  style.tintColor = palette().color(QPalette::WindowText);
+  ItemPlaceholderRenderer::drawTitle(tile, QFileInfo(filePath).completeBaseName(), font(), style,
+                                     /*dpr=*/1.0);
+  displayPixmap(tile);
 }
 
 void ArtworkPreviewOverlay::showArtworkAtPath(const QString &absoluteArtworkPath) {
@@ -470,6 +498,15 @@ void ArtworkPreviewOverlay::keyPressEvent(QKeyEvent *event) {
   // populated with related artwork. No-op when fewer than 2 entries
   // (single-image preview, nothing to cycle through).
   if ((event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) &&
+      m_galleryEntries.size() < 2) {
+    // Nothing to cycle on this item — travel to the neighbouring one
+    // rather than swallowing the key (field report 2026-08-18: an artless
+    // item was a dead end).
+    event->accept();
+    emit galleryBoundaryReached(event->key() == Qt::Key_Left ? -1 : +1);
+    return;
+  }
+  if ((event->key() == Qt::Key_Left || event->key() == Qt::Key_Right) &&
       m_galleryEntries.size() >= 2) {
     const int direction = event->key() == Qt::Key_Left ? -1 : +1;
     const int n = m_galleryEntries.size();
@@ -479,7 +516,14 @@ void ArtworkPreviewOverlay::keyPressEvent(QKeyEvent *event) {
       // showAtPath); start the cycle from the first entry.
       next = direction > 0 ? 0 : n - 1;
     } else {
-      next = ((next + direction) % n + n) % n;
+      next += direction;
+      if (next < 0 || next >= n) {
+        // Past the end: hand off rather than wrapping round to the same
+        // item's first picture again.
+        event->accept();
+        emit galleryBoundaryReached(direction);
+        return;
+      }
     }
     showGalleryEntry(next);
     event->accept();
@@ -488,18 +532,54 @@ void ArtworkPreviewOverlay::keyPressEvent(QKeyEvent *event) {
   QWidget::keyPressEvent(event);
 }
 
+bool ArtworkPreviewOverlay::wheelGestureIsNew() {
+  // One artwork per GESTURE (user request 2026-08-18). The gate is the
+  // quiet gap BEFORE an event, not the time since the last advance: a
+  // kinetic/high-resolution wheel streams events for seconds after the
+  // flick, and a plain cooldown just let one through every cooldown
+  // period — the artwork kept marching on its own. Every event refreshes
+  // the clock, so the gallery only moves again once the wheel has
+  // actually been still.
+  constexpr int kGestureGapMs = 180;
+  const bool isNew = !m_wheelCooldown.isValid() || m_wheelCooldown.elapsed() >= kGestureGapMs;
+  if (m_wheelCooldown.isValid()) {
+    m_wheelCooldown.restart();
+  } else {
+    m_wheelCooldown.start(); // restart() on a never-started timer is undefined
+  }
+  return isNew;
+}
+
 void ArtworkPreviewOverlay::wheelEvent(QWheelEvent *event) {
   // Mirror the Left/Right key cycling so the wheel advances the artwork
   // gallery instead of falling through to grid-selection scrolling. Wheel
   // up = previous, wheel down = next (matches the visual order of the
   // bottom thumb strip and the natural "scroll to advance" direction).
-  if (m_galleryEntries.size() < 2) {
-    QWidget::wheelEvent(event);
-    return;
-  }
+  // Expand mode OWNS the wheel while it is up. Falling through to
+  // QWidget::wheelEvent let the tick propagate to the grid behind the
+  // overlay, which started one of its continuous scrolls — the runaway
+  // the user filmed (2026-08-18). Nothing to cycle simply means nothing
+  // happens.
   const int delta = event->angleDelta().y();
   if (delta == 0) {
-    QWidget::wheelEvent(event);
+    event->accept();
+    return;
+  }
+  if (m_galleryEntries.size() < 2) {
+    // An item with no artwork (or a single picture) has nothing to cycle,
+    // but the user must still be able to travel past it — hand straight
+    // off to item stepping instead of going dead (field report
+    // 2026-08-18). Still gated by the gesture throttle below.
+    if (!wheelGestureIsNew()) {
+      event->accept();
+      return;
+    }
+    event->accept();
+    emit galleryBoundaryReached(delta > 0 ? -1 : +1);
+    return;
+  }
+  if (!wheelGestureIsNew()) {
+    event->accept();
     return;
   }
   const int direction = delta > 0 ? -1 : +1;
@@ -508,7 +588,14 @@ void ArtworkPreviewOverlay::wheelEvent(QWheelEvent *event) {
   if (next < 0) {
     next = direction > 0 ? 0 : n - 1;
   } else {
-    next = ((next + direction) % n + n) % n;
+    next += direction;
+    if (next < 0 || next >= n) {
+      // Same rule the keys follow: hand off at the ends instead of looping
+      // this item's artwork forever.
+      event->accept();
+      emit galleryBoundaryReached(direction);
+      return;
+    }
   }
   showGalleryEntry(next);
   event->accept();

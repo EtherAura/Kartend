@@ -56,6 +56,18 @@ public:
   /// (e.g. wheeleventhandler asks `pane->asWidget()->isVisible()` and
   /// `pane->asWidget()->rect().contains(...)`). DetailsPane returns
   /// `this`.
+  /// Open one artwork path in the fullscreen preview overlay (user
+  /// request 2026-08-18). Gamepad confirm on a ringed gallery tile uses
+  /// this to EXPAND the art, on top of the tile's own click which swaps
+  /// the pane's main preview.
+  virtual void openArtworkExpanded(const QString &path, bool isVideo) = 0;
+
+  /// Step the pane's MAIN artwork preview one entry in @p direction,
+  /// stopping at the ends. Called when the wheel turns over the gallery
+  /// strip (user request 2026-08-18). Returns false when there is no
+  /// gallery to step, so the caller can fall back to its normal handling.
+  virtual bool cycleGalleryPreviewForWheel(int direction) = 0;
+
   [[nodiscard]] virtual QWidget *asWidget() = 0;
   [[nodiscard]] virtual const QWidget *asWidget() const = 0;
 };

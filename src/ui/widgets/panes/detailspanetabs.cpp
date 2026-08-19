@@ -31,6 +31,15 @@ void DetailsPane::setupTabBar() {
   // the gaps above/below the tabs. Without this, the patternEvent's full-
   // sidebar fill leaks into the tab strip's transparent regions.
   m_tabBar->setAutoFillBackground(true);
+  // No selected-tab box (user request 2026-08-18: the style's indicator
+  // sat slightly off the label and read as a misalignment). Selection is
+  // carried by weight and colour instead, which cannot drift from the
+  // text it marks.
+  m_tabBar->setStyleSheet(QStringLiteral(
+      "QTabBar::tab { background: transparent; border: none; padding: 6px 10px; }"
+      "QTabBar::tab:selected { background: transparent; border: none;"
+      " font-weight: bold; color: palette(highlight); }"
+      "QTabBar::tab:!selected { color: palette(text); }"));
   mainLayout->insertWidget(0, m_tabBar);
 
   connect(m_tabBar, &QTabBar::currentChanged, this, [this](int index) {

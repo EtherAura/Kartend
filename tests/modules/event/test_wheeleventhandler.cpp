@@ -55,6 +55,8 @@ class FakeDetailsPane : public IDetailsPane {
 public:
   explicit FakeDetailsPane(QWidget *widget) : m_widget(widget) {}
   void clearMetadata() override {}
+  void openArtworkExpanded(const QString & /*path*/, bool /*isVideo*/) override {}
+  bool cycleGalleryPreviewForWheel(int /*direction*/) override { return false; }
   [[nodiscard]] QList<DetailsPaneGalleryEntry> currentGalleryEntries() const override { return {}; }
   [[nodiscard]] QWidget *asWidget() override { return m_widget; }
   [[nodiscard]] const QWidget *asWidget() const override { return m_widget; }

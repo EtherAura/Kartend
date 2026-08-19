@@ -120,6 +120,11 @@ public:
   /// — repeated calls are no-ops once the section exists.
   void prewarmSection();
 
+  /// Open @p path in the fullscreen preview overlay (user request
+  /// 2026-08-18: confirming a ringed artwork tile expands it as well as
+  /// swapping the pane's main preview).
+  void openPreviewForPath(const QString &path, bool isVideo);
+
 signals:
   /// Forwarded from the Edit button click — DetailsPane re-emits as its own
   /// editArtworkRequested signal.

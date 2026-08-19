@@ -144,7 +144,10 @@ public:
   /// No-op when fewer than 2 gallery entries exist. Bound to Left/Right
   /// arrow keys via keyPressEvent so the user can flip artwork without
   /// reaching for the mouse.
-  void cycleMainPreview(int direction);
+  /// @p wrap false stops at the first/last entry instead of cycling round
+  /// — what hovering the strip and scrolling does (user request
+  /// 2026-08-18: "until it reaches the last item in the gallery preview").
+  void cycleMainPreview(int direction, bool wrap = true);
   /// Snapshot of the most recently pushed gallery entries (the same list
   /// the sidebar's thumb strip is rendering). Used by the expand-mode
   /// ArtworkPreviewOverlay to mirror the sidebar gallery in its own strip
@@ -192,6 +195,9 @@ public:
     return m_collectionSummary;
   }
   void clearMetadata() override;
+  void openArtworkExpanded(const QString &path, bool isVideo) override;
+  bool cycleGalleryPreviewForWheel(int direction) override;
+
   [[nodiscard]] QWidget *asWidget() override { return this; }
   [[nodiscard]] const QWidget *asWidget() const override { return this; }
   /// bug #5: silences the sidebar's preview video and cancels any

@@ -106,7 +106,7 @@ void DetailsPane::showMainPreviewForEntry(const GalleryEntry &entry) {
   }
 }
 
-void DetailsPane::cycleMainPreview(int direction) {
+void DetailsPane::cycleMainPreview(int direction, bool wrap) {
   if (!m_galleryView) return;
   const auto &entries = m_galleryView->entries();
   if (entries.size() < 2) return;
@@ -128,6 +128,28 @@ void DetailsPane::cycleMainPreview(int direction) {
   if (currentIndex < 0) currentIndex = 0;
   // direction is +1 or -1; the modular step handles negatives + wraps.
   const int n = entries.size();
-  const int nextIndex = ((currentIndex + direction) % n + n) % n;
+  int nextIndex = currentIndex + direction;
+  if (!wrap) {
+    if (nextIndex < 0 || nextIndex >= n) {
+      return; // already at the end the user is scrolling toward
+    }
+  } else {
+    nextIndex = ((nextIndex % n) + n) % n;
+  }
   showMainPreviewForEntry(entries[nextIndex]);
+}
+
+bool DetailsPane::cycleGalleryPreviewForWheel(int direction) {
+  if (!m_galleryView || m_galleryView->entries().size() < 2) {
+    return false;
+  }
+  cycleMainPreview(direction, /*wrap=*/false);
+  return true;
+}
+
+void DetailsPane::openArtworkExpanded(const QString &path, bool isVideo) {
+  if (path.isEmpty() || !m_galleryView) {
+    return;
+  }
+  m_galleryView->openPreviewForPath(path, isVideo);
 }

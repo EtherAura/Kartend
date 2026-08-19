@@ -357,6 +357,11 @@ void DetailsPaneGalleryView::rebuildThumbs(DetailsPaneTab activeTab) {
     // (open the full-screen artworkpreviewoverlay) is still available
     // by clicking the main preview tile directly.
     const DetailsPane::GalleryEntry capturedEntry = entry;
+    // The tile carries its own entry so a non-mouse caller (the gamepad's
+    // ringed selection) can act on exactly this artwork without having to
+    // re-derive an index into the entry list.
+    button->setProperty("kartendGalleryPath", capturedEntry.path);
+    button->setProperty("kartendGalleryIsVideo", capturedEntry.isVideo);
     connect(button, &QToolButton::clicked, this, [this, capturedEntry]() {
       if (m_host) m_host->showMainPreviewForEntry(capturedEntry);
     });
@@ -562,6 +567,13 @@ QPixmap DetailsPaneGalleryView::makeVideoPlaceholder(int iconSize) const {
   return pix;
 }
 
+void DetailsPaneGalleryView::openPreviewForPath(const QString &path, bool isVideo) {
+  DetailsPane::GalleryEntry entry;
+  entry.path = path;
+  entry.isVideo = isVideo;
+  openPreview(entry);
+}
+
 void DetailsPaneGalleryView::openPreview(const DetailsPane::GalleryEntry &entry) {
   if (entry.path.isEmpty() || !m_host) {
     return;
@@ -594,4 +606,15 @@ void DetailsPaneGalleryView::openPreview(const DetailsPane::GalleryEntry &entry)
   } else {
     m_overlay->showArtworkAtPath(entry.path);
   }
+  // Hand the overlay the same strip the sidebar shows, so Left/Right (and
+  // the gamepad directions routed to them) cycle artwork inside expand
+  // mode. Without this the overlay had a single image and nothing to
+  // cycle, and the directions fell through to the grid behind it
+  // (field report 2026-08-18).
+  QList<ArtworkPreviewOverlay::GalleryEntry> strip;
+  strip.reserve(m_entries.size());
+  for (const DetailsPane::GalleryEntry &e : m_entries) {
+    strip.append({e.label, e.path, e.isVideo});
+  }
+  m_overlay->setGalleryEntries(strip);
 }
