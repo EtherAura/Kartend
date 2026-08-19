@@ -87,6 +87,7 @@ private slots:
   void button_droppedWhileSuspended();
   void button_droppedWhenShuttingDown();
   void chord_selectHeldDirectionMovesFocusSectionNotSelection();
+  void rightStick_flickHopsFocusSection_oncePerDeflection_settingGates();
 
   // Binding-capture mode
   void capture_buttonRoutedToCaptureSignalOnly();
@@ -220,6 +221,41 @@ void TestGamepadManager::chord_selectHeldDirectionMovesFocusSectionNotSelection(
   m_mgr->applyActiveDirection(GamepadHelpers::Direction::Left);
   QCOMPARE(focusMove.count(), 2);
   QCOMPARE(selMove.count(), 1);
+}
+
+void TestGamepadManager::rightStick_flickHopsFocusSection_oncePerDeflection_settingGates() {
+  QSignalSpy focusMove(m_mgr.get(), &GamepadManager::requestRightStickFlick);
+  QSignalSpy selMove(m_mgr.get(), &GamepadManager::requestSelectionMove);
+
+  m_mgr->m_axisRightX = 1.0; // flick right
+  m_mgr->updateRightStickSection();
+  QCOMPARE(focusMove.count(), 1);
+  QCOMPARE(focusMove.at(0).at(0).toInt(), 1);
+  QCOMPARE(focusMove.at(0).at(1).toInt(), 0);
+
+  m_mgr->updateRightStickSection(); // held deflection: no repeat
+  QCOMPARE(focusMove.count(), 1);
+
+  m_mgr->m_axisRightX = 0.0; // recentre arms the next flick
+  m_mgr->updateRightStickSection();
+  QCOMPARE(focusMove.count(), 1);
+
+  m_mgr->m_axisRightY = -1.0; // flick up
+  m_mgr->updateRightStickSection();
+  QCOMPARE(focusMove.count(), 2);
+  QCOMPARE(focusMove.at(1).at(0).toInt(), 0);
+  QCOMPARE(focusMove.at(1).at(1).toInt(), -1);
+
+  // The right stick never drives the grid selection.
+  QCOMPARE(selMove.count(), 0);
+
+  // Setting gate: disabled -> a fresh flick emits nothing.
+  m_mgr->m_axisRightY = 0.0;
+  m_mgr->updateRightStickSection();
+  m_settings.gamepad.gamepadRightStickSections = false;
+  m_mgr->m_axisRightX = 1.0;
+  m_mgr->updateRightStickSection();
+  QCOMPARE(focusMove.count(), 2);
 }
 
 void TestGamepadManager::button_remappedConfirmFollowsSettings() {

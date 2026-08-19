@@ -11,6 +11,7 @@
 #include <QWidget>
 
 #include "applicationcontext.h"
+#include "idetailspane.h"
 #include "collection/validationhelpers.h"
 #include "hoverscrollhandler.h"
 #include "ifilecollectionlookup.h"
@@ -51,6 +52,33 @@ bool EventManager::handleWheelEvent(QObject *obj, QEvent *event) {
   if (ourWindow == nullptr || targetWindow != ourWindow) {
     return false;
   }
+  // Expand mode owns the wheel: it cycles the artwork instead of scrolling
+  // the grid behind the overlay (user request 2026-08-18).
+  if (artworkOverlayVisible()) {
+    return false;
+  }
+
+  // A wheel tick over the details pane's artwork strip changes THAT item's
+  // displayed artwork (user request 2026-08-18), stopping at the last
+  // entry. Handled here because this filter claims wheel events app-wide
+  // before they ever reach the strip's own widgets.
+  if (m_ctx && m_ctx->ui.sidebar && targetWidget) {
+    for (QWidget *w = targetWidget; w; w = w->parentWidget()) {
+      if (w->objectName() != QLatin1String("galleryBackdrop")) {
+        continue;
+      }
+      auto *wheel = static_cast<QWheelEvent *>(event);
+      const int dy = wheel ? (wheel->angleDelta().y() != 0 ? wheel->angleDelta().y()
+                                                           : wheel->pixelDelta().y())
+                           : 0;
+      if (dy != 0 && m_ctx->ui.sidebar->cycleGalleryPreviewForWheel(dy > 0 ? -1 : 1)) {
+        event->accept();
+        return true;
+      }
+      break;
+    }
+  }
+
   // A wheel tick over the collection tree scrolls the TREE, not the grid
   // selection (user request 2026-08-17). Target-based rather than
   // focus-based — hovering is enough, matching every other scroll area.
@@ -166,6 +194,19 @@ int EventManager::visualIndexForWidget(ItemWidget *widget) const {
 }
 
 bool EventManager::handleHoverSelection(QObject *obj, QEvent *event) {
+  // Expand mode: the pointer is resting over the grid UNDERNEATH a
+  // fullscreen artwork, and hover-dwell would happily start its
+  // continuous scroll down there — the runaway the user filmed after a
+  // wheel gesture (field report 2026-08-18). Cancel anything already
+  // pending and stand down for as long as the overlay is up. This is a
+  // different handler from the wheel/key paths, which is why bypassing
+  // those alone did not stop it.
+  if (artworkOverlayVisible()) {
+    if (m_hoverScroll) {
+      m_hoverScroll->clearPendingScroll();
+    }
+    return false;
+  }
   return m_hoverScroll && m_hoverScroll->handleEvent(obj, event, isRestoringSelection());
 }
 

@@ -38,6 +38,8 @@ void GamepadManager::attachToGamepad(int deviceId) {
 
   connect(m_gamepad, &QGamepad::axisLeftXChanged, this, &GamepadManager::onAxisLeftXChanged);
   connect(m_gamepad, &QGamepad::axisLeftYChanged, this, &GamepadManager::onAxisLeftYChanged);
+  connect(m_gamepad, &QGamepad::axisRightXChanged, this, &GamepadManager::onAxisRightXChanged);
+  connect(m_gamepad, &QGamepad::axisRightYChanged, this, &GamepadManager::onAxisRightYChanged);
 
   connect(m_gamepad, &QGamepad::buttonAChanged, this, &GamepadManager::onButtonAChanged);
   connect(m_gamepad, &QGamepad::buttonBChanged, this, &GamepadManager::onButtonBChanged);
@@ -109,6 +111,16 @@ void GamepadManager::onAxisLeftYChanged(double value) {
   updateDirectionFromInputs();
 }
 
+void GamepadManager::onAxisRightXChanged(double value) {
+  m_axisRightX = value;
+  updateRightStickSection();
+}
+
+void GamepadManager::onAxisRightYChanged(double value) {
+  m_axisRightY = value;
+  updateRightStickSection();
+}
+
 void GamepadManager::onButtonAChanged(bool pressed) {
   if (!pressed || shuttingDown()) {
     return;
@@ -155,8 +167,14 @@ void GamepadManager::onButtonR1Changed(bool pressed) {
 
 void GamepadManager::onButtonSelectChanged(bool pressed) {
   // Held state feeds the Select+direction section chord; record BOTH
-  // edges (the SDL poll path maintains this in pollSdlState).
-  m_buttonBack = pressed;
+  // edges (the SDL poll path maintains this in pollSdlState). The edge
+  // also drives the modifier HUD.
+  if (m_buttonBack != pressed) {
+    m_buttonBack = pressed;
+    if (!shuttingDown() && !m_suspended && !m_bindingCaptureActive) {
+      emit modifierHeldChanged(pressed);
+    }
+  }
   if (!pressed || shuttingDown()) {
     return;
   }

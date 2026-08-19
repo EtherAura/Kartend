@@ -51,6 +51,8 @@ void ControlsPanel::load() {
 
   SettingsFormBinding::loadInto(ui->gamepadUseDpadCheckBox, s->gamepad.gamepadUseDpad);
   SettingsFormBinding::loadInto(ui->gamepadUseLeftStickCheckBox, s->gamepad.gamepadUseLeftStick);
+  SettingsFormBinding::loadInto(ui->gamepadRightStickSectionsCheckBox,
+                                s->gamepad.gamepadRightStickSections);
   SettingsFormBinding::loadInto(ui->gamepadConfirmButtonLineEdit, s->gamepad.gamepadConfirmButton);
   SettingsFormBinding::loadInto(ui->gamepadBackButtonLineEdit, s->gamepad.gamepadBackButton);
   SettingsFormBinding::loadInto(ui->gamepadToggleSidebarButtonLineEdit,
@@ -132,6 +134,7 @@ void ControlsPanel::save() {
 
   s->gamepad.gamepadUseDpad = ui->gamepadUseDpadCheckBox->isChecked();
   s->gamepad.gamepadUseLeftStick = ui->gamepadUseLeftStickCheckBox->isChecked();
+  s->gamepad.gamepadRightStickSections = ui->gamepadRightStickSectionsCheckBox->isChecked();
   // Gamepad button strings: only commit non-empty values so a partial /
   // cancelled detect-button workflow doesn't blank the saved binding.
   const QString confirm = ui->gamepadConfirmButtonLineEdit->text().trimmed();
@@ -176,6 +179,8 @@ void ControlsPanel::connectChangeSignals() {
   }
   connect(ui->gamepadUseDpadCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
   connect(ui->gamepadUseLeftStickCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });
+  connect(ui->gamepadRightStickSectionsCheckBox, &QCheckBox::toggled, this,
+          [this](bool) { save(); });
   connect(ui->artworkCycleModifierComboBox, &QComboBox::currentIndexChanged, this,
           [this](int) { save(); });
 }

@@ -153,6 +153,10 @@ struct InteractionManagerSetup {
  * Sub-managers are registered in ApplicationContext after setup for sibling
  * access.
  */
+class FocusSectionOverlay;
+class SelectionIndicator;
+class QAbstractScrollArea;
+
 class InteractionManager : public QObject, public IInteractionManager {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(InteractionManager)
@@ -163,6 +167,96 @@ public:
   /// each section's visibility. dx/dy are -1/0/+1. Public for the
   /// integration tests.
   void moveFocusSection(int dx, int dy);
+  /// Plain d-pad / left-stick ALWAYS control the grid (user decision
+  /// 2026-08-17): if keyboard focus wandered to a sidebar or the toolbar
+  /// (via the section chord), a plain direction press pulls it back to the
+  /// grid before the move applies. Select+direction and the right stick
+  /// remain the section/shortcut layer. Public for the integration tests.
+  void returnGamepadFocusToGrid();
+  /// Right-stick routing (user decision 2026-08-18): from the GRID the
+  /// stick moves between sections; once a section owns focus the stick
+  /// drives THAT section's list — tree rows and pane scroll on the
+  /// vertical axis, toolbar buttons on the horizontal one, with the other
+  /// axis left to section movement so there is always a way out. Returns
+  /// true when the input was consumed by a section. Public for the tests.
+  bool routeSectionInput(int dx, int dy);
+  /// The fullscreen artwork overlay, when one is up (either the grid's or
+  /// the details pane's — both live under the window). Expand mode owns
+  /// the gamepad while visible: Back dismisses it, directions cycle
+  /// artwork, and nothing reaches the collection behind it (field report
+  /// 2026-08-18). Public for the tests.
+  /// NOT const: discovering the overlay is also where its boundary signal
+  /// gets hooked. The hook used to live in the gamepad's key-sending
+  /// helper, so keyboard and wheel cycling never reached the item-stepping
+  /// logic at all (field report 2026-08-18).
+  [[nodiscard]] QWidget *visibleArtworkOverlay();
+  /// Called when an artwork overlay becomes visible so its boundary
+  /// hand-off is connected REGARDLESS of which input opened it. Keyboard
+  /// and wheel reach the overlay directly and never ask this class for
+  /// anything, so without a deterministic hook their cycling stopped dead
+  /// at the ends (field report 2026-08-18).
+  void hookArtworkOverlayIfVisible() { (void)visibleArtworkOverlay(); }
+  /// Feed @p key to the expanded overlay so its own handler runs — the
+  /// same path the keyboard takes, so there is one policy, not two.
+  bool sendKeyToArtworkOverlay(int key);
+  /// While expand mode is up, step to the previous/next ITEM and show its
+  /// artwork (user decision 2026-08-18, replacing the cycle-this-item's-
+  /// artwork behaviour). Returns false when nothing is expanded.
+  bool stepExpandedItem(int delta);
+  /// Re-point the visible expand-mode overlay at the CURRENT selection.
+  /// Split out because the selection settles asynchronously: stepping and
+  /// re-showing in one breath read the pre-move index and left the old
+  /// artwork on screen while the item moved underneath (field report
+  /// 2026-08-18).
+  void refreshExpandedArtwork();
+  /// Slot for ArtworkPreviewOverlay::galleryBoundaryReached. A named
+  /// member, not a lambda: Qt::UniqueConnection (which keeps the repeated
+  /// hookup idempotent) only works with member-function pointers — with a
+  /// functor it is a fatal error.
+  void onExpandedGalleryBoundary(int direction);
+  /// Repopulate the expanded overlay's thumb strip from the sidebar's
+  /// gallery. Without it the strip kept the PREVIOUS item's artwork after
+  /// a boundary step, so the overlay was still "at the end" and the next
+  /// press stepped the item again instead of cycling the new one's art
+  /// (field report 2026-08-18).
+  void syncExpandedGalleryStrip();
+  /// Path the expanded overlay is currently showing — lets the staged
+  /// refreshes re-sync the strip without re-decoding the same image.
+  QString m_expandedShownPath;
+  /// Direction of the last boundary step, consumed once the new item's
+  /// gallery arrives: stepping BACKWARD lands on the new item's LAST
+  /// artwork, so pressing left again cycles that item instead of stepping
+  /// straight past it (the mirror of the forward case).
+  int m_expandedStepDirection = 0;
+  /// Artwork paths the strip held when the boundary step was taken. The
+  /// new item's gallery arrives asynchronously, so the backward landing
+  /// must wait for the list to actually CHANGE — applying it against the
+  /// stale list jumped to the old item's last artwork and consumed the
+  /// pending step (field report 2026-08-18).
+  QStringList m_expandedEntrySnapshot;
+  /// Drive the details pane's own regions (artwork strip, description,
+  /// metadata) with the right stick (user request 2026-08-18). Scrolls the
+  /// SELECTED region; when it can go no further and @p allowAdvance is
+  /// set, the selection steps to the neighbouring region instead — so a
+  /// held deflection reads as one continuous travel down the pane. The
+  /// pulsing indicator marks whatever is selected. Returns false when
+  /// there is no pane to drive.
+  bool driveDetailsPane(int steps, bool allowAdvance);
+  /// Confirm (gamepad A) aimed at the focused section instead of the grid:
+  /// activates the tree row or toolbar button under focus. Returns true
+  /// when handled, so the caller does NOT also launch the grid selection —
+  /// without this, pressing A while browsing the tree launched whatever
+  /// the grid happened to have selected.
+  bool activateFocusedSection();
+  /// Show/hide the modifier HUD (desaturated backdrop + section indicator)
+  /// while the gamepad's Select modifier is held (user request
+  /// 2026-08-18). Public for the integration tests.
+  void setFocusModifierActive(bool active);
+  /// Scroll the details pane by @p steps notches when it is visible and
+  /// scrollable; returns false when the pane could not take the scroll, so
+  /// the caller can fall back to section movement (user request
+  /// 2026-08-18: the right stick scrolls the description).
+  bool scrollDetailsPane(int steps);
   explicit InteractionManager(QObject *parent = nullptr);
   ~InteractionManager() override;
   void setupReferences(const InteractionManagerSetup &setup);
@@ -377,6 +471,56 @@ private:
   // ctx is the single source of truth for sibling managers. Inline accessors
   // below are the canonical read path; never cache sibling-manager pointers
   // as direct fields.
+  /// Sections the focus chord/right stick can move between, resolved from
+  /// the live focus widget.
+  enum class FocusSection { Grid, Tree, Pane, Toolbar };
+  struct FocusSectionInfo {
+    QWidget *widget = nullptr;
+    QString label;
+    FocusSection kind = FocusSection::Grid;
+  };
+  [[nodiscard]] FocusSectionInfo currentFocusSection() const;
+  /// The details pane's scrollable viewport, or null when the pane is
+  /// hidden or has nothing to scroll.
+  [[nodiscard]] QAbstractScrollArea *detailsPaneScrollArea() const;
+  /// Step focus across the top bar's visible buttons in layout order.
+  void moveToolbarFocus(int delta);
+  /// Synthesize a key press/release on the focused widget so the section
+  /// handles it with its own native behaviour.
+  void sendKeyToFocusedWidget(int key);
+
+  /// Modifier HUD, created lazily and parented to the items page.
+  QPointer<FocusSectionOverlay> m_focusOverlay;
+  /// Shared pulsing ring: the pane's selected region normally, the focused
+  /// section while the modifier is held.
+  QPointer<SelectionIndicator> m_selectionIndicator;
+  /// True while the section modifier (Select) is held — the ONLY state in
+  /// which the right stick switches sections vertically (user decision
+  /// 2026-08-18); unheld, vertical belongs to the details pane.
+  bool m_focusModifierHeld = false;
+  /// Returns the right stick's focus to the grid when the user stops
+  /// driving the pane (user request 2026-08-18: one second of no input).
+  QTimer *m_paneIdleTimer = nullptr;
+  /// Index into paneRegions() of the region the right stick is driving.
+  int m_paneRegionIndex = -1;
+  /// True once the right stick has taken over the pane: confirm then acts
+  /// on the ringed pane target instead of launching the grid selection.
+  /// Cleared the moment the d-pad/left stick pulls focus back to the grid,
+  /// so A never opens artwork when the user is browsing the library.
+  bool m_paneSelectionActive = false;
+  /// Debounce for tree-row auto-activation (user request 2026-08-18:
+  /// highlighting a collection with the stick should switch to it, with no
+  /// second button press). Short enough to feel immediate, long enough
+  /// that skimming past ten rows does not load ten collections.
+  QTimer *m_treeActivateTimer = nullptr;
+
+  /// The pane's drivable targets, ordered as they appear: individual
+  /// artwork thumbnails first (each separately selectable), then the
+  /// description and metadata regions.
+  [[nodiscard]] QList<QWidget *> paneRegions() const;
+  void showSelectionIndicatorFor(QWidget *target);
+  void hideSelectionIndicator();
+
   const ApplicationContext *m_ctx = nullptr;
   // Kartend-h1l8f: keeps the IScrollManager facade — its partials span five
   // scroll roles (data, grid, overlay, preview, search).

@@ -37,8 +37,17 @@
 #include "collectiontypes.h"
 #include "databasemanager.h"
 #include "gridutils.h"
+#include "interactionhelpers.h"
+#include "pathutils.h"
 #include "iartworkmanager.h"
+#include "iartworkpreviewscroll.h"
 #include "idetailspane.h"
+#include <QAbstractButton>
+#include <QToolButton>
+#include <QAbstractScrollArea>
+#include "artworkpreviewoverlay.h"
+#include "focussectionoverlay.h"
+#include "selectionindicator.h"
 #include "itemwidget.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
@@ -251,6 +260,28 @@ auto InteractionManager::eventFilter(QObject *obj, QEvent *event) -> bool {
   // once its own destruction has begun (Kartend-gutqx).
   if (QApplication::closingDown() || m_destroying || !event) {
     return QObject::eventFilter(obj, event);
+  }
+
+  // Attract/auto-advance must not run behind a fullscreen artwork, and the
+  // artwork boundary hand-off has to be connected however expand mode was
+  // opened (user requests 2026-08-18). Observing the overlay's own
+  // show/hide HERE — rather than connecting MainWindow to two visibility
+  // signals — keeps this inside the object that owns both the attract
+  // manager and the hook, so nothing can be delivered to a half-destroyed
+  // window during teardown (a test caught exactly that).
+  if (event->type() == QEvent::Show || event->type() == QEvent::Hide) {
+    if (auto *widget = qobject_cast<QWidget *>(obj);
+        widget && widget->objectName() == QLatin1String("artworkPreviewOverlay")) {
+      const bool visible = event->type() == QEvent::Show;
+      if (m_attractManager) {
+        // Resuming reseeds the idle countdown, so dismissing the artwork
+        // gives a fresh full timeout rather than an instant advance.
+        m_attractManager->setSuspended(visible);
+      }
+      if (visible) {
+        (void)visibleArtworkOverlay(); // connects the boundary hand-off
+      }
+    }
   }
 
   // Delegate event filtering to EventManager
@@ -534,65 +565,65 @@ void InteractionManager::trySelectWidget(int index, const QList<int> &subcollect
 // Cycles search mode regardless of search text; only updates results when there
 // is search text
 
+InteractionManager::FocusSectionInfo InteractionManager::currentFocusSection() const {
+  FocusSectionInfo info;
+  if (!m_ctx) {
+    return info;
+  }
+  QWidget *fw = QApplication::focusWidget();
+  QWidget *paneW = m_ctx->ui.sidebar ? m_ctx->ui.sidebar->asWidget() : nullptr;
+  const auto within = [fw](QWidget *w) { return w && fw && (w == fw || w->isAncestorOf(fw)); };
+  if (within(m_ctx->ui.collectionTreeWidget)) {
+    info.widget = m_ctx->ui.collectionTreeWidget;
+    info.label = tr("Collections");
+    info.kind = FocusSection::Tree;
+  } else if (within(paneW)) {
+    info.widget = paneW;
+    info.label = tr("Details");
+    info.kind = FocusSection::Pane;
+  } else if (within(m_ctx->ui.itemsTopBar)) {
+    info.widget = m_ctx->ui.itemsTopBar;
+    info.label = tr("Toolbar");
+    info.kind = FocusSection::Toolbar;
+  } else {
+    info.widget = m_ctx->ui.itemScrollArea;
+    info.label = tr("Library");
+    info.kind = FocusSection::Grid;
+  }
+  return info;
+}
+
 void InteractionManager::moveFocusSection(int dx, int dy) {
   if (!m_ctx) {
     return;
   }
-  // Section chord (user request 2026-08-17): spatial moves between the
-  // grid, the top bar, and the two sidebars, from wherever focus is now.
-  enum class Section { Grid, Tree, Pane, Toolbar };
-  QWidget *fw = QApplication::focusWidget();
+  // Spatial moves between the grid, the top bar, and the two sidebars,
+  // from wherever focus is now (user request 2026-08-17).
   QWidget *treeW = m_ctx->ui.collectionTreeWidget;
-  auto *paneW = dynamic_cast<QWidget *>(m_ctx->ui.sidebar);
+  QWidget *paneW = m_ctx->ui.sidebar ? m_ctx->ui.sidebar->asWidget() : nullptr;
   QWidget *toolbarW = m_ctx->ui.itemsTopBar;
   QWidget *gridW = m_ctx->ui.itemScrollArea;
-
-  const auto within = [fw](QWidget *w) {
-    return w && fw && (w == fw || w->isAncestorOf(fw));
-  };
-  Section cur = Section::Grid;
-  if (within(treeW)) {
-    cur = Section::Tree;
-  } else if (within(paneW)) {
-    cur = Section::Pane;
-  } else if (within(toolbarW)) {
-    cur = Section::Toolbar;
-  }
+  QWidget *const current = currentFocusSection().widget;
 
   const auto usable = [](QWidget *w) { return w && w->isVisible(); };
-  Section target = cur;
-  if (dy < 0 && cur != Section::Toolbar && usable(toolbarW)) {
-    target = Section::Toolbar;
-  } else if (dy > 0 && cur == Section::Toolbar) {
-    target = Section::Grid;
+  QWidget *target = current;
+  if (dy < 0 && current != toolbarW && usable(toolbarW)) {
+    target = toolbarW;
+  } else if (dy > 0 && current == toolbarW) {
+    target = gridW;
   } else if (dx < 0) {
-    if (cur == Section::Pane) {
-      target = Section::Grid;
-    } else if (cur != Section::Tree && usable(treeW)) {
-      target = Section::Tree;
-    }
+    target = current == paneW ? gridW : (current != treeW && usable(treeW) ? treeW : current);
   } else if (dx > 0) {
-    if (cur == Section::Tree) {
-      target = Section::Grid;
-    } else if (cur != Section::Pane && usable(paneW)) {
-      target = Section::Pane;
-    }
+    target = current == treeW ? gridW : (current != paneW && usable(paneW) ? paneW : current);
   }
-  if (target == cur) {
-    return;
-  }
-  QWidget *dest = target == Section::Tree     ? treeW
-                  : target == Section::Pane   ? paneW
-                  : target == Section::Toolbar ? toolbarW
-                                               : gridW;
-  if (!dest) {
+  if (!target || target == current) {
     return;
   }
   // Containers (pane, top bar) hand focus to their first visible focusable
   // child; setFocus works programmatically regardless of policy otherwise.
-  QWidget *focusTarget = dest;
-  if (dest->focusPolicy() == Qt::NoFocus) {
-    const auto children = dest->findChildren<QWidget *>();
+  QWidget *focusTarget = target;
+  if (target->focusPolicy() == Qt::NoFocus) {
+    const auto children = target->findChildren<QWidget *>();
     for (QWidget *child : children) {
       if (child->isVisible() && child->focusPolicy() != Qt::NoFocus) {
         focusTarget = child;
@@ -601,4 +632,610 @@ void InteractionManager::moveFocusSection(int dx, int dy) {
     }
   }
   focusTarget->setFocus(Qt::OtherFocusReason);
+
+  // Keep the modifier HUD's cut-out and the ring on the new section.
+  if (m_focusOverlay && m_focusOverlay->isActive()) {
+    const FocusSectionInfo info = currentFocusSection();
+    m_focusOverlay->updateFocus(info.widget, tr("Focus: %1").arg(info.label));
+    showSelectionIndicatorFor(info.widget);
+  }
+}
+
+void InteractionManager::returnGamepadFocusToGrid() {
+  if (!m_ctx) {
+    return;
+  }
+  QWidget *fw = QApplication::focusWidget();
+  if (!fw) {
+    return;
+  }
+  const auto within = [fw](QWidget *w) { return w && (w == fw || w->isAncestorOf(fw)); };
+  QWidget *paneW = m_ctx->ui.sidebar ? m_ctx->ui.sidebar->asWidget() : nullptr;
+  if (within(m_ctx->ui.collectionTreeWidget) || within(paneW) || within(m_ctx->ui.itemsTopBar)) {
+    if (QWidget *gridW = m_ctx->ui.itemScrollArea) {
+      gridW->setFocus(Qt::OtherFocusReason);
+    }
+  }
+  // Back on the grid: the pane is no longer what the buttons act on.
+  m_paneSelectionActive = false;
+  m_paneRegionIndex = -1;
+  hideSelectionIndicator();
+}
+
+void InteractionManager::setFocusModifierActive(bool active) {
+  if (!m_ctx) {
+    return;
+  }
+  m_focusModifierHeld = active;
+  if (!active) {
+    if (m_focusOverlay) {
+      m_focusOverlay->deactivate();
+    }
+    // Hand the ring back to the pane selection the chord borrowed it from.
+    const QList<QWidget *> regions = paneRegions();
+    if (m_paneRegionIndex >= 0 && m_paneRegionIndex < regions.size()) {
+      showSelectionIndicatorFor(regions.at(m_paneRegionIndex));
+    } else {
+      hideSelectionIndicator();
+    }
+    return;
+  }
+  // The TOP-LEVEL window, not the items page: a full-height collection
+  // tree docks into MainWindow's outer sidebar row, outside the items
+  // page, and would otherwise be neither desaturated nor cut out.
+  QWidget *content = m_ctx->ui.itemsPage ? m_ctx->ui.itemsPage->window() : nullptr;
+  if (!content) {
+    return;
+  }
+  if (!m_focusOverlay) {
+    m_focusOverlay = new FocusSectionOverlay(content);
+  }
+  const FocusSectionInfo info = currentFocusSection();
+  m_focusOverlay->activate(content, info.widget, tr("Focus: %1").arg(info.label));
+  // The ring marks the focused section too, on top of the HUD.
+  showSelectionIndicatorFor(info.widget);
+}
+
+QAbstractScrollArea *InteractionManager::detailsPaneScrollArea() const {
+  if (!m_ctx || !m_ctx->ui.sidebar) {
+    return nullptr;
+  }
+  QWidget *pane = m_ctx->ui.sidebar->asWidget();
+  if (!pane || !pane->isVisible()) {
+    return nullptr;
+  }
+  // The pane may BE a scroll area or merely contain one (the description
+  // browser); either way, only a viewport with somewhere to go counts.
+  QList<QAbstractScrollArea *> candidates;
+  if (auto *self = qobject_cast<QAbstractScrollArea *>(pane)) {
+    candidates.append(self);
+  }
+  candidates.append(pane->findChildren<QAbstractScrollArea *>());
+  for (QAbstractScrollArea *area : candidates) {
+    if (!area || !area->isVisible()) {
+      continue;
+    }
+    const QScrollBar *bar = area->verticalScrollBar();
+    if (bar && bar->maximum() > bar->minimum()) {
+      return area;
+    }
+  }
+  return nullptr;
+}
+
+bool InteractionManager::scrollDetailsPane(int steps) {
+  QAbstractScrollArea *area = detailsPaneScrollArea();
+  if (!area) {
+    return false;
+  }
+  QScrollBar *bar = area->verticalScrollBar();
+  bar->setValue(bar->value() + steps * qMax(1, bar->singleStep()) * 3);
+  return true;
+}
+
+void InteractionManager::sendKeyToFocusedWidget(int key) {
+  QWidget *fw = QApplication::focusWidget();
+  if (!fw) {
+    return;
+  }
+  QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
+  QApplication::sendEvent(fw, &press);
+  QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+  QApplication::sendEvent(fw, &release);
+}
+
+void InteractionManager::moveToolbarFocus(int delta) {
+  if (!m_ctx || !m_ctx->ui.itemsTopBar || delta == 0) {
+    return;
+  }
+  QWidget *bar = m_ctx->ui.itemsTopBar;
+  QList<QAbstractButton *> buttons;
+  const auto all = bar->findChildren<QAbstractButton *>();
+  for (QAbstractButton *button : all) {
+    if (button->isVisible() && button->isEnabled()) {
+      buttons.append(button);
+    }
+  }
+  if (buttons.isEmpty()) {
+    return;
+  }
+  // Layout order, not child order: the top bar is assembled from several
+  // nested layouts, so child order does not match what the user sees.
+  std::sort(buttons.begin(), buttons.end(), [bar](QAbstractButton *a, QAbstractButton *b) {
+    return a->mapTo(bar, QPoint(0, 0)).x() < b->mapTo(bar, QPoint(0, 0)).x();
+  });
+  const QWidget *fw = QApplication::focusWidget();
+  int index = -1;
+  for (int i = 0; i < buttons.size(); ++i) {
+    if (buttons.at(i) == fw) {
+      index = i;
+      break;
+    }
+  }
+  index = index < 0 ? (delta > 0 ? 0 : buttons.size() - 1)
+                    : std::clamp(index + delta, 0, static_cast<int>(buttons.size()) - 1);
+  buttons.at(index)->setFocus(Qt::OtherFocusReason);
+}
+
+bool InteractionManager::routeSectionInput(int dx, int dy) {
+  // Expand mode first: the stick must not scroll the pane behind a
+  // fullscreen artwork view.
+  if (visibleArtworkOverlay()) {
+    if (dx != 0) {
+      return sendKeyToArtworkOverlay(dx < 0 ? Qt::Key_Left : Qt::Key_Right);
+    }
+    return true; // swallow vertical rather than driving what is hidden
+  }
+  // Held modifier: the stick is purely a section switcher — this is the
+  // ONLY way the vertical axis reaches the toolbar (user decision
+  // 2026-08-18).
+  if (m_focusModifierHeld) {
+    moveFocusSection(dx, dy);
+    return false;
+  }
+
+  const FocusSectionInfo info = currentFocusSection();
+  if (info.kind == FocusSection::Tree && dy != 0) {
+    // A focused tree keeps its own list on the vertical axis.
+    sendKeyToFocusedWidget(dy < 0 ? Qt::Key_Up : Qt::Key_Down);
+    // …and highlighting IS choosing (user request 2026-08-18): the
+    // collection switches on its own shortly after the highlight settles,
+    // instead of making the user leave the chord and press confirm. The
+    // debounce is what makes that affordable — skimming ten rows loads one
+    // collection, not ten. Return goes through the tree's own activation
+    // path, the same one a mouse click uses.
+    if (!m_treeActivateTimer) {
+      m_treeActivateTimer = new QTimer(this);
+      m_treeActivateTimer->setSingleShot(true);
+      m_treeActivateTimer->setInterval(260);
+      connect(m_treeActivateTimer, &QTimer::timeout, this, [this]() {
+        if (currentFocusSection().kind != FocusSection::Tree) {
+          return;
+        }
+        sendKeyToFocusedWidget(Qt::Key_Return);
+        // Re-assert focus AFTER the switch settles (field report
+        // 2026-08-18: the stick stopped driving the tree after a
+        // collection change, forcing a re-focus). Loading a collection
+        // fans out across queued rebuilds, and any one of them can move
+        // focus; rather than hunt each, claim it back once the queue
+        // drains and again shortly after. Cheap, and a no-op when nothing
+        // took it.
+        for (int delayMs : {0, 250}) {
+          QTimer::singleShot(delayMs, this, [this]() {
+            if (!m_ctx || !m_ctx->ui.collectionTreeWidget) {
+              return;
+            }
+            QWidget *tree = m_ctx->ui.collectionTreeWidget;
+            if (!tree->isVisible()) {
+              return;
+            }
+            QWidget *fw = QApplication::focusWidget();
+            const bool treeStillHasIt = fw && (fw == tree || tree->isAncestorOf(fw));
+            if (!treeStillHasIt) {
+              tree->setFocus(Qt::OtherFocusReason);
+            }
+          });
+        }
+      });
+    }
+    m_treeActivateTimer->start();
+    return true;
+  }
+  if (info.kind == FocusSection::Toolbar && dx != 0) {
+    moveToolbarFocus(dx);
+    return true;
+  }
+  if (dy != 0) {
+    // Everywhere else the vertical axis belongs to the details pane,
+    // whether or not it holds focus — and it NEVER switches sections
+    // (user decision 2026-08-18: "up should only focus the toolbar when
+    // the chord button is held"). With nothing to drive it simply does
+    // nothing; falling back to section movement would smuggle the toolbar
+    // back onto the unheld stick, which is the bug this rule fixes.
+    return driveDetailsPane(dy, /*allowAdvance=*/true);
+  }
+  if (dx != 0) {
+    moveFocusSection(dx, 0);
+  }
+  return false;
+}
+
+bool InteractionManager::activateFocusedSection() {
+  // A ringed pane target wins: confirm opens THAT artwork expanded (user
+  // request 2026-08-18) rather than launching whatever the grid had
+  // selected. The ring is cleared the moment the d-pad returns to the
+  // grid, so this cannot hijack a normal launch.
+  if (m_paneSelectionActive) {
+    const QList<QWidget *> regions = paneRegions();
+    if (m_paneRegionIndex >= 0 && m_paneRegionIndex < regions.size()) {
+      if (auto *tile = qobject_cast<QAbstractButton *>(regions.at(m_paneRegionIndex))) {
+        // The click swaps the pane's main preview (its own handler); the
+        // expand call is the second half the user asked for, so confirming
+        // a tile both updates the sidebar art AND opens it fullscreen.
+        tile->click();
+        const QString path = tile->property("kartendGalleryPath").toString();
+        if (!path.isEmpty() && m_ctx && m_ctx->ui.sidebar) {
+          m_ctx->ui.sidebar->openArtworkExpanded(
+              path, tile->property("kartendGalleryIsVideo").toBool());
+        }
+      }
+      return true;
+    }
+  }
+  const FocusSectionInfo info = currentFocusSection();
+  switch (info.kind) {
+  case FocusSection::Grid:
+    return false; // the grid keeps its launch behaviour
+  case FocusSection::Tree:
+    sendKeyToFocusedWidget(Qt::Key_Return);
+    return true;
+  case FocusSection::Toolbar:
+    if (auto *button = qobject_cast<QAbstractButton *>(QApplication::focusWidget())) {
+      button->click();
+    }
+    return true;
+  case FocusSection::Pane:
+    return true; // swallow: confirming in the pane must not launch the grid
+  }
+  return false;
+}
+
+QList<QWidget *> InteractionManager::paneRegions() const {
+  QList<QWidget *> regions;
+  if (!m_ctx || !m_ctx->ui.sidebar) {
+    return regions;
+  }
+  QWidget *pane = m_ctx->ui.sidebar->asWidget();
+  if (!pane || !pane->isVisible()) {
+    return regions;
+  }
+  // Individual artwork tiles are targets in their own right (user request
+  // 2026-08-18: "individual art items ... clickable/selectable"), so the
+  // ring lands on ONE picture and confirm opens exactly that one. The
+  // thumbs are the gallery's QToolButtons; the Edit control is a
+  // QPushButton and is deliberately not swept up.
+  const auto thumbs = pane->findChildren<QToolButton *>();
+  QList<QWidget *> tiles;
+  for (QToolButton *thumb : thumbs) {
+    // ONLY real artwork tiles: they are the ones the gallery tagged with
+    // their path. Without this filter any other tool button in the pane
+    // (the title's edit pencil, for one) became a navigation target and
+    // the ring landed on it (field report 2026-08-18).
+    if (thumb->isVisible() && thumb->isEnabled() &&
+        !thumb->property("kartendGalleryPath").toString().isEmpty()) {
+      tiles.append(thumb);
+    }
+  }
+  std::sort(tiles.begin(), tiles.end(), [pane](QWidget *a, QWidget *b) {
+    return a->mapTo(pane, QPoint(0, 0)).x() < b->mapTo(pane, QPoint(0, 0)).x();
+  });
+  regions.append(tiles);
+
+  // Then every scrollable region — description, metadata — so the stick
+  // reaches all of them rather than only whichever was found first.
+  const auto areas = pane->findChildren<QAbstractScrollArea *>();
+  QList<QWidget *> scrollables;
+  for (QAbstractScrollArea *area : areas) {
+    if (!area->isVisible()) {
+      continue;
+    }
+    if (!area->findChildren<QToolButton *>().isEmpty()) {
+      continue; // the thumb strip: represented by its tiles above
+    }
+    const QScrollBar *vertical = area->verticalScrollBar();
+    const QScrollBar *horizontal = area->horizontalScrollBar();
+    const bool scrollable = (vertical && vertical->maximum() > vertical->minimum()) ||
+                            (horizontal && horizontal->maximum() > horizontal->minimum());
+    if (scrollable) {
+      scrollables.append(area);
+    }
+  }
+  std::sort(scrollables.begin(), scrollables.end(), [pane](QWidget *a, QWidget *b) {
+    return a->mapTo(pane, QPoint(0, 0)).y() < b->mapTo(pane, QPoint(0, 0)).y();
+  });
+  regions.append(scrollables);
+  return regions;
+}
+
+namespace {
+/// Scrolls @p target into view inside whichever scroll area holds it, so a
+/// ringed thumbnail off the right edge of the strip comes to the user.
+void revealInsideScrollArea(QWidget *target) {
+  for (QWidget *p = target->parentWidget(); p; p = p->parentWidget()) {
+    if (auto *area = qobject_cast<QScrollArea *>(p)) {
+      area->ensureWidgetVisible(target); // QScrollArea-only API
+      return;
+    }
+  }
+}
+} // namespace
+
+void InteractionManager::showSelectionIndicatorFor(QWidget *target) {
+  if (!m_ctx || !target) {
+    return;
+  }
+  QWidget *window = m_ctx->ui.itemsPage ? m_ctx->ui.itemsPage->window() : nullptr;
+  if (!window) {
+    return;
+  }
+  if (!m_selectionIndicator) {
+    m_selectionIndicator = new SelectionIndicator(window);
+  }
+  m_selectionIndicator->showFor(target);
+}
+
+void InteractionManager::hideSelectionIndicator() {
+  if (m_selectionIndicator) {
+    m_selectionIndicator->hideIndicator();
+  }
+}
+
+bool InteractionManager::driveDetailsPane(int steps, bool allowAdvance) {
+  const QList<QWidget *> regions = paneRegions();
+  if (regions.isEmpty() || steps == 0) {
+    return false;
+  }
+  if (m_paneRegionIndex < 0 || m_paneRegionIndex >= regions.size()) {
+    m_paneRegionIndex = steps > 0 ? 0 : regions.size() - 1;
+  }
+  m_paneSelectionActive = true;
+  // One second without further input returns the stick to the grid (user
+  // request 2026-08-18) so the pane never keeps it by accident.
+  if (!m_paneIdleTimer) {
+    m_paneIdleTimer = new QTimer(this);
+    m_paneIdleTimer->setSingleShot(true);
+    m_paneIdleTimer->setInterval(1000);
+    connect(m_paneIdleTimer, &QTimer::timeout, this, [this]() {
+      m_paneSelectionActive = false;
+      m_paneRegionIndex = -1;
+      hideSelectionIndicator();
+      if (m_ctx && m_ctx->ui.itemScrollArea) {
+        m_ctx->ui.itemScrollArea->setFocus(Qt::OtherFocusReason);
+      }
+    });
+  }
+  m_paneIdleTimer->start();
+  QWidget *current = regions.at(m_paneRegionIndex);
+  auto *area = qobject_cast<QAbstractScrollArea *>(current);
+  if (!area) {
+    // An artwork tile: there is nothing to scroll, so the stick simply
+    // steps to the neighbouring target.
+    const int next = std::clamp(m_paneRegionIndex + (steps > 0 ? 1 : -1), 0,
+                                static_cast<int>(regions.size()) - 1);
+    m_paneRegionIndex = next;
+    QWidget *target = regions.at(next);
+    revealInsideScrollArea(target);
+    showSelectionIndicatorFor(target);
+    // Hovering IS previewing (user request 2026-08-18): landing on a tile
+    // swaps the pane's main artwork immediately, so the user sees what
+    // they are pointed at without pressing anything. Confirm still opens
+    // it fullscreen.
+    if (auto *tile = qobject_cast<QAbstractButton *>(target)) {
+      tile->click();
+    }
+    return true;
+  }
+  // The artwork strip scrolls sideways; drive whichever axis it actually
+  // has, so one stick direction walks the whole pane.
+  QScrollBar *bar = area->verticalScrollBar();
+  if (!bar || bar->maximum() <= bar->minimum()) {
+    bar = area->horizontalScrollBar();
+  }
+  if (bar && bar->maximum() > bar->minimum()) {
+    const int before = bar->value();
+    bar->setValue(before + steps * qMax(1, bar->singleStep()) * 3);
+    if (bar->value() != before) {
+      showSelectionIndicatorFor(area);
+      return true; // still travelling inside this region
+    }
+  }
+  if (!allowAdvance) {
+    showSelectionIndicatorFor(area);
+    return true; // at the end, but a held stick must not run away
+  }
+  const int next = std::clamp(m_paneRegionIndex + (steps > 0 ? 1 : -1), 0,
+                              static_cast<int>(regions.size()) - 1);
+  m_paneRegionIndex = next;
+  revealInsideScrollArea(regions.at(next));
+  showSelectionIndicatorFor(regions.at(next));
+  return true;
+}
+
+QWidget *InteractionManager::visibleArtworkOverlay() {
+  QWidget *window = m_ctx && m_ctx->ui.itemsPage ? m_ctx->ui.itemsPage->window() : nullptr;
+  if (!window) {
+    return nullptr;
+  }
+  // Both overlays (grid preview and details-pane expand) are parented
+  // under the window and share the object name, so one lookup covers both.
+  const auto overlays = window->findChildren<QWidget *>(QStringLiteral("artworkPreviewOverlay"));
+  for (QWidget *overlay : overlays) {
+    if (!overlay->isVisible()) {
+      continue;
+    }
+    // Hook the boundary hand-off HERE, not in the gamepad's key helper:
+    // the keyboard and the wheel reach the overlay directly, so hooking
+    // on send meant only the gamepad ever stepped items at the ends.
+    // UniqueConnection + a member slot keeps this idempotent (a functor
+    // would be a fatal error).
+    if (auto *preview = qobject_cast<ArtworkPreviewOverlay *>(overlay)) {
+      connect(preview, &ArtworkPreviewOverlay::galleryBoundaryReached, this,
+              &InteractionManager::onExpandedGalleryBoundary, Qt::UniqueConnection);
+    }
+    return overlay;
+  }
+  return nullptr;
+}
+
+bool InteractionManager::sendKeyToArtworkOverlay(int key) {
+  QWidget *overlay = visibleArtworkOverlay();
+  if (!overlay) {
+    return false;
+  }
+  QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
+  QApplication::sendEvent(overlay, &press);
+  QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+  QApplication::sendEvent(overlay, &release);
+  return true;
+}
+
+bool InteractionManager::stepExpandedItem(int delta) {
+  if (!visibleArtworkOverlay() || delta == 0) {
+    return false;
+  }
+  handleArrowKeyNavigation(delta, /*vertical=*/false);
+  // RELEASE the phantom key press. handleArrowKeyNavigation is the
+  // KEYBOARD path: it calls prepareKeyNavigationState(), which sets
+  // "physical key down" on the assumption that a real key-release will
+  // follow. Driven programmatically from a wheel tick or a gamepad
+  // flick, no release ever arrives — the repeat machinery stayed armed
+  // and kept scrolling on its own, which is why the runaway only ever
+  // appeared when travelling from one item to the next (field report
+  // 2026-08-18). Same pair the gamepad uses when a direction is let go.
+  if (m_keyboardManager) {
+    m_keyboardManager->setPhysicalKeyDown(false);
+    m_keyboardManager->stopRepeat(/*suppressRecentering=*/false);
+  }
+  // The selection lands asynchronously (scroll animation + viewport
+  // rebuild) and the sidebar's gallery for the new item arrives later
+  // still, so refresh in stages. Each pass re-shows only if the resolved
+  // path actually changed, and re-syncs the strip either way.
+  for (int delayMs : {0, 140, 380}) {
+    QTimer::singleShot(delayMs, this, [this]() { refreshExpandedArtwork(); });
+  }
+  return true;
+}
+
+void InteractionManager::onExpandedGalleryBoundary(int direction) {
+  m_expandedStepDirection = direction;
+  m_expandedEntrySnapshot.clear();
+  if (m_ctx && m_ctx->ui.sidebar) {
+    const auto entries = m_ctx->ui.sidebar->currentGalleryEntries();
+    for (const auto &entry : entries) {
+      m_expandedEntrySnapshot.append(entry.path);
+    }
+  }
+  (void)stepExpandedItem(direction);
+}
+
+void InteractionManager::refreshExpandedArtwork() {
+  QWidget *overlayWidget = visibleArtworkOverlay();
+  if (!overlayWidget || !m_collections) {
+    return;
+  }
+  const QString filePath = derivePathFromIndex(currentSelectedIndex());
+  if (filePath.isEmpty()) {
+    return;
+  }
+  // Resolve directories the way the rest of expand mode does
+  // (interactionmanager_enter.cpp): the OWNING collection wins over the
+  // viewing parent, and expandConfigVariables is what the artwork lookup
+  // expects. Getting this wrong is why the artwork stopped following the
+  // item — the path resolved to nothing and the overlay kept its image.
+  const int dbIndex = databaseMgr() ? databaseMgr()->getCollectionIndexForFile(filePath) : -1;
+  const int ownerIdx = InteractionHelpers::resolveOwnerIndex(
+      dbIndex, m_currentCollectionIndex ? *m_currentCollectionIndex : -1, m_collections->size());
+  if (ownerIdx < 0) {
+    return;
+  }
+  const CollectionConfig &owner = (*m_collections)[ownerIdx];
+  const QString artworkDir = SettingsUtils::expandConfigVariables(owner.artworkDirectory, owner.name);
+  const QString videoDir = SettingsUtils::expandConfigVariables(owner.videoDirectory, owner.name);
+
+  // The GRID's overlay goes through the scroll layer so manual covers and
+  // video-first previews behave exactly as they do everywhere else; the
+  // details pane's own overlay is driven directly. Only re-show when the
+  // item actually changed — the staged passes must not re-decode.
+  if (filePath != m_expandedShownPath) {
+    m_expandedShownPath = filePath;
+    IArtworkPreviewScroll *gridPreview = m_ctx ? m_ctx->scrollPreview() : nullptr;
+    auto *overlay = qobject_cast<ArtworkPreviewOverlay *>(overlayWidget);
+    bool shown = false;
+    if (gridPreview && gridPreview->isArtworkPreviewVisible()) {
+      shown = gridPreview->showMediaPreview(filePath, artworkDir, videoDir);
+    }
+    if (!shown && overlay) {
+      // Nothing resolved (an item with no artwork and no video), or the
+      // pane's own overlay is the visible one. showArtworkForFile falls
+      // back to the grid's hatched placeholder, which is what makes an
+      // artless item read as ITSELF instead of leaving the previous
+      // item's picture on screen (field report 2026-08-18: the grid path
+      // returned false and nothing repainted).
+      overlay->showArtworkForFile(filePath, artworkDir);
+    }
+  }
+  syncExpandedGalleryStrip();
+}
+
+void InteractionManager::syncExpandedGalleryStrip() {
+  QWidget *overlayWidget = visibleArtworkOverlay();
+  if (!overlayWidget || !m_ctx || !m_ctx->ui.sidebar) {
+    return;
+  }
+  // Mirror the sidebar's gallery, exactly as expand-mode activation does
+  // (interactionmanager_enter.cpp). setGalleryEntries re-pins the current
+  // index by matching the shown path, so the next direction press cycles
+  // the NEW item's artwork from the right place.
+  const auto sidebarEntries = m_ctx->ui.sidebar->currentGalleryEntries();
+  QList<ArtworkPreviewOverlay::GalleryEntry> overlayEntries;
+  overlayEntries.reserve(sidebarEntries.size());
+  for (const auto &entry : sidebarEntries) {
+    overlayEntries.append({entry.label, entry.path, entry.isVideo});
+  }
+  auto *overlay = qobject_cast<ArtworkPreviewOverlay *>(overlayWidget);
+  // Arriving from a BACKWARD step: land on this item's LAST artwork so the
+  // next left press cycles it, instead of hitting the boundary again and
+  // skipping the item's other pictures entirely. Wait for the gallery to
+  // actually turn over — these entries are still the previous item's until
+  // the sidebar reloads, and acting on them lands on the WRONG item's art.
+  QStringList currentPaths;
+  currentPaths.reserve(overlayEntries.size());
+  for (const auto &entry : overlayEntries) {
+    currentPaths.append(entry.path);
+  }
+  const bool galleryTurnedOver = !currentPaths.isEmpty() && currentPaths != m_expandedEntrySnapshot;
+  if (m_expandedStepDirection < 0 && galleryTurnedOver && overlay) {
+    overlay->showArtworkAtPath(overlayEntries.constLast().path);
+    // m_expandedShownPath deliberately KEEPS the item's path. It records
+    // which ITEM the overlay is on, not which picture — clearing it made
+    // the next staged pass believe the item had changed again and re-show
+    // its default artwork, undoing this landing a few hundred ms later
+    // (field report 2026-08-18: "it doesnt go to the last artwork item of
+    // the previous item").
+  }
+  if (galleryTurnedOver) {
+    m_expandedStepDirection = 0;
+    m_expandedEntrySnapshot = currentPaths;
+  }
+
+  IArtworkPreviewScroll *gridPreview = m_ctx->scrollPreview();
+  if (gridPreview && gridPreview->isArtworkPreviewVisible()) {
+    if (auto *scroll = dynamic_cast<ScrollManager *>(scrollMgr())) {
+      scroll->setArtworkPreviewGallery(overlayEntries);
+    }
+    return;
+  }
+  if (overlay) {
+    overlay->setGalleryEntries(overlayEntries);
+  }
 }

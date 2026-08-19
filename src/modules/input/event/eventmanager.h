@@ -142,6 +142,10 @@ private:
   [[nodiscard]] bool handleMouseButtonRelease(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleHoverSelection(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleWheelEvent(QObject *obj, QEvent *event);
+  /// True while any fullscreen artwork overlay is up — the grid's or the
+  /// details pane's. The app filter stands down for both keys and wheel
+  /// so the overlay's own handlers run (field reports 2026-08-18).
+  [[nodiscard]] bool artworkOverlayVisible() const;
   [[nodiscard]] bool handleKeyPressEvent(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleKeyReleaseEvent(QObject *obj, QEvent *event);
   [[nodiscard]] bool handleMouseDoubleClick(QObject *obj, QEvent *event);

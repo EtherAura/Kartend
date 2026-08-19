@@ -16,6 +16,10 @@ inline constexpr double AXIS_DEADZONE_OFF = 0.45;
 inline constexpr int POLL_INTERVAL_MS = 16;
 /// Slow poll interval when no controller is connected (reduces idle CPU)
 inline constexpr int POLL_INTERVAL_IDLE_MS = 1000;
+/// Repeat cadence for right-stick details-pane scrolling while the stick is
+/// held off-centre (user request 2026-08-18). Slower than the poll rate so
+/// a held deflection reads as a smooth scroll, not a jump.
+inline constexpr int PANE_SCROLL_REPEAT_MS = 45;
 } // namespace Gamepad
 } // namespace UIConstants
 

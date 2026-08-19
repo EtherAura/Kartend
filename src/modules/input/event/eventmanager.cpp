@@ -291,6 +291,16 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
     return false;
   }
 
+  // The details pane owns a SECOND ArtworkPreviewOverlay — expand mode
+  // opened from its gallery strip — and the scroll layer's flag above
+  // knows nothing about it. Without this the app filter claimed every key
+  // while that overlay was up: Escape left the collection instead of
+  // dismissing the artwork, and the arrows moved the grid selection behind
+  // it (field report 2026-08-18).
+  if (artworkOverlayVisible()) {
+    return false;
+  }
+
   // Kartend-ob1c9: while the collection tree panel has keyboard focus its
   // QTreeWidget owns arrows / Enter / expansion natively — stand down like
   // the artwork-preview bypass above, or the application-wide filter routes
@@ -304,7 +314,7 @@ bool EventManager::handleKeyPressEvent(QObject *obj, QEvent *event) {
   // (2026-08-17), and the owning widgets handle keys natively.
   if (m_ctx) {
     QWidget *fw = QApplication::focusWidget();
-    auto *paneW = dynamic_cast<QWidget *>(m_ctx->ui.sidebar);
+    QWidget *paneW = m_ctx->ui.sidebar ? m_ctx->ui.sidebar->asWidget() : nullptr;
     const auto within = [fw](QWidget *w) {
       return w && fw && (w == fw || w->isAncestorOf(fw));
     };
@@ -371,4 +381,21 @@ QList<int> EventManager::getSubcollections(int parentIndex) const {
     return {};
   }
   return CollectionUtils::directChildrenOf(parentIndex, *m_collections);
+}
+
+bool EventManager::artworkOverlayVisible() const {
+  if (!m_ctx || !m_ctx->ui.itemsPage) {
+    return false;
+  }
+  QWidget *window = m_ctx->ui.itemsPage->window();
+  if (!window) {
+    return false;
+  }
+  const auto overlays = window->findChildren<QWidget *>(QStringLiteral("artworkPreviewOverlay"));
+  for (QWidget *overlay : overlays) {
+    if (overlay->isVisible()) {
+      return true;
+    }
+  }
+  return false;
 }

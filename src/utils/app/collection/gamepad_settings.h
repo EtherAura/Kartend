@@ -16,6 +16,10 @@ struct GamepadSettings {
   /// unbound — Y is taken by the details pane, and a surprise binding on
   /// upgrade would be worse than none.
   QString gamepadToggleCollectionTreeButton = "L1";
+  /// Right-stick flicks hop the focus section (grid/toolbar/sidebars) —
+  /// the default direction input for the section chord (user request
+  /// 2026-08-17); Select+d-pad works as well.
+  bool gamepadRightStickSections = true;
   // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
   // settings dirty-check field-complete automatically (Kartend-6oqat).
   bool operator==(const GamepadSettings &) const = default;

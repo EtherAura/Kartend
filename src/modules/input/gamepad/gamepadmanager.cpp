@@ -161,6 +161,12 @@ void GamepadManager::detachController() {
   m_right = false;
   m_axisX = 0.0;
   m_axisY = 0.0;
+  m_axisRightX = 0.0;
+  m_axisRightY = 0.0;
+  m_rightStickDirection = Direction::None;
+  if (m_rightStickScrollTimer) {
+    m_rightStickScrollTimer->stop();
+  }
   m_buttonA = false;
   m_buttonB = false;
   m_buttonX = false;
@@ -226,6 +232,12 @@ void GamepadManager::pollSdlState() {
 
   m_axisX = GamepadHelpers::normalizeSdlAxis(rawX);
   m_axisY = GamepadHelpers::normalizeSdlAxis(rawY);
+
+  const Sint16 rawRX = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTX);
+  const Sint16 rawRY = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTY);
+  m_axisRightX = GamepadHelpers::normalizeSdlAxis(rawRX);
+  m_axisRightY = GamepadHelpers::normalizeSdlAxis(rawRY);
+  updateRightStickSection();
 
   m_up = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_UP);
   m_down = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_DPAD_DOWN);
@@ -339,6 +351,9 @@ void GamepadManager::pollSdlState() {
     handleMappedButtonPress(QStringLiteral("R3"));
   }
 
+  if (backNow != m_buttonBack && !m_suspended && !m_bindingCaptureActive) {
+    emit modifierHeldChanged(backNow);
+  }
   m_buttonA = aNow;
   m_buttonB = bNow;
   m_buttonX = xNow;

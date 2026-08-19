@@ -68,6 +68,7 @@
       </item>
       <item row="3" column="0" colspan="2"><widget class="QCheckBox" name="gamepadUseDpadCheckBox"><property name="text"><string>Use D-pad for navigation</string></property></widget></item>
       <item row="4" column="0" colspan="2"><widget class="QCheckBox" name="gamepadUseLeftStickCheckBox"><property name="text"><string>Use left stick for navigation</string></property></widget></item>
+      <item row="5" column="0" colspan="2"><widget class="QCheckBox" name="gamepadRightStickSectionsCheckBox"><property name="toolTip"><string>Flick the right stick to move focus between the grid, toolbar, and sidebars. Holding Select with a direction does the same.</string></property><property name="text"><string>Right stick moves focus between sections</string></property></widget></item>
      </layout>
     </widget>
    </item>

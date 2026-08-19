@@ -14,6 +14,7 @@
 #include "uiconstants/navigation.h"
 #include "uiconstants/timing.h"
 
+#include <QApplication>
 #include <QLineEdit>
 #include <QStackedWidget>
 #include <QtGlobal>
@@ -159,7 +160,18 @@ auto NavigationManager::prepareNonSharedNavigation(int collectionIndex) -> void 
   updateItemsPageTitle(collectionIndex);
   m_stackedWidget->setCurrentWidget(m_itemsPage);
   if (m_itemsPage && m_itemsPage->window()) {
-    m_itemsPage->window()->setFocus();
+    // Do NOT yank focus out of the collection tree (field report
+    // 2026-08-18): highlighting a row now switches collection on its own,
+    // and this call handed focus back to the window on every switch — so
+    // the right stick stopped driving the tree mid-traversal and started
+    // scrolling the details pane instead. A tree-driven switch keeps the
+    // tree focused; every other route change behaves as before.
+    QWidget *focused = QApplication::focusWidget();
+    QWidget *tree = m_ctx ? m_ctx->ui.collectionTreeWidget : nullptr;
+    const bool treeDriving = tree && focused && (focused == tree || tree->isAncestorOf(focused));
+    if (!treeDriving) {
+      m_itemsPage->window()->setFocus();
+    }
     m_itemsPage->window()->activateWindow();
   }
 

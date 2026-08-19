@@ -79,6 +79,16 @@ signals:
   /// (grid / toolbar / left / right sidebar) instead of the selection.
   /// dx/dy are -1/0/+1 in screen orientation.
   void requestFocusSectionMove(int dx, int dy);
+  /// Select/Back held state — drives the on-screen modifier HUD (user
+  /// request 2026-08-18: an indicator plus desaturated unfocused areas).
+  void modifierHeldChanged(bool held);
+  /// Right-stick FLICK, one per deflection. Kept separate from the chord
+  /// signal so the interaction layer can let a visible details pane claim
+  /// the vertical axis for scrolling (user request 2026-08-18).
+  void requestRightStickFlick(int dx, int dy);
+  /// Continuous while the right stick is deflected vertically: scroll the
+  /// details pane by @p steps notches (sign = direction).
+  void requestPaneScroll(int steps);
 
   void bindingCaptureButtonPressed(const QString &buttonName);
 
@@ -86,6 +96,9 @@ private:
   using Direction = GamepadHelpers::Direction;
 
   void updateDirectionFromInputs();
+  /// Edge-detects the right stick into requestFocusSectionMove — shared by
+  /// both backends, gated by GamepadSettings::gamepadRightStickSections.
+  void updateRightStickSection();
   void applyActiveDirection(Direction newDirection);
   void handleMappedButtonPress(const QString &buttonName);
 
@@ -114,6 +127,17 @@ private:
   // Left stick axes.
   double m_axisX = 0.0;
   double m_axisY = 0.0;
+
+  // Right stick axes + its own hysteresis state (user request 2026-08-17:
+  // a right-stick FLICK hops the focus section — no modifier needed; one
+  // hop per deflection, recentre to hop again).
+  double m_axisRightX = 0.0;
+  double m_axisRightY = 0.0;
+  Direction m_rightStickDirection = Direction::None;
+  /// Drives requestPaneScroll while the right stick is held off-centre:
+  /// the Qt backend only reports axis CHANGES, so a held deflection would
+  /// otherwise scroll exactly once.
+  QTimer *m_rightStickScrollTimer = nullptr;
 
   // Digital buttons (used for edge detection in polling backends).
   bool m_buttonA = false;
@@ -148,6 +172,8 @@ private:
 
   void onAxisLeftXChanged(double value);
   void onAxisLeftYChanged(double value);
+  void onAxisRightXChanged(double value);
+  void onAxisRightYChanged(double value);
 
   void onButtonAChanged(bool pressed);
   void onButtonBChanged(bool pressed);

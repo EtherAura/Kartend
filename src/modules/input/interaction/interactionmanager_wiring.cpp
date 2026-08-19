@@ -137,6 +137,21 @@ void InteractionManager::connectGamepadManagerSignals() {
             if (modalInputGateActive()) {
               return;
             }
+            // In expand mode the directions cycle ARTWORK, not the
+            // selection hidden behind the overlay (field report
+            // 2026-08-18).
+            if (visibleArtworkOverlay()) {
+              // Identical to what the keyboard does: cycle this item's
+              // artwork, and only step to the neighbouring item when the
+              // overlay reports it has run out (field report 2026-08-18:
+              // the gamepad was jumping items instead of cycling).
+              (void)sendKeyToArtworkOverlay(direction < 0 ? Qt::Key_Left : Qt::Key_Right);
+              return;
+            }
+            // Plain directions always mean the grid (user decision
+            // 2026-08-17) — pull focus home if the section chord parked it
+            // elsewhere, then move as usual.
+            returnGamepadFocusToGrid();
             int effectiveDirection = direction;
             bool effectiveVertical = vertical;
             ViewType vt = ViewType::Grid;
@@ -175,6 +190,17 @@ void InteractionManager::connectGamepadManagerSignals() {
     if (modalInputGateActive()) {
       return;
     }
+    // While expand mode is up, confirm must not launch the item behind
+    // it; the overlay decides what confirm means there.
+    if (visibleArtworkOverlay()) {
+      return;
+    }
+    // Confirm belongs to the focused section: activating a tree row or a
+    // toolbar button must never fall through and launch the grid item that
+    // happened to be selected.
+    if (activateFocusedSection()) {
+      return;
+    }
     if (scrollMgr()) {
       const int totalItems = scrollMgr()->getTotalItems();
       processEnterOrReturnKey(totalItems);
@@ -182,6 +208,12 @@ void InteractionManager::connectGamepadManagerSignals() {
   });
   connect(m_gamepadManager.get(), &GamepadManager::requestEscapeAction, this, [this]() {
     if (modalInputGateActive()) {
+      return;
+    }
+    // Back dismisses the expanded artwork rather than leaving the
+    // collection behind it (field report 2026-08-18). Escape goes to the
+    // overlay's own handler, the same one the keyboard uses.
+    if (sendKeyToArtworkOverlay(Qt::Key_Escape)) {
       return;
     }
     (void)handleEscapeKey();
@@ -209,6 +241,34 @@ void InteractionManager::connectGamepadManagerSignals() {
               return;
             }
             moveFocusSection(dx, dy);
+          });
+  connect(m_gamepadManager.get(), &GamepadManager::modifierHeldChanged, this, [this](bool held) {
+    if (modalInputGateActive()) {
+      return;
+    }
+    setFocusModifierActive(held);
+  });
+  connect(m_gamepadManager.get(), &GamepadManager::requestPaneScroll, this, [this](int steps) {
+    if (modalInputGateActive()) {
+      return;
+    }
+    // The vertical axis belongs to the details pane unless the modifier
+    // claims it for section switching (user decision 2026-08-18). Repeat
+    // ticks SCROLL only: stepping to the next region happens on the flick
+    // edge, so a held stick never races through the pane.
+    if (visibleArtworkOverlay()) {
+      return; // expand mode owns the stick
+    }
+    if (!m_focusModifierHeld && currentFocusSection().kind != FocusSection::Tree) {
+      (void)driveDetailsPane(steps, /*allowAdvance=*/false);
+    }
+  });
+  connect(m_gamepadManager.get(), &GamepadManager::requestRightStickFlick, this,
+          [this](int dx, int dy) {
+            if (modalInputGateActive()) {
+              return;
+            }
+            (void)routeSectionInput(dx, dy);
           });
   connect(m_gamepadManager.get(), &GamepadManager::requestScrollAnimationStop, this, [this]() {
     if (m_animationManager && m_animationManager->isVerticalAnimRunning()) {
