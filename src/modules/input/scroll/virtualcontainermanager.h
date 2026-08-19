@@ -43,6 +43,7 @@ class VirtualContainerManager : public QObject {
   // class should be positioning the container. The alignment contract is
   // worth pinning directly rather than through a populated grid.
   friend class TestVirtualContainerManager;
+
 public:
   explicit VirtualContainerManager(QObject *parent = nullptr);
   ~VirtualContainerManager() override;
@@ -76,11 +77,8 @@ private:
   void setupContainerSizes(int availableWidth, int contentWidth, int totalHeight, bool overflow);
   [[nodiscard]] HorizontalAlignment
   getEffectiveAlignment(const ContainerPositionParams &params) const;
-  void calculateScrollbarOffsets(bool verticalBarHidden, int &leftOffset, int &rightOffset,
-                                 int &centerOffset) const;
-  [[nodiscard]] int calculateContainerPosition(int availableWidth, int contentWidth, bool overflow,
-                                               HorizontalAlignment align, int leftOffset,
-                                               int rightOffset, int centerOffset) const;
+  [[nodiscard]] int calculateContainerPosition(int availableWidth, int contentWidth,
+                                               HorizontalAlignment align) const;
   void configureHorizontalScrollbar(bool overflow);
 
   QWidget *m_gridContainer = nullptr;

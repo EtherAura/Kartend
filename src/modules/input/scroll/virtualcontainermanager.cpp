@@ -132,15 +132,7 @@ void VirtualContainerManager::positionContainer(const ContainerPositionParams &p
 
   HorizontalAlignment align = getEffectiveAlignment(params);
 
-  bool verticalBarHidden =
-      m_scrollArea->verticalScrollBar() && !m_scrollArea->verticalScrollBar()->isVisible();
-  int leftOffset = 0;
-  int rightOffset = 0;
-  int centerOffset = 0;
-  calculateScrollbarOffsets(verticalBarHidden, leftOffset, rightOffset, centerOffset);
-
-  int containerX = calculateContainerPosition(availableWidth, contentWidth, overflow, align,
-                                              leftOffset, rightOffset, centerOffset);
+  const int containerX = calculateContainerPosition(availableWidth, contentWidth, align);
 
   configureHorizontalScrollbar(overflow);
   m_virtualContainer->move(containerX, 0);
@@ -170,80 +162,28 @@ VirtualContainerManager::getEffectiveAlignment(const ContainerPositionParams &pa
                                            params.itemsPerRow);
 }
 
-void VirtualContainerManager::calculateScrollbarOffsets(bool verticalBarHidden, int &leftOffset,
-                                                        int &rightOffset, int &centerOffset) const {
-  static constexpr int HIDDEN_SCROLLBAR_LEFT_OFFSET = -5;
-  static constexpr int HIDDEN_SCROLLBAR_RIGHT_OFFSET = -20;
-  static constexpr int HIDDEN_SCROLLBAR_CENTER_OFFSET = -10;
-
-  leftOffset = verticalBarHidden ? HIDDEN_SCROLLBAR_LEFT_OFFSET : 0;
-  rightOffset = verticalBarHidden ? HIDDEN_SCROLLBAR_RIGHT_OFFSET : 0;
-  centerOffset = verticalBarHidden ? HIDDEN_SCROLLBAR_CENTER_OFFSET : 0;
-}
-
 int VirtualContainerManager::calculateContainerPosition(int availableWidth, int contentWidth,
-                                                        bool overflow, HorizontalAlignment align,
-                                                        int leftOffset, int rightOffset,
-                                                        int centerOffset) const {
-  static constexpr int CONTAINER_EXTRA_SHIFT = 20;
-  int extraShift = CONTAINER_EXTRA_SHIFT;
-  int containerX = 0;
-
-  if (overflow) {
-    // Content wider than the viewport still has an alignment: which EDGE
-    // is anchored. This branch used to centre regardless, so Left and Right
-    // produced an identical position and the setting looked dead (field
-    // report 2026-08-18, measured: left and right both -180). Centre keeps
-    // its exact previous arithmetic — it is the default and was correct.
-    const int overflowAmount = contentWidth - availableWidth;
-    switch (align) {
-    case HorizontalAlignment::Left:
-      containerX = leftOffset; // content's left edge at the viewport's left
-      break;
-    case HorizontalAlignment::Right:
-      containerX = -overflowAmount + rightOffset; // right edge at the right
-      break;
-    case HorizontalAlignment::Center:
-    default: {
-      static constexpr int CENTER_ALIGNMENT_ADJUSTMENT = 10;
-      containerX =
-          -(overflowAmount / 2) + centerOffset + extraShift - CENTER_ALIGNMENT_ADJUSTMENT;
-      break;
-    }
-    }
-  } else if (contentWidth <= availableWidth) {
-    switch (align) {
-    case HorizontalAlignment::Left:
-      containerX = -UIConstants::Grid::CONTAINER_OFFSET - UIConstants::Grid::CONTAINER_LEFT_OFFSET +
-                   leftOffset;
-      break;
-    case HorizontalAlignment::Right:
-      containerX = availableWidth - contentWidth + UIConstants::Grid::CONTAINER_RIGHT_OFFSET +
-                   rightOffset + 10;
-      break;
-    case HorizontalAlignment::Center:
-    default:
-      containerX = ((availableWidth - contentWidth) / 2) + centerOffset + extraShift;
-      break;
-    }
-  } else {
-    int overflowAmount = contentWidth - availableWidth;
-    switch (align) {
-    case HorizontalAlignment::Left:
-      containerX = -UIConstants::Grid::CONTAINER_OFFSET - UIConstants::Grid::CONTAINER_LEFT_OFFSET +
-                   leftOffset;
-      break;
-    case HorizontalAlignment::Right:
-      containerX = -overflowAmount + UIConstants::Grid::CONTAINER_RIGHT_OFFSET + rightOffset;
-      break;
-    case HorizontalAlignment::Center:
-    default:
-      containerX = -(overflowAmount / 2) + centerOffset + extraShift;
-      break;
-    }
+                                                        HorizontalAlignment align) const {
+  // The whole contract (user, 2026-08-18): an OVERSIZED grid may clip —
+  // that is unavoidable — but a grid that FITS must never clip, whatever
+  // the alignment. Slack is what is left over; it is negative exactly when
+  // the content is too wide, and the same three cases serve both.
+  //
+  // This replaces a pile of empirical nudges (a 20px shift, a -10 centre
+  // tweak, hidden-scrollbar compensations of -5/-20/-10). Those pushed a
+  // FITTING grid to a negative x, so the first column was clipped even
+  // though there was room for every tile — and on overflow they collapsed
+  // Left and Right onto the same position.
+  const int slack = availableWidth - contentWidth;
+  switch (align) {
+  case HorizontalAlignment::Left:
+    return 0; // left edge of the content at the left of the viewport
+  case HorizontalAlignment::Right:
+    return slack; // right edges flush; negative slack clips on the left
+  case HorizontalAlignment::Center:
+  default:
+    return slack / 2; // centred; negative slack clips both sides evenly
   }
-
-  return containerX;
 }
 
 void VirtualContainerManager::configureHorizontalScrollbar(bool overflow) {

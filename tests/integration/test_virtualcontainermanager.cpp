@@ -86,36 +86,48 @@ void TestVirtualContainerManager::testWillNeedVerticalScrollbarFalseWithoutScrol
 
 void TestVirtualContainerManager::alignmentMovesContainerWhenContentFits() {
   VirtualContainerManager mgr;
-  // Content narrower than the viewport: the three alignments must land the
-  // container at three different x positions, left-to-right in order.
+  // Content NARROWER than the viewport. Each alignment lands somewhere
+  // different, and — the part that was broken — nothing may clip, because
+  // every tile has room (user rule 2026-08-18: "if the entire grid fits
+  // regardless, there shouldn't be any clipping").
   constexpr int kAvailable = 1000;
   constexpr int kContent = 600;
-  const int left = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/false,
-                                                  HorizontalAlignment::Left, 0, 0, 0);
-  const int centre = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/false,
-                                                    HorizontalAlignment::Center, 0, 0, 0);
-  const int right = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/false,
-                                                   HorizontalAlignment::Right, 0, 0, 0);
-  QVERIFY2(left < centre, qPrintable(QStringLiteral("left %1 vs centre %2").arg(left).arg(centre)));
-  QVERIFY2(centre < right,
-           qPrintable(QStringLiteral("centre %1 vs right %2").arg(centre).arg(right)));
+  const int left = mgr.calculateContainerPosition(kAvailable, kContent, HorizontalAlignment::Left);
+  const int centre =
+      mgr.calculateContainerPosition(kAvailable, kContent, HorizontalAlignment::Center);
+  const int right =
+      mgr.calculateContainerPosition(kAvailable, kContent, HorizontalAlignment::Right);
+
+  QCOMPARE(left, 0);
+  QCOMPARE(centre, (kAvailable - kContent) / 2);
+  QCOMPARE(right, kAvailable - kContent);
+  for (const int x : {left, centre, right}) {
+    QVERIFY2(x >= 0, qPrintable(QStringLiteral("x %1 is negative — clips on the left").arg(x)));
+    QVERIFY2(x + kContent <= kAvailable,
+             qPrintable(QStringLiteral("x %1 + content runs past the viewport").arg(x)));
+  }
 }
 
 void TestVirtualContainerManager::alignmentMovesContainerWhenContentOverflows() {
   VirtualContainerManager mgr;
-  // Content WIDER than the viewport — the everyday case for a full grid,
-  // where a row of tiles slightly exceeds the available width. Alignment
-  // must still decide which edge is anchored; centring regardless is what
-  // made the setting look dead.
+  // Content WIDER than the viewport: clipping is unavoidable, so alignment
+  // decides which edge survives. Left and Right used to compute the same
+  // position, which is what made the setting look dead.
   constexpr int kAvailable = 1000;
   constexpr int kContent = 1400;
-  const int left = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/true,
-                                                  HorizontalAlignment::Left, 0, 0, 0);
-  const int centre = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/true,
-                                                    HorizontalAlignment::Center, 0, 0, 0);
-  const int right = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/true,
-                                                   HorizontalAlignment::Right, 0, 0, 0);
-  QVERIFY2(left > centre, qPrintable(QStringLiteral("left %1 vs centre %2").arg(left).arg(centre)));
-  QVERIFY2(centre > right,
-           qPrintable(QStringLiteral("centre %1 vs right %2").arg(centre).arg(right)));
+  const int left = mgr.calculateContainerPosition(kAvailable, kContent, HorizontalAlignment::Left);
+  const int centre =
+      mgr.calculateContainerPosition(kAvailable, kContent, HorizontalAlignment::Center);
+  const int right =
+      mgr.calculateContainerPosition(kAvailable, kContent, HorizontalAlignment::Right);
+
+  QCOMPARE(left, 0);                      // left edge stays on screen
+  QCOMPARE(right, kAvailable - kContent); // right edge stays on screen
+  QCOMPARE(centre, (kAvailable - kContent) / 2);
+  QVERIFY2(left > centre && centre > right,
+           qPrintable(QStringLiteral("left %1, centre %2, right %3 must all differ")
+                          .arg(left)
+                          .arg(centre)
+                          .arg(right)));
+  QVERIFY2(left <= 0, "a fitting-side gap would mean wasted space, not clipping");
 }
