@@ -103,7 +103,15 @@ private:
 
   QList<QPointer<ItemWidget>> m_pool;
   QList<QPointer<ItemWidget>> m_stalePool; // Widgets marked stale but still available
-  QWidget *m_widgetParent = nullptr;
+  /// QPointer, NOT a raw pointer (crash 2026-08-18, reproduced under gdb):
+  /// the prewarm timer constructs ItemWidgets into this parent on a later
+  /// tick, and ScrollManager::cleanupVirtualContainer can destroy the
+  /// container in between. A raw pointer stayed non-null after that
+  /// destruction, so the `if (!m_widgetParent)` guards below passed and
+  /// `new ItemWidget(dangling)` segfaulted inside QWidget::setParent.
+  /// Auto-nulling makes those guards do what they always claimed to.
+  /// Every other widget handle in this class is already a QPointer.
+  QPointer<QWidget> m_widgetParent;
   WidgetPoolMetrics m_metrics;
 
   // Metrics for calculating optimal pool size

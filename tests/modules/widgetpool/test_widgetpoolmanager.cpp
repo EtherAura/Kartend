@@ -1,5 +1,6 @@
 #include "itemwidget.h"
 #include "widgetpoolmanager.h"
+#include <QCoreApplication>
 #include <QTest>
 #include <QWidget>
 
@@ -29,6 +30,9 @@ private slots:
   void testRelease_clearsVirtualFolderDoubleClickedConnection();
   void testClear_emptiesPool();
   void testClearAndDelete_deletesWidgets();
+
+  // Lifetime: the prewarm timer must not outlive its parent container.
+  void testPrewarmAsync_parentDestroyedMidFlight_doesNotCrash();
 
   // Soft clear and stale widgets
   void testSoftClear_marksWidgetsStale();
@@ -410,6 +414,37 @@ void TestWidgetPoolManager::testPrewarm_createsWidgets() {
   QVERIFY(m_pool->poolSize() > 0);
 
   m_pool->clearAndDelete();
+}
+
+// Regression for the 2026-08-18 startup segfault: prewarmAsync() creates
+// widgets in batches from a timer, and ScrollManager::cleanupVirtualContainer
+// destroys the parent container between ticks during the initial collection
+// load. With a raw parent pointer the "parent still alive?" guard passed on
+// freed memory and `new ItemWidget(parent)` crashed in QWidget::setParent.
+void TestWidgetPoolManager::testPrewarmAsync_parentDestroyedMidFlight_doesNotCrash() {
+  auto *parent = new QWidget;
+  WidgetPoolManager pool;
+  pool.setWidgetParent(parent);
+  pool.setVisibleMetrics(/*visibleRows=*/6, /*itemsPerRow=*/8);
+  pool.prewarmAsync(); // arms the batching timer
+
+  // Container torn down before the timer drains its target — the exact
+  // startup race (scan completion rebuilds the virtual container).
+  delete parent;
+
+  // Pump: the timer must observe a null parent and stop instead of
+  // constructing into freed memory.
+  QTest::qWait(50);
+  QCoreApplication::processEvents();
+
+  // Surviving the pump IS the assertion; the pool must also be safe to use
+  // again once a fresh container arrives.
+  auto *replacement = new QWidget;
+  pool.setWidgetParent(replacement);
+  pool.prewarmAsync();
+  QTest::qWait(50);
+  QCoreApplication::processEvents();
+  delete replacement;
 }
 
 QTEST_MAIN(TestWidgetPoolManager)
