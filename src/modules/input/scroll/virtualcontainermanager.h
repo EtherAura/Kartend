@@ -37,6 +37,12 @@ struct ContainerPositionParams {
 class VirtualContainerManager : public QObject {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(VirtualContainerManager)
+
+  // Test access (2026-08-18): container placement is pure arithmetic over
+  // explicit arguments, but it is private because nothing outside the
+  // class should be positioning the container. The alignment contract is
+  // worth pinning directly rather than through a populated grid.
+  friend class TestVirtualContainerManager;
 public:
   explicit VirtualContainerManager(QObject *parent = nullptr);
   ~VirtualContainerManager() override;

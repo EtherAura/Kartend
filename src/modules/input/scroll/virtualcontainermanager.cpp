@@ -190,11 +190,26 @@ int VirtualContainerManager::calculateContainerPosition(int availableWidth, int 
   int containerX = 0;
 
   if (overflow) {
-    int overflowAmount = contentWidth - availableWidth;
-    containerX = -(overflowAmount / 2) + centerOffset + extraShift;
-    if (align == HorizontalAlignment::Center) {
+    // Content wider than the viewport still has an alignment: which EDGE
+    // is anchored. This branch used to centre regardless, so Left and Right
+    // produced an identical position and the setting looked dead (field
+    // report 2026-08-18, measured: left and right both -180). Centre keeps
+    // its exact previous arithmetic — it is the default and was correct.
+    const int overflowAmount = contentWidth - availableWidth;
+    switch (align) {
+    case HorizontalAlignment::Left:
+      containerX = leftOffset; // content's left edge at the viewport's left
+      break;
+    case HorizontalAlignment::Right:
+      containerX = -overflowAmount + rightOffset; // right edge at the right
+      break;
+    case HorizontalAlignment::Center:
+    default: {
       static constexpr int CENTER_ALIGNMENT_ADJUSTMENT = 10;
-      containerX -= CENTER_ALIGNMENT_ADJUSTMENT;
+      containerX =
+          -(overflowAmount / 2) + centerOffset + extraShift - CENTER_ALIGNMENT_ADJUSTMENT;
+      break;
+    }
     }
   } else if (contentWidth <= availableWidth) {
     switch (align) {

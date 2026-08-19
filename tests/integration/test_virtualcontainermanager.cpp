@@ -83,3 +83,39 @@ void TestVirtualContainerManager::testWillNeedVerticalScrollbarFalseWithoutScrol
   QVERIFY(!mgr.willNeedVerticalScrollbar(100));
   QVERIFY(!mgr.willNeedVerticalScrollbar(std::numeric_limits<int>::max()));
 }
+
+void TestVirtualContainerManager::alignmentMovesContainerWhenContentFits() {
+  VirtualContainerManager mgr;
+  // Content narrower than the viewport: the three alignments must land the
+  // container at three different x positions, left-to-right in order.
+  constexpr int kAvailable = 1000;
+  constexpr int kContent = 600;
+  const int left = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/false,
+                                                  HorizontalAlignment::Left, 0, 0, 0);
+  const int centre = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/false,
+                                                    HorizontalAlignment::Center, 0, 0, 0);
+  const int right = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/false,
+                                                   HorizontalAlignment::Right, 0, 0, 0);
+  QVERIFY2(left < centre, qPrintable(QStringLiteral("left %1 vs centre %2").arg(left).arg(centre)));
+  QVERIFY2(centre < right,
+           qPrintable(QStringLiteral("centre %1 vs right %2").arg(centre).arg(right)));
+}
+
+void TestVirtualContainerManager::alignmentMovesContainerWhenContentOverflows() {
+  VirtualContainerManager mgr;
+  // Content WIDER than the viewport — the everyday case for a full grid,
+  // where a row of tiles slightly exceeds the available width. Alignment
+  // must still decide which edge is anchored; centring regardless is what
+  // made the setting look dead.
+  constexpr int kAvailable = 1000;
+  constexpr int kContent = 1400;
+  const int left = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/true,
+                                                  HorizontalAlignment::Left, 0, 0, 0);
+  const int centre = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/true,
+                                                    HorizontalAlignment::Center, 0, 0, 0);
+  const int right = mgr.calculateContainerPosition(kAvailable, kContent, /*overflow=*/true,
+                                                   HorizontalAlignment::Right, 0, 0, 0);
+  QVERIFY2(left > centre, qPrintable(QStringLiteral("left %1 vs centre %2").arg(left).arg(centre)));
+  QVERIFY2(centre > right,
+           qPrintable(QStringLiteral("centre %1 vs right %2").arg(centre).arg(right)));
+}

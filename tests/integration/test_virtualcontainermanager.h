@@ -19,6 +19,12 @@ class TestVirtualContainerManager : public QObject {
   Q_OBJECT
 
 private slots:
+  // Horizontal alignment must actually move the container — in BOTH the
+  // fits-in-viewport case and the overflowing one (field report
+  // 2026-08-18: "left right center alignment options inoperable").
+  void alignmentMovesContainerWhenContentFits();
+  void alignmentMovesContainerWhenContentOverflows();
+
   void testConstructionWithoutWiring();
   void testCreateContainerRequiresGridContainer();
   void testCreateContainerProducesChildOfGrid();
