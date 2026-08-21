@@ -96,6 +96,12 @@ public:
   [[nodiscard]] bool hasArtwork() const { return m_hasArtwork; }
   [[nodiscard]] int collectionColumnWidth() const { return m_collectionColumnWidth; }
   [[nodiscard]] int artworkColumnWidth() const { return m_artworkColumnWidth; }
+  /// Edge length of the square the artwork is actually painted into. Capped
+  /// by the cell's HEIGHT once the title band is reserved, so on a cell wider
+  /// than that it is SMALLER than itemWidth and the rest of the cell stays
+  /// blank. Grid alignment reads this so it can anchor the painted edge
+  /// rather than the cell edge. 0 until the first configure pass.
+  [[nodiscard]] int artworkSize() const { return m_artworkSize; }
   int m_itemWidth;
   int m_itemHeight;
   int m_artworkSize = 0;  // Computed artwork size for triangle indicator positioning

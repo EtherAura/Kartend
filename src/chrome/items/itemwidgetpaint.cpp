@@ -399,20 +399,11 @@ void ItemWidget::applyDimensions() {
   QFont referenceFont = this->font();
   referenceFont.setPointSize(std::max(12, m_fontSize));
   QFontMetrics referenceFm(referenceFont);
-  // Reserve space for 3 lines of text to accommodate longer titles
-  int textLines = 3;
-  int singleLineHeight = referenceFm.ascent() + referenceFm.descent();
-  int reservedTextHeight = singleLineHeight * textLines;
 
-  int availableHeight = m_itemHeight - UIConstants::Widget::PADDING - UIConstants::Widget::SPACING -
-                        reservedTextHeight;
-  int availableWidth = m_itemWidth - UIConstants::Widget::PADDING;
-  int artworkSize = qMin(availableWidth, availableHeight);
-  m_artworkSize = artworkSize;
-
-  // Show title if: regular item with titles visible, OR subcollection with
-  // subcollection titles visible, OR virtual folder with subfolder titles
-  // visible
+  // Resolved BEFORE the artwork is sized, because the text reservation
+  // depends on it. Show title if: regular item with titles visible, OR
+  // subcollection with subcollection titles visible, OR virtual folder with
+  // subfolder titles visible.
   bool shouldShowTitle = false;
   if (m_isVirtualFolder) {
     shouldShowTitle = !m_hideSubfolderTitle;
@@ -422,12 +413,52 @@ void ItemWidget::applyDimensions() {
     shouldShowTitle = !m_hideTitles;
   }
 
+  // Three lines, so a long wrapped title never overlaps the art. RESERVED
+  // UNCONDITIONALLY, including when no title is drawn.
+  //
+  // That looks like waste and was "fixed" once (2026-08-20) by reserving zero
+  // when titles are hidden, letting the square art grow into the freed height.
+  // It broke the grid badly on a real library — artwork drawn overlapping
+  // artwork, rows colliding — and was reverted within the hour.
+  //
+  // The mechanism is NOT understood. An early guess (negative grid spacing)
+  // was wrong: the reporter had none. Do not re-attempt this without first
+  // reproducing the overlap and explaining it, because the failure is not
+  // where it looks like it should be: at the reporter's cell proportions the
+  // art was already WIDTH-limited (measured cellDeadMargin=10, i.e.
+  // availableWidth < availableHeight), so raising availableHeight should have
+  // changed nothing at all. Something else consumes the reservation.
+  const int textLines = 3;
+  const int singleLineHeight = referenceFm.ascent() + referenceFm.descent();
+  const int reservedTextHeight = singleLineHeight * textLines;
+
+  // Doubled because ARTWORK_BACKDROP_INSET is a per-SIDE inset.
+  constexpr int kArtworkInset = 2 * UIConstants::Widget::ARTWORK_BACKDROP_INSET;
+  int availableHeight = m_itemHeight - UIConstants::Widget::PADDING - UIConstants::Widget::SPACING -
+                        reservedTextHeight - kArtworkInset;
+  int availableWidth = m_itemWidth - UIConstants::Widget::PADDING - kArtworkInset;
+  int artworkSize = qMin(availableWidth, availableHeight);
+  m_artworkSize = artworkSize;
+
   if (imageLabel) {
     imageLabel->setVisible(true); // Ensure visible in grid mode
     // Reset min/max constraints that may have been zeroed in list mode
     imageLabel->setMinimumSize(0, 0);
     imageLabel->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
     imageLabel->setFixedSize(artworkSize, artworkSize);
+    // CENTRE the art box in the cell. artworkSize is the SQUARE that fits the
+    // cell, so on any cell wider than it is tall the label is narrower than
+    // the cell — and a QVBoxLayout parks a Fixed-width child at the left
+    // margin. Measured 2026-08-19: a 200px cell held its 106px art at x=10,
+    // leaving 10px dead on the left and 84px on the right. That asymmetry is
+    // what made every horizontal alignment look wrong while the grid
+    // container was in fact placed exactly: right-aligned art stopped 94px
+    // short of the edge its cell was flush against.
+    // AlignCenter on the label itself only centres the pixmap INSIDE the
+    // label; centring the label inside the cell is the layout's call.
+    if (QLayout *box = layout()) {
+      box->setAlignment(imageLabel, Qt::AlignHCenter);
+    }
   }
 
   // In grid mode, folder icons are drawn in paintEvent for correct positioning
@@ -442,9 +473,25 @@ void ItemWidget::applyDimensions() {
     nameLabel->setWordWrap(true);                             // Re-enable word wrap for grid mode
     // Reset min/max constraints that may have been set in list mode
     nameLabel->setMinimumSize(0, 0);
+    // FIXED width, not a maximum: giving the layout an alignment flag below
+    // makes it hand the label its sizeHint instead of the cell width, and a
+    // word-wrapping label's hint is narrower than the cap — which pushed
+    // titles onto a third line that then spilled into the row beneath.
+    // Pinning the width keeps the wrap identical to before while still
+    // letting the label be centred as a block.
     nameLabel->setMaximumSize(artworkSize, reservedTextHeight);
+    nameLabel->setFixedWidth(artworkSize);
     nameLabel->setFixedHeight(reservedTextHeight);
-    // Let layout manage horizontal positioning (centered below artwork)
+    // Centre the title band in the cell, the same way the art box above is
+    // centred — this is the "centered below artwork" the line below always
+    // claimed. The label is capped to artworkSize, so like the art it is
+    // narrower than the cell, and a QVBoxLayout parks it at the LEFT margin
+    // unless told otherwise. Both were left-parked before, so they agreed
+    // with each other by accident; centring only the art broke that and put
+    // the title off to one side of its own cover.
+    if (QLayout *box = layout()) {
+      box->setAlignment(nameLabel, Qt::AlignHCenter);
+    }
 
     if (!shouldShowTitle) {
       nameLabel->setText("");

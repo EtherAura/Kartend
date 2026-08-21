@@ -13,8 +13,11 @@
 #include "timerutils.h"
 #include "uiconstants/scroll.h"
 #include "widgetpoolmanager.h"
+#include <QLoggingCategory>
 #include <QScrollArea>
 #include <QScrollBar>
+
+Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
 
 void ScrollManager::applyFilter(const QString &searchText) {
   if (!m_filterManager) {
@@ -38,6 +41,8 @@ void ScrollManager::applyFilter(const QString &searchText) {
   positionVirtualContainer();
 
   // Release widgets back to pool for reuse instead of just hiding
+  qCDebug(lcScrollManager).nospace()
+      << "WIDGETREL reason=filterChange-release-ALL n=" << m_activeWidgets.size();
   for (auto it = m_activeWidgets.begin(); it != m_activeWidgets.end(); ++it) {
     if (ItemWidget *widget = it.value()) {
       releaseWidget(widget);

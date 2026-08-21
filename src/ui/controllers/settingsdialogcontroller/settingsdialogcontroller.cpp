@@ -116,8 +116,8 @@ void updateViewingFlags(const CollectionConfig &configA, const CollectionConfig 
     hasChanges = true;
     hideTitlesChanged = true;
   }
-  if (configA.gridLayout.hideHorizontalScrollbar != configB.gridLayout.hideHorizontalScrollbar ||
-      configA.gridLayout.hideVerticalScrollbar != configB.gridLayout.hideVerticalScrollbar) {
+  if (configA.gridLayout.horizontalScrollbarMode != configB.gridLayout.horizontalScrollbarMode ||
+      configA.gridLayout.verticalScrollbarMode != configB.gridLayout.verticalScrollbarMode) {
     hasChanges = true;
     scrollbarChanged = true;
   }

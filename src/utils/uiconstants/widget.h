@@ -14,6 +14,14 @@ inline constexpr int MARGIN = 10;
 inline constexpr int SPACING = 8;
 /// Internal padding for widget content
 inline constexpr int PADDING = 20;
+
+/// EXTRA inset between the artwork and the tile backdrop behind it, on top of
+/// PADDING. Requested 2026-08-20 — cover art sat nearly flush against the
+/// rounded backdrop on three sides, so the backdrop read as a hairline rather
+/// than a frame. Applied to BOTH axes, so the art box shrinks symmetrically
+/// and stays square; the backdrop and cell geometry are untouched, which
+/// keeps column positions and the painted-extent alignment maths unchanged.
+inline constexpr int ARTWORK_BACKDROP_INSET = 10;
 /// Margin around icons within widgets
 inline constexpr int ICON_MARGIN = 5;
 /// Large widget size preset

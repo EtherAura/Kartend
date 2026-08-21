@@ -246,6 +246,10 @@ void ScrollManager::receiveItemsRange(int offset, const QStringList &filePaths,
   // released — instead of letting every one-arg releaseWidget call recompute
   // it.
   int visibleRows = -1;
+  if (!updatedIndices.isEmpty()) {
+    qCDebug(lcScrollManager).nospace()
+        << "WIDGETREL reason=receiveItemsRange-placeholder-refresh n=" << updatedIndices.size();
+  }
   for (int visualIndex : updatedIndices) {
     if (ItemWidget *widget = m_activeWidgets.value(visualIndex, nullptr)) {
       if (visibleRows < 0) {
