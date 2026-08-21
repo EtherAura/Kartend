@@ -224,6 +224,10 @@ void TestGamepadManager::chord_selectHeldDirectionMovesFocusSectionNotSelection(
 }
 
 void TestGamepadManager::rightStick_flickHopsFocusSection_oncePerDeflection_settingGates() {
+  if (!backendCompiledIn()) {
+    QSKIP("No gamepad backend compiled in; updateRightStickSection is a no-op");
+  }
+
   QSignalSpy focusMove(m_mgr.get(), &GamepadManager::requestRightStickFlick);
   QSignalSpy selMove(m_mgr.get(), &GamepadManager::requestSelectionMove);
 
