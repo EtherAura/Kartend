@@ -79,6 +79,18 @@ const QString kPlaylistsGroupKey = QStringLiteral("::playlists-group::");
 /// boost cap — rows are non-uniform, so only those rows grow.
 constexpr qreal kThinAspectRef = 3.0;
 constexpr qreal kThinHeightBoost = 2.2;
+/// Ceiling for the COMPACT end of the same curve. A wide wordmark at height H
+/// covers several times the area of a square mark at the same H, so sizing on
+/// height alone left round/square logos visibly faint beside them (field
+/// report 2026-08-20: "wide ones are easy to see, but others aren't").
+///
+/// This DOES make square-logo rows taller, which is the 2026-08-17 report
+/// ("every row ballooned to the boost headroom") coming back in a smaller
+/// form. Accepted deliberately on 2026-08-20 after weighing the two: legible
+/// compact logos are worth the extra row height, and the ceiling keeps the
+/// growth bounded rather than open-ended. tests/integration
+/// /test_collectiontreepanel.cpp pins the bound.
+constexpr qreal kCompactHeightBoost = 1.8;
 
 /// Draws the expand/collapse chevron for @p index inside the branch column
 /// to the left of @p option.rect. Shared so the view and the delegate
@@ -1321,7 +1333,16 @@ void CollectionTreeController::refreshIcons() {
         // for a logo too wide to fit at that height, which is the one case
         // where something has to give.
         const qreal aspect = pm.height() > 0 ? static_cast<qreal>(pm.width()) / pm.height() : 1.0;
-        const qreal boost = std::clamp(aspect / kThinAspectRef, 1.0, kThinHeightBoost);
+        // Two-sided curve around kThinAspectRef, both arms correcting the same
+        // thing — height alone is a poor proxy for how big a logo LOOKS:
+        //   above ref  thin wordmarks would render as hairlines: add height
+        //   below ref  square marks cover far less area at equal height, so
+        //              add height until they carry comparable weight
+        // Both arms are 1.0 exactly at kThinAspectRef, so the curve is
+        // continuous and the previously-tuned wide end is bit-for-bit intact.
+        const qreal boost = aspect >= kThinAspectRef
+                                ? std::clamp(aspect / kThinAspectRef, 1.0, kThinHeightBoost)
+                                : std::clamp(kThinAspectRef / aspect, 1.0, kCompactHeightBoost);
         const int allowedDevH = qMax(1, qRound(devHeight * boost));
         pm = pm.scaledToHeight(allowedDevH, Qt::SmoothTransformation);
         // NO width clamp. It was meant to engage only for a logo too wide to

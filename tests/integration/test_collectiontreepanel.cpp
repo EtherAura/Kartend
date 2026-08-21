@@ -184,19 +184,27 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAtConfiguredSiz
                           .arg(frame.width())
                           .arg(dpr)));
 
-  // Row DENSITY (field report 2026-08-17: every row ballooned to the boost
-  // headroom): a square icon's row must hug the base icon height, not the
-  // 1.6x boosted decoration. Logical units throughout (visualItemRect).
+  // Row DENSITY. Originally (field report 2026-08-17: every row ballooned to
+  // the boost headroom) a square icon's row had to hug the BASE icon height.
+  // Relaxed 2026-08-20 to the COMPACT boost ceiling: square marks are lifted
+  // toward the visual weight of wide wordmarks, which necessarily makes their
+  // rows taller ("wide ones are easy to see, but others aren't"). The bound
+  // still exists, and that is the point — growth is capped at the compact
+  // ceiling, so the original open-ended ballooning stays caught.
+  // kCompactHeightBoost (1.8) is private to the controller; expressed here as
+  // ninths/fifths so the two cannot drift silently without this test failing.
+  // Logical units throughout (visualItemRect).
   QTreeWidgetItem *shellItem = tree->topLevelItem(0);
   QVERIFY(shellItem);
   QVERIFY(shellItem->childCount() >= 1);
   QTreeWidgetItem *childItem = shellItem->child(0);
   const int baseIconSize = CollectionTreeSettings{}.treeIconSize;
   const int childRowH = tree->visualItemRect(childItem).height();
-  // Base icon height + the proportional row pad (max(16, 3*size/4)) + slack.
-  QVERIFY2(childRowH <= baseIconSize + qMax(16, (baseIconSize * 3) / 4) + 6,
-           qPrintable(QStringLiteral("square-icon row is %1px tall for a %2px icon — the boost "
-                                     "headroom is leaking into unboosted rows")
+  // Compact-boosted icon height + the proportional row pad + slack.
+  const int compactCeiling = (baseIconSize * 9) / 5; // 1.8x
+  QVERIFY2(childRowH <= compactCeiling + qMax(16, (baseIconSize * 3) / 4) + 6,
+           qPrintable(QStringLiteral("square-icon row is %1px tall for a %2px icon — taller than "
+                                     "the compact boost ceiling allows")
                           .arg(childRowH)
                           .arg(baseIconSize)));
 }
