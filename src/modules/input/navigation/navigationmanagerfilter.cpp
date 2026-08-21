@@ -211,6 +211,21 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
         return;
       }
 
+      // LAST possible moment to capture where the user actually is. Persisting
+      // when the reload is REQUESTED is not enough: the request is debounced,
+      // so anything done between the final request and this handler running —
+      // and the scroll animation settling is squarely inside that window — was
+      // still being lost. The rebuild below clears the selection to -1, which
+      // destroys the evidence, and the restore that follows then faithfully
+      // re-applies whatever was last persisted. That is the revert: not the
+      // restore misbehaving (its own trace shows it firing against current=-1,
+      // exactly as intended) but the value it was handed being out of date.
+      persistCurrentSelection();
+      // TEMPORARY DIAGNOSTIC (2026-08-21) — pairs with RESTORETRACE ARM: this
+      // is the value the upcoming restore will be handed.
+      qCWarning(lcNavigationManager).nospace()
+          << "RESTORETRACE PERSIST-AT-RELOAD reloadPending=" << pendingIndex;
+
       // Determine which collection to reload. If the pending index doesn't
       // match what the user is currently viewing, reload the current collection
       // instead. This handles the case where a subcollection reload is
