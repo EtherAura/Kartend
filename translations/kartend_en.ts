@@ -40,14 +40,14 @@
     </message>
     <message>
         <location line="+0"/>
-        <location filename="../src/ui/dialogs/settings/appearance/appearancecolorspanel.cpp" line="+223"/>
+        <location filename="../src/ui/dialogs/settings/appearance/appearancecolorspanel.cpp" line="+253"/>
         <source>Default</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
         <location line="+19"/>
-        <location line="+8"/>
+        <location line="+19"/>
         <location line="+8"/>
         <location line="+8"/>
         <location line="+35"/>
@@ -57,7 +57,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-86"/>
+        <location line="-97"/>
         <source>Select background color or image</source>
         <translation type="unfinished"></translation>
     </message>
@@ -88,6 +88,36 @@
     </message>
     <message>
         <location line="+4"/>
+        <source>Toolbar colour:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Which colour fills the toolbar. Titlebar and Accent follow the desktop; Highlight uses the selection colour; Collection uses the Primary Color set here.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Match titlebar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Desktop accent</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Highlight colour</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Collection primary colour</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
         <source>Primary Color:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -231,7 +261,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-153"/>
+        <location line="-164"/>
         <source>Color Scheme</source>
         <translation type="unfinished"></translation>
     </message>
@@ -251,7 +281,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+130"/>
+        <location line="+141"/>
         <source>Corner darkness 0-100 (0 = no effect, 100 = pitch black at the corners)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -561,7 +591,41 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-7"/>
+        <location line="+3"/>
+        <source>Horizontal Scrollbar:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <location line="+1"/>
+        <source>Show: normal. Auto-hide: appears only when the pointer comes near the scrollbar edge. Hide: never drawn. The grid always scrolls either way. Auto-hide needs slim overlay scrollbars (Settings -&gt; General); without them it behaves as Show.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-1"/>
+        <location line="+1"/>
+        <source>Show</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-1"/>
+        <location line="+1"/>
+        <source>Auto-hide (show near the edge)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-1"/>
+        <location line="+1"/>
+        <source>Hide</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Vertical Scrollbar:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-11"/>
         <source>Item Width:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -843,6 +907,16 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+3"/>
+        <source>Sidebars</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Every details-pane and navigation-sidebar preference: visibility, side, justification, width, tabs, backgrounds, icon options.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+19"/>
         <source>Copy Settings From...</source>
         <translation type="unfinished"></translation>
@@ -876,7 +950,7 @@
 <context>
     <name>ArtworkPreviewOverlay</name>
     <message>
-        <location filename="../src/chrome/overlays/artworkpreviewoverlay.cpp" line="+55"/>
+        <location filename="../src/chrome/overlays/artworkpreviewoverlay.cpp" line="+61"/>
         <source>✕</source>
         <translation type="unfinished"></translation>
     </message>
@@ -887,7 +961,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+198"/>
+        <location line="+220"/>
         <source>Loading…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1573,12 +1647,7 @@ Skipped %3 items that already had artwork.</source>
 <context>
     <name>CollectionTreeController</name>
     <message>
-        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+54"/>
-        <source>Collections</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+114"/>
+        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+953"/>
         <source>Playlists</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2061,6 +2130,16 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="+1"/>
+        <source>Flick the right stick to move focus between the grid, toolbar, and sidebars. Holding Select with a direction does the same.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Right stick moves focus between sections</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+6"/>
         <source>Mouse</source>
         <translation type="unfinished"></translation>
@@ -2076,7 +2155,7 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/behavior/controlspanel.cpp" line="+186"/>
+        <location filename="../src/ui/dialogs/settings/behavior/controlspanel.cpp" line="+191"/>
         <source>Shift</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4110,7 +4189,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
     <message>
         <location line="+90"/>
-        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="+75"/>
+        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="+84"/>
         <source>Item Information</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4126,12 +4205,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/widgets/panes/detailspane.ui" line="-13"/>
-        <source>border: 1px solid palette(mid); background-color: palette(base);</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="-73"/>
+        <location filename="../src/ui/widgets/panes/detailspane.ui" line="-86"/>
         <source>color: palette(highlight); padding: 0px; background: transparent;</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4142,7 +4216,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/ui/widgets/panes/detailspane.cpp" line="+441"/>
+        <location filename="../src/ui/widgets/panes/detailspane.cpp" line="+451"/>
         <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="+17"/>
         <location line="+2"/>
         <location line="+16"/>
@@ -4289,7 +4363,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="-81"/>
+        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="-90"/>
         <source>Item</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4337,7 +4411,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
 <context>
     <name>DetailsPaneGalleryView</name>
     <message>
-        <location filename="../src/ui/widgets/panes/detailspanegalleryview.cpp" line="+123"/>
+        <location filename="../src/ui/widgets/panes/detailspanegalleryview.cpp" line="+124"/>
         <source>Media gallery</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4347,7 +4421,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+352"/>
+        <location line="+362"/>
         <source>Artwork</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4862,6 +4936,16 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+1"/>
+        <source>Slim overlay scrollbars</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Draw a thin scrollbar on top of the content that fades in while scrolling or hovering. It reserves no space, so items never shift when it appears.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>Draw the item title on top of placeholder art (the hatched pattern or any user-supplied placeholder image) when no real artwork exists for the item.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4963,7 +5047,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-72"/>
+        <location line="-73"/>
         <source>Startup Video File:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5018,7 +5102,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+2"/>
         <source>Show title in placeholder artwork</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5114,7 +5198,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/behavior/generalsettingspanel.cpp" line="+96"/>
+        <location filename="../src/ui/dialogs/settings/behavior/generalsettingspanel.cpp" line="+97"/>
         <source>(Default)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5332,7 +5416,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/input/interaction/interactionmanager_selection.cpp" line="+339"/>
+        <location filename="../src/modules/input/interaction/interactionmanager_selection.cpp" line="+344"/>
         <source>This collection&apos;s launcher paths are unresolvable on this host:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5345,6 +5429,32 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <location line="+4"/>
         <location line="+2"/>
         <source>Launcher unavailable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/modules/input/interaction/interactionmanager.cpp" line="+578"/>
+        <source>Collections</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Details</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Toolbar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Library</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+49"/>
+        <location line="+55"/>
+        <source>Focus: %1</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -7164,7 +7274,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+5"/>
-        <location filename="../src/core/mainwindow_dialogs.cpp" line="+129"/>
+        <location filename="../src/core/mainwindow_dialogs.cpp" line="+138"/>
         <source>About</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7294,7 +7404,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow.cpp" line="+505"/>
+        <location filename="../src/core/mainwindow.cpp" line="+555"/>
         <source>Import Kart</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7508,7 +7618,7 @@ Will change:
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow_setup.cpp" line="+118"/>
+        <location filename="../src/core/mainwindow_setup.cpp" line="+122"/>
         <source>Collection configuration problem</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7970,7 +8080,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/input/navigation/navigationmanagersubcollection.cpp" line="+295"/>
+        <location filename="../src/modules/input/navigation/navigationmanagersubcollection.cpp" line="+300"/>
         <source>Home</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8333,7 +8443,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/data/scraper/providers/screenscraperprovider.cpp" line="+482"/>
+        <location filename="../src/modules/data/scraper/providers/screenscraperprovider.cpp" line="+492"/>
         <source>Extracting archive for hash ID…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9234,7 +9344,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+106"/>
+        <location line="+129"/>
         <source>Scraper</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9265,7 +9375,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>ScraperController</name>
     <message>
-        <location filename="../src/core/scrapercontroller.cpp" line="+91"/>
+        <location filename="../src/core/scrapercontroller.cpp" line="+94"/>
         <location line="+66"/>
         <location line="+7"/>
         <source>Scraper</source>
@@ -9914,7 +10024,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
     </message>
     <message>
         <location line="+7"/>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialogform.cpp" line="+230"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialogform.cpp" line="+232"/>
         <source>Header Logo</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9929,17 +10039,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>Details Pane</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>Sidebars</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+3"/>
+        <location line="+8"/>
         <source>Application</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9999,7 +10099,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+216"/>
+        <location line="+220"/>
         <source>Configuration Backup</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10074,7 +10174,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+34"/>
+        <location line="+19"/>
         <source>Save</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10099,7 +10199,12 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+19"/>
+        <location line="+11"/>
+        <source>Sidebar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
         <source>Attract Mode</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10109,7 +10214,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+361"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+363"/>
         <source>deselecting</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10298,7 +10403,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+236"/>
+        <location line="+244"/>
         <source>General settings could not be saved: the settings host is unavailable.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10773,7 +10878,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     <name>SidebarPanel</name>
     <message>
         <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.ui" line="+13"/>
-        <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.cpp" line="+121"/>
+        <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.cpp" line="+117"/>
         <source>Editing: (no collection selected)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10869,17 +10974,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+7"/>
-        <source>Hide the horizontal scrollbar for this collection</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Hide the vertical scrollbar for this collection</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="-31"/>
+        <location line="-23"/>
         <source>Default tab:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10899,7 +10994,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+31"/>
+        <location line="+29"/>
         <source>Background</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10931,7 +11026,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     <message>
         <location line="+0"/>
         <location line="+34"/>
-        <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.cpp" line="+60"/>
+        <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.cpp" line="+58"/>
         <source>Default</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10999,23 +11094,13 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-127"/>
+        <location line="-125"/>
         <source>QLabel { font-style: italic; }</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+60"/>
         <source>Lock width (disable drag-resize)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Hide horizontal scrollbar</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Hide vertical scrollbar</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -11135,7 +11220,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.cpp" line="-132"/>
+        <location filename="../src/ui/dialogs/settings/appearance/sidebarpanel.cpp" line="-126"/>
         <source>Select Details Pane Text Color</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11160,12 +11245,12 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+45"/>
+        <location line="+43"/>
         <source>Editing: %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+78"/>
+        <location line="+74"/>
         <source>None</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11204,29 +11289,29 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
     <message>
         <location line="+2"/>
-        <location line="+25"/>
+        <location line="+29"/>
         <source>Side:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-22"/>
+        <location line="-26"/>
         <source>Same setting as Position on the Details Pane page — the two controls stay in sync.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+26"/>
+        <location line="+30"/>
         <source>Right</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-25"/>
-        <location line="+24"/>
+        <location line="-29"/>
+        <location line="+28"/>
         <source>Left</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-23"/>
+        <location line="-27"/>
         <source>Top</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11237,29 +11322,58 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
     <message>
         <location line="+3"/>
-        <location line="+23"/>
+        <location line="+35"/>
         <source>Justification:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-20"/>
+        <location line="-32"/>
         <source>Full height makes the pane span the whole window, with the toolbar stopping at its edge. Applies to Left/Right docks; Top/Bottom and Overlay ignore it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
-        <location line="+23"/>
+        <location line="+35"/>
         <source>Below toolbar</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-22"/>
-        <location line="+23"/>
+        <location line="-34"/>
+        <location line="+35"/>
         <source>Full height</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-15"/>
+        <location line="-32"/>
+        <location line="+35"/>
+        <source>Scrollbar:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-33"/>
+        <source>Show: normal. Auto-hide: appears only when the pointer comes near the scrollbar edge. Hide: never drawn. The pane always scrolls with the wheel — this only governs the indicator. Auto-hide needs slim overlay scrollbars (Settings -&gt; General); without them it behaves as Show.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <location line="+35"/>
+        <source>Show</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-35"/>
+        <location line="+35"/>
+        <source>Auto-hide (show near the edge)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-35"/>
+        <location line="+35"/>
+        <source>Hide</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-28"/>
         <source>Navigation sidebar (collection tree)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11269,8 +11383,149 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+8"/>
+        <location line="+5"/>
+        <source>Mode:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Overlap floats the navigation sidebar above the content, so opening or resizing it never moves the grid underneath — it simply covers it. Push aside keeps the classic behaviour, where the sidebar takes its width from the content area and the grid shifts to make room.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Overlap the content</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Push the content aside</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
         <source>Full height makes the tree span the whole window, with the toolbar stopping at its edge.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Width:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Width of the navigation sidebar in pixels. You can also drag the panel&apos;s inner edge.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <location line="+25"/>
+        <source> px</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-23"/>
+        <source>Show: normal. Auto-hide: appears only when the pointer comes near the scrollbar edge. Hide: never drawn. The tree always scrolls with the wheel and the arrow keys — this only governs the indicator. Auto-hide needs slim overlay scrollbars (Settings -&gt; General); without them it behaves as Show.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Icons only:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Show only the icon/logo on rows that have one — the name moves to the tooltip. Rows without an icon keep their name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Show icons/logos without names</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Tree lines:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Draw the connector lines between branches. The expand/collapse chevrons show either way.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Show branch connector lines</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Icon height:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Height of the row icons/logos in pixels. Width follows the panel width, keeping each logo&apos;s aspect ratio.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Icon style:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Normal shows the artwork as-is. Monochrome recolours the logo&apos;s silhouette in a fixed dark or light ink. Tinted recolours it with the tint colour below.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Normal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Monochrome dark</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Monochrome light</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Tinted</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Active logo:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>With a monochrome or tinted style, show the collection you are currently viewing in its original colours. No effect on the Normal style.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Show the active collection&apos;s logo in colour</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Tint colour:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Hex colour (e.g. #e0a030) used by the Tinted style. Leave empty to use the collection&apos;s accent colour.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Accent colour (default)</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -11914,11 +12169,12 @@ Continue?</source>
         <location line="+4"/>
         <location line="+2"/>
         <location line="+2"/>
+        <location line="+2"/>
         <source>Show</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-27"/>
+        <location line="-29"/>
         <source>Grid View Custom Text:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11991,7 +12247,17 @@ Continue?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-4"/>
+        <location line="+6"/>
+        <source>Collection Breadcrumb:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Show the collection name and subfolder path in the toolbar. Its segments are clickable and navigate to that collection.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-11"/>
         <source>Title Filter Button:</source>
         <translation type="unfinished"></translation>
     </message>
