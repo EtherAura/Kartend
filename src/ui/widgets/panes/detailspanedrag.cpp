@@ -43,6 +43,16 @@ void DetailsPane::leaveEvent(QEvent *event) {
 }
 
 bool DetailsPane::eventFilter(QObject *watched, QEvent *event) {
+  // The VIEWPORT's own resize is the only moment its width is final. Capping
+  // from DetailsPane::resizeEvent read the width the viewport was about to
+  // stop having, so after a widening drag the content stayed capped at the
+  // OLD width (measured 2026-08-20: pane 314 with content still pinned at
+  // 242, artwork centred in the stale box).
+  if (ui && ui->scrollArea && watched == ui->scrollArea->viewport() &&
+      event->type() == QEvent::Resize) {
+    constrainContentToViewport();
+    return false;
+  }
   auto *child = qobject_cast<QWidget *>(watched);
   if (m_resizeGrip && child && m_resizeGrip->handleChildEvent(child, event)) {
     return true;

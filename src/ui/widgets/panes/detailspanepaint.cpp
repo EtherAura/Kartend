@@ -26,6 +26,7 @@
 #include "extensionutils.h"
 #include "imagedecodeutils.h"
 #include "itemwidget.h"
+#include "overlayscrollbars.h"
 #include "textzoom.h"
 #include "ui_detailspane.h"
 
@@ -38,6 +39,9 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection, bool reloa
   // on the first paint after a position change.
   m_widthLocked = collection.sidebar.sidebarWidthLocked;
   m_position = collection.sidebar.sidebarPosition;
+  // Cached BEFORE the two calls below, because both can build inner sections
+  // (the horizontal view, the gallery) whose scroll areas read it on the way up.
+  m_scrollbarMode = collection.sidebar.sidebarScrollbarMode;
   if (m_resizeGrip) {
     m_resizeGrip->setLocked(m_widthLocked);
     m_resizeGrip->setPosition(m_position);
@@ -47,6 +51,11 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection, bool reloa
   // and chrome state are in place when applyTabVisibility runs.
   applyDockOrientation();
   setActiveTab(collection.sidebar.sidebarActiveTab);
+  // After both, so sections either of them just built are covered. The pane
+  // is several scroll areas and the user's toggle means all of them; the
+  // sweep also has to reach the overlay handles, which paint over natively
+  // disabled bars and would otherwise survive the hide.
+  OverlayScrollbars::setPaneScrollbarMode(this, m_scrollbarMode);
   // Mouse tracking is required so we can change the cursor over the grip
   // strip without waiting for a click.
   setMouseTracking(!m_widthLocked);

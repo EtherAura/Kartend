@@ -9,6 +9,7 @@
 #include "detailspane.h"
 #include "extensionutils.h"
 #include "imagedecodeutils.h"
+#include "overlayscrollbars.h"
 #include "overlayzorderregistry.h"
 #include "uiconstants/icons.h"
 #include "uiconstants/metadata.h"
@@ -165,6 +166,11 @@ void DetailsPaneGalleryView::ensureSection() {
   thumbScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
   thumbScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   thumbScroll->setFrameShape(QFrame::NoFrame);
+  // Built lazily, so it misses the sweep applyAppearance ran at the last
+  // collection switch — take the pane's standing intent now, or this one
+  // strip keeps a scrollbar in a pane the user hid.
+  OverlayScrollbars::setScrollbarMode(thumbScroll,
+                                      m_host ? m_host->scrollbarMode() : ScrollbarMode::Show);
   thumbScroll->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
   // Fix the height to one thumb tile + a few px slack for the
   // horizontal scrollbar; otherwise the QScrollArea wants to grow

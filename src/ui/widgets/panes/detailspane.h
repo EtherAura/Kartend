@@ -234,6 +234,12 @@ public:
   void setActiveTab(DetailsPaneTab tab);
   [[nodiscard]] DetailsPaneTab activeTab() const { return m_activeTab; }
 
+  /// The active collection's scrollbar mode, as last delivered by
+  /// applyAppearance. Read by the lazily-built inner sections (the gallery's
+  /// thumb strip) so a scroll area created after the collection switch still
+  /// comes up in the state the user asked for.
+  [[nodiscard]] ScrollbarMode scrollbarMode() const { return m_scrollbarMode; }
+
 signals:
   /// Fired when the user activates the gallery's "Edit links…" button
   /// The sidebar widget itself has no item context, so the
@@ -273,6 +279,10 @@ protected:
   /// so the path always fits the available width without losing the start /
   /// end portions to a fixed-length right-truncation.
   void resizeEvent(QResizeEvent *event) override;
+  /// Caps the scrolled content at the viewport width. The pane has no
+  /// horizontal scrollbar, so anything wider is unreachable AND off-centres
+  /// every child that centres itself in the content widget.
+  void constrainContentToViewport();
   /// render the per-collection background (color, image, or
   /// procedurally-drawn pattern) before children paint.
   void paintEvent(QPaintEvent *event) override;
@@ -495,6 +505,9 @@ private:
   /// needs to skip the handle highlight mid-drag.
   bool m_widthLocked = true;
   DetailsPanePosition m_position = DetailsPanePosition::Right;
+  /// Per-collection scrollbar mode (user request 2026-08-19), cached so
+  /// lazily-built sections can pick it up.
+  ScrollbarMode m_scrollbarMode = ScrollbarMode::Show;
   /// Owns the resize-grip state machine: hit-test, drag bookkeeping, and
   /// cursor changes. Parented to this widget. Forwards widthDragged /
   /// widthCommitted / heightDragged / heightCommitted as DetailsPane

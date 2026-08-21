@@ -44,6 +44,7 @@
 #include "detailspaneresizegrip.h"
 #include "extensionutils.h"
 #include "itemwidget.h"
+#include "overlayscrollbars.h"
 #include "pathutils.h"
 #include "uiconstants/detailspaneconstants.h"
 #include "uiconstants/icons.h"
@@ -51,6 +52,8 @@
 #include "uiconstants/timing.h"
 #include "videopreviewwidget.h"
 #include "videothumbnailextractor.h"
+#include <QLoggingCategory>
+#include <QScrollBar>
 
 #include <QPointer>
 #include <QPolygon>
@@ -104,6 +107,8 @@ struct SetMetadataPhaseTrace {
   qint64 fileInfo = 0, previewSize1 = 0, loadArtwork = 0, video = 0, tabVis = 0;
 };
 } // namespace
+
+Q_LOGGING_CATEGORY(lcDetailsPane, "kartend.detailspane")
 
 // Creates metadata sidebar with scrollable layout for displaying item
 // information and artwork
@@ -191,6 +196,11 @@ void DetailsPane::setupWidgets() {
   ui->artworkDisplay->setFocusPolicy(Qt::StrongFocus);
   m_videoPlayback.videoPreview->setFocusPolicy(Qt::StrongFocus);
   ui->artworkDisplay->installEventFilter(this);
+  // Viewport resizes drive constrainContentToViewport (see eventFilter).
+  if (ui->scrollArea && ui->scrollArea->viewport()) {
+    ui->scrollArea->viewport()->installEventFilter(this);
+    constrainContentToViewport();
+  }
   m_videoPlayback.videoPreview->installEventFilter(this);
 
   setupTabBar();
@@ -658,8 +668,79 @@ void DetailsPane::updateFilePathDisplay() {
   ui->filePathValue->setText(m_currentFilePath);
 }
 
+void DetailsPane::constrainContentToViewport() {
+  if (!ui || !ui->scrollArea || !ui->scrollArea->viewport() || !ui->contentWidget) {
+    return;
+  }
+  // The pane scrolls VERTICALLY only (horizontalScrollBarPolicy=AlwaysOff in
+  // the .ui), so content wider than the viewport cannot be reached — it is
+  // simply lost. Worse, it silently moved everything: a long unbreakable
+  // metadata value (rom_sha1, a full filename) sets a large minimum width on
+  // the details grid, which pushed contentWidget to 410px inside a 314px
+  // viewport. Children then centred themselves in 410 rather than in what the
+  // user can see — measured 2026-08-20: artwork at x=58 instead of x=10, i.e.
+  // a 48px band of empty pane between the grid and the artwork, and the
+  // header pill running 76px past the right edge.
+  //
+  // Capping the widget at the viewport width makes every child lay out inside
+  // the VISIBLE area. Over-long values are squeezed/elided by their own
+  // labels instead of dragging the whole pane sideways.
+  const int visible = ui->scrollArea->viewport()->width();
+  if (visible > 0) {
+    ui->contentWidget->setMaximumWidth(visible);
+  }
+}
+
 void DetailsPane::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
+
+  // Permanent diagnostic for "the gap is in the details pane" reports. Every
+  // x is relative to the PANE's own left edge, so a non-zero value is dead
+  // space this widget is responsible for and a zero is not. Enable with:
+  //   QT_LOGGING_RULES='kartend.detailspane.debug=true'
+  if (lcDetailsPane().isDebugEnabled()) {
+    const auto rel = [this](QWidget *w) { return w ? w->mapTo(this, QPoint(0, 0)).x() : -1; };
+    QScrollBar *vbar = ui->scrollArea->verticalScrollBar();
+    QWidget *win = window();
+    qCDebug(lcDetailsPane).nospace()
+        << "PANEGAP paneWinX=" << (win ? mapTo(win, QPoint(0, 0)).x() : -1) << " contentWinX="
+        << ((win && ui->contentWidget) ? ui->contentWidget->mapTo(win, QPoint(0, 0)).x() : -1)
+        << " | paneW=" << width() << " | scrollArea x=" << rel(ui->scrollArea)
+        << " w=" << ui->scrollArea->width() << " | viewport x=" << rel(ui->scrollArea->viewport())
+        << " w=" << ui->scrollArea->viewport()->width()
+        << " | contentWidget x=" << rel(ui->contentWidget) << " w=" << ui->contentWidget->width()
+        << " | titleBar x=" << rel(ui->titleBar) << " w=" << ui->titleBar->width()
+        << " | artwork x=" << rel(ui->artworkDisplay) << " w=" << ui->artworkDisplay->width()
+        << " | vbar visible=" << (vbar && vbar->isVisible()) << " w=" << (vbar ? vbar->width() : 0)
+        << " | lane=" << OverlayScrollbars::reservedGutter(ui->scrollArea);
+
+    // Dump the ROW the pane lives in. A gap between two adjacent widgets in a
+    // zero-spacing layout means either a third item nobody remembers, or a
+    // widget refusing to grow into the space the layout offers it.
+    if (QWidget *parent = parentWidget()) {
+      if (QLayout *row = parent->layout()) {
+        QString dump;
+        for (int i = 0; i < row->count(); ++i) {
+          QLayoutItem *it = row->itemAt(i);
+          if (!it) continue;
+          if (QWidget *w = it->widget()) {
+            dump +=
+                QStringLiteral(" [%1 x=%2 w=%3 max=%4 vis=%5]")
+                    .arg(w->objectName().isEmpty() ? w->metaObject()->className() : w->objectName())
+                    .arg(w->x())
+                    .arg(w->width())
+                    .arg(w->maximumWidth())
+                    .arg(w->isVisible() ? 1 : 0);
+          } else if (it->spacerItem()) {
+            dump += QStringLiteral(" [SPACER w=%1]").arg(it->geometry().width());
+          }
+        }
+        qCDebug(lcDetailsPane).nospace()
+            << "PANEROW parentW=" << parent->width() << " count=" << row->count() << dump;
+      }
+    }
+  }
+
   updateFilePathDisplay();
   // track the artwork + video preview to the sidebar's current
   // content width so a width-drag (or initial show) reflows the previews
