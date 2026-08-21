@@ -17,6 +17,27 @@ kartend_add_test(NAME NavigationHelpers
   LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# Toolbar chrome follows the desktop colour at runtime (activity switch).
+kartend_add_test(NAME ChromeFollowsDesktopColor
+  SOURCES modules/navigation/test_chromefollowsdesktopcolor.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_chromefollowsdesktopcolor PRIVATE ${SRC_DIR}/chrome/overlays)
+
+# Overlay scrollbars reserve a lane instead of covering content.
+kartend_add_test(NAME OverlayScrollbarGutter
+  SOURCES chrome/test_overlayscrollbargutter.cpp
+  LINK kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_overlayscrollbargutter PRIVATE ${SRC_DIR}/chrome/overlays)
+
+# Hiding a pane's scrollbar defeats the native bars AND the overlay handles.
+kartend_add_test(NAME ScrollbarHiding
+  SOURCES chrome/test_scrollbarhiding.cpp
+  LINK kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_scrollbarhiding PRIVATE ${SRC_DIR}/chrome/overlays)
+
 # InteractionHelpers tests (pure helpers extracted)
 kartend_add_test(NAME InteractionHelpers
   SOURCES modules/interaction/test_interactionhelpers.cpp

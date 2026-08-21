@@ -9,6 +9,16 @@
 
 enum class HorizontalAlignment { Left = 0, Center = 1, Right = 2 };
 
+/// Per-surface scrollbar policy (user request 2026-08-19). Replaces the
+/// hide/show bools these settings used to be — Autohide is the state that
+/// needed a third value: nothing is drawn until the pointer comes near the
+/// lane the bar would occupy, then it appears.
+///
+/// Order matters for the settings combos, which cast index <-> enum.
+/// Persisted as a STRING so the extra state was not a silent bool
+/// reinterpretation; the readers still accept the legacy "true"/"false".
+enum class ScrollbarMode { Show = 0, Autohide = 1, Hide = 2 };
+
 /// anchor for the per-collection header logo overlay. Drawn at
 /// the top of the items viewport over the grid. Center matches the typical
 /// "title slate" usage; Left/Right are for users who want the logo offset so

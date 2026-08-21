@@ -172,6 +172,35 @@ stringToSidebarJustification(const QString &str, bool *unknownFallback = nullptr
   return ToolbarColorSource::Titlebar;
 }
 
+inline QString scrollbarModeToString(ScrollbarMode mode) {
+  switch (mode) {
+  case ScrollbarMode::Autohide:
+    return QStringLiteral("autohide");
+  case ScrollbarMode::Hide:
+    return QStringLiteral("hide");
+  case ScrollbarMode::Show:
+    break;
+  }
+  return QStringLiteral("show");
+}
+
+/// Also accepts the legacy BOOL spelling. Every one of these keys was a
+/// hide-yes/no bool before 2026-08-19, and QSettings wrote them as
+/// "true"/"false", so a config from any earlier build lands here and has to
+/// map onto the two states that existed then — true meant hidden.
+/// Deliberately not flagged as an unknown-value fallback: a legacy bool is a
+/// correct old config, not a typo, and must not log a warning.
+[[nodiscard]] inline ScrollbarMode stringToScrollbarMode(const QString &str,
+                                                         bool *unknownFallback = nullptr) {
+  const QString lower = str.trimmed().toLower();
+  if (unknownFallback) *unknownFallback = false;
+  if (lower == QLatin1String("autohide")) return ScrollbarMode::Autohide;
+  if (lower == QLatin1String("hide") || lower == QLatin1String("true")) return ScrollbarMode::Hide;
+  if (lower == QLatin1String("show") || lower == QLatin1String("false")) return ScrollbarMode::Show;
+  if (unknownFallback && !lower.isEmpty()) *unknownFallback = true;
+  return ScrollbarMode::Show;
+}
+
 inline QString treeIconStyleToString(TreeIconStyle style) {
   switch (style) {
   case TreeIconStyle::MonochromeDark:
