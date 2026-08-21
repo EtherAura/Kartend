@@ -1137,22 +1137,12 @@ void CollectionTreeController::refreshIcons() {
   const QList<CollectionConfig> &collections = *m_ctx->collection.collections;
   const qreal dpr = m_tree->devicePixelRatioF();
   m_bakedPanelWidth = m_panel ? m_panel->width() : kPanelWidth;
-  const int indentation = m_tree->indentation();
-  // The width budget comes from the tree's ACTUAL viewport (field report
-  // 2026-08-17, round 6: an estimated chrome constant left max-aspect logos
-  // a few pixels over the edge — the viewport already accounts for the
-  // grip, scrollbar, frame, and theme margins, so measure instead of
-  // estimating). Depth indentation is subtracted PER ROW below; 8px covers
-  // the item's own decoration margin.
+  // NOTE: the tree indentation and the per-row width budget it fed are gone.
+  // Icons are sized purely from the configured height now (see refreshIcons),
+  // so nothing here depends on how wide the panel happens to be.
   const int viewportWidth = m_tree->viewport() && m_tree->viewport()->width() > 0
                                 ? m_tree->viewport()->width()
                                 : m_bakedPanelWidth - 29;
-  // HARD INVARIANT (user directive 2026-08-17): no icon may be wider than
-  // the sidebar. Leaf budgets are viewport minus the symmetric
-  // kPanelChrome margins; category budgets additionally stop short of the
-  // chevron cell plus this breathing margin. TreeIconDelegate clamps the
-  // painted position to the same margins.
-  const int breathing = 12;
   m_bakedViewportWidth = viewportWidth;
   // The delegate fills root rows edge to edge; it needs the row's full span,
   // which is the viewport width (already excluding the scrollbar gutter).
