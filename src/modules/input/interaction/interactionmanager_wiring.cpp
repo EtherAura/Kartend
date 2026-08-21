@@ -414,6 +414,22 @@ void InteractionManager::connectAttractManagerSignals() {
             }
             m_attractManager->onActivityDetected();
           });
+  // A wheel scroll that does NOT move the selection is still browsing, and
+  // attract mode exists to yield to browsing. selectionChanged above covers
+  // the wheel only when applySelectionDelta actually lands on a new index; it
+  // returns early for wheelSteps == 0, which is what fine-grained trackpad
+  // and high-resolution wheel deltas produce. The view then scrolls with no
+  // selectionChanged, attract never hears about it, and its next advance tick
+  // yanks the selection back to its own target — reported 2026-08-19 as
+  // "selection reverting on mouse scroll sometimes", and the "sometimes" is
+  // exactly which scrolls happened to accumulate a whole step.
+  //
+  // Safe to treat as activity unconditionally, unlike a scrollbar
+  // valueChanged would be: this originates in a real QEvent::Wheel, so
+  // attract's own centring (requestSelectIndex -> centerItemVertically) never
+  // reaches it and cannot cancel the mode it is currently running.
+  connect(m_eventManager.get(), &EventManager::wheelScrollStarted, m_attractManager.get(),
+          &AttractManager::onActivityDetected);
   connect(m_attractManager.get(), &AttractManager::requestSelectIndex, this, [this](int index) {
     // Explicit viewport centering: selectItemByIndex only centers when
     // the target widget is already materialized. With random advance

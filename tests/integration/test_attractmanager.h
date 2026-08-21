@@ -34,6 +34,7 @@ private slots:
   void testSetSuspendedToggleIsIdempotent();
   void testSetSuspendedDoesNotStartAttract();
   void testFixtureExposesAttractManagerViaInteractionManager();
+  void testWheelScrollCountsAsActivity();
 };
 
 #endif // KARTEND_TESTS_TEST_ATTRACTMANAGER_H

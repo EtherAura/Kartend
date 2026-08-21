@@ -3,6 +3,7 @@
 #include "applicationmanager.h"
 #include "attractmanager.h"
 #include "collection/generalsettings.h"
+#include "eventmanager.h"
 #include "interactionmanager.h"
 #include "mainwindow.h"
 // Kartend-xrj9r: this suite asserts only on in-memory coordinator state
@@ -122,4 +123,33 @@ void TestAttractManager::testFixtureExposesAttractManagerViaInteractionManager()
   QVERIFY(attract != nullptr);
   QVERIFY(!attract->isActive());
   QVERIFY(!attract->isDrivingSelection());
+}
+
+void TestAttractManager::testWheelScrollCountsAsActivity() {
+  // Scrolling the grid is browsing, and attract mode must yield to it. The
+  // selectionChanged wiring covers a wheel only when it LANDS on a new index;
+  // applySelectionDelta returns early for wheelSteps == 0, which is what
+  // fine-grained trackpad and high-resolution wheel deltas produce. Those
+  // scrolls moved the view with no selectionChanged, so attract never heard
+  // about them and its next advance tick yanked the selection back — reported
+  // 2026-08-19 as "selection reverting on mouse scroll sometimes".
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  auto *interaction = win->getApplicationManager()->getInteractionManager();
+  QVERIFY(interaction);
+  AttractManager *attract = interaction->attractManager();
+  EventManager *events = interaction->eventManager();
+  QVERIFY(attract != nullptr);
+  QVERIFY(events != nullptr);
+
+  // disconnect() reports whether a connection was actually there, which is
+  // the assertion: the wheel signal must reach attract's activity slot. The
+  // alternative — driving a real wheel event and watching isActive() — needs
+  // attract to already be running, and starting it is deliberately gated.
+  const bool wheelWiredToActivity = QObject::disconnect(
+      events, &EventManager::wheelScrollStarted, attract, &AttractManager::onActivityDetected);
+  QVERIFY2(wheelWiredToActivity,
+           "EventManager::wheelScrollStarted is not wired to AttractManager::onActivityDetected — "
+           "a wheel scroll that does not move the selection leaves attract mode running, and its "
+           "next tick reverts the user's position");
 }
