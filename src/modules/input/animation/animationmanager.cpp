@@ -335,7 +335,13 @@ void AnimationManager::startWheelScrollAnimation(QScrollBar *vScrollBar, int sta
   // an ensureVisible glide in the OPPOSITE direction is the revert.
   qCWarning(lcAnimationManager).nospace()
       << "VANIM wheelScroll     from=" << effectiveStart << " to=" << endVal
-      << " delta=" << (endVal - effectiveStart) << " (requestedStart=" << startVal << ")";
+      << " delta=" << (endVal - effectiveStart) << " (requestedStart=" << startVal
+      << ")"
+      // barValue==barMax on every line means the bar is simply CLAMPED at the
+      // end of its range; a barValue that keeps snapping back below barMax
+      // means a second writer is resetting it.
+      << " barValue=" << (vScrollBar ? vScrollBar->value() : -1)
+      << " barMax=" << (vScrollBar ? vScrollBar->maximum() : -1);
   m_vScrollAnim->setStartValue(effectiveStart);
   m_vScrollAnim->setEndValue(endVal);
 
