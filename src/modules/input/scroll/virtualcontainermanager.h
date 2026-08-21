@@ -26,6 +26,22 @@ struct ContainerPositionParams {
   /// keeps its full width (no overflow-clamping or center-shift) and the
   /// horizontal scrollbar is left enabled instead of force-hidden.
   bool isHorizontal = false;
+  /// Dead width on EACH side of the content block: the part of the first and
+  /// last cell that the artwork never paints. The art box is a square capped
+  /// by the cell's HEIGHT, so a cell wider than that carries blank margin
+  /// (measured 2026-08-19: 47px per side on a 200px cell holding 106px art).
+  /// Alignment anchors what the user can SEE, so it works in painted
+  /// coordinates and this is how it gets there. Zero leaves the old
+  /// cell-box behaviour exactly as it was.
+  ///
+  /// NEGATIVE means "not measured this pass", which is NOT the same as zero.
+  /// The value is read off a materialized cell, and the pool is momentarily
+  /// empty during a relayout — so a resize produced the sequence 47, 0, 47.
+  /// Read as real inset changes those looked like layout changes and threw
+  /// away the held position, which is why the grid still jumped when the
+  /// details pane was resized. The manager substitutes the last known inset
+  /// instead.
+  int contentInset = -1;
 };
 
 /**
@@ -78,12 +94,26 @@ private:
   [[nodiscard]] HorizontalAlignment
   getEffectiveAlignment(const ContainerPositionParams &params) const;
   [[nodiscard]] int calculateContainerPosition(int availableWidth, int contentWidth,
-                                               HorizontalAlignment align) const;
+                                               HorizontalAlignment align,
+                                               int contentInset = 0) const;
+  /// Resolves ContainerPositionParams::contentInset against the last known
+  /// one. A NEGATIVE report means "no cell was materialized to measure this
+  /// pass", which is not the same as an inset of zero: the pool empties for a
+  /// beat during any relayout, so a details-pane resize reported 47, 0, 47 and
+  /// the two apparent changes threw away the held position — the grid kept
+  /// jumping even after it was supposed to hold (field report 2026-08-20).
+  [[nodiscard]] static int resolveContentInset(int reported, int lastKnown) {
+    return reported >= 0 ? reported : qMax(0, lastKnown);
+  }
   void configureHorizontalScrollbar(bool overflow);
 
   QWidget *m_gridContainer = nullptr;
   QScrollArea *m_scrollArea = nullptr;
   QWidget *m_virtualContainer = nullptr;
+  /// Last MEASURED cell inset. Only kept so a pass with nothing materialized
+  /// can reuse it (see resolveContentInset) — the POSITION itself is
+  /// recomputed from scratch every time.
+  int m_lastContentInset = -1;
   // Borrowed from ScrollManager's owned sub-objects. QPointer guards
   // against dangling reads if a future refactor changes the destruction
   // order of these siblings relative to VirtualContainerManager

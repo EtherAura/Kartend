@@ -58,10 +58,18 @@ inline void calculateGridMetrics(int totalItems, int itemsPerRow, int itemWidth,
   // int overflow, then clamp to Qt's max widget size.
   constexpr int MAX_WIDTH = kQtMaxWidgetSize - 1000; // Safety margin
   if (itemsPerRow > 0) {
+    // Width spans the columns actually OCCUPIED, not the configured column
+    // count. A collection with fewer items than columns used to report a
+    // container one phantom column too wide: right-aligned content hung that
+    // column off the right edge and pushed the first item clean off the left,
+    // centring was half a column out, and — worst — the inflated width could
+    // declare an overflow for a grid that fits, clipping when there was room
+    // for everything (reproduced in the VM, 2026-08-18). Full rows are
+    // unaffected: occupied == itemsPerRow the moment there are enough items.
+    const qint64 occupiedColumns = qBound(1, totalItems, itemsPerRow);
     const qint64 horizontalSpacingContribution =
-        (itemsPerRow > 1 ? static_cast<qint64>(itemsPerRow - 1) * horizontalSpacing : 0);
-    const qint64 rawWidth = static_cast<qint64>(margins) * 2 +
-                            static_cast<qint64>(itemsPerRow) * itemWidth +
+        (occupiedColumns > 1 ? (occupiedColumns - 1) * horizontalSpacing : 0);
+    const qint64 rawWidth = static_cast<qint64>(margins) * 2 + occupiedColumns * itemWidth +
                             horizontalSpacingContribution;
     const int clampedWidth = static_cast<int>(qMin(rawWidth, static_cast<qint64>(MAX_WIDTH)));
     actualGridWidth = clampedWidth;

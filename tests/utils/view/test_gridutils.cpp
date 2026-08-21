@@ -12,6 +12,10 @@ class TestGridUtils : public QObject {
   Q_OBJECT
 
 private slots:
+  // Grid width must span occupied columns, not configured ones.
+  void gridWidth_partialRow_spansOnlyOccupiedColumns();
+  void gridWidth_fullRows_unchangedByTheOccupancyRule();
+
   // computeItemRow tests
   void testComputeItemRow_firstRow();
   void testComputeItemRow_secondRow();
@@ -213,8 +217,12 @@ void TestGridUtils::testCalculateGridMetrics_singleRow() {
   GridUtils::calculateGridMetrics(3, 5, 100, 100, 10, 10, 10, totalWidth, totalHeight,
                                   actualGridWidth);
 
-  // Width: 10*2 + 5*100 + 4*10 = 20 + 500 + 40 = 560
-  QCOMPARE(totalWidth, 560);
+  // Width spans the OCCUPIED columns (3), not the configured 5. Changed
+  // 2026-08-18: counting empty columns made the container wider than the
+  // content, which shifted right-aligned grids off the left edge and could
+  // declare an overflow for a grid that fits.
+  // 10*2 + 3*100 + 2*10 = 20 + 300 + 20 = 340
+  QCOMPARE(totalWidth, 340);
 
   // Height: 10 + 1*100 + 0*10 = 110
   QCOMPARE(totalHeight, 110);
@@ -277,4 +285,35 @@ void TestGridUtils::testCalculateGridMetrics_widthClampedOnOverflow() {
 }
 
 QTEST_MAIN(TestGridUtils)
+
+void TestGridUtils::gridWidth_partialRow_spansOnlyOccupiedColumns() {
+  // 6 items in a 7-column grid: the 7th column holds nothing, so the
+  // container must not be a column wider than the content drawn.
+  int totalWidth = 0, totalHeight = 0, actualGridWidth = 0, logicalHeight = 0;
+  double scrollScale = 0.0;
+  bool isClipped = false;
+  GridUtils::calculateGridMetrics(/*totalItems=*/6, /*itemsPerRow=*/7, /*itemWidth=*/100,
+                                  /*itemHeight=*/120, /*horizontalSpacing=*/20,
+                                  /*verticalSpacing=*/20, /*margins=*/10, totalWidth, totalHeight,
+                                  actualGridWidth, logicalHeight, scrollScale, isClipped);
+
+  const int expected = 10 * 2 + 6 * 100 + 5 * 20; // margins + 6 items + 5 gaps
+  QCOMPARE(totalWidth, expected);
+  QCOMPARE(actualGridWidth, expected);
+}
+
+void TestGridUtils::gridWidth_fullRows_unchangedByTheOccupancyRule() {
+  // 20 items in a 7-column grid: every column is occupied, so the width is
+  // exactly what it always was — this rule must not disturb full grids.
+  int totalWidth = 0, totalHeight = 0, actualGridWidth = 0, logicalHeight = 0;
+  double scrollScale = 0.0;
+  bool isClipped = false;
+  GridUtils::calculateGridMetrics(/*totalItems=*/20, /*itemsPerRow=*/7, /*itemWidth=*/100,
+                                  /*itemHeight=*/120, /*horizontalSpacing=*/20,
+                                  /*verticalSpacing=*/20, /*margins=*/10, totalWidth, totalHeight,
+                                  actualGridWidth, logicalHeight, scrollScale, isClipped);
+
+  QCOMPARE(totalWidth, 10 * 2 + 7 * 100 + 6 * 20);
+}
+
 #include "test_gridutils.moc"

@@ -25,14 +25,13 @@ inline constexpr int MARGINS = 10;
 inline constexpr int BUFFER_ROWS = 2;
 /// Default number of visible rows for pool sizing
 inline constexpr int DEFAULT_VISIBLE_ROWS = 6;
-/// Y offset for virtual container positioning
-inline constexpr int CONTAINER_OFFSET = -20;
-/// Left offset for virtual container
-inline constexpr int CONTAINER_LEFT_OFFSET = 20;
-/// Right offset for virtual container
-inline constexpr int CONTAINER_RIGHT_OFFSET = 16;
-/// Extra height buffer for container sizing
-inline constexpr int CONTAINER_HEIGHT_BUFFER = 25;
+// The four CONTAINER_* offsets that used to live here (-20 Y, +20 left,
+// +16 right, +25 height) were the empirical nudges the alignment rewrite
+// deleted: VirtualContainerManager::calculateContainerPosition now derives
+// every position from availableWidth - contentWidth alone. They were left
+// behind referenced by nothing, which makes them a trap — anyone hunting a
+// layout offset finds four plausible-looking numbers that no code reads.
+// Removed rather than kept: alignment is arithmetic, not a set of fudges.
 } // namespace Grid
 } // namespace UIConstants
 

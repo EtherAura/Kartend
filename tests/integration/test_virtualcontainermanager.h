@@ -25,6 +25,13 @@ private slots:
   void alignmentMovesContainerWhenContentFits();
   void alignmentMovesContainerWhenContentOverflows();
 
+  // A hidden vertical scrollbar must not reserve width: the viewport
+  // already excludes real bars, and overlay bars occupy nothing.
+  void alignmentAnchorsThePaintedEdgeNotTheCellBox();
+  void chromeResizeRealignsPerTheSetting();
+  void anUnmeasuredInsetIsNotALayoutChange();
+  void hiddenScrollbarDoesNotReserveWidth();
+
   void testConstructionWithoutWiring();
   void testCreateContainerRequiresGridContainer();
   void testCreateContainerProducesChildOfGrid();
