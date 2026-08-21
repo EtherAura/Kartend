@@ -23,6 +23,8 @@
 
 #include <QLoggingCategory>
 
+Q_DECLARE_LOGGING_CATEGORY(lcNavigationManager)
+
 // Local mirror of the diagnostic logging macro used in navigationmanager.cpp.
 // Re-defined here so this TU has the same release-safe diagnostic gate
 // without leaking the macro through a header.
@@ -286,6 +288,8 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
     // We're about to rebuild the items view. Clear any stale selection-restore
     // suppression so automatic restore can re-apply the selection rectangle.
     if (interactionMgr()) {
+      // TEMPORARY DIAGNOSTIC (2026-08-21) — names this reset site in the trace.
+      qCWarning(lcNavigationManager) << "RESTORETRACE RESET-FROM NavigationManagerFilter rebuild";
       interactionMgr()->resetSelectionRestoreState();
     }
 

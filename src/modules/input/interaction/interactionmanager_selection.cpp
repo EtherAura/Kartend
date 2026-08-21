@@ -105,6 +105,14 @@ void InteractionManager::updateSearchBarPlaceholder() {
 // sidebar metadata
 void InteractionManager::beginSelectionRestore(int targetIndex) {
   debugLog("[SelectionRestore] beginSelectionRestore: targetIndex=" << targetIndex);
+  // TEMPORARY DIAGNOSTIC (2026-08-21). currentSelectedIndex() is what the user
+  // is actually looking at; targetIndex is what this restore wants to impose.
+  // A line where they differ AND userSelectionMade is false is the revert.
+  qCWarning(lcInteractionManager).nospace()
+      << "RESTORETRACE FIRE   target=" << targetIndex << " current=" << currentSelectedIndex()
+      << " token=" << m_state.selectionRestore().restoreToken
+      << " userSelectionMade=" << m_state.selectionRestore().userSelectionMade
+      << (m_state.selectionRestore().userSelectionMade ? "  -> BLOCKED" : "  -> WILL APPLY");
   if (targetIndex < 0) {
     return;
   }
@@ -462,6 +470,11 @@ void InteractionManager::persistSelectionForIndex(int coll, int idx) {
 }
 
 void InteractionManager::cancelPendingSelectionRestore() {
+  // TEMPORARY DIAGNOSTIC (2026-08-21) — remove once the revert is fixed.
+  qCWarning(lcInteractionManager).nospace()
+      << "RESTORETRACE CANCEL token=" << m_state.selectionRestore().restoreToken
+      << " userSelectionMade=" << m_state.selectionRestore().userSelectionMade
+      << " pending=" << m_state.selectionRestore().restorePending;
   if (m_selectionManager) {
     // SelectionManager owns the canonical write path and updates
     // m_state.selectionRestore() directly.
@@ -478,6 +491,13 @@ void InteractionManager::cancelPendingSelectionRestore() {
 }
 
 void InteractionManager::resetSelectionRestoreState() {
+  // TEMPORARY DIAGNOSTIC (2026-08-21) — this is the prime suspect: it CLEARS
+  // userSelectionMade, which is the only thing stopping an already-queued
+  // beginSelectionRestore from landing a stale index.
+  qCWarning(lcInteractionManager).nospace()
+      << "RESTORETRACE RESET  token=" << m_state.selectionRestore().restoreToken
+      << " userSelectionMade=" << m_state.selectionRestore().userSelectionMade
+      << " pending=" << m_state.selectionRestore().restorePending;
   if (m_selectionManager) {
     m_selectionManager->resetSelectionRestoreState();
     return;

@@ -179,6 +179,13 @@ auto SelectionRestoreCoordinator::executeSelectionRestore(int desiredIndex,
     QPointer<const SelectionRestoreCoordinator> guard(this);
     // Delay restore to allow virtual scroll population to complete -
     // widgets may not be materialized immediately after collection load
+    // TEMPORARY DIAGNOSTIC (2026-08-21): this timer captures desiredIndex and
+    // checks only guard+validator on arrival — nothing about whether the user
+    // has taken over since. Log the arming so the fire can be paired with it.
+    qCWarning(lcSelectionRestoreManager).nospace()
+        << "RESTORETRACE ARM    desired=" << desiredIndex
+        << " token=" << (state() ? state()->selectionRestore().restoreToken : -1)
+        << " delayMs=" << UIConstants::Timing::MEDIUM_DELAY_MS;
     QTimer::singleShot(UIConstants::Timing::MEDIUM_DELAY_MS, this,
                        [guard, desiredIndex, validator]() {
                          debugLog("[SelectionRestore] timer fired, calling beginSelectionRestore");

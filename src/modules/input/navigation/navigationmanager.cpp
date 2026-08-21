@@ -198,6 +198,8 @@ auto NavigationManager::initializeNavigationState() -> void {
   // Reset restore state for new navigation - clears any pending restores
   // and allows automatic restore to proceed (userSelectionMade = false)
   if (interactionMgr()) {
+    // TEMPORARY DIAGNOSTIC (2026-08-21) — names this reset site in the trace.
+    qCWarning(lcNavigationManager) << "RESTORETRACE RESET-FROM NavigationManager::navigate";
     interactionMgr()->resetSelectionRestoreState();
   }
 }
