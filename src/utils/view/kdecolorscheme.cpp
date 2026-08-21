@@ -10,7 +10,6 @@
 // rolling our own avoids a tempfile-shuffle dance and lets us treat
 // resource and filesystem schemes uniformly.
 #include "kdecolorscheme.h"
-#include <QSettings>
 
 #include <algorithm>
 
@@ -32,20 +31,62 @@ using ErrorUtils::ErrorContext;
 namespace KdeColorScheme {
 
 namespace {
-/// Shared "r,g,b" reader for kdeglobals keys. QSettings hands back an
-/// unquoted triple as a QStringList, so the list form is tried first.
+/// Shared "r,g,b" reader for kdeglobals keys, e.g. "WM/activeBackground".
+///
+/// Parsed by hand rather than through QSettings: QSettings keeps a cached
+/// QConfFile per path and will happily serve a stale value for a file
+/// rewritten moments earlier, which is precisely the case here — Plasma
+/// rewrites kdeglobals whenever the desktop colours change, and the app has
+/// to see the NEW colour immediately (user request 2026-08-19). Reading the
+/// file directly also matches how this module already handles .colors.
+///
+/// Deliberately NOT cached in a static: the whole point is that the desktop
+/// colour changes under a running app (a Plasma activity switch with a
+/// per-activity wallpaper). This is a handful of lines of INI parsed on a
+/// re-theme, not on a paint.
 QColor readKdeGlobalsColor(const QString &key) {
   const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) +
                        QStringLiteral("/kdeglobals");
-  if (!QFileInfo::exists(path)) {
+  const int slash = key.indexOf(QLatin1Char('/'));
+  if (slash <= 0) {
     return {};
   }
-  QSettings globals(path, QSettings::IniFormat);
-  const QVariant raw = globals.value(key);
-  QStringList parts = raw.toStringList();
-  if (parts.size() < 3) {
-    parts = raw.toString().split(QLatin1Char(','), Qt::SkipEmptyParts);
+  const QString wantSection = key.left(slash);
+  const QString wantKey = key.mid(slash + 1);
+
+  QFile file(path);
+  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    return {};
   }
+  QTextStream in(&file);
+  QString section;
+  QString value;
+  while (!in.atEnd()) {
+    const QString line = in.readLine().trimmed();
+    if (line.isEmpty() || line.startsWith(QLatin1Char('#'))) {
+      continue;
+    }
+    if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
+      section = line.mid(1, line.size() - 2);
+      continue;
+    }
+    if (section != wantSection) {
+      continue;
+    }
+    const int eq = line.indexOf(QLatin1Char('='));
+    if (eq <= 0) {
+      continue;
+    }
+    if (line.left(eq).trimmed() == wantKey) {
+      value = line.mid(eq + 1).trimmed();
+      break;
+    }
+  }
+  if (value.isEmpty()) {
+    return {};
+  }
+
+  const QStringList parts = value.split(QLatin1Char(','), Qt::SkipEmptyParts);
   if (parts.size() < 3) {
     return {};
   }
@@ -63,20 +104,18 @@ QColor readKdeGlobalsColor(const QString &key) {
 } // namespace
 
 QColor desktopAccentColor() {
-  static const QColor cached = readKdeGlobalsColor(QStringLiteral("General/AccentColor"));
-  return cached;
+  return readKdeGlobalsColor(QStringLiteral("General/AccentColor"));
 }
 
 QColor activeTitlebarTextColor() {
-  static const QColor cached = readKdeGlobalsColor(QStringLiteral("WM/activeForeground"));
-  return cached;
+  return readKdeGlobalsColor(QStringLiteral("WM/activeForeground"));
 }
 
 QColor activeTitlebarColor() {
-  // Cached: this is read on every re-theme and the session's decoration
-  // colour does not change without a restart of the colour scheme anyway.
-  static const QColor cached = readKdeGlobalsColor(QStringLiteral("WM/activeBackground"));
-  return cached;
+  // NOT cached — see readKdeGlobalsColor. The old static assumed "the
+  // session's decoration colour does not change without a restart", which a
+  // Plasma activity switch with per-activity wallpapers disproves.
+  return readKdeGlobalsColor(QStringLiteral("WM/activeBackground"));
 }
 
 namespace {

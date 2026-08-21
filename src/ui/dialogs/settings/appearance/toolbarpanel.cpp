@@ -16,7 +16,7 @@ ToolbarPanel::ToolbarPanel(QWidget *parent) : QWidget(parent), ui(new Ui::Toolba
         ui->toolbarCoverFlowViewVisibleCheckBox, ui->toolbarHorizontalViewVisibleCheckBox,
         ui->toolbarHideSubcollectionsVisibleCheckBox, ui->toolbarTypeFilterVisibleCheckBox,
         ui->toolbarTitleFilterVisibleCheckBox, ui->toolbarSearchModeVisibleCheckBox,
-        ui->toolbarSearchBarVisibleCheckBox}) {
+        ui->toolbarSearchBarVisibleCheckBox, ui->showToolbarBreadcrumbsCheckBox}) {
     connect(box, &QCheckBox::toggled, this, [this](bool) { save(); });
   }
   for (auto *edit : {ui->toolbarGridViewTextEdit, ui->toolbarListViewTextEdit,
@@ -58,6 +58,9 @@ void ToolbarPanel::load() {
                                 s->toolbar.toolbarShowSearchModeButton);
   SettingsFormBinding::loadInto(ui->toolbarSearchBarVisibleCheckBox,
                                 s->toolbar.toolbarShowSearchBar);
+  // Breadcrumb visibility lives on this page rather than General — it is a
+  // toolbar widget like every other row here (user request 2026-08-19).
+  SettingsFormBinding::loadInto(ui->showToolbarBreadcrumbsCheckBox, s->view.showToolbarBreadcrumbs);
   SettingsFormBinding::loadInto(ui->toolbarGridViewTextEdit, s->toolbar.toolbarGridViewButtonText);
   SettingsFormBinding::loadInto(ui->toolbarListViewTextEdit, s->toolbar.toolbarListViewButtonText);
   SettingsFormBinding::loadInto(ui->toolbarCoverFlowViewTextEdit,
@@ -74,6 +77,7 @@ void ToolbarPanel::save() {
     return;
   }
   GeneralSettings *s = m_model->generalSettings;
+  s->view.showToolbarBreadcrumbs = ui->showToolbarBreadcrumbsCheckBox->isChecked();
   s->toolbar.toolbarShowGridViewButton = ui->toolbarGridViewVisibleCheckBox->isChecked();
   s->toolbar.toolbarShowListViewButton = ui->toolbarListViewVisibleCheckBox->isChecked();
   s->toolbar.toolbarShowCoverFlowViewButton = ui->toolbarCoverFlowViewVisibleCheckBox->isChecked();

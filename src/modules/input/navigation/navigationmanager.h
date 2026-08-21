@@ -184,6 +184,11 @@ public slots:
 
   // Appearance methods - can be called from SettingsManager after dialog closes
   void applyBackgroundForCollection(int collectionIndex) override;
+  /// Rebuild chrome whose colour comes from the DESKTOP (titlebar/accent/
+  /// highlight) after the desktop scheme changed under us — a Plasma
+  /// activity switch with a per-activity wallpaper. The toolbar tint lives
+  /// in a stylesheet string, which a palette re-broadcast cannot refresh.
+  void refreshDesktopDerivedChrome();
   void applyPrimaryColorForCollection(int collectionIndex) override;
 
   /// Re-apply every per-collection derived colour for the given (active)

@@ -142,12 +142,17 @@ void NavigationManager::onBreadcrumbLinkClicked(const QString &link) {
   using Kind = NavigationHelpers::BreadcrumbLink::Kind;
 
   if (parsed.kind == Kind::Collection) {
-    if (parsed.collectionIndex < (*m_collections).size()) {
-      // Clear current subfolder before navigating to parent
+    if (parsed.collectionIndex >= 0 && parsed.collectionIndex < (*m_collections).size()) {
+      // Clear current subfolder before navigating away from it.
       if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {
         (*m_collections)[*m_currentCollectionIndex].folderBrowsing.currentSubfolder.clear();
       }
-      goBackToCollections();
+      // Navigate to the CLICKED collection. This decoded parsed.collectionIndex,
+      // checked it was in range, and then called goBackToCollections() — which
+      // ignores it — so every ancestor link did the same thing regardless of
+      // which segment was clicked (field report 2026-08-19: "no matter which
+      // one i click, just the currently viewed collection refreshes").
+      showCollectionItems(parsed.collectionIndex);
     }
   } else if (parsed.kind == Kind::Subfolder) {
     if (*m_currentCollectionIndex >= 0 && *m_currentCollectionIndex < (*m_collections).size()) {

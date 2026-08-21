@@ -54,6 +54,8 @@
         <item row="13" column="1"><widget class="QCheckBox" name="toolbarSearchModeVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
         <item row="14" column="0"><widget class="QLabel" name="toolbarSearchBarLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Search Bar:</string></property></widget></item>
         <item row="14" column="1"><widget class="QCheckBox" name="toolbarSearchBarVisibleCheckBox"><property name="text"><string>Show</string></property></widget></item>
+        <item row="15" column="0"><widget class="QLabel" name="toolbarBreadcrumbLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Collection Breadcrumb:</string></property></widget></item>
+        <item row="15" column="1"><widget class="QCheckBox" name="showToolbarBreadcrumbsCheckBox"><property name="text"><string>Show</string></property><property name="toolTip"><string>Show the collection name and subfolder path in the toolbar. Its segments are clickable and navigate to that collection.</string></property></widget></item>
        </layout>
       </item>
       <item>

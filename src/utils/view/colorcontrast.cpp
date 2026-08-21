@@ -33,6 +33,17 @@ double contrastRatio(const QColor &a, const QColor &b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+QColor breadcrumbLinkColor(const QColor &highlight, const QColor &window) {
+  // Half saturation at a fixed lightness keeps the hue recognisable without
+  // the highlight's full punch, then contrast repair guarantees it stays
+  // legible on either polarity.
+  int h = 0;
+  int s = 0;
+  int l = 0;
+  highlight.getHsl(&h, &s, &l);
+  return ensureContrast(QColor::fromHsl(h < 0 ? 0 : h, s / 2, 170), window);
+}
+
 QColor ensureContrast(const QColor &fg, const QColor &bg, double minRatio) {
   if (contrastRatio(fg, bg) >= minRatio) return fg;
   int hue = 0;

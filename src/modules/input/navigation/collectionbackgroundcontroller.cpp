@@ -40,6 +40,8 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
     return;
   }
 
+  m_lastAppliedIndex = collectionIndex;
+
   const CollectionConfig &collection = (*m_collections)[collectionIndex];
   QWidget *viewport = m_itemScrollArea->viewport();
   if (!viewport) {
@@ -226,6 +228,7 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
 }
 
 void CollectionBackgroundController::applyPrimaryColorForCollection(int collectionIndex) {
+  m_lastAppliedIndex = collectionIndex;
   if (!m_collections || collectionIndex < 0 || collectionIndex >= (*m_collections).size()) {
     return;
   }
@@ -315,15 +318,21 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
     m_itemsTopBar->setStyleSheet(toolbarStyle);
   }
 
-  // Apply primary color to menubar
+  // Menu bar takes the TOOLBAR's fill, not the collection's primary colour
+  // (user request 2026-08-20: "make the menu bar color the same as the title
+  // bar/toolbar color"). The two are only the same when the toolbar source is
+  // CollectionPrimary; with a Titlebar/Accent/Highlight source the menu bar
+  // was the odd stripe out, sitting between the real titlebar above it and a
+  // differently-toned toolbar below. chromeFill already resolves the source
+  // and falls back to the collection colour, so this follows it everywhere.
   if (m_menubar) {
     QString menubarStyle;
-    if (hasPrimaryColor) {
+    if (!chromeFill.isEmpty()) {
       menubarStyle = QString("QMenuBar { background-color: %1; }"
                              "QMenuBar::item { background-color: transparent; }"
                              "QMenuBar::item:selected { background-color: "
                              "rgba(255,255,255,0.2); }")
-                         .arg(collection.background.primaryColor);
+                         .arg(chromeFill);
     }
     m_menubar->setStyleSheet(menubarStyle);
   }
@@ -430,4 +439,22 @@ void CollectionBackgroundController::applyParallaxOffset() {
                                  .arg(imagePath)
                                  .arg(offset);
   m_itemScrollArea->viewport()->setStyleSheet(styleSheet);
+}
+
+void CollectionBackgroundController::refreshDesktopDerivedChrome() {
+  if (m_lastAppliedIndex < 0 || !m_collections || m_lastAppliedIndex >= (*m_collections).size()) {
+    return;
+  }
+  const ToolbarColorSource source =
+      (*m_collections)[m_lastAppliedIndex].background.toolbarColorSource;
+  const bool desktopDerived =
+      (source == ToolbarColorSource::Titlebar || source == ToolbarColorSource::Accent ||
+       source == ToolbarColorSource::Highlight);
+  if (!desktopDerived) {
+    return;
+  }
+  // applyPrimaryColorForCollection, NOT applyBackgroundForCollection: the
+  // chrome tint lives in the former, and the latter re-decodes the
+  // wallpaper/video for a colour that did not change.
+  applyPrimaryColorForCollection(m_lastAppliedIndex);
 }

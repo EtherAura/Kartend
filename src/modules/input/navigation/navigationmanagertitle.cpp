@@ -65,13 +65,23 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
     return;
   }
 
-  // Connect linkActivated signal if not already connected
-  static bool linkConnected = false;
-  if (!linkConnected) {
-    QObject::connect(titleLabel, &QLabel::linkActivated, this,
-                     &NavigationManager::onBreadcrumbLinkClicked);
-    linkConnected = true;
-  }
+  // UniqueConnection, NOT a function-local static: the static latched on the
+  // first label and was never cleared, so a rebuilt title label got no
+  // handler at all and its breadcrumb links silently stopped navigating
+  // (field report 2026-08-19). UniqueConnection re-arms per label while
+  // still refusing duplicates — it requires a member-function pointer, which
+  // this is.
+  QObject::connect(titleLabel, &QLabel::linkActivated, this,
+                   &NavigationManager::onBreadcrumbLinkClicked, Qt::UniqueConnection);
+  // A QLabel only EMITS linkActivated when its links are mouse-accessible.
+  // Without these the breadcrumb rendered as links and did nothing when
+  // clicked, however the signal was connected — the real reason navigation
+  // never happened (field report 2026-08-19). The subfolder label below has
+  // always set them, which is why its links worked and these did not.
+  titleLabel->setTextFormat(Qt::RichText);
+  titleLabel->setTextInteractionFlags(Qt::LinksAccessibleByMouse | Qt::LinksAccessibleByKeyboard);
+  titleLabel->setOpenExternalLinks(false);
+  titleLabel->setCursor(Qt::PointingHandCursor);
 
   const CollectionConfig &config = (*m_collections)[collectionIndex];
 
@@ -87,7 +97,7 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   // both polarities; on dark themes the colour is already compliant (6.15:1)
   // and passes through unchanged.
   const QColor linkColor =
-      ColorContrast::ensureContrast(QColor::fromHsl(h, s / 2, 170), pal.color(QPalette::Window));
+      ColorContrast::breadcrumbLinkColor(highlightColor, pal.color(QPalette::Window));
   QString linkColorHex = linkColor.name();
 
   // Breadcrumb assembly (ancestor "collection:<idx>" links, the "root:"
@@ -109,15 +119,13 @@ auto NavigationManager::updateItemsPageTitle(int collectionIndex) -> void {
   if (subfolderLabel) {
     const QString &subfolder = config.folderBrowsing.currentSubfolder;
     if (!subfolder.isEmpty()) {
-      // Connect subfolder label linkActivated if not already connected
-      static bool subfolderLinkConnected = false;
-      if (!subfolderLinkConnected) {
-        QObject::connect(subfolderLabel, &QLabel::linkActivated, this,
-                         &NavigationManager::onBreadcrumbLinkClicked);
-        subfolderLabel->setTextFormat(Qt::RichText);
-        subfolderLabel->setOpenExternalLinks(false);
-        subfolderLinkConnected = true;
-      }
+      // Same latching bug as the title label above — UniqueConnection
+      // re-arms per label instead of once per process.
+      QObject::connect(subfolderLabel, &QLabel::linkActivated, this,
+                       &NavigationManager::onBreadcrumbLinkClicked, Qt::UniqueConnection);
+      subfolderLabel->setTextFormat(Qt::RichText);
+      subfolderLabel->setOpenExternalLinks(false);
+      {}
 
       // Subfolder breadcrumb — clickable "subfolder:<path>" links per
       // intermediate segment, plain text for the current one. Pure HTML

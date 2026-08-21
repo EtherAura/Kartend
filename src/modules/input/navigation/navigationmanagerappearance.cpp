@@ -105,6 +105,12 @@ void NavigationManager::reapplyActiveCollectionTheming(int collectionIndex) {
   updateItemsPageTitle(collectionIndex);
 }
 
+void NavigationManager::refreshDesktopDerivedChrome() {
+  if (m_backgroundController) {
+    m_backgroundController->refreshDesktopDerivedChrome();
+  }
+}
+
 void NavigationManager::applyBackgroundForCollection(int collectionIndex) {
   if (m_backgroundController) {
     m_backgroundController->applyBackgroundForCollection(collectionIndex);

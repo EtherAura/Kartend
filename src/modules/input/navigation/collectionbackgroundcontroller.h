@@ -4,6 +4,7 @@
 #include "collection/collectionconfig.h"
 #include <QList>
 #include <QObject>
+
 #include <QTimer>
 
 QT_BEGIN_NAMESPACE
@@ -68,7 +69,21 @@ public:
   /// the toolbar / menubar / search-bar stylesheets.
   void applyPrimaryColorForCollection(int collectionIndex);
 
+  /// Re-apply the chrome after the DESKTOP colours changed — a Plasma
+  /// activity switch with a per-activity wallpaper hands the session a new
+  /// titlebar/accent (user request 2026-08-19). The toolbar tint is baked
+  /// into a STYLESHEET STRING, so the palette re-broadcast that handles the
+  /// rest of the app cannot touch it; it has to be rebuilt. Only
+  /// desktop-derived collections repaint — one tinted from its own primary
+  /// colour has nothing to refresh, and re-applying would needlessly
+  /// restart a video background.
+  void refreshDesktopDerivedChrome();
+
 private:
+  /// The collection whose chrome is on screen, so a colour change can
+  /// repaint it without the caller re-supplying the index.
+  int m_lastAppliedIndex = -1;
+
   // throttled scroll handler for wallpaper parallax (coalesced to ~60Hz).
   void onItemsScrolled();
   void applyParallaxOffset();

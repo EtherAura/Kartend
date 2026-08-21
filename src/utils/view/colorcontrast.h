@@ -34,6 +34,14 @@ inline constexpr double kAaNormalText = 4.5;
 [[nodiscard]] QColor ensureContrast(const QColor &fg, const QColor &bg,
                                     double minRatio = kAaNormalText);
 
+/// The colour breadcrumb links are drawn in: the highlight's hue at half
+/// saturation and a fixed lightness, contrast-repaired against @p window.
+///
+/// Shared because the collection tree's root label has to MATCH it (user
+/// request 2026-08-19). Two copies of this derivation would drift the first
+/// time either was tuned.
+[[nodiscard]] QColor breadcrumbLinkColor(const QColor &highlight, const QColor &window);
+
 } // namespace ColorContrast
 
 #endif // COLORCONTRAST_H
