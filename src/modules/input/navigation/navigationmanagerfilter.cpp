@@ -283,8 +283,23 @@ void NavigationManager::safeReloadCollection(int collectionIndex) {
   m_pendingSafeReloadCollectionIndex = collectionIndex;
 
   const bool alreadyScheduled = m_safeReloadTimer.isActive();
+
+  // Persist on EVERY request, not just the first of a burst. The reload is
+  // debounced — each request restarts the timer — so with the persist inside
+  // the !alreadyScheduled arm the saved index was whatever the selection
+  // happened to be when the burst STARTED. Anything the user did during the
+  // debounce window was then thrown away by the restore that follows the
+  // reload, which is the selection jumping backwards to an older item
+  // (field report 2026-08-20, reproduced as "scroll, click an item, then
+  // scroll": the click opens the burst and persists, the scrolling that
+  // follows is coalesced into it and never re-persists).
+  //
+  // This is not a behaviour change: the same restore still runs, to the same
+  // collection, at the same moment. It simply carries the user's CURRENT
+  // selection instead of a stale snapshot of it.
+  persistCurrentSelection();
+
   if (!alreadyScheduled) {
-    persistCurrentSelection();
     // We're about to rebuild the items view. Clear any stale selection-restore
     // suppression so automatic restore can re-apply the selection rectangle.
     if (interactionMgr()) {
