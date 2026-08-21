@@ -309,10 +309,22 @@ protected:
       painter->setRenderHint(QPainter::Antialiasing, true);
       painter->setPen(Qt::NoPen);
       painter->setBrush(colour);
-      if (isRootRow) {
+      // The PLAYLISTS group is a section header, not a collection, so it
+      // takes the square edge-to-edge treatment rather than a pill (user
+      // request 2026-08-20). It sets kRoleIsCategory to get a band at all,
+      // which is what was rounding it.
+      const bool squareEdged =
+          isRootRow || index.data(kRoleExpansionKey).toString() == kPlaylistsGroupKey;
+      if (squareEdged) {
         painter->drawRect(bodyRect());
       } else {
-        painter->drawRoundedRect(bodyRect(), kSelectionRadius, kSelectionRadius);
+        // QRectF inset by half a pixel: an integer QRect puts the antialiased
+        // edge exactly on the pixel boundary, so the curve is dithered across
+        // two rows of pixels and reads as jagged (user request 2026-08-20:
+        // "the rounding appears jagged"). Landing the geometric edge on a
+        // pixel CENTRE lets the same antialiasing resolve a clean arc.
+        const QRectF pill = QRectF(bodyRect()).adjusted(0.5, 0.5, -0.5, -0.5);
+        painter->drawRoundedRect(pill, kSelectionRadius, kSelectionRadius);
       }
       painter->restore();
     };
@@ -1170,6 +1182,10 @@ void CollectionTreeController::refreshIcons() {
     int logicalHeight = 0;
   };
   QHash<QString, BakedIcon> cache; // path|maxW — style/size/tint are uniform per pass
+  // Collected in the pass below, applied after it: every row in this set gets
+  // ONE height, so the group reads as an even list. See the setSizeHint arm.
+  QList<QTreeWidgetItem *> normalisedRows;
+  int maxNormalisedIconH = 0;
 
   for (QTreeWidgetItemIterator it(m_tree); *it; ++it) {
     QTreeWidgetItem *item = *it;
@@ -1441,10 +1457,16 @@ void CollectionTreeController::refreshIcons() {
       item->setSizeHint(
           0, QSize(0, qMax(toolbarHeight, baked.isNull() ? 0 : cached.value().logicalHeight)));
     } else if (!baked.isNull()) {
-      // Roomier rows (user request 2026-08-18). Scales with the icon so
-      // the gap stays proportional now that the size is uncapped.
-      const int rowPad = qMax(16, (m_iconSize * 3) / 4);
-      item->setSizeHint(0, QSize(0, cached.value().logicalHeight + rowPad));
+      // Height is NORMALISED across these rows rather than hugging each
+      // pixmap (user request 2026-08-20: "category height should be
+      // normalized"). Per-logo heights made neighbouring rows visibly
+      // uneven once compact marks gained their own boost — a square mark at
+      // 1.8x stood taller than a wordmark at 1.17x. Deferred to a second
+      // pass below, which uses the TALLEST baked icon actually present:
+      // a fixed worst-case ceiling would balloon every row even when no
+      // logo needs the room (the 2026-08-17 regression).
+      normalisedRows.append(item);
+      maxNormalisedIconH = qMax(maxNormalisedIconH, cached.value().logicalHeight);
     } else {
       item->setSizeHint(0, QSize());
     }
@@ -1456,6 +1478,17 @@ void CollectionTreeController::refreshIcons() {
     } else {
       item->setText(0, name);
       item->setToolTip(0, QString());
+    }
+  }
+
+  // Second pass: one height for every row that carries a logo at this depth.
+  // Driven by the tallest icon actually baked, so the rows are even without
+  // reserving space no logo uses.
+  if (!normalisedRows.isEmpty() && maxNormalisedIconH > 0) {
+    const int rowPad = qMax(16, (m_iconSize * 3) / 4);
+    const int uniformHeight = maxNormalisedIconH + rowPad;
+    for (QTreeWidgetItem *row : normalisedRows) {
+      row->setSizeHint(0, QSize(0, uniformHeight));
     }
   }
 }

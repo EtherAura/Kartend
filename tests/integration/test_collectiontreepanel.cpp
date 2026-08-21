@@ -184,27 +184,37 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAtConfiguredSiz
                           .arg(frame.width())
                           .arg(dpr)));
 
-  // Row DENSITY. Originally (field report 2026-08-17: every row ballooned to
-  // the boost headroom) a square icon's row had to hug the BASE icon height.
-  // Relaxed 2026-08-20 to the COMPACT boost ceiling: square marks are lifted
-  // toward the visual weight of wide wordmarks, which necessarily makes their
-  // rows taller ("wide ones are easy to see, but others aren't"). The bound
-  // still exists, and that is the point — growth is capped at the compact
-  // ceiling, so the original open-ended ballooning stays caught.
-  // kCompactHeightBoost (1.8) is private to the controller; expressed here as
-  // ninths/fifths so the two cannot drift silently without this test failing.
-  // Logical units throughout (visualItemRect).
+  // Row DENSITY, twice revised on 2026-08-20 and worth reading as a whole.
+  //
+  // Originally (field report 2026-08-17: every row ballooned to the boost
+  // headroom) a square icon's row had to hug the BASE icon height. Then
+  // compact marks were lifted toward the visual weight of wide wordmarks
+  // ("wide ones are easy to see, but others aren't"), which raised their
+  // rows. Then row heights were NORMALISED across logo-bearing rows
+  // ("category height should be normalized"), which by definition puts every
+  // such row at the tallest icon present.
+  //
+  // So the original per-row density rule is genuinely superseded: rows are
+  // meant to be even now, not individually tight. What survives is the part
+  // that still protects the user — growth is BOUNDED. A row may not exceed
+  // what the widest-logo boost can justify, so open-ended ballooning is
+  // still caught. Logical units throughout (visualItemRect).
   QTreeWidgetItem *shellItem = tree->topLevelItem(0);
   QVERIFY(shellItem);
   QVERIFY(shellItem->childCount() >= 1);
   QTreeWidgetItem *childItem = shellItem->child(0);
   const int baseIconSize = CollectionTreeSettings{}.treeIconSize;
   const int childRowH = tree->visualItemRect(childItem).height();
-  // Compact-boosted icon height + the proportional row pad + slack.
-  const int compactCeiling = (baseIconSize * 9) / 5; // 1.8x
-  QVERIFY2(childRowH <= compactCeiling + qMax(16, (baseIconSize * 3) / 4) + 6,
-           qPrintable(QStringLiteral("square-icon row is %1px tall for a %2px icon — taller than "
-                                     "the compact boost ceiling allows")
+  // Tallest-boost height + the proportional row pad + slack. Rows carrying a
+  // logo are NORMALISED to the tallest icon present, so a square-icon row is
+  // expected to match a wordmark row — bounding it at the compact ceiling
+  // would now fail by design. kThinHeightBoost (2.2) is private to the
+  // controller; expressed as elevenths/fifths so the two cannot drift apart
+  // without this failing.
+  const int tallestCeiling = (baseIconSize * 11) / 5; // 2.2x
+  QVERIFY2(childRowH <= tallestCeiling + qMax(16, (baseIconSize * 3) / 4) + 6,
+           qPrintable(QStringLiteral("row is %1px tall for a %2px icon — taller than even the "
+                                     "widest-logo boost ceiling allows")
                           .arg(childRowH)
                           .arg(baseIconSize)));
 }
