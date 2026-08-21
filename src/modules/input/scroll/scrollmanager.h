@@ -143,6 +143,15 @@ public:
   [[nodiscard]] const GridMetrics &getMetrics() const override { return m_metrics; }
   void enforceScrollContentConstraints();
   void recreateLayout() override;
+  /// Watches the media scroll area's VIEWPORT for resizes. Chrome resizes —
+  /// a pane drag, the navigation sidebar growing, a settings apply — reach
+  /// the grid only as a viewport resize; nothing else fires for them (the
+  /// window didn't resize, so MainWindow::resizeEvent never runs). Without
+  /// this, the container kept its stale position: harmless-looking for
+  /// right-side chrome (the origin doesn't move), but LEFT-side chrome moved
+  /// the origin and carried the grid across the screen with it (2026-08-20:
+  /// "resizing the navigation sidebar is still shifting the grid").
+  bool eventFilter(QObject *watched, QEvent *event) override;
 
   /// Set file path to restore selection to after items are loaded (for sort
   /// changes)
@@ -459,6 +468,19 @@ private:
   qint64 m_lastScrollTime = 0;
   bool m_isMutating = false;
   bool m_destroying = false;
+  /// Coalesces viewport-resize bursts (a pane drag fires one per tick) into
+  /// one materialization pass on the settled geometry. The POSITIONING part
+  /// runs synchronously in eventFilter — deferring it fidgeted the grid, one
+  /// stale-painted frame per drag tick. See eventFilter.
+  QTimer *m_viewportResizeTimer = nullptr;
+  /// Re-entrancy guard for the synchronous pass: positioning writes
+  /// gridContainer geometry, which can arrive back here as another resize.
+  bool m_inViewportResizeSync = false;
+  /// Set only when a viewport resize actually changed the CELL layout. A pure
+  /// chrome resize repositions the container and stops there — materializing
+  /// again would recycle widgets and re-trigger artwork, which reads as a
+  /// flash while dragging a sidebar.
+  bool m_viewportResizeNeedsMaterialize = false;
   // cached sidebar-hidden-and-shrinking predicate, fed by
   // MainWindow on sidebar-visibility changes. Read by VirtualScrollEngine when
   // it builds layout metrics so the alternate per-collection grid sizes apply

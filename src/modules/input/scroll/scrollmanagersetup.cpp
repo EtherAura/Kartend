@@ -56,6 +56,11 @@ void ScrollManager::setupReferences(const ScrollManagerSetup &setup) {
   m_generalSettings = setup.getGeneralSettings();
   m_gridContainer = setup.getGridContainer();
   m_mediaScrollArea = setup.getMediaScrollArea();
+  // Viewport resizes are the ONLY signal the grid gets when chrome around it
+  // changes size — watch them (handled in ScrollManager::eventFilter).
+  if (m_mediaScrollArea && m_mediaScrollArea->viewport()) {
+    m_mediaScrollArea->viewport()->installEventFilter(this);
+  }
   m_collections = setup.getCollections();
   m_hierarchyCache = setup.getHierarchyCache();
 

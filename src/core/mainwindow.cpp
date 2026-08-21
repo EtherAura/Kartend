@@ -286,12 +286,44 @@ void MainWindow::onSystemThemeChanged() const {
   // forces a full re-polish so style-drawn chrome (toolbar / menubar /
   // scrollbars) picks up the new colours.
   qApp->setStyleSheet(qApp->styleSheet());
-  // setPalette(fresh) lands an ApplicationPaletteChange on us, which event()
-  // coalesces into a single deferred reapplyDerivedThemingFromSystemPalette()
-  // for the cached/HTML/stylesheet chrome — so we deliberately do NOT call it a
-  // second time here (doing so re-ran the whole appearance pipeline twice,
-  // including the off-thread sidebar/background image reloads — the main source
-  // of the perceived lag).
+  // setPalette(fresh) normally lands an ApplicationPaletteChange on us, which
+  // event() coalesces into a single deferred
+  // reapplyDerivedThemingFromSystemPalette() for the cached/HTML/stylesheet
+  // chrome — so we deliberately do NOT call that a second time here (doing so
+  // re-ran the whole appearance pipeline twice, including the off-thread
+  // sidebar/background image reloads — the main source of the perceived lag).
+  //
+  // The toolbar tint is the exception, and it has to be refreshed directly.
+  // Its colour comes from kdeglobals (titlebar/accent) and is baked into a
+  // STYLESHEET STRING, not resolved from the palette — so when the desktop
+  // colours change without Qt handing us a palette the app does not already
+  // have, no palette event is dispatched and the deferred re-theme never
+  // runs. Measured on a Plasma guest (2026-08-19): switching the desktop
+  // colour fired onSystemThemeChanged but never reached the re-theme, and
+  // the bar kept the colour it started with until a restart. Rebuilding just
+  // the desktop-derived chrome is cheap — no wallpaper re-decode.
+  if (m_appManager) {
+    if (auto *nav = m_appManager->getNavigationManager()) {
+      nav->refreshDesktopDerivedChrome();
+    }
+  }
+  // The collection tree's SELECTION is titlebar-tinted too, and it is a
+  // different surface from the toolbar — leaving it out left the sidebar
+  // showing the previous activity's colour beside an updated bar (seen on
+  // the guest, 2026-08-19).
+  if (m_collectionTreeController) {
+    m_collectionTreeController->refreshDesktopTint();
+  }
+  // The top bar's palette fallback (set during setup) is titlebar-derived
+  // as well; refresh it so the colour is right even for collections whose
+  // stylesheet does not claim the fill.
+  if (ui && ui->itemsTopBar) {
+    if (const QColor titlebar = KdeColorScheme::activeTitlebarColor(); titlebar.isValid()) {
+      QPalette barPalette = ui->itemsTopBar->palette();
+      barPalette.setColor(QPalette::Window, titlebar);
+      ui->itemsTopBar->setPalette(barPalette);
+    }
+  }
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *event) {

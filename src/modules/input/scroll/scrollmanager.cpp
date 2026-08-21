@@ -381,8 +381,9 @@ void ScrollManager::updateViewType(ViewType viewType) {
     // off again on overflow. Force it back on here when entering Horizontal.
     if (viewType == ViewType::Horizontal) {
       m_mediaScrollArea->setHorizontalScrollBarPolicy(
-          m_context.config.gridLayout.hideHorizontalScrollbar ? Qt::ScrollBarAlwaysOff
-                                                              : Qt::ScrollBarAsNeeded);
+          m_context.config.gridLayout.horizontalScrollbarMode == ScrollbarMode::Hide
+              ? Qt::ScrollBarAlwaysOff
+              : Qt::ScrollBarAsNeeded);
     }
   }
 

@@ -202,11 +202,17 @@ auto VirtualScrollEngine::calculateNeededIndices() const -> NeededRange {
   return NeededRange{band.firstIndex, band.lastIndex};
 }
 
+// WIDGETREL diagnostic: a released widget loses its artwork (the pool's reset
+// clears storedPixmap), so it comes back as a placeholder until the debounced
+// artwork pass repaints it — visible as a flash. Each release SITE logs its
+// reason and count so the trigger can be named instead of guessed at.
+// Enable with QT_LOGGING_RULES='kartend.scrollmanager.debug=true'.
 void VirtualScrollEngine::removeUnneededWidgets(const NeededRange &needed) {
   // Kartend-16al4: the visible-row range is constant across this pass, so
   // compute it once (lazily, only if something is actually evicted) and hand it
   // to releaseWidget instead of having each call recompute getVisibleRowRange.
   int visibleRows = -1;
+  int releasedCount = 0;
   for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end();
        /* advance inside */) {
     if (!needed.contains(it.key())) {
@@ -215,11 +221,19 @@ void VirtualScrollEngine::removeUnneededWidgets(const NeededRange &needed) {
           visibleRows = (m_owner->getLastVisibleRow() - m_owner->getFirstVisibleRow()) + 1;
         }
         m_owner->releaseWidget(widget, visibleRows);
+        ++releasedCount;
       }
       it = m_owner->m_activeWidgets.erase(it);
     } else {
       ++it;
     }
+  }
+  if (releasedCount > 0) {
+    qCDebug(lcScrollManager).nospace()
+        << "WIDGETREL reason=evicted-outside-band n=" << releasedCount
+        << " band=" << needed.firstIndex << ".." << needed.lastIndex
+        << " rows=" << m_owner->getFirstVisibleRow() << ".." << m_owner->getLastVisibleRow()
+        << " perRow=" << m_owner->m_metrics.itemsPerRow;
   }
 }
 
@@ -314,6 +328,8 @@ void VirtualScrollEngine::handleLayoutChange() {
   // because layout changes (especially view type changes) require fresh widgets
   // with different configurations (e.g., list mode has no image label)
   const int visibleRows = (m_owner->getLastVisibleRow() - m_owner->getFirstVisibleRow()) + 1;
+  qCDebug(lcScrollManager).nospace()
+      << "WIDGETREL reason=handleLayoutChange-release-ALL n=" << m_owner->m_activeWidgets.size();
   for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end(); ++it) {
     if (ItemWidget *widget = it.value()) {
       m_owner->releaseWidget(widget, visibleRows);
@@ -454,6 +470,20 @@ void VirtualScrollEngine::positionVirtualContainer() {
   params.alignment = m_owner->getCurrentAlignment();
   params.isFiltered = isFiltered;
   params.isHorizontal = m_owner->m_metrics.isHorizontal;
+  // Dead width per side of the content block, taken from a REAL materialized
+  // cell rather than recomputing the art-size formula here — that formula
+  // depends on font metrics (itemwidgetpaint reserves three text lines), and
+  // a second copy of it would drift the moment either side changed. Zero
+  // before anything is materialized, which simply keeps the previous
+  // cell-box alignment for that first pass.
+  // Left at the struct's -1 ("not measured") when the pool is empty, which it
+  // is for a beat during any relayout. Reporting 0 there told the container
+  // manager the inset had genuinely changed and cost it the held position.
+  for (ItemWidget *w : m_owner->m_activeWidgets) {
+    if (!w || w->artworkSize() <= 0) continue;
+    params.contentInset = qMax(0, (m_owner->m_metrics.itemWidth - w->artworkSize()) / 2);
+    break;
+  }
 
   m_owner->m_containerManager->positionContainer(params);
 
