@@ -258,6 +258,30 @@ bool ViewportManager::shouldDeferCenterNow(bool immediate, int index) const {
 }
 
 bool ViewportManager::shouldEarlyReturnUserScroll(bool forceImmediate) const {
+  // A continuous wheel scroll OWNS the viewport for as long as it runs, and
+  // that outranks forceImmediate. Without this, centring fires while the
+  // wheel's own glide is still in flight and animates the view back toward
+  // the previous selection's centre — the reported "scrolling reverts".
+  //
+  // Caught in the act by the VANIM trace: every revert is a wheelScroll
+  // immediately followed by a configureAndStart whose target is the wheel
+  // glide's own START value, i.e. exactly where the user just scrolled away
+  // from, and the drawn selection follows it back:
+  //
+  //   VANIM wheelScroll      from=83800 to=84085 delta=+285
+  //   VANIM configureAndStart from=83887 to=83800 delta=-87
+  //   SELDRAW 1482 -> 1476
+  //
+  // The existing guard could not catch it: it consults userScrollActive only,
+  // and every centring on this path passes immediate=true, which sets
+  // forceImmediate and bypasses the check outright.
+  //
+  // Scoped deliberately to the continuous-scroll window rather than
+  // suppressing centring generally — outside it, immediate centring still
+  // wins as before, which is what keyboard navigation and restore rely on.
+  if (m_continuousScrollActive) {
+    return true;
+  }
   return (state() && state()->scroll().userScrollActive) && !forceImmediate;
 }
 
