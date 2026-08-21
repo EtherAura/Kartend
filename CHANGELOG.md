@@ -49,9 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Navigation sidebar rows line up.** Rows carrying a logo now share one
   height instead of each hugging its own artwork, so a column of platforms
-  reads as an even list. The Playlists section header takes a square
-  backdrop rather than a rounded one, and the rounded highlights behind
-  rows render with cleaner edges.
+  reads as an even list. Logos are fitted to a common box, so a wide
+  wordmark and a round platform mark take up comparable space instead of
+  the wordmark dwarfing it. The rounded highlights behind rows also render
+  with cleaner edges.
 - **Attract mode holds still while you are looking at artwork.** With an
   artwork open fullscreen, auto-advance stops — from either the grid's
   preview or the details pane's — and dismissing it starts a fresh idle

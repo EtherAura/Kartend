@@ -77,20 +77,21 @@ const QString kPlaylistsGroupKey = QStringLiteral("::playlists-group::");
 /// icons should be made taller to compensate"): a wordmark whose aspect
 /// exceeds the reference may exceed the configured icon height, up to the
 /// boost cap — rows are non-uniform, so only those rows grow.
-constexpr qreal kThinAspectRef = 3.0;
 constexpr qreal kThinHeightBoost = 2.2;
-/// Ceiling for the COMPACT end of the same curve. A wide wordmark at height H
-/// covers several times the area of a square mark at the same H, so sizing on
-/// height alone left round/square logos visibly faint beside them (field
-/// report 2026-08-20: "wide ones are easy to see, but others aren't").
+/// Widest a logo may get, as a multiple of the configured icon size. Together
+/// with kThinHeightBoost this defines a fixed BOX every logo is fitted into.
 ///
-/// This DOES make square-logo rows taller, which is the 2026-08-17 report
-/// ("every row ballooned to the boost headroom") coming back in a smaller
-/// form. Accepted deliberately on 2026-08-20 after weighing the two: legible
-/// compact logos are worth the extra row height, and the ceiling keeps the
-/// growth bounded rather than open-ended. tests/integration
-/// /test_collectiontreepanel.cpp pins the bound.
-constexpr qreal kCompactHeightBoost = 1.8;
+/// Height-only sizing (the previous scheme, and the two-sided boost curve
+/// that replaced it) could not normalise anything, because it left width
+/// completely unbounded: a wordmark at a given height still covered several
+/// times the area of a square mark at that same height, so the two never read
+/// as the same size (field reports 2026-08-20, twice: "wide ones are easy to
+/// see, but others aren't", then "icons still not normalized enough").
+///
+/// Deriving the box from the CONFIGURED SIZE — never from the panel width —
+/// is what keeps this stable: an earlier width clamp measured the viewport,
+/// which made every icon resize when the sidebar was dragged.
+constexpr qreal kIconMaxAspect = 5.5;
 
 /// Draws the expand/collapse chevron for @p index inside the branch column
 /// to the left of @p option.rect. Shared so the view and the delegate
@@ -309,13 +310,12 @@ protected:
       painter->setRenderHint(QPainter::Antialiasing, true);
       painter->setPen(Qt::NoPen);
       painter->setBrush(colour);
-      // The PLAYLISTS group is a section header, not a collection, so it
-      // takes the square edge-to-edge treatment rather than a pill (user
-      // request 2026-08-20). It sets kRoleIsCategory to get a band at all,
-      // which is what was rounding it.
-      const bool squareEdged =
-          isRootRow || index.data(kRoleExpansionKey).toString() == kPlaylistsGroupKey;
-      if (squareEdged) {
+      // Only true ROOT rows are square (they read as chrome continuous with
+      // the toolbar). Everything else, the Playlists section header included,
+      // wears the rounded pill — it was briefly squared on 2026-08-20 on a
+      // misreading of "playlist backdrop not rounded", which was a report
+      // that it lacked the pill, not a request to remove one.
+      if (isRootRow) {
         painter->drawRect(bodyRect());
       } else {
         // QRectF inset by half a pixel: an integer QRect puts the antialiased
@@ -1348,19 +1348,18 @@ void CollectionTreeController::refreshIcons() {
         // icon to the configured size; the width clamp below only engages
         // for a logo too wide to fit at that height, which is the one case
         // where something has to give.
-        const qreal aspect = pm.height() > 0 ? static_cast<qreal>(pm.width()) / pm.height() : 1.0;
-        // Two-sided curve around kThinAspectRef, both arms correcting the same
-        // thing — height alone is a poor proxy for how big a logo LOOKS:
-        //   above ref  thin wordmarks would render as hairlines: add height
-        //   below ref  square marks cover far less area at equal height, so
-        //              add height until they carry comparable weight
-        // Both arms are 1.0 exactly at kThinAspectRef, so the curve is
-        // continuous and the previously-tuned wide end is bit-for-bit intact.
-        const qreal boost = aspect >= kThinAspectRef
-                                ? std::clamp(aspect / kThinAspectRef, 1.0, kThinHeightBoost)
-                                : std::clamp(kThinAspectRef / aspect, 1.0, kCompactHeightBoost);
-        const int allowedDevH = qMax(1, qRound(devHeight * boost));
-        pm = pm.scaledToHeight(allowedDevH, Qt::SmoothTransformation);
+        // FIT TO A BOX, rather than scaling on height alone. Every logo is
+        // scaled to fit inside (kIconMaxAspect x kThinHeightBoost) icon sizes,
+        // so a square mark fills the box's height and a wordmark fills its
+        // width. Both then occupy comparable area, which is what makes a
+        // column of mixed logos read as one size — the thing height-only
+        // scaling could never deliver, since it left width unbounded.
+        const int boxH = qMax(1, qRound(devHeight * kThinHeightBoost));
+        const int boxW = qMax(1, qRound(devHeight * kIconMaxAspect));
+        const qreal scale = std::min(static_cast<qreal>(boxW) / qMax(1, pm.width()),
+                                     static_cast<qreal>(boxH) / qMax(1, pm.height()));
+        pm = pm.scaled(qMax(1, qRound(pm.width() * scale)), qMax(1, qRound(pm.height() * scale)),
+                       Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
         // NO width clamp. It was meant to engage only for a logo too wide to
         // fit, but platform logos are mostly wide, so in practice it engaged
         // on nearly every row and the rendered size tracked the panel width
