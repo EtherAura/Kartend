@@ -105,6 +105,13 @@ public:
   /// defaults.
   void applyPrimaryColor(const QString &hexColor);
 
+  /// Re-apply the last accent against the CURRENT desktop colours. The
+  /// selection is tinted from the titlebar, which changes under a running
+  /// app on a Plasma activity switch (user request 2026-08-19) — without
+  /// this the sidebar keeps the colour it started with while the toolbar
+  /// moves on, and the two visibly disagree.
+  void refreshDesktopTint();
+
   [[nodiscard]] bool isPanelVisible() const;
   /// The tree widget, for focus checks (EventManager bypass) and tests.
   [[nodiscard]] QTreeWidget *treeWidget() const { return m_tree; }
@@ -115,19 +122,33 @@ signals:
   void visibilityChanged(bool visible);
 
 protected:
-  /// Drives the width-grip drag (press/move/release on m_grip). The grip is a
-  /// plain child widget rather than a QSplitter because the panel docks by
-  /// plain layout insertion into layouts the controller does not own —
+  /// Drives the width drag: press/move/release inside a zone on the tree's
+  /// INNER edge. A bare zone rather than a QSplitter because the panel docks
+  /// by plain layout insertion into layouts the controller does not own —
   /// re-parenting the whole content row into a splitter would entangle this
   /// panel with the details pane's and toolbar's insertion logic
-  /// (Kartend-auh7u) for one draggable edge.
+  /// (Kartend-auh7u) for one draggable edge. And a zone rather than a real
+  /// grip WIDGET because any widget paints something between the sidebar and
+  /// the toolbar, which read as a gap (field report 2026-08-18).
+  ///
+  /// The events arrive on the tree's VIEWPORT, not the tree — that is where
+  /// QTreeWidget sends mouse input — so the viewport branch above must not
+  /// swallow anything but Resize.
   bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
-  void insertPanelAt(DetailsPanePosition position, SidebarJustification justification);
-  /// Places m_grip on the panel's inner edge for @p position and applies
-  /// @p width (clamped) to the panel. Called from applyStateForCollection and
-  /// the drag handler.
+  /// Places the panel for @p mode. Expand docks it into the row (it takes
+  /// layout width); Overlay floats it above the content so the items
+  /// viewport keeps its full geometry and the grid underneath does not move.
+  void insertPanelAt(DetailsPanePosition position, SidebarJustification justification,
+                     DetailsPaneMode mode);
+  /// Re-anchors the floating panel to its host's current geometry. No-op
+  /// unless the panel is in Overlay mode.
+  void positionOverlayPanel();
+  /// Applies @p width (clamped to [kMinWidth, kMaxWidth]) to the panel.
+  /// Called from applyStateForCollection and the drag handler. @p position is
+  /// unused now that the drag zone lives on the tree's inner edge rather than
+  /// on a widget that had to be re-seated per dock side.
   void applyPanelWidth(int width, DetailsPanePosition position);
   /// Re-styles every existing row IN PLACE — icon (depth-aware width cap,
   /// style/tint/silhouette-source selection) and icons-only text handling —
@@ -149,16 +170,19 @@ private:
   QHBoxLayout *m_mainLayout = nullptr;
   QWidget *m_panelParent = nullptr;
   QHBoxLayout *m_fullHeightLayout = nullptr;
+  /// The widget the panel FLOATS over in Overlay mode (the owner of whichever
+  /// layout it would otherwise have docked into). Null in Expand mode. Its
+  /// resizes are watched so the floating panel keeps spanning it.
+  QWidget *m_overlayHost = nullptr;
+  DetailsPaneMode m_insertedMode = DetailsPaneMode::Expand;
   QWidget *m_toolbarColumnWidget = nullptr;
   std::function<void()> m_persistCollections;
 
   QWidget *m_panel = nullptr;
   QTreeWidget *m_tree = nullptr;
-  /// Drag-to-resize grip on the panel's INNER edge (the side facing the
-  /// content view — right edge when docked Left, left edge when Right).
-  /// Width lives on cfg.collectionTree.treeWidth per collection; the drag
-  /// resizes live and persists on release (user request 2026-08-17).
-  QWidget *m_grip = nullptr;
+  /// The root row pinned to the top of the tree while it scrolls. Typed as
+  /// QWidget because the concrete class is file-local to the .cpp.
+  QWidget *m_stickyRootHeader = nullptr;
   /// True between press and release inside the tree's inner-edge drag
   /// zone. Without it a plain click on a row would be read as a resize.
   bool m_resizingPanel = false;

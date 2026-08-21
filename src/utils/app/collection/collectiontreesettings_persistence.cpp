@@ -56,6 +56,9 @@ void load(QSettings &settings, CollectionTreeSettings &tree, const QString &coll
                                   .value(keys::kCollectionTreeColorizeSelected,
                                          CollectionTreeSettings{}.treeColorizeSelected)
                                   .toBool();
+  // String, with legacy "true"/"false" accepted — see the grid variant.
+  tree.treeScrollbarMode = CollectionUtils::stringToScrollbarMode(
+      settings.value(keys::kCollectionTreeHideScrollbar).toString());
   const int rawIconSize =
       settings.value(keys::kCollectionTreeIconSize, CollectionTreeSettings{}.treeIconSize).toInt();
   tree.treeIconSize = std::clamp(rawIconSize, CollectionTreeSettings::kMinIconSize,
@@ -76,6 +79,13 @@ void load(QSettings &settings, CollectionTreeSettings &tree, const QString &coll
   // 2026-08-17) — an UNKNOWN value still clamps to below-toolbar via the
   // shared string helper, whose fallback is deliberately the conservative
   // classic layout.
+  // Same "fixed"/"overlay" vocabulary the details pane uses (see
+  // sidebarappearance_persistence), so the INI reads consistently across the
+  // two panes. Absent defaults to "fixed" — the docked behaviour every
+  // existing collection already has.
+  tree.treeMode = (settings.value(keys::kCollectionTreeMode, "fixed").toString() == "overlay")
+                      ? DetailsPaneMode::Overlay
+                      : DetailsPaneMode::Expand;
   bool justificationFallback = false;
   tree.treeJustification = CollectionUtils::stringToSidebarJustification(
       settings.value(keys::kCollectionTreeJustification, QStringLiteral("full-height")).toString(),
@@ -94,12 +104,16 @@ void save(QSettings &settings, const CollectionTreeSettings &tree) {
   settings.setValue(keys::kCollectionTreeIconsOnly, tree.treeIconsOnly);
   settings.setValue(keys::kCollectionTreeShowLines, tree.treeShowLines);
   settings.setValue(keys::kCollectionTreeColorizeSelected, tree.treeColorizeSelected);
+  settings.setValue(keys::kCollectionTreeHideScrollbar,
+                    CollectionUtils::scrollbarModeToString(tree.treeScrollbarMode));
   settings.setValue(keys::kCollectionTreeIconSize, tree.treeIconSize);
   settings.setValue(keys::kCollectionTreeIconStyle,
                     CollectionUtils::treeIconStyleToString(tree.treeIconStyle));
   settings.setValue(keys::kCollectionTreeIconTint, tree.treeIconTintColor);
   settings.setValue(keys::kCollectionTreeJustification,
                     CollectionUtils::sidebarJustificationToString(tree.treeJustification));
+  settings.setValue(keys::kCollectionTreeMode,
+                    (tree.treeMode == DetailsPaneMode::Overlay) ? "overlay" : "fixed");
 }
 
 } // namespace CollectionTreeSettingsPersistence

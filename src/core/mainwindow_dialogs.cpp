@@ -35,6 +35,7 @@
 #include "collection/themepreset.h"
 #include "collection/typehelpers.h"
 #include "collection/validationhelpers.h"
+#include "collectiontreecontroller.h"
 #include "commandpalettedialog.h"
 #include "createcollectiondialog.h"
 #include "dialogcontroller.h"
@@ -102,6 +103,14 @@ void MainWindow::openSettingsDialog(SettingsPage initialPage) {
   SettingsDialogContext context = makeSettingsDialogContext();
   context.initialPage = initialPage;
   settingsDialogController()->openSettingsDialog(context);
+  // Modal, so we are here because the dialog closed. The tree panel's
+  // per-collection state (side, width, icon options, scrollbar) is otherwise
+  // only re-read when a navigation finishes, which meant editing any of it on
+  // the Sidebar page did nothing visible until the user switched collection
+  // and back. Re-apply it here instead.
+  if (m_collectionTreeController) {
+    m_collectionTreeController->onCollectionSwitched(m_currentCollectionIndex);
+  }
   // Settings may have flipped watchFilesystem on/off or changed a mediaDirectory;
   // reconcile the watch set so the next file event lands on the right collection.
   refreshCollectionFilesystemWatcher();

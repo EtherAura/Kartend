@@ -25,7 +25,7 @@ private slots:
   // and measures where it lands — centred in the row's visible span, fully
   // inside the viewport. Guards the decoration-rect geometry that clipped
   // icons at the panel edge (field reports 2026-08-17).
-  void icons_onIndentedRows_renderCenteredAndUnclipped();
+  void icons_onIndentedRows_renderCenteredAtConfiguredSize();
 
   // Select+direction section chord (2026-08-17): left focuses the tree,
   // right returns to the grid; a hidden tree is skipped.

@@ -515,6 +515,69 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
            SidebarJustification::BelowToolbar);
   QCOMPARE(clampedJustification[0].sidebar.sidebarJustification,
            SidebarJustification::BelowToolbar); // absent key → default
+
+  // Nav sidebar overlap mode (user request 2026-08-20: "i want to allow it to
+  // overlap without moving the grid at all. navigation side bar needs to
+  // function the same"). Absent MUST read as the docked behaviour every
+  // existing collection already has — this setting is opt-in, and defaulting
+  // it the other way would silently float every open tree over its grid.
+  QCOMPARE(clampedJustification[0].collectionTree.treeMode, DetailsPaneMode::Expand);
+
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=4\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreeMode=overlay\n"));
+  QList<CollectionConfig> overlaid;
+  mgr.loadCollections(overlaid);
+  QCOMPARE(overlaid[0].collectionTree.treeMode, DetailsPaneMode::Overlay);
+  // The two panes' modes are independent — turning the tree into an overlay
+  // must not drag the details pane along with it.
+  QCOMPARE(overlaid[0].sidebar.sidebarMode, DetailsPaneMode::Overlay); // its own default
+  mgr.saveCollections(overlaid);
+  QList<CollectionConfig> overlaidReloaded;
+  mgr.loadCollections(overlaidReloaded);
+  QCOMPARE(overlaidReloaded[0].collectionTree.treeMode, DetailsPaneMode::Overlay);
+
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=4\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreeMode=nonsense\n"));
+  QList<CollectionConfig> badMode;
+  mgr.loadCollections(badMode);
+  QCOMPARE(badMode[0].collectionTree.treeMode, DetailsPaneMode::Expand);
+
+  // Scrollbar mode (user request 2026-08-19): one tri-state per side pane,
+  // round-tripping independently, and — the part that would silently break
+  // every existing config — the LEGACY BOOL spelling still reads correctly.
+  // These keys were hide-yes/no bools before the Autohide state existed, and
+  // the key names were deliberately kept so an old INI migrates in place.
+  QCOMPARE(clampedJustification[0].collectionTree.treeScrollbarMode, ScrollbarMode::Show);
+  QCOMPARE(clampedJustification[0].sidebar.sidebarScrollbarMode, ScrollbarMode::Show);
+
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=4\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "collectionTreeHideScrollbar=true\n"  // legacy bool
+                                "sidebarHideScrollbar=false\n"        // legacy bool
+                                "hideVerticalScrollbar=autohide\n")); // new spelling
+  QList<CollectionConfig> modes;
+  mgr.loadCollections(modes);
+  QCOMPARE(modes[0].collectionTree.treeScrollbarMode, ScrollbarMode::Hide); // true  -> Hide
+  QCOMPARE(modes[0].sidebar.sidebarScrollbarMode, ScrollbarMode::Show);     // false -> Show
+  QCOMPARE(modes[0].gridLayout.verticalScrollbarMode, ScrollbarMode::Autohide);
+
+  // Autohide must survive a save/reload — it is the state a writer that fell
+  // back to a bool would quietly collapse to Show.
+  modes[0].sidebar.sidebarScrollbarMode = ScrollbarMode::Autohide;
+  QVERIFY(mgr.saveCollections(modes).isOk());
+  QList<CollectionConfig> modesReloaded;
+  mgr.loadCollections(modesReloaded);
+  QCOMPARE(modesReloaded[0].collectionTree.treeScrollbarMode, ScrollbarMode::Hide);
+  QCOMPARE(modesReloaded[0].sidebar.sidebarScrollbarMode, ScrollbarMode::Autohide);
+  QCOMPARE(modesReloaded[0].gridLayout.verticalScrollbarMode, ScrollbarMode::Autohide);
 }
 
 void TestSettingsRoundtrip::migration_v1StampsSidebarLayoutOntoCollectionsOnce() {

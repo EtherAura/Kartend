@@ -29,6 +29,10 @@
         <item><property name="text"><string>Full height</string></property></item>
        </widget>
       </item>
+      <item row="2" column="0"><widget class="QLabel" name="paneHideScrollbarLabel"><property name="text"><string>Scrollbar:</string></property></widget></item>
+      <item row="2" column="1">
+       <widget class="QComboBox" name="paneScrollbarModeComboBox"><property name="toolTip"><string>Show: normal. Auto-hide: appears only when the pointer comes near the scrollbar edge. Hide: never drawn. The pane always scrolls with the wheel — this only governs the indicator. Auto-hide needs slim overlay scrollbars (Settings -&gt; General); without them it behaves as Show.</string></property><item><property name="text"><string>Show</string></property></item><item><property name="text"><string>Auto-hide (show near the edge)</string></property></item><item><property name="text"><string>Hide</string></property></item></widget>
+      </item>
      </layout>
     </widget>
    </item>
@@ -44,30 +48,42 @@
         <item><property name="text"><string>Right</string></property></item>
        </widget>
       </item>
-      <item row="1" column="0"><widget class="QLabel" name="treeJustificationLabel"><property name="text"><string>Justification:</string></property></widget></item>
+      <item row="1" column="0"><widget class="QLabel" name="treeModeLabel"><property name="text"><string>Mode:</string></property></widget></item>
       <item row="1" column="1">
+       <widget class="QComboBox" name="treeModeComboBox">
+        <property name="toolTip"><string>Overlap floats the navigation sidebar above the content, so opening or resizing it never moves the grid underneath — it simply covers it. Push aside keeps the classic behaviour, where the sidebar takes its width from the content area and the grid shifts to make room.</string></property>
+        <item><property name="text"><string>Overlap the content</string></property></item>
+        <item><property name="text"><string>Push the content aside</string></property></item>
+       </widget>
+      </item>
+      <item row="2" column="0"><widget class="QLabel" name="treeJustificationLabel"><property name="text"><string>Justification:</string></property></widget></item>
+      <item row="2" column="1">
        <widget class="QComboBox" name="treeJustificationComboBox">
         <property name="toolTip"><string>Full height makes the tree span the whole window, with the toolbar stopping at its edge.</string></property>
         <item><property name="text"><string>Below toolbar</string></property></item>
         <item><property name="text"><string>Full height</string></property></item>
        </widget>
       </item>
-      <item row="2" column="0"><widget class="QLabel" name="treeIconsOnlyLabel"><property name="text"><string>Icons only:</string></property></widget></item>
-      <item row="2" column="1">
+      <item row="3" column="0"><widget class="QLabel" name="treeWidthLabel"><property name="text"><string>Width:</string></property></widget></item><item row="3" column="1"><widget class="QSpinBox" name="treeWidthSpinBox"><property name="toolTip"><string>Width of the navigation sidebar in pixels. You can also drag the panel&apos;s inner edge.</string></property><property name="minimum"><number>140</number></property><property name="maximum"><number>600</number></property><property name="value"><number>240</number></property><property name="suffix"><string> px</string></property></widget></item><item row="4" column="0"><widget class="QLabel" name="treeHideScrollbarLabel"><property name="text"><string>Scrollbar:</string></property></widget></item>
+      <item row="4" column="1">
+       <widget class="QComboBox" name="treeScrollbarModeComboBox"><property name="toolTip"><string>Show: normal. Auto-hide: appears only when the pointer comes near the scrollbar edge. Hide: never drawn. The tree always scrolls with the wheel and the arrow keys — this only governs the indicator. Auto-hide needs slim overlay scrollbars (Settings -&gt; General); without them it behaves as Show.</string></property><item><property name="text"><string>Show</string></property></item><item><property name="text"><string>Auto-hide (show near the edge)</string></property></item><item><property name="text"><string>Hide</string></property></item></widget>
+      </item>
+      <item row="5" column="0"><widget class="QLabel" name="treeIconsOnlyLabel"><property name="text"><string>Icons only:</string></property></widget></item>
+      <item row="5" column="1">
        <widget class="QCheckBox" name="treeIconsOnlyCheckBox">
         <property name="toolTip"><string>Show only the icon/logo on rows that have one — the name moves to the tooltip. Rows without an icon keep their name.</string></property>
         <property name="text"><string>Show icons/logos without names</string></property>
        </widget>
       </item>
-      <item row="3" column="0"><widget class="QLabel" name="treeShowLinesLabel"><property name="text"><string>Tree lines:</string></property></widget></item>
-      <item row="3" column="1">
+      <item row="6" column="0"><widget class="QLabel" name="treeShowLinesLabel"><property name="text"><string>Tree lines:</string></property></widget></item>
+      <item row="6" column="1">
        <widget class="QCheckBox" name="treeShowLinesCheckBox">
         <property name="toolTip"><string>Draw the connector lines between branches. The expand/collapse chevrons show either way.</string></property>
         <property name="text"><string>Show branch connector lines</string></property>
        </widget>
       </item>
-      <item row="4" column="0"><widget class="QLabel" name="treeIconSizeLabel"><property name="text"><string>Icon height:</string></property></widget></item>
-      <item row="4" column="1">
+      <item row="7" column="0"><widget class="QLabel" name="treeIconSizeLabel"><property name="text"><string>Icon height:</string></property></widget></item>
+      <item row="7" column="1">
        <widget class="QSpinBox" name="treeIconSizeSpinBox">
         <property name="toolTip"><string>Height of the row icons/logos in pixels. Width follows the panel width, keeping each logo's aspect ratio.</string></property>
         <property name="minimum"><number>12</number></property>
@@ -76,8 +92,8 @@
         <property name="suffix"><string> px</string></property>
        </widget>
       </item>
-      <item row="5" column="0"><widget class="QLabel" name="treeIconStyleLabel"><property name="text"><string>Icon style:</string></property></widget></item>
-      <item row="5" column="1">
+      <item row="8" column="0"><widget class="QLabel" name="treeIconStyleLabel"><property name="text"><string>Icon style:</string></property></widget></item>
+      <item row="8" column="1">
        <widget class="QComboBox" name="treeIconStyleComboBox">
         <property name="toolTip"><string>Normal shows the artwork as-is. Monochrome recolours the logo's silhouette in a fixed dark or light ink. Tinted recolours it with the tint colour below.</string></property>
         <item><property name="text"><string>Normal</string></property></item>
@@ -86,15 +102,15 @@
         <item><property name="text"><string>Tinted</string></property></item>
        </widget>
       </item>
-      <item row="7" column="0"><widget class="QLabel" name="treeColorizeSelectedLabel"><property name="text"><string>Active logo:</string></property></widget></item>
-      <item row="7" column="1">
+      <item row="10" column="0"><widget class="QLabel" name="treeColorizeSelectedLabel"><property name="text"><string>Active logo:</string></property></widget></item>
+      <item row="10" column="1">
        <widget class="QCheckBox" name="treeColorizeSelectedCheckBox">
         <property name="toolTip"><string>With a monochrome or tinted style, show the collection you are currently viewing in its original colours. No effect on the Normal style.</string></property>
         <property name="text"><string>Show the active collection's logo in colour</string></property>
        </widget>
       </item>
-      <item row="6" column="0"><widget class="QLabel" name="treeIconTintLabel"><property name="text"><string>Tint colour:</string></property></widget></item>
-      <item row="6" column="1">
+      <item row="9" column="0"><widget class="QLabel" name="treeIconTintLabel"><property name="text"><string>Tint colour:</string></property></widget></item>
+      <item row="9" column="1">
        <widget class="QLineEdit" name="treeIconTintEdit">
         <property name="toolTip"><string>Hex colour (e.g. #e0a030) used by the Tinted style. Leave empty to use the collection's accent colour.</string></property>
         <property name="placeholderText"><string>Accent colour (default)</string></property>

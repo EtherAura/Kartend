@@ -79,7 +79,7 @@ void TestCollectionTreePanel::tree_opensFullyExpanded_onFreshSession() {
   QVERIFY2(sawParentRow, "seeded parent/child must produce at least one branch row");
 }
 
-void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAndUnclipped() {
+void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAtConfiguredSize() {
   QTemporaryDir artDir;
   QVERIFY(artDir.isValid());
   const QString iconPath = artDir.path() + QStringLiteral("/wide.png");
@@ -159,12 +159,17 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAndUnclipped() 
   }
   QVERIFY2(right >= 0, "probe icon must be rendered somewhere in the viewport");
 
-  // Fully inside the viewport: nothing may touch the last pixels before the
-  // edge (the 8px chrome margin guarantees daylight when unclipped).
-  QVERIFY2(right < frame.width() - qRound(4 * dpr),
-           qPrintable(QStringLiteral("icon right edge %1 hugs/clips the viewport edge %2")
-                          .arg(right)
-                          .arg(frame.width())));
+  // NOT asserted any more: that the icon fits inside the viewport.
+  //
+  // It used to be, and the guarantee came from a width clamp that shrank any
+  // logo too wide for the panel. That clamp was also what made the rendered
+  // size track the panel width, reported twice (2026-08-18, and 2026-08-20:
+  // "expanding nav pane also increases icon size ... the icon size should
+  // remain fixed"). The two cannot both hold for a logo wider than the panel:
+  // either it shrinks (size follows width) or it overflows (size is fixed).
+  // The maintainer chose fixed, so a wide logo in a narrow panel now clips at
+  // the edges — deliberately, and adjustable with the width and icon-size
+  // settings.
 
   // LEAF rows centre on the PANEL itself (user direction 2026-08-17), not
   // the indent span. All PHYSICAL pixels; tolerance covers the style's

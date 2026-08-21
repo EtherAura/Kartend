@@ -30,6 +30,22 @@ struct CollectionTreeSettings {
   /// sidebar reads as a full-height file-manager-style panel, unlike the
   /// details pane whose default stays below-toolbar.
   SidebarJustification treeJustification = SidebarJustification::FullHeight;
+  /// Whether the panel takes layout width or floats above the content
+  /// (user request 2026-08-20: "i want to allow it to overlap without moving
+  /// the grid at all. navigation side bar needs to function the same").
+  ///
+  /// Expand — today's behaviour — docks the panel into the row, so opening
+  /// or resizing it moves the items viewport's ORIGIN and every item with
+  /// it. No amount of grid-side position holding can compensate for that:
+  /// the grid is clipped to a viewport that itself moved.
+  ///
+  /// Overlay floats the panel above the content instead. The viewport keeps
+  /// its full geometry, so the grid does not move at all and the panel
+  /// simply covers whatever is beneath it.
+  ///
+  /// Defaults to Expand so no existing collection's layout changes; this is
+  /// opt-in per collection, exactly like the details pane's own mode.
+  DetailsPaneMode treeMode = DetailsPaneMode::Expand;
   /// Panel width in px, set by dragging the panel's inner-edge grip
   /// (Kartend-ob1c9.1 follow-on; user request 2026-08-17). Per-collection
   /// like the rest of the block. The persistence layer clamps to
@@ -71,6 +87,13 @@ struct CollectionTreeSettings {
   /// viewing stands out of the uniform row. Ignored by the Normal style,
   /// where every logo is already in colour.
   bool treeColorizeSelected = false;
+  /// Scrollbar policy for the panel (user request 2026-08-19). Has to cover
+  /// BOTH mechanisms — the native bars and the overlay handles — because the
+  /// overlay forces the native policy off and paints its own handle, so a
+  /// policy change alone reads as doing nothing. Wheel and keyboard scrolling
+  /// are unaffected in every mode. INI key keeps its legacy
+  /// `collectionTreeHideScrollbar` name so existing configs migrate.
+  ScrollbarMode treeScrollbarMode = ScrollbarMode::Show;
   /// Tint colour for TreeIconStyle::Tinted, as a hex string. EMPTY means
   /// "the collection's accent colour" (the same primary colour the rest of
   /// the chrome re-themes with) — the requested default.

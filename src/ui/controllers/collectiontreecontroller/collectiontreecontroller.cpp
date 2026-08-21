@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include <QAbstractScrollArea>
 #include <QApplication>
 #include <QEvent>
 #include <QFileInfo>
@@ -11,6 +12,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QRegularExpression>
+#include <QScrollBar>
 #include <QStyle>
 #include <QStyledItemDelegate>
 #include <QStyleOption>
@@ -23,9 +25,11 @@
 
 #include "collection/collectiontreemodel.h"
 #include "collection/typehelpers.h"
+#include "colorcontrast.h"
 #include "inavigationmanager.h"
 #include "isessionmanager.h"
 #include "kdecolorscheme.h"
+#include "overlayscrollbars.h"
 #include "pathutils.h"
 #include "uiconstants/detailspaneconstants.h"
 
@@ -41,8 +45,26 @@ constexpr int kRoleCollectionIndex = Qt::UserRole;      // int; -1 for the group
 constexpr int kRoleExpansionKey = Qt::UserRole + 1;     // QString; UUID or reserved key
 constexpr int kRoleParentCollection = Qt::UserRole + 2; // int; -1 for roots/playlists
 constexpr int kRoleName = Qt::UserRole + 3; // QString; cfg.name (text may be blank in icons-only)
-constexpr int kRoleIsCategory = Qt::UserRole + 4;  // bool; row has children (incl. group header)
-constexpr int kRoleBakedPixmap = Qt::UserRole + 5; // QPixmap; painted by TreeIconDelegate
+constexpr int kRoleIsCategory = Qt::UserRole + 4;   // bool; row has children (incl. group header)
+constexpr int kRoleBakedPixmap = Qt::UserRole + 5;  // QPixmap; painted by TreeIconDelegate
+constexpr int kRoleRootFill = Qt::UserRole + 6;     // QColor; edge-to-edge fill for root rows
+constexpr int kRoleCategoryBand = Qt::UserRole + 7; // QColor; rounded band for category rows
+/// Corner radius of a SUBCOLLECTION's selection backdrop. Root rows are
+/// deliberately square — see the delegate.
+constexpr int kSelectionRadius = 20;
+/// Extra clearance beyond the scrollbar lane so a row's backdrop reads as
+/// inset rather than running to the edge (user request 2026-08-19: "a bit
+/// less wide"). Applied to band, hover and selection alike so their corner
+/// radii match instead of the right pair being clipped off.
+constexpr int kRowRightInset = 8;
+/// Matching padding on the LEFT so the pill is inset on both sides.
+constexpr int kRowLeftInset = 8;
+/// Trims the pill's height — a backdrop the full row height reads as a slab
+/// rather than a pill (user request 2026-08-19: "the pills are also too
+/// tall").
+constexpr int kRowVerticalInset = 5;
+/// Breathing room between a logo and the edge of the pill behind it.
+constexpr int kRowLogoPadding = 10;
 /// Symmetric horizontal margin the icons keep from the panel edges
 /// (widened from 8 on 2026-08-18 — logos ran too close to both edges).
 constexpr int kPanelChrome = 18;
@@ -91,6 +113,113 @@ void drawChevron(QPainter *painter, const QStyleOptionViewItem &option, const QM
   painter->restore();
 }
 
+/// Keeps the ROOT collection row parked at the top of the tree while the
+/// rest of the list scrolls beneath it (user request 2026-08-19).
+///
+/// It is a PAINTED COPY, not a moved row: taking the item out of the model
+/// would disturb selection, expansion and every index the controller holds.
+/// The copy is rendered through the tree's own delegate, so the pinned row
+/// and the real one can never drift apart in colour, shape or icon — the
+/// delegate already paints in viewport coordinates, which is exactly what a
+/// header at y=0 needs.
+class StickyRootHeader : public QWidget {
+public:
+  explicit StickyRootHeader(QTreeWidget *tree) : QWidget(tree->viewport()), m_tree(tree) { hide(); }
+
+  /// Show the pinned copy only once the real row has scrolled out of sight,
+  /// so nothing is drawn twice.
+  void sync() {
+    QTreeWidgetItem *root = rootItem();
+    if (!m_tree || !m_tree->viewport() || !root) {
+      hide();
+      return;
+    }
+    const QRect real = m_tree->visualItemRect(root);
+    if (real.isNull()) {
+      hide();
+      return;
+    }
+    // ALWAYS on screen, not only once the real row scrolls away. Swapping a
+    // copy in at the moment the row left the viewport meant the row appeared
+    // to move and change as it pinned, however closely the copy matched
+    // (field report 2026-08-19: "Games should stay static"). Kept permanently
+    // at y=0 it simply covers the real row at scroll-top — identical pixels,
+    // no transition at all — and stays put as the list scrolls beneath.
+    setGeometry(0, 0, m_tree->viewport()->width(), real.height());
+    show();
+    raise();
+    update();
+  }
+
+protected:
+  void paintEvent(QPaintEvent * /*event*/) override {
+    QTreeWidgetItem *root = rootItem();
+    // The COLUMN-0 delegate — TreeIconDelegate — not the view default.
+    // itemDelegate() returns the default QStyledItemDelegate, whose text
+    // colour the panel stylesheet overrides, so the pinned copy rendered
+    // white while every tint fix landed in the column delegate underneath —
+    // pixels this permanent overlay covers (root cause of six rounds of
+    // "still not tinted", 2026-08-19). Same delegate, same pixels.
+    QAbstractItemDelegate *delegate = m_tree ? m_tree->itemDelegateForColumn(0) : nullptr;
+    if (!delegate && m_tree) {
+      delegate = m_tree->itemDelegate();
+    }
+    if (!root || !delegate || !m_tree->model()) {
+      return;
+    }
+    const QModelIndex index = m_tree->model()->index(0, 0, QModelIndex());
+    if (!index.isValid()) {
+      return;
+    }
+    QPainter painter(this);
+    // Opaque base first: the widget is transparent by default, so a row
+    // scrolling underneath showed through the pinned copy.
+    // TITLEBAR colour, matching the real root row's fill — the pinned copy is
+    // always a root row, and the window colour showed through wherever the
+    // delegate's own fill did not reach (user request 2026-08-19).
+    const QColor titlebar = KdeColorScheme::activeTitlebarColor();
+    painter.fillRect(rect(),
+                     titlebar.isValid() ? titlebar : m_tree->palette().color(QPalette::Window));
+    QStyleOptionViewItem opt;
+    opt.initFrom(m_tree);
+    // The REAL row's rect, moved to the top — not this widget's rect. The
+    // row rect carries the tree's indentation and column width, so painting
+    // into a rect starting at x=0 shifted the label and logo left the
+    // instant the row pinned (field report 2026-08-19: "it should not change
+    // position or appearance"). Only y moves.
+    const QRect real = m_tree->visualItemRect(root);
+    opt.rect = QRect(real.x(), 0, real.width(), real.height());
+    opt.widget = m_tree;
+    opt.state = QStyle::State_Enabled;
+    if (root->isSelected()) {
+      opt.state |= QStyle::State_Selected;
+    }
+    delegate->paint(&painter, opt, index);
+  }
+
+  void mousePressEvent(QMouseEvent * /*event*/) override {
+    // The pinned copy behaves like the row it stands in for rather than
+    // letting the click fall through to whatever happens to be underneath.
+    if (QTreeWidgetItem *root = rootItem()) {
+      m_tree->setCurrentItem(root);
+    }
+  }
+
+private:
+  [[nodiscard]] QTreeWidgetItem *rootItem() const {
+    return (m_tree && m_tree->topLevelItemCount() > 0) ? m_tree->topLevelItem(0) : nullptr;
+  }
+  QTreeWidget *m_tree = nullptr;
+};
+
+/// Typed access to the controller's type-erased member (the class above is
+/// file-local, so the header cannot name it).
+void syncStickyRoot(QWidget *header) {
+  if (auto *sticky = static_cast<StickyRootHeader *>(header)) {
+    sticky->sync();
+  }
+}
+
 /// Paints the baked row pixmap directly in viewport coordinates — TRUE
 /// panel centring at any depth. Qt's decoration mechanism cannot do this:
 /// the decoration never paints left of the row's indent, so a
@@ -105,15 +234,151 @@ public:
 protected:
   void paint(QPainter *painter, const QStyleOptionViewItem &option,
              const QModelIndex &index) const override {
+    // ROOT-collection rows are filled edge to edge, in VIEWPORT coordinates.
+    // A per-item background only covers the item's own rect, which the tree
+    // indents — so setting it left an unfilled strip down the left and the
+    // row read as a floating block instead of chrome (field report
+    // 2026-08-19: "not spanning the entire area, leaving a gap").
+    const int spanWidth =
+        option.widget ? option.widget->property("kartendRowSpanWidth").toInt() : 0;
+    const int fullWidth = spanWidth > 0 ? spanWidth : option.rect.right() + 1;
+    const bool isRootRow = !index.parent().isValid();
+
+    // ONE shape for every backdrop on the row — category band, hover and
+    // selection. They used to be computed separately and disagreed: the band
+    // ran to the panel edge (past the scrollbar handle) with its right-hand
+    // corners clipped square while the left pair was rounded (field report
+    // 2026-08-19). Root rows stay square and full width by design; they read
+    // as chrome continuous with the toolbar.
+    const auto bodyRect = [&]() {
+      // Width comes from the VIEWPORT, not from the baked-span property: the
+      // property is empty until the first icon bake, so the fallback (the
+      // indented item rect) painted a narrower pill that visibly jumped wider
+      // the first time a repaint ran — reported as backdrops resizing on the
+      // first hover (2026-08-19).
+      const auto *sa = qobject_cast<const QAbstractScrollArea *>(option.widget);
+      const int viewportWidth = (sa && sa->viewport()) ? sa->viewport()->width() : fullWidth;
+      if (isRootRow) {
+        return QRect(0, option.rect.y(), viewportWidth, option.rect.height());
+      }
+      // UNCONDITIONAL, not "only when scrollable": the scroll range is still
+      // zero on the first paint, so gating on it made every pill jump
+      // narrower the moment the range was computed — which is what the user
+      // saw as the width changing on first hover (2026-08-19). A constant
+      // lane costs a few pixels when nothing scrolls and never moves.
+      const int lane = OverlayScrollbars::reservedGutter(option.widget);
+      // LEFT EDGE = where the item's own content starts, i.e. just right of
+      // the branch cell that holds the fold chevron. Anchoring the pill to a
+      // fixed inset instead reached back across that cell and swallowed the
+      // chevron (user request 2026-08-19: folding icons belong outside the
+      // pill). The indent doubles as the left padding.
+      // Only CATEGORY rows own a chevron, so only they must yield the branch
+      // cell. Anchoring every row there cost the leaf rows — where most
+      // logos live — the width their pill needs to cover them (field report
+      // 2026-08-19: "the pill doesn't cover most of the logos anymore").
+      const int left = index.data(kRoleIsCategory).toBool() ? option.rect.left() : kRowLeftInset;
+      const int rightLimit = viewportWidth - lane - kRowRightInset;
+      int width = qMax(0, rightLimit - left);
+      // The pill must COVER its logo. Logos are baked to the configured
+      // height and keep whatever width that aspect implies, so a wide
+      // wordmark could overhang a pill sized purely from the viewport.
+      // Widening the pill is the fix — the icon size stays as configured.
+      const QPixmap logo = index.data(kRoleBakedPixmap).value<QPixmap>();
+      if (!logo.isNull()) {
+        const int logoWidth = static_cast<int>(logo.deviceIndependentSize().width());
+        width = qMax(width, logoWidth + kRowLogoPadding * 2);
+      }
+      width = qMin(width, qMax(0, viewportWidth - lane - left));
+      return QRect(left, option.rect.y() + kRowVerticalInset, width,
+                   qMax(0, option.rect.height() - kRowVerticalInset * 2));
+    };
+    const auto fillBackdrop = [&](const QColor &colour) {
+      painter->save();
+      painter->setRenderHint(QPainter::Antialiasing, true);
+      painter->setPen(Qt::NoPen);
+      painter->setBrush(colour);
+      if (isRootRow) {
+        painter->drawRect(bodyRect());
+      } else {
+        painter->drawRoundedRect(bodyRect(), kSelectionRadius, kSelectionRadius);
+      }
+      painter->restore();
+    };
+
+    if (const QColor rootFill = index.data(kRoleRootFill).value<QColor>(); rootFill.isValid()) {
+      fillBackdrop(rootFill);
+    }
+    if (const QColor band = index.data(kRoleCategoryBand).value<QColor>(); band.isValid()) {
+      fillBackdrop(band);
+    }
+
+    const QColor rowTint =
+        option.widget ? option.widget->property("kartendSelectionColor").value<QColor>() : QColor();
+    if ((option.state & QStyle::State_Selected) && rowTint.isValid()) {
+      fillBackdrop(rowTint);
+    } else if ((option.state & QStyle::State_MouseOver) && rowTint.isValid()) {
+      QColor hover = rowTint;
+      hover.setAlpha(90); // a hint of the selection, not the selection itself
+      fillBackdrop(hover);
+    }
+
+    // The style would otherwise repaint its own square, full-row highlight
+    // over the shapes above — applied to BOTH paint paths, since a text-only
+    // row takes the early return below.
+    QStyleOptionViewItem base = option;
+    // An item's ForegroundRole loses to the panel stylesheet's `color:`
+    // rules, so the tinted root label kept rendering in the sheet's colour
+    // (field report 2026-08-19: "still not seeing Games text tinted"). Push
+    // it into the option's palette, which is what the item view actually
+    // reads when it draws the label.
+    if (const QVariant fg = index.data(Qt::ForegroundRole); fg.canConvert<QBrush>()) {
+      if (const QColor ink = fg.value<QBrush>().color(); ink.isValid()) {
+        base.palette.setColor(QPalette::Text, ink);
+        base.palette.setColor(QPalette::HighlightedText, ink);
+        base.palette.setColor(QPalette::WindowText, ink);
+      }
+    }
+    if (base.state & QStyle::State_Selected) {
+      base.palette.setColor(QPalette::Text, base.palette.color(QPalette::HighlightedText));
+    }
+    base.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver);
+
     const QPixmap pm = index.data(kRoleBakedPixmap).value<QPixmap>();
     if (pm.isNull()) {
-      QStyledItemDelegate::paint(painter, option, index);
+      // Text-only row with an explicit colour: draw the label HERE rather
+      // than handing it to the style. QStyleSheetStyle resolves `color:`
+      // from the panel stylesheet and ignores both the item's ForegroundRole
+      // and the option's palette, so every attempt to tint this label
+      // through those channels was silently discarded (four rounds of it,
+      // 2026-08-19). Painting it directly is the only route the sheet
+      // cannot override.
+      const QVariant fg = index.data(Qt::ForegroundRole);
+      const QString label = index.data(Qt::DisplayRole).toString();
+      QColor ink = fg.canConvert<QBrush>() ? fg.value<QBrush>().color() : QColor();
+      if (ink.isValid() && !label.isEmpty()) {
+        painter->save();
+        painter->setPen(ink);
+        if (const QVariant fnt = index.data(Qt::FontRole); fnt.canConvert<QFont>()) {
+          painter->setFont(fnt.value<QFont>());
+        } else {
+          painter->setFont(option.font);
+        }
+        int align = Qt::AlignVCenter | Qt::AlignLeft;
+        if (const QVariant a = index.data(Qt::TextAlignmentRole); a.canConvert<int>()) {
+          align = a.toInt();
+        }
+        painter->drawText(option.rect, align, label);
+        painter->restore();
+        return;
+      }
+      QStyledItemDelegate::paint(painter, base, index);
       return;
     }
-    QStyleOptionViewItem opt = option;
+    QStyleOptionViewItem opt = base;
     initStyleOption(&opt, index);
     opt.icon = QIcon();
     opt.text.clear();
+    opt.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver);
     const QWidget *widget = option.widget;
     QStyle *style = widget ? widget->style() : QApplication::style();
     // Full-width row band (field report 2026-08-18: the hover/selection
@@ -139,13 +404,35 @@ protected:
     // The single column stretches to the viewport, so the item rect's right
     // edge IS the panel's inner width.
     const int panelRight = option.rect.right() + 1;
-    int x = (panelRight - w) / 2; // panel-centred
-    if (index.data(kRoleIsCategory).toBool()) {
-      // Category rows own a chevron in their branch cell — never under it.
-      x = qMax(option.rect.left(), x);
+    // Centred on the PILL, not the panel (user request 2026-08-19). For a
+    // root row the pill spans the whole panel, so this keeps the original
+    // panel-centred result there; for an indented row it centres inside the
+    // backdrop the user actually sees, instead of drifting toward the panel
+    // centre and out of the pill.
+    const QRect pill = bodyRect();
+    int x = pill.left() + (pill.width() - w) / 2;
+    if (w > panelRight - 2 * kPanelChrome) {
+      // OVERSIZED: the logo is wider than the panel can show. Since icons are
+      // baked to the configured size and no longer shrink to fit (user,
+      // 2026-08-20: "the icon size should remain fixed"), no x keeps this one
+      // whole — so centre it on the PANEL and let it clip evenly on both
+      // sides. The clamps below would instead pin it to the left inset and
+      // clip the entire overflow off the right, which reads as a logo that
+      // has slid sideways rather than one that is simply too big.
+      x = (panelRight - w) / 2;
+    } else {
+      x = qMax(x, pill.left());
+      x = qMin(x, pill.right() - w + 1);
+      // Staying fully visible WINS over pill-centring. A logo can be wider
+      // than an indented row's pill, and centring it there pushed its right
+      // edge onto the viewport edge — the clipping that
+      // icons_onIndentedRows_renderCenteredAtConfiguredSize exists to catch,
+      // and that took several rounds to eliminate on 2026-08-17. Where the
+      // two rules disagree the icon stays fully visible and merely off-centre
+      // in its pill.
+      x = qMin(x, panelRight - kPanelChrome - w);
+      x = qMax(x, kPanelChrome);
     }
-    x = qMin(x, panelRight - kPanelChrome - w);
-    x = qMax(x, kPanelChrome);
     const int y = option.rect.top() + (option.rect.height() - h) / 2;
     painter->drawPixmap(QRect(x, y, w, h), pm);
   }
@@ -353,16 +640,6 @@ void CollectionTreeController::setupPanel() {
   // widget always paints SOMETHING between the sidebar and the toolbar,
   // whichever colour it takes, and that band is the "gap"). This mirrors
   // the details pane, whose grip is likewise an invisible zone.
-  m_grip = new QWidget(m_panel);
-  m_grip->hide();
-  m_grip->setObjectName(QStringLiteral("collectionTreeGrip"));
-  // Same thickness as the details pane's grip (user request 2026-08-18) —
-  // taken from that constant rather than re-typed, so the two dividers
-  // cannot drift apart again.
-  m_grip->setFixedWidth(0);
-  m_grip->setCursor(Qt::SplitHCursor);
-  m_grip->installEventFilter(this);
-  // NOT added to the layout — it would reserve width again.
 
   // No "Collections" header label (user request 2026-08-17: "we all know
   // they are collections") — the tree starts at the panel's top edge.
@@ -395,6 +672,11 @@ void CollectionTreeController::setupPanel() {
     m_ctx->ui.itemsTopBar->installEventFilter(this); // height changes re-bake
   }
   m_tree->setItemDelegateForColumn(0, new TreeIconDelegate(m_tree));
+  m_stickyRootHeader = new StickyRootHeader(m_tree);
+  if (QScrollBar *vbar = m_tree->verticalScrollBar()) {
+    connect(vbar, &QScrollBar::valueChanged, this,
+            [this]() { syncStickyRoot(m_stickyRootHeader); });
+  }
   layout->addWidget(m_tree, /*stretch=*/1);
 
   connect(m_tree, &QTreeWidget::itemActivated, this,
@@ -423,12 +705,14 @@ void CollectionTreeController::setupPanel() {
   // any layout until the first collection switch (Kartend-auh7u fix). Struct
   // defaults, so the root view matches what a fresh collection would show
   // (left + full-height since the 2026-08-17 defaults decision).
-  insertPanelAt(CollectionTreeSettings{}.treePosition, CollectionTreeSettings{}.treeJustification);
+  insertPanelAt(CollectionTreeSettings{}.treePosition, CollectionTreeSettings{}.treeJustification,
+                CollectionTreeSettings{}.treeMode);
   applyStateForCollection(activeCollectionIndex());
 }
 
 void CollectionTreeController::insertPanelAt(DetailsPanePosition position,
-                                             SidebarJustification justification) {
+                                             SidebarJustification justification,
+                                             DetailsPaneMode mode) {
   if (!m_mainLayout || !m_panel) {
     return;
   }
@@ -440,9 +724,13 @@ void CollectionTreeController::insertPanelAt(DetailsPanePosition position,
       justification == SidebarJustification::FullHeight && m_fullHeightLayout != nullptr;
   const SidebarJustification effective =
       fullHeight ? SidebarJustification::FullHeight : SidebarJustification::BelowToolbar;
-  if (m_panelInserted && position == m_insertedPosition && effective == m_insertedJustification) {
+  if (m_panelInserted && position == m_insertedPosition && effective == m_insertedJustification &&
+      mode == m_insertedMode) {
     return;
   }
+  // setParent() below hides the widget, and a mode switch must not silently
+  // close a panel the collection wants open.
+  const bool wasVisible = m_panel->isVisible();
   if (m_panelInserted) {
     if (m_mainLayout->indexOf(m_panel) != -1) {
       m_mainLayout->removeWidget(m_panel);
@@ -451,20 +739,71 @@ void CollectionTreeController::insertPanelAt(DetailsPanePosition position,
       m_fullHeightLayout->removeWidget(m_panel);
     }
   }
-  QHBoxLayout *target = fullHeight ? m_fullHeightLayout : m_mainLayout;
-  // The tree claims the row's extremes, so it always sits OUTSIDE a
-  // full-height details pane (which inserts adjacent to the toolbar column).
-  // The fold marker docks at the very same extreme, OUTSIDE the panel, so
-  // when the panel hides the marker holds its edge. Its arrow points into
-  // the view — the direction the panel would unfold.
-  if (position == DetailsPanePosition::Right) {
-    target->addWidget(m_panel);
+
+  if (mode == DetailsPaneMode::Overlay) {
+    // FLOAT: the panel leaves the layout entirely and is positioned over the
+    // host by hand. This is the whole point of the mode — a docked panel
+    // takes width from the row, which moves the items viewport's ORIGIN, and
+    // a grid clipped to a viewport that itself moved cannot be held still
+    // from the grid side (user request 2026-08-20: the nav sidebar should
+    // overlap "without moving the grid at all").
+    QWidget *host =
+        (fullHeight && m_fullHeightLayout) ? m_fullHeightLayout->parentWidget() : m_panelParent;
+    if (host) {
+      if (m_overlayHost && m_overlayHost != host) {
+        m_overlayHost->removeEventFilter(this);
+      }
+      if (m_panel->parentWidget() != host) {
+        m_panel->setParent(host);
+      }
+      m_overlayHost = host;
+      // The host's resizes are what the float has to track — nothing lays
+      // the panel out any more, so a window resize would otherwise leave it
+      // spanning the old height.
+      host->installEventFilter(this);
+      positionOverlayPanel();
+    }
   } else {
-    target->insertWidget(0, m_panel);
+    if (m_overlayHost) {
+      m_overlayHost->removeEventFilter(this);
+      m_overlayHost = nullptr;
+    }
+    QHBoxLayout *target = fullHeight ? m_fullHeightLayout : m_mainLayout;
+    // The tree claims the row's extremes, so it always sits OUTSIDE a
+    // full-height details pane (which inserts adjacent to the toolbar column).
+    // The fold marker docks at the very same extreme, OUTSIDE the panel, so
+    // when the panel hides the marker holds its edge. Its arrow points into
+    // the view — the direction the panel would unfold.
+    if (position == DetailsPanePosition::Right) {
+      target->addWidget(m_panel);
+    } else {
+      target->insertWidget(0, m_panel);
+    }
   }
   m_insertedPosition = position;
   m_insertedJustification = effective;
+  m_insertedMode = mode;
   m_panelInserted = true;
+  if (wasVisible) {
+    m_panel->show();
+    if (mode == DetailsPaneMode::Overlay) {
+      m_panel->raise();
+    }
+  }
+}
+
+void CollectionTreeController::positionOverlayPanel() {
+  if (!m_panel || !m_overlayHost || m_insertedMode != DetailsPaneMode::Overlay) {
+    return;
+  }
+  // Width comes from the panel itself (the grip drag sets it); the height is
+  // always the host's, so the float spans the same extent the dock would have.
+  const int width = qBound(CollectionTreeSettings::kMinWidth, m_panel->width(),
+                           CollectionTreeSettings::kMaxWidth);
+  const int x =
+      (m_insertedPosition == DetailsPanePosition::Right) ? m_overlayHost->width() - width : 0;
+  m_panel->setGeometry(x, 0, width, m_overlayHost->height());
+  m_panel->raise();
 }
 
 void CollectionTreeController::rebuildTree() {
@@ -662,17 +1001,32 @@ void CollectionTreeController::applyPanelWidth(int width, DetailsPanePosition /*
   // there is no grip widget to re-seat when the dock side changes.
   m_panel->setFixedWidth(
       std::clamp(width, CollectionTreeSettings::kMinWidth, CollectionTreeSettings::kMaxWidth));
+  // A floating panel is anchored by hand, and a Right-docked float anchors
+  // its RIGHT edge — growing the width must move x, not just the extent.
+  // No-op in Expand mode.
+  positionOverlayPanel();
 }
 
 bool CollectionTreeController::eventFilter(QObject *watched, QEvent *event) {
+  // A floating panel is laid out by nobody, so it has to follow its host by
+  // hand — otherwise a window resize leaves it spanning the old height.
+  if (m_overlayHost && watched == m_overlayHost && event->type() == QEvent::Resize) {
+    positionOverlayPanel();
+    return false;
+  }
   if (m_ctx && watched == m_ctx->ui.itemsTopBar && event->type() == QEvent::Resize) {
     // Top-level rows track the toolbar's height; re-bake when it changes.
     QTimer::singleShot(0, this, [this]() { refreshIcons(); });
     return false;
   }
-  if (m_tree && watched == m_tree->viewport()) {
-    if (event->type() == QEvent::Resize && m_tree->viewport()->width() != m_bakedViewportWidth &&
-        m_bakedViewportWidth != 0) {
+  // Viewport RESIZE only. Deliberately scoped to Resize and deliberately
+  // NOT an early return for everything else: a QTreeWidget delivers mouse
+  // events to its VIEWPORT, never to the tree itself, so swallowing every
+  // viewport event here left the inner-edge drag zone below unreachable and
+  // the panel width impossible to change by dragging (field report
+  // 2026-08-19, "i am unable to edit nav sidebar width").
+  if (m_tree && watched == m_tree->viewport() && event->type() == QEvent::Resize) {
+    if (m_tree->viewport()->width() != m_bakedViewportWidth && m_bakedViewportWidth != 0) {
       // Deferred: icon swaps inside a resize re-enter layout. The width
       // check keeps the scrollbar-toggle feedback loop convergent.
       QTimer::singleShot(0, this, [this]() {
@@ -690,14 +1044,26 @@ bool CollectionTreeController::eventFilter(QObject *watched, QEvent *event) {
   }
   // Inner edge = the one facing the content view: the panel's right when
   // docked Left, its left when docked Right.
-  const auto inGripZone = [this](const QPoint &pos) {
+  //
+  // Measured against the widget that DELIVERED the event, not always the
+  // tree: the viewport is inset from the tree by its frame and by the
+  // scrollbar lane, so using the tree's width against a viewport-relative
+  // position puts the zone in the wrong place by that inset.
+  auto *source = qobject_cast<QWidget *>(watched);
+  const int sourceWidth = source ? source->width() : 0;
+  const auto inGripZone = [this, sourceWidth](const QPoint &pos) {
     const int zone = UIConstants::DetailsPane::RESIZE_GRIP_PX;
-    const int w = m_tree ? m_tree->width() : 0;
-    return m_insertedPosition == DetailsPanePosition::Right ? pos.x() <= zone : pos.x() >= w - zone;
+    return m_insertedPosition == DetailsPanePosition::Right ? pos.x() <= zone
+                                                            : pos.x() >= sourceWidth - zone;
   };
   if (event->type() == QEvent::MouseMove && !m_resizingPanel) {
     auto *move = static_cast<QMouseEvent *>(event);
-    m_tree->setCursor(inGripZone(move->pos()) ? Qt::SplitHCursor : Qt::ArrowCursor);
+    // On the SOURCE widget: the viewport carries its own cursor, so setting
+    // the tree's would be overridden by it and the split-cursor hint would
+    // never appear where the pointer actually is.
+    if (source) {
+      source->setCursor(inGripZone(move->pos()) ? Qt::SplitHCursor : Qt::ArrowCursor);
+    }
     return false; // never swallow plain hover
   }
   if (event->type() == QEvent::MouseButtonPress) {
@@ -788,6 +1154,15 @@ void CollectionTreeController::refreshIcons() {
   // painted position to the same margins.
   const int breathing = 12;
   m_bakedViewportWidth = viewportWidth;
+  // The delegate fills root rows edge to edge; it needs the row's full span,
+  // which is the viewport width (already excluding the scrollbar gutter).
+  // FULL viewport width — no gutter subtracted. Stopping short of the
+  // scrollbar lane left an unfilled strip at the row's right end, which
+  // reads as a gap (field report 2026-08-19). A row fill is decoration; the
+  // handle floating over its end is normal for an overlay scrollbar. The
+  // lane matters for ITEM CONTENT (grid art), not for a background.
+  m_tree->setProperty("kartendRowSpanWidth", viewportWidth);
+  syncStickyRoot(m_stickyRootHeader);
   struct BakedIcon {
     QPixmap pixmap; // painted by TreeIconDelegate in viewport coordinates
     int logicalHeight = 0;
@@ -805,12 +1180,64 @@ void CollectionTreeController::refreshIcons() {
     QFont rowFont = item->font(0);
     rowFont.setBold(isCategory);
     item->setFont(0, rowFont);
-    if (isCategory) {
+    // ROOT-level collections carry the desktop TITLEBAR colour (user
+    // request 2026-08-19), the same fill as the toolbar and the selection,
+    // so the top of the sidebar reads as one continuous piece of chrome
+    // rather than a faintly washed row. Deeper categories keep the faint
+    // band that distinguishes them from leaves; the Playlists group header
+    // (index < 0) keeps its text-only look.
+    const bool isRootCollection = (item->parent() == nullptr) && index >= 0;
+    const QColor rootFill = isRootCollection ? KdeColorScheme::activeTitlebarColor() : QColor();
+    if (isRootCollection && rootFill.isValid()) {
+      // Handed to the delegate rather than set as the item's background:
+      // an item background stops at the indented item rect and leaves a
+      // gap down the left, so the delegate fills the row edge to edge.
+      item->setData(0, kRoleRootFill, rootFill);
+      item->setData(0, kRoleCategoryBand, QVariant());
+      item->setBackground(0, QBrush());
+      // CENTRED and TINTED (user request 2026-08-19). Set on the item rather
+      // than on a paint-time option so the pinned copy inherits it for free —
+      // the delegate re-reads the model, so anything set only on the passed
+      // option is discarded by initStyleOption.
+      item->setTextAlignment(0, Qt::AlignCenter);
+      // SAME resolution order as the tinted logos below (m_iconTint, then
+      // the accent): the label only consulted m_accentColor, which is empty
+      // when the tint is configured explicitly, so it fell through to the
+      // titlebar's white text — and saturating white is a no-op, which is
+      // why "tint it more" kept changing nothing.
+      QColor ink = QColor(m_iconTint);
+      if (!ink.isValid()) {
+        ink = QColor(m_accentColor);
+      }
+      if (!ink.isValid()) {
+        // The LOGOS' fallback, not the titlebar's text colour. With no tint
+        // and no accent configured — the default — the logos resolve to the
+        // palette highlight while this label resolved to white, which is why
+        // it never looked tinted no matter what else was fixed (2026-08-19).
+        ink = m_tree->palette().color(QPalette::Highlight);
+      }
+      // MATCH the toolbar breadcrumb (user request 2026-08-19) via the shared
+      // derivation rather than a second copy: the previous local version
+      // saturated the highlight instead of softening it, so the label read
+      // far stronger than the text it was meant to match.
+      ink = ColorContrast::breadcrumbLinkColor(ink, m_tree->palette().color(QPalette::Window));
+      if (ink.isValid()) {
+        item->setForeground(0, ink);
+      }
+    } else if (isCategory) {
+      item->setData(0, kRoleRootFill, QVariant());
       QColor band = m_tree->palette().color(QPalette::Text);
       band.setAlpha(14);
-      item->setBackground(0, band);
-    } else {
+      // Handed to the delegate: an item background spans the row and cannot
+      // be rounded or inset, which is what pushed it past the scrollbar.
+      item->setData(0, kRoleCategoryBand, band);
       item->setBackground(0, QBrush());
+      item->setForeground(0, QBrush());
+    } else {
+      item->setData(0, kRoleRootFill, QVariant());
+      item->setData(0, kRoleCategoryBand, QVariant());
+      item->setBackground(0, QBrush());
+      item->setForeground(0, QBrush());
     }
     if (index < 0 || index >= collections.size()) {
       continue; // the Playlists group header keeps its text-only look
@@ -818,14 +1245,9 @@ void CollectionTreeController::refreshIcons() {
     const QString name = collections.at(index).name;
     int depth = 1; // rootIsDecorated indents even top-level rows one unit
     for (QTreeWidgetItem *p = item->parent(); p; p = p->parent()) ++depth;
-    // Width budget: LEAF rows have no chevron, so the indent column is
-    // dead space — they may span the whole panel minus the symmetric
-    // chrome margins (TreeIconDelegate centres them on the panel).
-    // Category rows stop short of their chevron cell.
-    const bool categoryRow = item->data(0, kRoleIsCategory).toBool();
-    const int maxWidth =
-        categoryRow ? qMax(24, viewportWidth - kPanelChrome - indentation * depth - breathing)
-                    : qMax(24, viewportWidth - 2 * kPanelChrome);
+    // No width budget any more: the bake is driven entirely by the
+    // configured icon size, so nothing here depends on how wide the panel
+    // happens to be (user, 2026-08-20 — "the icon size should remain fixed").
 
     QString parentArtworkDir;
     const int parentIndex = item->data(0, kRoleParentCollection).toInt();
@@ -872,13 +1294,15 @@ void CollectionTreeController::refreshIcons() {
     // the decision so the two renderings never share an entry.
     const bool colourThisRow = m_iconStyle == TreeIconStyle::Normal ||
                                (m_colorizeSelected && index == activeCollectionIndex());
-    const QString cacheKey = path + QLatin1Char('|') + QString::number(maxWidth) +
+    // Keyed on the CONFIGURED size, never the panel width: the bake is now
+    // width-independent, so including maxWidth only threw the cache away on
+    // every drag frame to re-produce a byte-identical pixmap.
+    const QString cacheKey = path + QLatin1Char('|') + QString::number(m_iconSize) +
                              (colourThisRow ? QLatin1String("|c") : QLatin1String("|m"));
     auto cached = cache.find(cacheKey);
     if (cached == cache.end()) {
       QPixmap pm;
       const int devHeight = qMax(1, qRound(m_iconSize * dpr));
-      const int devWidth = qMax(1, qRound(maxWidth * dpr));
       if (path.endsWith(QLatin1String(".svg"), Qt::CaseInsensitive)) {
         // Render at 2x the target box, then TRIM: the scraped monochrome
         // SVGs park the art inside padded viewBoxes, so an untrimmed render
@@ -886,7 +1310,12 @@ void CollectionTreeController::refreshIcons() {
         // 2026-08-17: "alignment is still off in mono/tinted mode" — the
         // mono styles are exactly the ones that swap to SVG sources). The
         // oversized render keeps the post-trim downscale sharp.
-        pm = QIcon(path).pixmap(QSize(devWidth * 2, qRound(devHeight * kThinHeightBoost) * 2));
+        // Render box derived from the HEIGHT budget alone. It used to be
+        // devWidth*2, which made a narrow panel render the source small and
+        // the later upscale soft — the size survived, the sharpness did not.
+        // 8:1 is wider than any real logo, so the height is what binds.
+        const int renderDevH = qRound(devHeight * kThinHeightBoost) * 2;
+        pm = QIcon(path).pixmap(QSize(renderDevH * 8, renderDevH));
       }
       if (pm.isNull()) {
         pm = QPixmap(path);
@@ -905,9 +1334,14 @@ void CollectionTreeController::refreshIcons() {
         const qreal boost = std::clamp(aspect / kThinAspectRef, 1.0, kThinHeightBoost);
         const int allowedDevH = qMax(1, qRound(devHeight * boost));
         pm = pm.scaledToHeight(allowedDevH, Qt::SmoothTransformation);
-        if (pm.width() > devWidth) {
-          pm = pm.scaledToWidth(devWidth, Qt::SmoothTransformation);
-        }
+        // NO width clamp. It was meant to engage only for a logo too wide to
+        // fit, but platform logos are mostly wide, so in practice it engaged
+        // on nearly every row and the rendered size tracked the panel width
+        // again — the same complaint, twice (2026-08-18, and 2026-08-20:
+        // "expanding nav pane also increases icon size ... the icon size
+        // should remain fixed"). The configured size now wins outright; a
+        // logo too wide for the panel overflows rather than shrinking, which
+        // is the user's call to make with the width and size settings.
       }
       if (!pm.isNull() && !colourThisRow) {
         QColor ink;
@@ -966,9 +1400,7 @@ void CollectionTreeController::refreshIcons() {
         if (pm.height() > maxDevH) {
           pm = pm.scaledToHeight(maxDevH, Qt::SmoothTransformation);
         }
-        if (pm.width() > devWidth) {
-          pm = pm.scaledToWidth(devWidth, Qt::SmoothTransformation);
-        }
+        // Height-capped only — see the note on the width clamp above.
       }
       BakedIcon baked;
       if (!pm.isNull()) {
@@ -987,7 +1419,17 @@ void CollectionTreeController::refreshIcons() {
     // decoration height ballooned every row; a flat 4px then read "too
     // cramped vertically"). Boosted wordmark rows stay taller, square
     // rows tighter, and the gap keeps big logos from touching.
-    if (!baked.isNull()) {
+    if (toolbarHeight > 0) {
+      // Top-level rows match the toolbar height, logo or not (user request
+      // 2026-08-18, restated 2026-08-19). Only the no-artwork branch above
+      // honoured that, so a root collection WITH a logo — the normal case —
+      // fell through to the pixmap-hugging height below and stood at a
+      // different height from the toolbar it is supposed to line up with.
+      // Floored, never truncated: an icon taller than the toolbar keeps its
+      // own height rather than being clipped to match.
+      item->setSizeHint(
+          0, QSize(0, qMax(toolbarHeight, baked.isNull() ? 0 : cached.value().logicalHeight)));
+    } else if (!baked.isNull()) {
       // Roomier rows (user request 2026-08-18). Scales with the icon so
       // the gap stays proportional now that the size is uncapped.
       const int rowPad = qMax(16, (m_iconSize * 3) / 4);
@@ -1022,8 +1464,12 @@ void CollectionTreeController::applyStateForCollection(int collectionIndex) {
     return;
   }
   const CollectionTreeSettings &tree = collections.at(collectionIndex).collectionTree;
-  insertPanelAt(tree.treePosition, tree.treeJustification);
+  insertPanelAt(tree.treePosition, tree.treeJustification, tree.treeMode);
   applyPanelWidth(tree.treeWidth, tree.treePosition);
+  // Before the icon rebake below. With no overlay attached this changes the
+  // native policy, which resizes the viewport the icons are baked against —
+  // and refreshIcons stamps m_bakedViewportWidth from that.
+  OverlayScrollbars::setScrollbarMode(m_tree, tree.treeScrollbarMode);
   // Icon display options are baked into the rows by rebuildTree, so a
   // change (settings edit, collection switch between differently-configured
   // collections) needs a rebuild — cheap, and the expansion memory keeps the
@@ -1126,7 +1572,7 @@ void CollectionTreeController::setDockPosition(DetailsPanePosition position) {
   if (position != DetailsPanePosition::Left && position != DetailsPanePosition::Right) {
     return;
   }
-  insertPanelAt(position, m_insertedJustification);
+  insertPanelAt(position, m_insertedJustification, m_insertedMode);
   // The grip must follow the panel to its new inner edge.
   applyPanelWidth(m_panel ? m_panel->width() : CollectionTreeSettings{}.treeWidth, position);
   if (CollectionConfig *cfg = activeCollectionMutable()) {
@@ -1165,6 +1611,12 @@ void CollectionTreeController::applyPrimaryColor(const QString &hexColor) {
   const QColor titlebar = KdeColorScheme::activeTitlebarColor();
   const QString selectionColor =
       titlebar.isValid() ? titlebar.name() : QStringLiteral("palette(highlight)");
+  if (m_tree) {
+    // Handed to the delegate, which stops the fill at the scrollbar lane.
+    m_tree->setProperty("kartendSelectionColor",
+                        titlebar.isValid() ? titlebar
+                                           : m_tree->palette().color(QPalette::Highlight));
+  }
   m_panel->setStyleSheet(QStringLiteral("QWidget#collectionTreePanel {"
                                         " background-color: palette(window); }"
                                         "QLabel#collectionTreeHeader {"
@@ -1172,8 +1624,12 @@ void CollectionTreeController::applyPrimaryColor(const QString &hexColor) {
                                         "QTreeWidget#collectionTreeWidget {"
                                         " background-color: palette(window);"
                                         " color: palette(text); border: none; }"
+                                        // background TRANSPARENT: the delegate
+                                        // paints the selection so it can stop at
+                                        // the scrollbar lane. A styled fill here
+                                        // always spans the full row.
                                         "QTreeWidget#collectionTreeWidget::item:selected {"
-                                        " background-color: %2;"
+                                        " background-color: transparent;"
                                         " color: palette(highlighted-text); }"
                                         // The 5px drag grip sits between the panel and the
                                         // content and was painting in the panel's own colour —
@@ -1191,6 +1647,15 @@ void CollectionTreeController::applyPrimaryColor(const QString &hexColor) {
                                         "QWidget#collectionTreeGrip {"
                                         " background-color: transparent; }")
                              .arg(accent, selectionColor));
+}
+
+void CollectionTreeController::refreshDesktopTint() {
+  // Both surfaces: the SELECTION lives in the panel stylesheet, the
+  // root-collection fill is a per-item background baked in refreshIcons.
+  // Refreshing only the stylesheet left the root row on the previous
+  // desktop's colour.
+  applyPrimaryColor(m_accentColor);
+  refreshIcons();
 }
 
 bool CollectionTreeController::isPanelVisible() const {
