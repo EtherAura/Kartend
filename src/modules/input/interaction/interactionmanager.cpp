@@ -821,6 +821,8 @@ bool InteractionManager::routeSectionInput(int dx, int dy) {
         // drains and again shortly after. Cheap, and a no-op when nothing
         // took it.
         for (int delayMs : {0, 250}) {
+          // 0 defers past whatever rebuilds are already queued on this turn;
+          // 250 covers one that gets posted after them and takes focus late.
           QTimer::singleShot(delayMs, this, [this]() {
             if (!m_ctx || !m_ctx->ui.collectionTreeWidget) {
               return;
@@ -1121,6 +1123,9 @@ bool InteractionManager::stepExpandedItem(int delta) {
   // still, so refresh in stages. Each pass re-shows only if the resolved
   // path actually changed, and re-syncs the strip either way.
   for (int delayMs : {0, 140, 380}) {
+    // 0 catches whatever already resolved synchronously; 140 lands after the
+    // scroll animation settles the viewport; 380 after the sidebar's gallery
+    // for the newly selected item has arrived.
     QTimer::singleShot(delayMs, this, [this]() { refreshExpandedArtwork(); });
   }
   return true;
