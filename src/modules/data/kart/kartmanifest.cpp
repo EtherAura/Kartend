@@ -178,14 +178,18 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   o["sidebar_active_tab"] = CollectionUtils::detailsPaneTabToString(c.sidebar.sidebarActiveTab);
   o["sidebar_font_family"] = c.sidebar.sidebarFontFamily;
   o["sidebar_font_point_size"] = c.sidebar.sidebarFontPointSize;
+  o["sidebar_hide_scrollbar"] =
+      CollectionUtils::scrollbarModeToString(c.sidebar.sidebarScrollbarMode);
 
   o["view_type"] = CollectionUtils::viewTypeToString(c.viewType);
   o["hide_missing_artwork"] = c.hideMissingArtwork;
   o["group_multi_disc"] = c.groupMultiDisc;
   o["horizontal_spacing"] = c.gridLayout.horizontalSpacing;
   o["vertical_spacing"] = c.gridLayout.verticalSpacing;
-  o["hide_horizontal_scrollbar"] = c.gridLayout.hideHorizontalScrollbar;
-  o["hide_vertical_scrollbar"] = c.gridLayout.hideVerticalScrollbar;
+  o["hide_horizontal_scrollbar"] =
+      CollectionUtils::scrollbarModeToString(c.gridLayout.horizontalScrollbarMode);
+  o["hide_vertical_scrollbar"] =
+      CollectionUtils::scrollbarModeToString(c.gridLayout.verticalScrollbarMode);
   o["item_width"] = c.gridLayout.itemWidth;
   o["item_height"] = c.gridLayout.itemHeight;
   o["font_size"] = c.gridLayout.fontSize;
@@ -320,6 +324,12 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   if (sidebarActiveTabFallback) warnUnknown("sidebar_active_tab", rawSidebarActiveTab, "item");
   c.sidebar.sidebarFontFamily = o["sidebar_font_family"].toString();
   c.sidebar.sidebarFontPointSize = o["sidebar_font_point_size"].toInt(0);
+  // Bundles written before 2026-08-19 carry a JSON bool here; toVariant()
+  // .toString() renders those as "true"/"false", which stringToScrollbarMode
+  // accepts, so an older kart imports as Hide/Show. Absent key reads empty and
+  // falls back to Show — what those bundles meant.
+  c.sidebar.sidebarScrollbarMode =
+      CollectionUtils::stringToScrollbarMode(o["sidebar_hide_scrollbar"].toVariant().toString());
 
   const QString rawViewType = o["view_type"].toString();
   bool viewTypeFallback = false;
@@ -331,8 +341,10 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.groupMultiDisc = o["group_multi_disc"].toBool(false);
   c.gridLayout.horizontalSpacing = o["horizontal_spacing"].toInt(UIConstants::Grid::SPACING);
   c.gridLayout.verticalSpacing = o["vertical_spacing"].toInt(20);
-  c.gridLayout.hideHorizontalScrollbar = o["hide_horizontal_scrollbar"].toBool(false);
-  c.gridLayout.hideVerticalScrollbar = o["hide_vertical_scrollbar"].toBool(false);
+  c.gridLayout.horizontalScrollbarMode =
+      CollectionUtils::stringToScrollbarMode(o["hide_horizontal_scrollbar"].toVariant().toString());
+  c.gridLayout.verticalScrollbarMode =
+      CollectionUtils::stringToScrollbarMode(o["hide_vertical_scrollbar"].toVariant().toString());
   c.gridLayout.itemWidth = o["item_width"].toInt(UIConstants::Item::DEFAULT_WIDTH);
   c.gridLayout.itemHeight = o["item_height"].toInt(UIConstants::Item::DEFAULT_HEIGHT);
   c.gridLayout.fontSize = o["font_size"].toInt(UIConstants::Item::DEFAULT_FONT_SIZE);

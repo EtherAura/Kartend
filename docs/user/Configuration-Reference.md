@@ -131,6 +131,7 @@ facing names and rebinding workflow.
 | `scrollbarsOnHoverOnly` | bool | `false` | Slim overlay scrollbars that fade in and reserve no space. |
 | `toolbarColorSource` | string | `titlebar` | Toolbar fill: `titlebar`, `accent`, `highlight` or `collection`. |
 | `collectionTreeColorizeSelected` | bool | `false` | With a monochrome/tinted tree style, show the active collection's logo in colour. |
+| `collectionTreeHideScrollbar` | enum | `show` | Navigation-sidebar scrollbars: `show` / `autohide` / `hide`. Legacy `true`/`false` still read as hide/show. |
 
 Button names are the SDL / Qt6::Gamepad standard labels (`A`, `B`, `X`,
 `Y`, `LB`, `RB`, etc.).
@@ -498,6 +499,7 @@ See [Sidebar & Details Pane](Sidebar-and-Details-Pane.md) for behavior.
 | `sidebarWidth` | int | `300` | Preferred width (pixels). |
 | `sidebarHeight` | int | `280` | Preferred height for top/bottom dock. |
 | `sidebarWidthLocked` | bool | `true` | Disable resize dragging. |
+| `sidebarHideScrollbar` | enum | `show` | Details-pane scrollbars: `show` / `autohide` / `hide`. Legacy `true`/`false` still read as hide/show. |
 | `sidebarBackgroundType` | enum | `color` | `color` / `image` / `pattern`. |
 | `sidebarBackgroundColor` | hex | derived | Sidebar background color. |
 | `sidebarBackgroundImage` | path | empty | Sidebar background image. |

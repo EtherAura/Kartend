@@ -18,6 +18,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   edge. The details pane's existing Position control keeps working — it
   and the new page edit the same setting.
 
+- **Choose how each scrollbar behaves: Show, Auto-hide, or Hide.** Every
+  scrollbar setting is now a three-way choice instead of an on/off box —
+  the items grid (per axis), the details pane, and the navigation sidebar.
+  *Auto-hide* keeps the bar out of sight until you move the pointer near
+  the edge it lives on, then fades it in. *Hide* removes it entirely and
+  gives the reserved strip back to your content. Scrolling itself is never
+  affected: the wheel, the arrow keys and drag work in all three modes.
+  Existing settings carry over — anything previously ticked reads as Hide.
+  Auto-hide needs the slim overlay scrollbars (Settings → General); without
+  them it behaves as Show.
+
+- **The navigation sidebar can overlap the grid instead of pushing it.** A
+  new *Mode* choice on the Sidebars settings page: *Push the content aside*
+  keeps today's behaviour, where opening or resizing the sidebar moves the
+  grid to make room; *Overlap the content* floats it above the grid instead,
+  so the items underneath never shift — the sidebar simply covers them.
+  Set per collection and off by default, so nothing changes until you pick it.
+
+- **Room to breathe around cover art.** Grid artwork now sits inset from the
+  tile behind it rather than running flush to its edges, and the details
+  pane's preview no longer draws a hairline outline around the image.
 - **Attract mode holds still while you are looking at artwork.** With an
   artwork open fullscreen, auto-advance stops — from either the grid's
   preview or the details pane's — and dismissing it starts a fresh idle

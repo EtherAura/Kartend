@@ -6,6 +6,7 @@
 #include "uiconstants/grid.h"
 #include "uiconstants/viewport.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QSpinBox>
 
@@ -27,6 +28,12 @@ AppearanceLayoutPanel::AppearanceLayoutPanel(QWidget *parent)
   connect(ui->itemWidthSpinBox, onSpin, this, [this](int) { emit changed(); });
   connect(ui->itemHeightSpinBox, onSpin, this, [this](int) { emit changed(); });
   connect(ui->cornerRadiusSpinBox, onSpin, this, [this](int) { emit changed(); });
+  // Grid scrollbar visibility moved here from the Sidebar page (user request
+  // 2026-08-19): it governs the items grid, not the sidebars.
+  connect(ui->horizontalScrollbarModeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, &AppearanceLayoutPanel::changed);
+  connect(ui->verticalScrollbarModeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+          this, &AppearanceLayoutPanel::changed);
 }
 
 AppearanceLayoutPanel::~AppearanceLayoutPanel() {
@@ -58,6 +65,10 @@ void AppearanceLayoutPanel::load() {
   SettingsFormBinding::loadInto(ui->itemWidthSpinBox, config.gridLayout.itemWidth);
   SettingsFormBinding::loadInto(ui->itemHeightSpinBox, config.gridLayout.itemHeight);
   SettingsFormBinding::loadInto(ui->cornerRadiusSpinBox, config.gridLayout.cornerRadius);
+  ui->horizontalScrollbarModeComboBox->setCurrentIndex(
+      static_cast<int>(config.gridLayout.horizontalScrollbarMode));
+  ui->verticalScrollbarModeComboBox->setCurrentIndex(
+      static_cast<int>(config.gridLayout.verticalScrollbarMode));
 }
 
 void AppearanceLayoutPanel::clear() {
@@ -72,6 +83,10 @@ void AppearanceLayoutPanel::clear() {
   ui->itemWidthSpinBox->setValue(200);
   ui->itemHeightSpinBox->setValue(300);
   ui->cornerRadiusSpinBox->setValue(0);
+  ui->horizontalScrollbarModeComboBox->setCurrentIndex(
+      static_cast<int>(GridLayoutPreferences{}.horizontalScrollbarMode));
+  ui->verticalScrollbarModeComboBox->setCurrentIndex(
+      static_cast<int>(GridLayoutPreferences{}.verticalScrollbarMode));
 }
 
 void AppearanceLayoutPanel::save() {
@@ -91,6 +106,10 @@ void AppearanceLayoutPanel::save() {
   config.gridLayout.itemWidth = ui->itemWidthSpinBox->value();
   config.gridLayout.itemHeight = ui->itemHeightSpinBox->value();
   config.gridLayout.cornerRadius = ui->cornerRadiusSpinBox->value();
+  config.gridLayout.horizontalScrollbarMode =
+      static_cast<ScrollbarMode>(ui->horizontalScrollbarModeComboBox->currentIndex());
+  config.gridLayout.verticalScrollbarMode =
+      static_cast<ScrollbarMode>(ui->verticalScrollbarModeComboBox->currentIndex());
 }
 
 QSpinBox *AppearanceLayoutPanel::gridWidthSpinBox() const {

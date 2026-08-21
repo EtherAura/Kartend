@@ -18,6 +18,7 @@
 #include "iscrollmanager.h"
 #include "iselectionmanager.h"
 #include "iselectionoverlayscroll.h"
+#include "overlayscrollbars.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/keyboard.h"
 #include "uiconstants/listview.h"
@@ -282,8 +283,15 @@ void ViewportManager::ensureVerticalScrollbarPolicy() {
       !CollectionUtils::isValidIndex(m_currentCollectionIndex, m_collections)) {
     return;
   }
+  // While overlay handles are attached they OWN the policies (forced OFF) and
+  // paint the indicator themselves. Re-asserting AsNeeded here put a real
+  // scrollbar back, costing the viewport ~21px on the details-pane side for
+  // the whole session (field report 2026-08-20).
+  if (OverlayScrollbars::isAttached(m_itemScrollArea)) {
+    return;
+  }
   int idx = *m_currentCollectionIndex;
-  if (!(*m_collections)[idx].gridLayout.hideVerticalScrollbar) {
+  if ((*m_collections)[idx].gridLayout.verticalScrollbarMode != ScrollbarMode::Hide) {
     m_itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
   }
 }

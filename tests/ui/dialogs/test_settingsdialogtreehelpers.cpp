@@ -108,8 +108,8 @@ CollectionConfig styledSource() {
   // Visibility category
   c.hideTitles = true;
   c.hideSubcollectionTitles = true;
-  c.gridLayout.hideHorizontalScrollbar = true;
-  c.gridLayout.hideVerticalScrollbar = true;
+  c.gridLayout.horizontalScrollbarMode = ScrollbarMode::Hide;
+  c.gridLayout.verticalScrollbarMode = ScrollbarMode::Hide;
   c.sidebar.sidebarMode = DetailsPaneMode::Expand;
   // Colors category (background cluster incl. logo/vignette/parallax/blur)
   c.background.backgroundType = BackgroundType::Image;
@@ -199,8 +199,8 @@ void TestSettingsDialogTreeHelpers::visibilityCategory_copiesTitleAndScrollbarFl
 
   QVERIFY(dst.hideTitles);
   QVERIFY(dst.hideSubcollectionTitles);
-  QVERIFY(dst.gridLayout.hideHorizontalScrollbar);
-  QVERIFY(dst.gridLayout.hideVerticalScrollbar);
+  QVERIFY(dst.gridLayout.horizontalScrollbarMode);
+  QVERIFY(dst.gridLayout.verticalScrollbarMode);
   QCOMPARE(dst.sidebar.sidebarMode, DetailsPaneMode::Expand);
   // Font size rides with ItemText, not Visibility.
   QCOMPARE(dst.gridLayout.fontSize, UIConstants::Item::DEFAULT_FONT_SIZE);
@@ -356,8 +356,8 @@ void TestSettingsDialogTreeHelpers::subcollectionDefaults_setLinkageAndInherited
   QCOMPARE(child.gridLayout.itemWidth, 321);
   QCOMPARE(child.gridLayout.itemHeight, 345);
   QCOMPARE(child.gridLayout.fontSize, 19);
-  QVERIFY(child.gridLayout.hideHorizontalScrollbar);
-  QVERIFY(child.gridLayout.hideVerticalScrollbar);
+  QVERIFY(child.gridLayout.horizontalScrollbarMode);
+  QVERIFY(child.gridLayout.verticalScrollbarMode);
   QCOMPARE(child.sidebar.sidebarMode, DetailsPaneMode::Expand);
   QCOMPARE(child.viewType, ViewType::List);
   QCOMPARE(child.showAllSubcollectionItems, parent.showAllSubcollectionItems);

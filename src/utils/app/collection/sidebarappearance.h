@@ -91,6 +91,13 @@ struct SidebarAppearance {
   /// GeneralSettings::globalUiFontFamily).
   QString sidebarFontFamily;
   int sidebarFontPointSize = 0;
+  /// Scrollbar policy for the pane (user request 2026-08-19). Covers BOTH
+  /// mechanisms — the native bars and the overlay handles — because the pane
+  /// holds several scroll areas and the overlay paints its own handle over a
+  /// natively-disabled bar. Wheel scrolling is unaffected in every mode; this
+  /// governs the indicator, never the content. INI key keeps its legacy
+  /// `sidebarHideScrollbar` name so existing configs migrate themselves.
+  ScrollbarMode sidebarScrollbarMode = ScrollbarMode::Show;
 
   bool operator==(const SidebarAppearance &other) const {
     return sidebarVisible == other.sidebarVisible && sidebarMode == other.sidebarMode &&
@@ -111,7 +118,8 @@ struct SidebarAppearance {
            sidebarWidthLocked == other.sidebarWidthLocked &&
            sidebarActiveTab == other.sidebarActiveTab &&
            sidebarFontFamily == other.sidebarFontFamily &&
-           sidebarFontPointSize == other.sidebarFontPointSize;
+           sidebarFontPointSize == other.sidebarFontPointSize &&
+           sidebarScrollbarMode == other.sidebarScrollbarMode;
   }
   bool operator!=(const SidebarAppearance &other) const { return !(*this == other); }
 };
@@ -129,7 +137,7 @@ inline size_t qHash(const SidebarAppearance &key, size_t seed = 0) {
       key.sidebarAccentColor, key.sidebarHeaderBgColor, key.sidebarSectionBgColor,
       key.sidebarHeaderBgOpacity, key.sidebarSectionBgOpacity, key.sidebarWidth, key.sidebarHeight,
       key.sidebarWidthLocked, static_cast<int>(key.sidebarActiveTab), key.sidebarFontFamily,
-      key.sidebarFontPointSize);
+      key.sidebarFontPointSize, static_cast<int>(key.sidebarScrollbarMode));
 }
 
 #endif

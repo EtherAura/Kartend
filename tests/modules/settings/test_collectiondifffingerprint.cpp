@@ -70,8 +70,10 @@ void TestCollectionDiffFingerprint::gridLayoutHashTracksEachField() {
   hashDetects<T>("gridHeightSidebarHidden", [](T &c) { c.gridHeightSidebarHidden = 99; });
   hashDetects<T>("horizontalSpacing", [](T &c) { c.horizontalSpacing = 77; });
   hashDetects<T>("verticalSpacing", [](T &c) { c.verticalSpacing = 77; });
-  hashDetects<T>("hideHorizontalScrollbar", [](T &c) { c.hideHorizontalScrollbar = true; });
-  hashDetects<T>("hideVerticalScrollbar", [](T &c) { c.hideVerticalScrollbar = true; });
+  hashDetects<T>("horizontalScrollbarMode",
+                 [](T &c) { c.horizontalScrollbarMode = ScrollbarMode::Autohide; });
+  hashDetects<T>("verticalScrollbarMode",
+                 [](T &c) { c.verticalScrollbarMode = ScrollbarMode::Hide; });
   hashDetects<T>("itemWidth", [](T &c) { c.itemWidth = 321; });
   hashDetects<T>("itemHeight", [](T &c) { c.itemHeight = 321; });
   hashDetects<T>("fontSize", [](T &c) { c.fontSize = 33; });

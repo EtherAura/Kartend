@@ -335,8 +335,11 @@ void TestSettingsPersistenceRoundtrip::gridLayoutPreferences() {
   in.gridHeightSidebarHidden += 1;
   in.horizontalSpacing += 1;
   in.verticalSpacing += 1;
-  in.hideHorizontalScrollbar = !in.hideHorizontalScrollbar;
-  in.hideVerticalScrollbar = !in.hideVerticalScrollbar;
+  // Exercise BOTH new states, not just the old boolean pair — Autohide is
+  // the value that would silently round-trip as Show if the writer ever fell
+  // back to a bool.
+  in.horizontalScrollbarMode = ScrollbarMode::Autohide;
+  in.verticalScrollbarMode = ScrollbarMode::Hide;
   in.itemWidth += 1;
   in.itemHeight += 1;
   in.fontSize += 1;

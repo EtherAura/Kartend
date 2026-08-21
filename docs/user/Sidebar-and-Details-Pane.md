@@ -85,6 +85,34 @@ Drag the sidebar's edge to resize. Lock dragging with `sidebarWidthLocked=true`
 | Sidebar height | `sidebarHeight` | Pixels (top/bottom). |
 | Lock resize | `sidebarWidthLocked` | Disable drag-resizing. |
 
+### Scrollbar behaviour
+
+Settings Dialog → **Sidebar** tab → *Details pane* → **Scrollbar** offers
+three choices, and the navigation sidebar (collection tree) has its own in
+the group below it. Both are per-collection and independent.
+
+| Mode | What you get |
+|------|--------------|
+| **Show** | Normal — the bar fades in while scrolling or hovering. |
+| **Auto-hide** | Nothing until the pointer comes near the edge the bar lives on, then it appears. |
+| **Hide** | Never drawn, and the strip it reserved goes back to your content. |
+
+Only the *indicator* changes — the wheel, the arrow keys and drag-scrolling
+work in every mode.
+
+> **Auto-hide needs the slim overlay scrollbars** (Settings → General).
+> Proximity is a property of the drawn handle, so with overlay scrollbars
+> switched off Auto-hide behaves as Show rather than hiding a bar that could
+> never come back.
+
+| Setting | INI key | Values |
+|---------|---------|--------|
+| Details-pane scrollbars | `sidebarHideScrollbar` | `show` / `autohide` / `hide` |
+| Navigation-sidebar scrollbars | `collectionTreeHideScrollbar` | `show` / `autohide` / `hide` |
+
+The keys keep their old `hide…` names so existing configs migrate in place:
+a previously saved `true` reads as `hide`, `false` as `show`.
+
 ## Tabs
 
 The sidebar has up to three tabs:

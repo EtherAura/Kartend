@@ -1,5 +1,6 @@
 #include "gridlayoutpreferences_persistence.h"
 
+#include "collection/enumstringhelpers.h"
 #include "settingskeys.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/item.h"
@@ -15,8 +16,13 @@ void load(QSettings &settings, GridLayoutPreferences &grid) {
   grid.horizontalGridHeightSidebarHidden =
       settings.value(keys::kHorizontalGridHeightSidebarHidden, 0).toInt();
   grid.gridHeightSidebarHidden = settings.value(keys::kGridHeightSidebarHidden, 0).toInt();
-  grid.hideHorizontalScrollbar = settings.value(keys::kHideHorizontalScrollbar, false).toBool();
-  grid.hideVerticalScrollbar = settings.value(keys::kHideVerticalScrollbar, false).toBool();
+  // Read as a STRING, not a bool: these keys were bools until 2026-08-19 and
+  // stringToScrollbarMode accepts the legacy "true"/"false" spelling, so an
+  // existing config migrates itself on first load with no schema bump.
+  grid.horizontalScrollbarMode = CollectionUtils::stringToScrollbarMode(
+      settings.value(keys::kHideHorizontalScrollbar).toString());
+  grid.verticalScrollbarMode = CollectionUtils::stringToScrollbarMode(
+      settings.value(keys::kHideVerticalScrollbar).toString());
   grid.horizontalSpacing =
       settings.value(keys::kHorizontalSpacing, UIConstants::Grid::SPACING).toInt();
   grid.verticalSpacing = settings.value(keys::kVerticalSpacing, 20).toInt();
@@ -34,8 +40,10 @@ void save(QSettings &settings, const GridLayoutPreferences &grid) {
   settings.setValue(keys::kHorizontalGridHeightSidebarHidden,
                     grid.horizontalGridHeightSidebarHidden);
   settings.setValue(keys::kGridHeightSidebarHidden, grid.gridHeightSidebarHidden);
-  settings.setValue(keys::kHideHorizontalScrollbar, grid.hideHorizontalScrollbar);
-  settings.setValue(keys::kHideVerticalScrollbar, grid.hideVerticalScrollbar);
+  settings.setValue(keys::kHideHorizontalScrollbar,
+                    CollectionUtils::scrollbarModeToString(grid.horizontalScrollbarMode));
+  settings.setValue(keys::kHideVerticalScrollbar,
+                    CollectionUtils::scrollbarModeToString(grid.verticalScrollbarMode));
   settings.setValue(keys::kHorizontalSpacing, grid.horizontalSpacing);
   settings.setValue(keys::kVerticalSpacing, grid.verticalSpacing);
   settings.setValue(keys::kItemWidth, grid.itemWidth);

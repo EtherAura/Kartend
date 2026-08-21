@@ -10,13 +10,15 @@
 
 #include <QHash>
 
+#include "../collectiontypes.h"
+
 #include <uiconstants/grid.h>
 #include <uiconstants/item.h>
 
 /// Per-collection grid / item-layout cluster. Extracted from CollectionConfig
 /// (Kartend-r4x5 follow-up: grid+layout). Owns the items-per-row / per-column
 /// fields (including the sidebar-hidden alternates), grid spacing, item box
-/// dimensions + font + corner radius, and the scrollbar-hide toggles. Members
+/// dimensions + font + corner radius, and the per-axis scrollbar modes. Members
 /// keep their legacy names so existing INI + kart-manifest keys round-trip
 /// unchanged; access as `cfg.gridLayout.itemWidth` etc.
 struct GridLayoutPreferences {
@@ -47,8 +49,13 @@ struct GridLayoutPreferences {
   int gridHeightSidebarHidden = 0;
   int horizontalSpacing = UIConstants::Grid::SPACING;
   int verticalSpacing = 20;
-  bool hideHorizontalScrollbar = false;
-  bool hideVerticalScrollbar = false;
+  /// Scrollbar policy per axis (user request 2026-08-19). These were plain
+  /// hide-yes/no bools until Autohide needed a third state. The INI KEYS keep
+  /// their old "hide…" names so an existing config migrates itself — the
+  /// readers accept the legacy "true"/"false" — which is why the key and the
+  /// field no longer read quite the same.
+  ScrollbarMode horizontalScrollbarMode = ScrollbarMode::Show;
+  ScrollbarMode verticalScrollbarMode = ScrollbarMode::Show;
   int itemWidth = UIConstants::Item::DEFAULT_WIDTH;
   int itemHeight = UIConstants::Item::DEFAULT_HEIGHT;
   int fontSize = UIConstants::Item::DEFAULT_FONT_SIZE;
@@ -61,8 +68,8 @@ struct GridLayoutPreferences {
            gridHeightSidebarHidden == other.gridHeightSidebarHidden &&
            horizontalSpacing == other.horizontalSpacing &&
            verticalSpacing == other.verticalSpacing &&
-           hideHorizontalScrollbar == other.hideHorizontalScrollbar &&
-           hideVerticalScrollbar == other.hideVerticalScrollbar && itemWidth == other.itemWidth &&
+           horizontalScrollbarMode == other.horizontalScrollbarMode &&
+           verticalScrollbarMode == other.verticalScrollbarMode && itemWidth == other.itemWidth &&
            itemHeight == other.itemHeight && fontSize == other.fontSize &&
            cornerRadius == other.cornerRadius;
   }
@@ -75,13 +82,15 @@ struct GridLayoutPreferences {
 // container. MUST hash exactly the fields operator== compares — if the two ever
 // drift, an equal config could fingerprint differently (a spurious refresh) or,
 // worse, a real change could go unnoticed. Keep the member list in lockstep with
-// operator== above. (No enums/containers here — all members hash directly.)
+// operator== above. Scoped enums are cast to int because qHash(Enum) only exists
+// since Qt 6.5 and CI pins Qt 6.4.2.
 inline size_t qHash(const GridLayoutPreferences &key, size_t seed = 0) {
   return qHashMulti(seed, key.gridWidth, key.horizontalGridHeight, key.gridWidthSidebarHidden,
                     key.horizontalGridHeightSidebarHidden, key.gridHeightSidebarHidden,
-                    key.horizontalSpacing, key.verticalSpacing, key.hideHorizontalScrollbar,
-                    key.hideVerticalScrollbar, key.itemWidth, key.itemHeight, key.fontSize,
-                    key.cornerRadius);
+                    key.horizontalSpacing, key.verticalSpacing,
+                    static_cast<int>(key.horizontalScrollbarMode),
+                    static_cast<int>(key.verticalScrollbarMode), key.itemWidth, key.itemHeight,
+                    key.fontSize, key.cornerRadius);
 }
 
 #endif

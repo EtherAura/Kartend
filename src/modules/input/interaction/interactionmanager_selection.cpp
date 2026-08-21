@@ -2,6 +2,7 @@
 // Extracted from interactionmanager.cpp during LOC-reduction refactor.
 // These remain InteractionManager members; this is a translation-unit split.
 #include "interactionmanager.h"
+#include "overlayscrollbars.h"
 
 #include "collection/launcherconfig.h"
 
@@ -242,7 +243,7 @@ void InteractionManager::scheduleScrollbarRecovery() {
   if (!CollectionUtils::isValidIndex(idx, m_collections)) {
     return;
   }
-  if ((*m_collections)[idx].gridLayout.hideVerticalScrollbar) {
+  if ((*m_collections)[idx].gridLayout.verticalScrollbarMode == ScrollbarMode::Hide) {
     return;
   }
 
@@ -259,8 +260,12 @@ void InteractionManager::scheduleScrollbarRecovery() {
     if (guard->m_viewportManager) {
       guard->m_viewportManager->ensureVerticalScrollbarPolicy();
     }
+    // Overlay handles own the policies while attached — see
+    // OverlayScrollbars::isAttached. This retried three times, so it undid the
+    // overlay's AlwaysOff even if something else set it correctly first.
     QScrollBar *verticalScrollBar = guard->m_itemScrollArea->verticalScrollBar();
-    if (verticalScrollBar && verticalScrollBar->maximum() > 0) {
+    if (verticalScrollBar && verticalScrollBar->maximum() > 0 &&
+        !OverlayScrollbars::isAttached(guard->m_itemScrollArea)) {
       guard->m_itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     }
   };

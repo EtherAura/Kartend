@@ -236,7 +236,7 @@ void CoverFlowController::applyVisibility() {
       m_mediaScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     } else {
       m_mediaScrollArea->setHorizontalScrollBarPolicy(
-          m_context && m_context->config.gridLayout.hideHorizontalScrollbar
+          m_context && m_context->config.gridLayout.horizontalScrollbarMode == ScrollbarMode::Hide
               ? Qt::ScrollBarAlwaysOff
               : Qt::ScrollBarAsNeeded);
     }

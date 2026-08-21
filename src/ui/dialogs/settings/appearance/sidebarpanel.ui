@@ -73,8 +73,6 @@
        </widget>
       </item>
       <item row="5" column="0" colspan="2"><widget class="QCheckBox" name="sidebarWidthLockedCheckBox"><property name="text"><string>Lock width (disable drag-resize)</string></property><property name="toolTip"><string>When unchecked, drag the details pane's inner edge to resize it.</string></property></widget></item>
-      <item row="6" column="0" colspan="2"><widget class="QCheckBox" name="hideHorizontalScrollbarCheckBox"><property name="text"><string>Hide horizontal scrollbar</string></property><property name="toolTip"><string>Hide the horizontal scrollbar for this collection</string></property></widget></item>
-      <item row="7" column="0" colspan="2"><widget class="QCheckBox" name="hideVerticalScrollbarCheckBox"><property name="text"><string>Hide vertical scrollbar</string></property><property name="toolTip"><string>Hide the vertical scrollbar for this collection</string></property></widget></item>
      </layout>
     </widget>
    </item>

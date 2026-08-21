@@ -36,8 +36,8 @@ void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig
   if (categories.testFlag(ApplySettingsDialog::Visibility)) {
     dst.hideTitles = src.hideTitles;
     dst.hideSubcollectionTitles = src.hideSubcollectionTitles;
-    dst.gridLayout.hideHorizontalScrollbar = src.gridLayout.hideHorizontalScrollbar;
-    dst.gridLayout.hideVerticalScrollbar = src.gridLayout.hideVerticalScrollbar;
+    dst.gridLayout.horizontalScrollbarMode = src.gridLayout.horizontalScrollbarMode;
+    dst.gridLayout.verticalScrollbarMode = src.gridLayout.verticalScrollbarMode;
     dst.sidebar.sidebarMode = src.sidebar.sidebarMode;
   }
   if (categories.testFlag(ApplySettingsDialog::Colors)) {
@@ -123,8 +123,8 @@ void applySubcollectionDefaults(CollectionConfig &child, const CollectionConfig 
   child.gridLayout.itemWidth = parent.gridLayout.itemWidth;
   child.gridLayout.itemHeight = parent.gridLayout.itemHeight;
   child.gridLayout.fontSize = parent.gridLayout.fontSize;
-  child.gridLayout.hideHorizontalScrollbar = parent.gridLayout.hideHorizontalScrollbar;
-  child.gridLayout.hideVerticalScrollbar = parent.gridLayout.hideVerticalScrollbar;
+  child.gridLayout.horizontalScrollbarMode = parent.gridLayout.horizontalScrollbarMode;
+  child.gridLayout.verticalScrollbarMode = parent.gridLayout.verticalScrollbarMode;
   child.sidebar.sidebarMode = parent.sidebar.sidebarMode;
   child.viewType = parent.viewType;
   child.showAllSubcollectionItems = parent.showAllSubcollectionItems;

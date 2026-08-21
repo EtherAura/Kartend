@@ -86,6 +86,9 @@ void load(QSettings &settings, SidebarAppearance &sidebar, const QString &collec
   }
   sidebar.sidebarFontFamily = settings.value(keys::kSidebarFontFamily).toString();
   sidebar.sidebarFontPointSize = settings.value(keys::kSidebarFontPointSize, 0).toInt();
+  // String, with legacy "true"/"false" accepted — see the grid variant.
+  sidebar.sidebarScrollbarMode = CollectionUtils::stringToScrollbarMode(
+      settings.value(keys::kSidebarHideScrollbar).toString());
 }
 
 void save(QSettings &settings, const SidebarAppearance &sidebar, const PathSanitizer &sanitize) {
@@ -120,6 +123,8 @@ void save(QSettings &settings, const SidebarAppearance &sidebar, const PathSanit
                     CollectionUtils::detailsPaneTabToString(sidebar.sidebarActiveTab));
   settings.setValue(keys::kSidebarFontFamily, sidebar.sidebarFontFamily);
   settings.setValue(keys::kSidebarFontPointSize, sidebar.sidebarFontPointSize);
+  settings.setValue(keys::kSidebarHideScrollbar,
+                    CollectionUtils::scrollbarModeToString(sidebar.sidebarScrollbarMode));
 }
 
 } // namespace SidebarAppearancePersistence

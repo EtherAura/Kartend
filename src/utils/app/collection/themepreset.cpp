@@ -1,4 +1,5 @@
 #include "themepreset.h"
+#include "collection/enumstringhelpers.h"
 
 #include <QFile>
 #include <QJsonArray>
@@ -36,8 +37,8 @@ QJsonObject gridToJson(const GridLayoutPreferences &g) {
   o["gridHeightSidebarHidden"] = g.gridHeightSidebarHidden;
   o["horizontalSpacing"] = g.horizontalSpacing;
   o["verticalSpacing"] = g.verticalSpacing;
-  o["hideHorizontalScrollbar"] = g.hideHorizontalScrollbar;
-  o["hideVerticalScrollbar"] = g.hideVerticalScrollbar;
+  o["hideHorizontalScrollbar"] = CollectionUtils::scrollbarModeToString(g.horizontalScrollbarMode);
+  o["hideVerticalScrollbar"] = CollectionUtils::scrollbarModeToString(g.verticalScrollbarMode);
   o["itemWidth"] = g.itemWidth;
   o["itemHeight"] = g.itemHeight;
   o["fontSize"] = g.fontSize;
@@ -61,11 +62,15 @@ GridLayoutPreferences gridFromJson(const QJsonObject &o) {
     g.horizontalSpacing = o.value("horizontalSpacing").toInt(g.horizontalSpacing);
   if (o.contains("verticalSpacing"))
     g.verticalSpacing = o.value("verticalSpacing").toInt(g.verticalSpacing);
+  // Presets written before 2026-08-19 carry a JSON bool here; toVariant().toString()
+  // renders those as "true"/"false", which stringToScrollbarMode accepts, so an old
+  // preset imports as Hide/Show without a version bump.
   if (o.contains("hideHorizontalScrollbar"))
-    g.hideHorizontalScrollbar =
-        o.value("hideHorizontalScrollbar").toBool(g.hideHorizontalScrollbar);
+    g.horizontalScrollbarMode = CollectionUtils::stringToScrollbarMode(
+        o.value("hideHorizontalScrollbar").toVariant().toString());
   if (o.contains("hideVerticalScrollbar"))
-    g.hideVerticalScrollbar = o.value("hideVerticalScrollbar").toBool(g.hideVerticalScrollbar);
+    g.verticalScrollbarMode = CollectionUtils::stringToScrollbarMode(
+        o.value("hideVerticalScrollbar").toVariant().toString());
   if (o.contains("itemWidth")) g.itemWidth = o.value("itemWidth").toInt(g.itemWidth);
   if (o.contains("itemHeight")) g.itemHeight = o.value("itemHeight").toInt(g.itemHeight);
   if (o.contains("fontSize")) g.fontSize = o.value("fontSize").toInt(g.fontSize);

@@ -194,8 +194,10 @@ void TestKartManifest::testCollectionConfigAllFieldsRoundTrip() {
   c.hideMissingArtwork = true;
   c.gridLayout.horizontalSpacing = 25;
   c.gridLayout.verticalSpacing = 30;
-  c.gridLayout.hideHorizontalScrollbar = true;
-  c.gridLayout.hideVerticalScrollbar = true;
+  // Autohide on one axis and Hide on the other, so a writer that collapsed
+  // the mode back to a bool would lose the distinction here.
+  c.gridLayout.horizontalScrollbarMode = ScrollbarMode::Autohide;
+  c.gridLayout.verticalScrollbarMode = ScrollbarMode::Hide;
   c.gridLayout.itemWidth = 200;
   c.gridLayout.itemHeight = 250;
   c.gridLayout.fontSize = 14;

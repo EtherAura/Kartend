@@ -1,7 +1,9 @@
 // Resolves settings file paths and provides INI file handling utilities.
 #include "settingsutils.h"
+
 #include "errorutils.h"
 #include "pathutils.h"
+#include "propertyutils.h"
 #include "settingskeys.h"
 #include <algorithm>
 #include <QDir>
@@ -333,7 +335,14 @@ void SettingsUtils::applyHorizontalScrollbarSetting(QScrollArea *itemScrollArea,
     return;
   }
   const CollectionConfig &collection = collections[collectionIndex];
-  if (collection.gridLayout.hideHorizontalScrollbar) {
+  // See the vertical variant below: overlay scrollbars need the mode, not
+  // just the native policy.
+  const ScrollbarMode mode = collection.gridLayout.horizontalScrollbarMode;
+  itemScrollArea->setProperty("kartendHorizontalScrollbarMode", static_cast<int>(mode));
+  // Autohide has no native equivalent, so it leaves the native policy alone
+  // (AsNeeded) and is realised entirely by the overlay handle — matching
+  // OverlayScrollbars::setScrollbarMode's documented fallback.
+  if (mode == ScrollbarMode::Hide) {
     itemScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   } else {
     itemScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
@@ -346,7 +355,24 @@ void SettingsUtils::applyVerticalScrollbarSetting(QScrollArea *itemScrollArea, i
     return;
   }
   const CollectionConfig &collection = collections[collectionIndex];
-  if (collection.gridLayout.hideVerticalScrollbar) {
+  // The policy alone no longer decides anything: overlay scrollbars force the
+  // native bars off and paint their own handle on top, so a user who hid the
+  // scrollbar still saw one (field report 2026-08-19). The MODE is recorded as
+  // a property the overlay reads — the property name is the contract with
+  // OverlayScrollbars, which sits above this layer and cannot be included
+  // here — so both mechanisms honour one setting.
+  const ScrollbarMode mode = collection.gridLayout.verticalScrollbarMode;
+  itemScrollArea->setProperty("kartendVerticalScrollbarMode", static_cast<int>(mode));
+  // When the overlay is attached it owns the native policies outright. Setting
+  // AsNeeded here for any non-Hide mode put a REAL scrollbar back alongside the
+  // painted handle, and its 21px came straight out of the viewport — the
+  // persistent band between the grid and the details pane that took several
+  // rounds to attribute (field report 2026-08-20). Autohide is the mode that
+  // suffered: it is not Hide, so it landed in the else branch every time.
+  if (itemScrollArea->property(PropertyKeys::OverlayScrollbarsAttached).value<QObject *>()) {
+    return;
+  }
+  if (mode == ScrollbarMode::Hide) {
     itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
   } else {
     itemScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);

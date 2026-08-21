@@ -92,8 +92,6 @@ void SidebarPanel::load() {
   ui->sidebarFontFamilyEdit->setText(config.sidebar.sidebarFontFamily);
   ui->sidebarFontSizeSpinBox->setValue(config.sidebar.sidebarFontPointSize);
   ui->sidebarActiveTabComboBox->setCurrentIndex(static_cast<int>(config.sidebar.sidebarActiveTab));
-  ui->hideHorizontalScrollbarCheckBox->setChecked(config.gridLayout.hideHorizontalScrollbar);
-  ui->hideVerticalScrollbarCheckBox->setChecked(config.gridLayout.hideVerticalScrollbar);
   ui->sidebarActiveCollectionLabel->setText(tr("Editing: %1").arg(config.name));
 }
 
@@ -116,8 +114,6 @@ void SidebarPanel::clear() {
   ui->sidebarFontFamilyEdit->clear();
   ui->sidebarFontSizeSpinBox->setValue(0);
   ui->sidebarActiveTabComboBox->setCurrentIndex(0);
-  ui->hideHorizontalScrollbarCheckBox->setChecked(false);
-  ui->hideVerticalScrollbarCheckBox->setChecked(false);
   ui->sidebarActiveCollectionLabel->setText(tr("Editing: (no collection selected)"));
 }
 
@@ -156,8 +152,6 @@ void SidebarPanel::save() {
   config.sidebar.sidebarFontPointSize = ui->sidebarFontSizeSpinBox->value();
   config.sidebar.sidebarActiveTab =
       static_cast<DetailsPaneTab>(ui->sidebarActiveTabComboBox->currentIndex());
-  config.gridLayout.hideHorizontalScrollbar = ui->hideHorizontalScrollbarCheckBox->isChecked();
-  config.gridLayout.hideVerticalScrollbar = ui->hideVerticalScrollbarCheckBox->isChecked();
 }
 
 void SidebarPanel::onPositionChanged() {
@@ -282,6 +276,4 @@ void SidebarPanel::connectChangeSignals() {
   connect(ui->sidebarFontFamilyEdit, &QLineEdit::textChanged, this, &SidebarPanel::changed);
   connect(ui->sidebarFontSizeSpinBox, onSpin, this, &SidebarPanel::changed);
   connect(ui->sidebarActiveTabComboBox, onCombo, this, &SidebarPanel::changed);
-  connect(ui->hideHorizontalScrollbarCheckBox, &QCheckBox::toggled, this, &SidebarPanel::changed);
-  connect(ui->hideVerticalScrollbarCheckBox, &QCheckBox::toggled, this, &SidebarPanel::changed);
 }
