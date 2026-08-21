@@ -39,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Room to breathe around cover art.** Grid artwork now sits inset from the
   tile behind it rather than running flush to its edges, and the details
   pane's preview no longer draws a hairline outline around the image.
+
+- **Round and square logos in the navigation sidebar are easier to see.**
+  Sizing previously favoured wide wordmarks, which are given extra height so
+  they do not render as hairlines — a square or circular platform mark got no
+  such lift and sat noticeably fainter beside them. Compact marks are now
+  raised toward the same visual weight. Rows holding one are a little taller
+  as a result; wide logos are unchanged.
 - **Attract mode holds still while you are looking at artwork.** With an
   artwork open fullscreen, auto-advance stops — from either the grid's
   preview or the details pane's — and dismissing it starts a fresh idle
