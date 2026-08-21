@@ -124,6 +124,29 @@ void InteractionManager::beginSelectionRestore(int targetIndex) {
     return;
   }
 
+  // A LIVE selection that differs from the target means this restore is
+  // stale: the view already has a selection, and it is not the one this
+  // restore was armed with, so the user moved after it was scheduled.
+  //
+  // The userSelectionMade flag cannot catch that case on its own, because the
+  // rebuild path deliberately clears it so a restore CAN run (see
+  // resetSelectionRestoreState). What follows below then stops any in-flight
+  // scroll animation and imposes targetIndex — so without this guard an
+  // armed restore silently discards a newer selection, which is the reported
+  // revert. It shows up when clicking and scrolling alternate faster than the
+  // scroll animation completes, because that is when a restore is still in
+  // flight while the selection moves on.
+  //
+  // The legitimate case is untouched: after a rebuild there is no selection
+  // (current == -1), which is exactly when the restore is needed. An equal
+  // index is a no-op either way.
+  const int liveIndex = currentSelectedIndex();
+  if (liveIndex >= 0 && liveIndex != targetIndex) {
+    debugLog("[SelectionRestore] Skipping stale restore - live selection "
+             << liveIndex << " is newer than target " << targetIndex);
+    return;
+  }
+
   // Use SelectionManager for preparation
   if (m_selectionManager) {
     m_selectionManager->prepareForRestore(targetIndex);
