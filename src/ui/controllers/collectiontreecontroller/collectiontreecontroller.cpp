@@ -285,11 +285,23 @@ protected:
       // fixed inset instead reached back across that cell and swallowed the
       // chevron (user request 2026-08-19: folding icons belong outside the
       // pill). The indent doubles as the left padding.
-      // Only CATEGORY rows own a chevron, so only they must yield the branch
-      // cell. Anchoring every row there cost the leaf rows — where most
-      // logos live — the width their pill needs to cover them (field report
-      // 2026-08-19: "the pill doesn't cover most of the logos anymore").
-      const int left = index.data(kRoleIsCategory).toBool() ? option.rect.left() : kRowLeftInset;
+      //
+      // EVERY non-root row anchors at its own indented position, categories
+      // and leaves alike. Leaves used to be pinned to a flat kRowLeftInset
+      // while their parent category yielded the branch cell, which put a
+      // child's pill one indent LEFT of its parent's — the hierarchy read
+      // backwards, so a category and the subcollections under it looked like
+      // siblings (user request 2026-08-21: "shell collections/categories
+      // should be more to the left, so it's clear the underlying collections
+      // are subcollections"). Anchoring both to option.rect.left() restores
+      // the nesting: each depth steps one indentation unit right.
+      //
+      // The flat inset originally existed because anchoring leaves here cost
+      // them the width their pill needs to cover a wide logo (field report
+      // 2026-08-19: "the pill doesn't cover most of the logos anymore"). That
+      // is no longer load-bearing — the logo-coverage guarantee a few lines
+      // below now widens the pill to fit its logo whatever the left edge is.
+      const int left = option.rect.left();
       const int rightLimit = viewportWidth - lane - kRowRightInset;
       int width = qMax(0, rightLimit - left);
       // The pill must COVER its logo. Logos are baked to the configured

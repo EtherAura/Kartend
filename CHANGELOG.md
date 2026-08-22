@@ -452,6 +452,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   row width — and reflows in place otherwise, keeping the art on screen
   throughout the drag (Kartend-8pxzi).
 
+- **Subcollections in the collection tree now sit indented under their
+  parent.** Every row's highlight pill started at the same fixed left edge
+  regardless of depth, while the categories above them yielded space for their
+  folding arrow — which left a child's pill sitting one step further left than
+  its parent's, so a category and the collections inside it read as siblings.
+  Each row now anchors to its own indented position, and the hierarchy steps
+  rightward with depth as expected.
+
 - **A .kart backup no longer forgets your notes, ratings, pins — or your
   hand-picked covers.** Exporting a collection silently dropped the
   personal half of each item's metadata: notes, rating, source URL and
