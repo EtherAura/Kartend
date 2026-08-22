@@ -1543,6 +1543,11 @@ Skipped %3 items that already had artwork.</source>
         <source>policy</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <location line="+9"/>
+        <source>Permit --import-kart to register a launcher path that points inside the extracted kart tree (a self-bundled executable). Off by default.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>CollectionHealthDialog</name>
@@ -1647,7 +1652,7 @@ Skipped %3 items that already had artwork.</source>
 <context>
     <name>CollectionTreeController</name>
     <message>
-        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+953"/>
+        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+991"/>
         <source>Playlists</source>
         <translation type="unfinished"></translation>
     </message>
@@ -5416,7 +5421,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/input/interaction/interactionmanager_selection.cpp" line="+344"/>
+        <location filename="../src/modules/input/interaction/interactionmanager_selection.cpp" line="+367"/>
         <source>This collection&apos;s launcher paths are unresolvable on this host:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10692,17 +10697,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
-        <source>Type letters</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+0"/>
-        <source>Quick filter (when search not focused)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+2"/>
+        <location line="+8"/>
         <source>Clear search text / Exit search</source>
         <translation type="unfinished"></translation>
     </message>
