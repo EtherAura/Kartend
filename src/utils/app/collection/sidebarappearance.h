@@ -102,6 +102,7 @@ struct SidebarAppearance {
   bool operator==(const SidebarAppearance &other) const {
     return sidebarVisible == other.sidebarVisible && sidebarMode == other.sidebarMode &&
            sidebarPosition == other.sidebarPosition &&
+           sidebarJustification == other.sidebarJustification &&
            sidebarBackgroundType == other.sidebarBackgroundType &&
            sidebarBackgroundColor == other.sidebarBackgroundColor &&
            sidebarBackgroundImage == other.sidebarBackgroundImage &&
@@ -131,13 +132,14 @@ struct SidebarAppearance {
 inline size_t qHash(const SidebarAppearance &key, size_t seed = 0) {
   return qHashMulti(
       seed, key.sidebarVisible, static_cast<int>(key.sidebarMode),
-      static_cast<int>(key.sidebarPosition), static_cast<int>(key.sidebarBackgroundType),
-      key.sidebarBackgroundColor, key.sidebarBackgroundImage, static_cast<int>(key.sidebarPattern),
-      key.sidebarPatternIntensity, key.sidebarPatternColor, key.sidebarTextColor,
-      key.sidebarAccentColor, key.sidebarHeaderBgColor, key.sidebarSectionBgColor,
-      key.sidebarHeaderBgOpacity, key.sidebarSectionBgOpacity, key.sidebarWidth, key.sidebarHeight,
-      key.sidebarWidthLocked, static_cast<int>(key.sidebarActiveTab), key.sidebarFontFamily,
-      key.sidebarFontPointSize, static_cast<int>(key.sidebarScrollbarMode));
+      static_cast<int>(key.sidebarPosition), static_cast<int>(key.sidebarJustification),
+      static_cast<int>(key.sidebarBackgroundType), key.sidebarBackgroundColor,
+      key.sidebarBackgroundImage, static_cast<int>(key.sidebarPattern), key.sidebarPatternIntensity,
+      key.sidebarPatternColor, key.sidebarTextColor, key.sidebarAccentColor,
+      key.sidebarHeaderBgColor, key.sidebarSectionBgColor, key.sidebarHeaderBgOpacity,
+      key.sidebarSectionBgOpacity, key.sidebarWidth, key.sidebarHeight, key.sidebarWidthLocked,
+      static_cast<int>(key.sidebarActiveTab), key.sidebarFontFamily, key.sidebarFontPointSize,
+      static_cast<int>(key.sidebarScrollbarMode));
 }
 
 #endif

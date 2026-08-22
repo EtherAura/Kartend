@@ -85,6 +85,11 @@ void TestCollectionDiffFingerprint::sidebarHashTracksEachField() {
   hashDetects<T>("sidebarVisible", [](T &c) { c.sidebarVisible = true; });
   hashDetects<T>("sidebarMode", [](T &c) { c.sidebarMode = DetailsPaneMode::Expand; });
   hashDetects<T>("sidebarPosition", [](T &c) { c.sidebarPosition = DetailsPanePosition::Left; });
+  // Kartend-g3fth: this field was in NEITHER operator== nor qHash, so a
+  // collection whose only change was Below toolbar <-> Full height
+  // fingerprinted equal and DetailsPaneManager was never told to re-lay out.
+  hashDetects<T>("sidebarJustification",
+                 [](T &c) { c.sidebarJustification = SidebarJustification::FullHeight; });
   hashDetects<T>("sidebarBackgroundType",
                  [](T &c) { c.sidebarBackgroundType = DetailsPaneBackgroundType::Image; });
   hashDetects<T>("sidebarBackgroundColor",
