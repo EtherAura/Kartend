@@ -437,6 +437,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The window titlebar and the app's own chrome are now exactly the same
+  colour.** With the toolbar colour set to follow the titlebar the two were
+  close but never equal, leaving a faint seam where the toolbar met the
+  titlebar. Kartend read the colour from the older of the two places KDE keeps
+  it; Plasma has painted window decorations from the newer one since 5.23, and
+  they hold slightly different values. It now reads the one the decoration
+  actually uses, falling back to the older key for colour schemes that lack it.
+  Switching activities or colour schemes still recolours everything without a
+  restart.
+
 - **The keyboard shortcuts dialog no longer lists a quick-filter that does not
   exist.** It advertised "Type letters → Quick filter (when search not
   focused)", but typing in the grid has never done anything of the kind — the
