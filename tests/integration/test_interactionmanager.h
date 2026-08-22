@@ -26,6 +26,7 @@ private slots:
   void testIsWheelScrollingInitiallyFalse();
   void testStopRepeatResetsTransientInputState();
   void testStopRepeatFlushesPendingSuppressedSelection();
+  void testNewRowClickDoesNotLeaveSelectionSuppressionArmed();
   void testArtworkPreviewLaunchRequestClearsExpandState();
   void testSelectionChangeNotificationResetsExpandState();
 };

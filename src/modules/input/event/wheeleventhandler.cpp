@@ -430,6 +430,18 @@ bool WheelEventHandler::applySelectionDelta(int wheelSteps) {
   if (selectionMgr()) {
     selectionMgr()->cancelPendingSelectionRestore();
   }
+  // Same reasoning, second subsystem: stand down any click-selection
+  // suppression left armed by an earlier gesture, exactly as the Home/End jump
+  // does before its own move. While that flag is set, every
+  // `isSelectionSuppressed() ? pendingSelectionIndex() : live` substitution —
+  // ViewportManager::onVScrollAnimationFinished at the end of each wheel glide,
+  // AnimationManager::requestSelectionUpdate — pushes the STALE pending index
+  // instead of the one this step is about to write, dragging the selection
+  // rectangle and the viewport back a row mid-scroll (Kartend-s88dl). The wheel
+  // is the newest expression of intent, so its landing index wins.
+  if (state()) {
+    state()->endSelectionSuppression();
+  }
   if (selectionCore()) {
     selectionCore()->setSelectedIndex(newSelection);
     QList<int> subs = getSubcollections(*m_currentCollectionIndex);

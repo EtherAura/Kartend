@@ -212,6 +212,23 @@ void SelectionManager::handleNewRowClickSelection(int visualIndex, qint64 nowMs)
     scrollOverlay()->updateSelectionForIndex(visualIndex);
   }
   selectItemByIndex(visualIndex, true);
+  // The suppression above is a ONE-SHOT routing flag, not a gesture scope: its
+  // whole job was to send the selectItemByIndex call just above down the
+  // persistSuppressedSelectionAndMaybeCenter branch instead of
+  // handleSuccessfulSelection. Every other arming site pairs with a drain at
+  // the end of its gesture (ArrowNavigationHandler::handleStopRepeat,
+  // holdScrollingStopped, the Home/End jump, finalizeRestore); a single click
+  // has no gesture end, so leaving it armed left it set for the rest of the
+  // session. That poisons every later `isSelectionSuppressed() ?
+  // pendingSelectionIndex() : live` substitution — above all
+  // ViewportManager::onVScrollAnimationFinished, which fires at the end of
+  // each wheel glide and pushed this clicked index back into
+  // updateSelectionForIndex, snapping the selection rectangle and the viewport
+  // back to the clicked row on every notch (Kartend-s88dl). The sibling
+  // same-row path already clears both fields for exactly this reason.
+  if (state()) {
+    state()->endSelectionSuppression();
+  }
   emit requestCenterVertically(visualIndex, false);
   if (state()) {
     state()->click().rowChangeFirstClickIndex = visualIndex;

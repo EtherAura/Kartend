@@ -82,6 +82,7 @@ private slots:
   void deltaWrapDisabledClampsToValidRange();
   void deltaNoMovementReturnsWrapFlagOnly();
   void deltaUserStepCancelsPendingSelectionRestore();
+  void deltaUserStepStandsDownStaleClickSelectionSuppression();
   void deltaMovedSelectionIsPersistedForTheActiveCollection();
   void deltaHomeViewMoveIsNotPersisted();
   void coverFlowWheelSkipsTheHiddenGridScrollMachinery();
@@ -122,6 +123,7 @@ void TestWheelEventHandler::init() {
   m_sel = StubSelectionManager{};
   m_state.scroll() = {};
   m_state.arrow() = {};
+  m_state.click() = {};
   m_collections.clear();
   m_viewIndex = -1;
 }
@@ -306,6 +308,35 @@ void TestWheelEventHandler::deltaUserStepCancelsPendingSelectionRestore() {
   QVERIFY2(m_sel.cancelPendingRestoreCalls >= 1,
            "wheel selection step moved the selection without standing down the pending "
            "restore — a verification timer would revert this move");
+}
+
+void TestWheelEventHandler::deltaUserStepStandsDownStaleClickSelectionSuppression() {
+  // Kartend-s88dl. A new-row click arms the click-selection suppression pair
+  // (selectionSuppressed + pendingSelectionIndex). Every downstream
+  // `isSelectionSuppressed() ? pendingSelectionIndex() : live` substitution —
+  // ViewportManager::onVScrollAnimationFinished at the end of each wheel glide,
+  // AnimationManager::requestSelectionUpdate — then re-pushes that FIXED
+  // clicked index through updateSelectionForIndex instead of where the wheel
+  // just moved, so the selection rectangle and the viewport snap back to the
+  // clicked row on every notch. The wheel is the newest expression of intent:
+  // its step must stand the pair down before moving, as the Home/End jump does.
+  wire(/*viewIndex=*/-1);
+  m_scroll.totalItems = 3000;
+  m_sel.index = 1481;
+  m_settings.input.mouseWheelRows = 1;
+  m_settings.input.scrollVelocityMultiplier = 1.0;
+  m_state.beginSelectionSuppression(1481);
+
+  const CollectionConfig defaultConfig;
+  const int gw = gridWidthFor(defaultConfig);
+
+  m_handler.applySelectionDelta(-1); // one row down
+
+  QCOMPARE(m_sel.lastSetIndex, 1481 + gw);
+  QVERIFY2(!m_state.isSelectionSuppressed(),
+           "wheel step left the click's selection suppression armed — the end-of-glide "
+           "selection update re-pushes the stale clicked index and the view snaps back");
+  QCOMPARE(m_state.pendingSelectionIndex(), -1);
 }
 
 // Kartend-2sdjp: cancelling the pending restore is only half the protection —

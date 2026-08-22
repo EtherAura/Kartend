@@ -427,6 +427,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Scrolling after clicking an item no longer drags the selection and the
+  view back a row at a time.** Clicking an item on a different row than the
+  current one put the selection into a short-lived "commit this when the
+  gesture ends" state — the same mechanism a held arrow key or a hold-scroll
+  uses. Those gestures each end and clear it; a single click has no end, so
+  the state stayed armed for the rest of the session, still pointing at the
+  item you clicked. From then on, every place that asks "is a selection
+  pending?" answered yes and used that clicked item instead of wherever you
+  had scrolled to. The end of each wheel glide is one of those places, so the
+  selection rectangle jumped back to the clicked row on every notch, and the
+  view animated back after it — the faster you scrolled, the more the two
+  fought each other. A click now clears the state as soon as it has done its
+  job, and a wheel step stands down any that an interrupted gesture left
+  behind, so wheel scrolling after a click tracks the wheel and nothing else.
+
 - **A .kart backup no longer forgets your notes, ratings, pins — or your
   hand-picked covers.** Exporting a collection silently dropped the
   personal half of each item's metadata: notes, rating, source URL and

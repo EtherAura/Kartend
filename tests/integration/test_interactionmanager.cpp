@@ -108,6 +108,33 @@ void TestInteractionManager::testStopRepeatFlushesPendingSuppressedSelection() {
   QCOMPARE(im->state().click().pendingSelectionIndex, -1);
 }
 
+void TestInteractionManager::testNewRowClickDoesNotLeaveSelectionSuppressionArmed() {
+  // Kartend-s88dl. A click onto a different row arms the same deferred-commit
+  // pair the hold-scroll above uses, but a single click has no gesture end to
+  // drain it — so it used to stay armed for the rest of the session. Every
+  // later `isSelectionSuppressed() ? pendingSelectionIndex() : live`
+  // substitution then re-pushed that FIXED clicked index:
+  // ViewportManager::onVScrollAnimationFinished fires at the end of every wheel
+  // glide, so each notch dragged the selection rectangle and the viewport back
+  // to the clicked row while the user was still scrolling.
+  CollectionConfig seed;
+  KartendTest::MockedMainWindowFixture fixture({seed});
+  InteractionManager *im = interaction(fixture);
+  QVERIFY(im);
+  SelectionManager *sm = im->selectionManager();
+  QVERIFY(sm);
+
+  sm->handleWidgetSelectionByIndex(0, QPoint(), nullptr);
+
+  // Guards the assertions below against vacuity: rowChangeFirstClickIndex is
+  // stamped at the tail of handleNewRowClickSelection, so this failing means
+  // the click never took the new-row path and the suppression checks would
+  // pass for the wrong reason.
+  QCOMPARE(im->state().click().rowChangeFirstClickIndex, 0);
+  QVERIFY(!im->state().click().selectionSuppressed);
+  QCOMPARE(im->state().click().pendingSelectionIndex, -1);
+}
+
 void TestInteractionManager::testArtworkPreviewLaunchRequestClearsExpandState() {
   // The overlay-activation slot must always tear down the expand-mode state,
   // even when it cannot resolve a path to launch (empty view here) — a
