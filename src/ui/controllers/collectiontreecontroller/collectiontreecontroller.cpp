@@ -57,8 +57,6 @@ constexpr int kSelectionRadius = 20;
 /// less wide"). Applied to band, hover and selection alike so their corner
 /// radii match instead of the right pair being clipped off.
 constexpr int kRowRightInset = 8;
-/// Matching padding on the LEFT so the pill is inset on both sides.
-constexpr int kRowLeftInset = 8;
 /// Trims the pill's height — a backdrop the full row height reads as a slab
 /// rather than a pill (user request 2026-08-19: "the pills are also too
 /// tall").
@@ -287,7 +285,7 @@ protected:
       // pill). The indent doubles as the left padding.
       //
       // EVERY non-root row anchors at its own indented position, categories
-      // and leaves alike. Leaves used to be pinned to a flat kRowLeftInset
+      // and leaves alike. Leaves used to be pinned to a flat 8px inset
       // while their parent category yielded the branch cell, which put a
       // child's pill one indent LEFT of its parent's — the hierarchy read
       // backwards, so a category and the subcollections under it looked like
