@@ -59,6 +59,18 @@ enum class ToolbarColorSource {
 
 enum class TreeIconStyle { Normal = 0, MonochromeDark = 1, MonochromeLight = 2, Tinted = 3 };
 
+/// What a collection-tree row shows when it HAS artwork (Kartend-j1mtg, user
+/// request 2026-08-22). Replaces the treeIconsOnly bool, which only ever chose
+/// between the last two of these — a row with artwork always lost its name,
+/// because TreeIconDelegate cleared the label unconditionally on the icon path.
+/// IconAndText is the third behaviour that was never reachable.
+///
+/// Rows with NO artwork are unaffected and always show their name: a blank
+/// unlabelled row would be unusable, so text is the fallback in every mode.
+///
+/// Order matters for the settings combo, which casts index <-> enum.
+enum class TreeIconDisplay { TextOnly = 0, IconAndText = 1, IconOnly = 2 };
+
 /// how the details-pane background is rendered. Color and Image
 /// mirror the main-view BackgroundType values. Pattern adds a
 /// procedurally-drawn pattern (currently only Crosshatch) tinted by

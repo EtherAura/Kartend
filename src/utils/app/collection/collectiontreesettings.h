@@ -56,11 +56,20 @@ struct CollectionTreeSettings {
   static constexpr int kMinWidth = 140;
   static constexpr int kMaxWidth = 600;
 
-  /// Icons-only mode (user request 2026-08-17): rows whose icon resolves show
-  /// ONLY the icon (name demoted to a tooltip); rows with no icon keep their
-  /// text — a blank unlabelled row would be unusable, so text is the fallback,
-  /// not a casualty.
-  bool treeIconsOnly = false;
+  /// What a row with artwork shows (Kartend-j1mtg, user request 2026-08-22:
+  /// "we should have an option to just show the text, even if the icon is
+  /// available. or, show the text, but make the icon small and next to the
+  /// text"). Replaces the treeIconsOnly bool from 2026-08-17.
+  ///
+  /// IconAndText is the DEFAULT and is new behaviour: a row with artwork used
+  /// to lose its name outright, because TreeIconDelegate cleared the label on
+  /// its icon path whatever treeIconsOnly said. The old bool therefore chose
+  /// between IconOnly (true, name to tooltip) and IconAndText-without-the-text
+  /// (false) — never text alongside an icon.
+  ///
+  /// Rows with NO artwork keep their name in every mode; a blank unlabelled
+  /// row would be unusable, so text is the fallback, not a casualty.
+  TreeIconDisplay treeIconDisplay = TreeIconDisplay::IconAndText;
   /// Branch connector lines (user request 2026-08-17). OFF by default —
   /// the chevrons alone carry the structure; the lines are visual noise
   /// most themes are better without. Chevrons stay either way.

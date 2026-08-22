@@ -425,6 +425,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchecked (the default), the imported files stay behind for a future
   re-import to pick up, as before (Kartend-i366w).
 
+- **Collection tree rows can show their name, their icon, or both.** A row
+  that had artwork used to lose its name entirely — the tree drew the picture
+  and nothing else — which made a library of logos hard to read and had no
+  setting to change it. The Sidebars page now has a **Rows show** choice:
+  *Name only* keeps the artwork on file but draws just the text, *Icon and
+  name* puts a small icon beside the name (the new default), and *Icon only*
+  is the previous picture-only look with the name in the tooltip. Rows without
+  artwork show their name in every mode, as before. An existing icons-only
+  setting carries over to *Icon only*; everything else becomes *Icon and name*.
+
 ### Fixed
 
 - **The keyboard shortcuts dialog no longer lists a quick-filter that does not

@@ -68,11 +68,13 @@
       <item row="4" column="1">
        <widget class="QComboBox" name="treeScrollbarModeComboBox"><property name="toolTip"><string>Show: normal. Auto-hide: appears only when the pointer comes near the scrollbar edge. Hide: never drawn. The tree always scrolls with the wheel and the arrow keys — this only governs the indicator. Auto-hide needs slim overlay scrollbars (Settings -&gt; General); without them it behaves as Show.</string></property><item><property name="text"><string>Show</string></property></item><item><property name="text"><string>Auto-hide (show near the edge)</string></property></item><item><property name="text"><string>Hide</string></property></item></widget>
       </item>
-      <item row="5" column="0"><widget class="QLabel" name="treeIconsOnlyLabel"><property name="text"><string>Icons only:</string></property></widget></item>
+      <item row="5" column="0"><widget class="QLabel" name="treeIconDisplayLabel"><property name="text"><string>Rows show:</string></property></widget></item>
       <item row="5" column="1">
-       <widget class="QCheckBox" name="treeIconsOnlyCheckBox">
-        <property name="toolTip"><string>Show only the icon/logo on rows that have one — the name moves to the tooltip. Rows without an icon keep their name.</string></property>
-        <property name="text"><string>Show icons/logos without names</string></property>
+       <widget class="QComboBox" name="treeIconDisplayComboBox">
+        <property name="toolTip"><string>What a row shows when it has an icon or logo. Name only: the artwork is kept but not drawn. Icon and name: a small icon beside the name. Icon only: just the artwork, with the name in the tooltip. Rows without artwork always show their name.</string></property>
+        <item><property name="text"><string>Name only</string></property></item>
+        <item><property name="text"><string>Icon and name</string></property></item>
+        <item><property name="text"><string>Icon only (name in tooltip)</string></property></item>
        </widget>
       </item>
       <item row="6" column="0"><widget class="QLabel" name="treeShowLinesLabel"><property name="text"><string>Tree lines:</string></property></widget></item>

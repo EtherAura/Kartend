@@ -46,9 +46,21 @@ void load(QSettings &settings, CollectionTreeSettings &tree, const QString &coll
       settings.value(keys::kCollectionTreeWidth, CollectionTreeSettings{}.treeWidth).toInt();
   tree.treeWidth =
       std::clamp(rawWidth, CollectionTreeSettings::kMinWidth, CollectionTreeSettings::kMaxWidth);
-  tree.treeIconsOnly =
-      settings.value(keys::kCollectionTreeIconsOnly, CollectionTreeSettings{}.treeIconsOnly)
-          .toBool();
+  // Kartend-j1mtg. Prefer the tri-state key; fall back to the legacy bool so an
+  // existing config keeps the mode its owner chose. true -> IconOnly. false
+  // maps to IconAndText, NOT TextOnly: false used to mean "icon, and the name
+  // silently dropped by the delegate", so IconAndText is what that user was
+  // reaching for and it keeps their artwork. Nobody loses an icon on upgrade.
+  if (settings.contains(keys::kCollectionTreeIconDisplay)) {
+    tree.treeIconDisplay = CollectionUtils::stringToTreeIconDisplay(
+        settings.value(keys::kCollectionTreeIconDisplay).toString());
+  } else if (settings.contains(keys::kCollectionTreeIconsOnly)) {
+    tree.treeIconDisplay = settings.value(keys::kCollectionTreeIconsOnly).toBool()
+                               ? TreeIconDisplay::IconOnly
+                               : TreeIconDisplay::IconAndText;
+  } else {
+    tree.treeIconDisplay = CollectionTreeSettings{}.treeIconDisplay;
+  }
   tree.treeShowLines =
       settings.value(keys::kCollectionTreeShowLines, CollectionTreeSettings{}.treeShowLines)
           .toBool();
@@ -101,7 +113,15 @@ void save(QSettings &settings, const CollectionTreeSettings &tree) {
   settings.setValue(keys::kCollectionTreeVisible, tree.treeVisible);
   settings.setValue(keys::kCollectionTreePosition, positionToString(tree.treePosition));
   settings.setValue(keys::kCollectionTreeWidth, tree.treeWidth);
-  settings.setValue(keys::kCollectionTreeIconsOnly, tree.treeIconsOnly);
+  // Kartend-j1mtg: the legacy bool is REMOVED, not merely left unwritten.
+  // Not writing it is not enough — an existing kartend.cfg already contains
+  // it, so it would sit beside the new key forever, read by nothing and
+  // contradicting it for anyone inspecting the file (a config showing
+  // collectionTreeIconsOnly=false next to collectionTreeIconDisplay=icon-only
+  // is actively misleading). Migration happens on load; this is the other half.
+  settings.remove(keys::kCollectionTreeIconsOnly);
+  settings.setValue(keys::kCollectionTreeIconDisplay,
+                    CollectionUtils::treeIconDisplayToString(tree.treeIconDisplay));
   settings.setValue(keys::kCollectionTreeShowLines, tree.treeShowLines);
   settings.setValue(keys::kCollectionTreeColorizeSelected, tree.treeColorizeSelected);
   settings.setValue(keys::kCollectionTreeHideScrollbar,
