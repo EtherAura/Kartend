@@ -136,7 +136,12 @@ void ShortcutsDialog::populateContent() {
   auto *searchSection = addSection(m_leftColumnLayout, tr("Search"));
   addShortcut(searchSection, keyText(settings.keybindings.keySearch),
               tr("Focus search bar / Toggle search mode"));
-  addShortcut(searchSection, tr("Type letters"), tr("Quick filter (when search not focused)"));
+  // No "Type letters -> Quick filter" row (Kartend-oenit): nothing implements
+  // it. KeyboardManager::handleKeyPress returns false for unhandled keys and
+  // never redirects them to the search bar, and the only path that focuses it
+  // is InteractionManager::handleSlashKey, bound to the Search key above.
+  // docs/user/Input-and-Controls.md already states that typing while the grid
+  // is focused does NOT auto-focus search, so this dialog was the odd one out.
   addShortcut(searchSection, keyText(settings.keybindings.keyBack),
               tr("Clear search text / Exit search"));
 

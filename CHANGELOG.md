@@ -427,6 +427,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The keyboard shortcuts dialog no longer lists a quick-filter that does not
+  exist.** It advertised "Type letters → Quick filter (when search not
+  focused)", but typing in the grid has never done anything of the kind — the
+  user guide says so correctly, and the dialog was the odd one out. Use the
+  Search key to focus the search bar.
+
 - **Scrolling after clicking an item no longer drags the selection and the
   view back a row at a time.** Clicking an item on a different row than the
   current one put the selection into a short-lived "commit this when the
