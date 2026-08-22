@@ -100,11 +100,29 @@ jobs:
               echo "::notice::Every commit in this push carries [no-changelog] — skipping CHANGELOG check."
               exit 0
             fi
-            # Files touched by the unmarked commits only. -m diffs a merge
-            # against each parent, which over-reports rather than under-reports
-            # — the safe direction for a gate.
+            # Files touched by the unmarked commits only, FIRST-PARENT.
+            #
+            # Kartend-b2fpv: this used `diff-tree -r -m`, justified as
+            # "over-reports rather than under-reports — the safe direction for
+            # a gate". It is not safe, it is un-passable. -m diffs a merge
+            # against EVERY parent, so a PR-merge whose branch was cut from an
+            # older main reports everything main gained since the branch point.
+            # Measured on merge 82dfc6c8: first-parent says 1 file, -m says 84.
+            # Those 83 extra files include src/, so USER_VISIBLE flips to 1 for
+            # work the merge did not introduce, and no edit to THIS push can
+            # clear it — the CHANGELOG lines it wants already landed with the
+            # branch. (--first-parent does not help here: combined with -m it
+            # still emitted all 84.)
+            #
+            # sha^1..sha is what the commit actually contributed to this ref.
+            # Identical to the old output for non-merge commits, verified.
+            # A root commit has no ^1, so fall back to --root for it.
             CHANGED=$(for sha in ${UNMARKED_SHAS}; do
-              git diff-tree -r -m --no-commit-id --name-only "$sha"
+              if git rev-parse -q --verify "${sha}^1" >/dev/null 2>&1; then
+                git diff -r --name-only "${sha}^1" "$sha"
+              else
+                git diff-tree -r --no-commit-id --name-only --root "$sha"
+              fi
             done | sort -u)
           else
             BASE_SHA="$(git rev-parse "origin/${BASE_REF}")"
@@ -149,9 +167,23 @@ jobs:
             exit 1
           fi
 
+          # Kartend-b2fpv: the counting pattern was '^\+[^[:space:]]', which
+          # demands a non-whitespace character IMMEDIATELY after the '+'. Every
+          # continuation line of a wrapped Markdown bullet is indented, so an
+          # entry that is expanded or reworded — rather than newly added at
+          # column 0 — counted ZERO and the push failed with "no new
+          # non-whitespace lines were added" despite a real CHANGELOG edit.
+          # This is the actual "push-leg red on main cannot be un-failed"
+          # failure; reproduced on 6e52a4e7, whose four added lines are all
+          # bullet continuations (old pattern: 0, this one: 4).
+          #
+          # The check's real intent is "at least one added line carries some
+          # non-whitespace", so allow leading indentation before requiring it.
+          # Whitespace-only additions still count 0, which is the case the
+          # check exists to reject — verified against '+   ', '+' and '+\t'.
           ADDED=$(git diff "${RANGE_BASE}" HEAD -- CHANGELOG.md \
             | awk '/^\+\+\+ / { in_file = 1; next } in_file && /^\+[^+]/ { print }' \
-            | grep -cE '^\+[^[:space:]]' || true)
+            | grep -cE '^\+[[:space:]]*[^[:space:]]' || true)
           if [ "$ADDED" -eq 0 ]; then
             echo "::error::CHANGELOG.md is modified but no new non-whitespace lines were added. Add a real entry under [Unreleased]."
             exit 1
