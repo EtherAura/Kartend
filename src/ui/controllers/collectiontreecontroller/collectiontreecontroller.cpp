@@ -697,6 +697,10 @@ void CollectionTreeController::setupPanel() {
   m_tree->setSelectionMode(QAbstractItemView::SingleSelection);
   m_tree->setFocusPolicy(Qt::ClickFocus);
   if (m_tree->viewport()) {
+    // Captured here, while the tree is unambiguously alive, because
+    // eventFilter cannot safely ask for it later (Kartend-6a2ci — see the
+    // m_treeViewport declaration).
+    m_treeViewport = m_tree->viewport();
     m_tree->viewport()->installEventFilter(this);
     m_tree->viewport()->setMouseTracking(true);
   }
@@ -1059,12 +1063,12 @@ bool CollectionTreeController::eventFilter(QObject *watched, QEvent *event) {
   // viewport event here left the inner-edge drag zone below unreachable and
   // the panel width impossible to change by dragging (field report
   // 2026-08-19, "i am unable to edit nav sidebar width").
-  if (m_tree && watched == m_tree->viewport() && event->type() == QEvent::Resize) {
-    if (m_tree->viewport()->width() != m_bakedViewportWidth && m_bakedViewportWidth != 0) {
+  if (m_treeViewport && watched == m_treeViewport && event->type() == QEvent::Resize) {
+    if (m_treeViewport->width() != m_bakedViewportWidth && m_bakedViewportWidth != 0) {
       // Deferred: icon swaps inside a resize re-enter layout. The width
       // check keeps the scrollbar-toggle feedback loop convergent.
       QTimer::singleShot(0, this, [this]() {
-        if (m_tree && m_tree->viewport() && m_tree->viewport()->width() != m_bakedViewportWidth) {
+        if (m_treeViewport && m_treeViewport->width() != m_bakedViewportWidth) {
           refreshIcons();
         }
       });
@@ -1072,7 +1076,7 @@ bool CollectionTreeController::eventFilter(QObject *watched, QEvent *event) {
     return false;
   }
   const bool fromTree =
-      m_tree && (watched == m_tree || (m_tree->viewport() && watched == m_tree->viewport()));
+      (m_tree && watched == m_tree) || (m_treeViewport && watched == m_treeViewport);
   if (!fromTree || !m_panel) {
     return QObject::eventFilter(watched, event);
   }

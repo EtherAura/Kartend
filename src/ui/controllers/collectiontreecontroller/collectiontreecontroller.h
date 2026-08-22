@@ -4,6 +4,7 @@
 #include <functional>
 
 #include <QObject>
+#include <QPointer>
 #include <QSet>
 #include <QString>
 
@@ -180,6 +181,17 @@ private:
 
   QWidget *m_panel = nullptr;
   QTreeWidget *m_tree = nullptr;
+  /// The tree's viewport, captured when the event filter is installed on it
+  /// (Kartend-6a2ci). eventFilter must NOT reach it via m_tree->viewport():
+  /// the tree is owned by the widget hierarchy, not by this controller, so it
+  /// is destroyed first, and the ChildRemoved events its own teardown emits
+  /// are still delivered here. By then ~QAbstractScrollArea has run and
+  /// viewport() is a member call on an object that is no longer one — UB, and
+  /// the reason ~12 integration tests failed under UBSan. A QPointer to the
+  /// tree would not have helped: it clears in ~QObject, which runs later
+  /// still. Held as QPointer so a comparison against a destroyed viewport
+  /// fails rather than matching a recycled address.
+  QPointer<QWidget> m_treeViewport;
   /// The root row pinned to the top of the tree while it scrolls. Typed as
   /// QWidget because the concrete class is file-local to the .cpp.
   QWidget *m_stickyRootHeader = nullptr;
