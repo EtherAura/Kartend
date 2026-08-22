@@ -12,7 +12,6 @@
 #include <QLabel>
 #include <QPainter>
 #include <QPalette>
-#include <QPen>
 #include <QPixmap>
 #include <QPointer>
 #include <QSet>
@@ -300,52 +299,12 @@ void DetailsPane::paintEvent(QPaintEvent *event) {
   }
   }
 
-  // paint a guideline on the inner (grid-facing)
-  // edge while the resize lock is off so the user can see where to grab.
-  // Skipped during the live drag so the line doesn't smear. A 1px line was
-  // too easy to miss on T/B docks, where the items area's horizontal
-  // scrollbar lives right next to the grip — bump it to a 2px band and
-  // overlay a short central tick so the handle reads as a deliberate
-  // affordance rather than a stray highlight pixel.
-  if (!m_widthLocked && m_resizeGrip && !m_resizeGrip->isDragging()) {
-    QColor edgeColor = palette().color(QPalette::Highlight);
-    edgeColor.setAlpha(180);
-    QColor tickColor = edgeColor;
-    tickColor.setAlpha(255);
-    const int w = width();
-    const int h = height();
-    auto drawHandle = [&](int x1, int y1, int x2, int y2, bool horizontalEdge) {
-      painter.setPen(QPen(edgeColor, 2));
-      painter.drawLine(x1, y1, x2, y2);
-      // Center tick: a short perpendicular bar (~24px) drawn full-alpha so
-      // the handle is visible even when the band sits behind a scrollbar
-      // shadow on dark themes.
-      painter.setPen(QPen(tickColor, 2));
-      const int tickHalf = 12;
-      if (horizontalEdge) {
-        const int cx = w / 2;
-        painter.drawLine(cx - tickHalf, y1, cx + tickHalf, y1);
-      } else {
-        const int cy = h / 2;
-        painter.drawLine(x1, cy - tickHalf, x1, cy + tickHalf);
-      }
-    };
-    switch (m_position) {
-    case DetailsPanePosition::Left:
-      drawHandle(w - 1, 0, w - 1, h, /*horizontalEdge=*/false);
-      break;
-    case DetailsPanePosition::Top:
-      drawHandle(0, h - 1, w, h - 1, /*horizontalEdge=*/true);
-      break;
-    case DetailsPanePosition::Bottom:
-      drawHandle(0, 0, w, 0, /*horizontalEdge=*/true);
-      break;
-    case DetailsPanePosition::Right:
-    default:
-      drawHandle(0, 0, 0, h, /*horizontalEdge=*/false);
-      break;
-    }
-  }
+  // No grip guideline is painted on the inner (grid-facing) edge. The pane
+  // deliberately carries no visible border of its own, so the 2px Highlight
+  // band + centre tick that used to advertise the drag handle was the one
+  // thing drawing a line around it. DetailsPaneResizeGrip still owns the
+  // hit area and the resize cursor, so dragging works exactly as before —
+  // the affordance is now the cursor change alone.
 
   QWidget::paintEvent(event);
 }

@@ -460,6 +460,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Each row now anchors to its own indented position, and the hierarchy steps
   rightward with depth as expected.
 
+- **The details pane no longer draws a stray line down its grid-facing edge.**
+  A two-pixel highlight band with a centre tick was painted along that edge to
+  advertise the resize handle, but the pane carries no border of its own, so
+  the band read as an unexplained line boxing the pane in. The handle keeps its
+  hit area and its resize cursor, so dragging is unchanged — the cursor is now
+  the affordance. The pane's inner content also sits flush to its edges rather
+  than inside a fixed margin.
+
 - **A .kart backup no longer forgets your notes, ratings, pins — or your
   hand-picked covers.** Exporting a collection silently dropped the
   personal half of each item's metadata: notes, rating, source URL and
