@@ -324,20 +324,53 @@ void VirtualScrollEngine::handleLayoutChange() {
     return;
   }
 
-  // Release all active widgets back to the pool - they need to be recreated
-  // because layout changes (especially view type changes) require fresh widgets
-  // with different configurations (e.g., list mode has no image label)
-  const int visibleRows = (m_owner->getLastVisibleRow() - m_owner->getFirstVisibleRow()) + 1;
-  qCDebug(lcScrollManager).nospace()
-      << "WIDGETREL reason=handleLayoutChange-release-ALL n=" << m_owner->m_activeWidgets.size();
-  for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end(); ++it) {
-    if (ItemWidget *widget = it.value()) {
-      m_owner->releaseWidget(widget, visibleRows);
-    }
-  }
-  m_owner->clearActiveWidgets();
-
+  // Kartend-8pxzi: compute the new metrics FIRST, then release only when the
+  // change is STRUCTURAL. A released widget loses its artwork — the pool's
+  // reset clears storedPixmap — so it comes back a placeholder until the
+  // debounced artwork pass repaints it ~100ms later. Releasing everything on a
+  // geometry-only relayout therefore flashes every visible tile at once.
+  //
+  // Dragging the details-pane divider lands here via DetailsPaneManager ->
+  // scheduleLayoutUpdate -> MainWindow::onArtworkLayoutUpdateRequested, and it
+  // is purely geometric: the widgets are structurally identical, only their
+  // positions move. Measured in the guest before this gate, one drag emitted
+  // `WIDGETREL reason=handleLayoutChange-release-ALL n=35` — all 35 live tiles.
+  // Same shape as the gate 651ff1a4 added one layer up in
+  // ScrollManager::eventFilter.
+  const GridMetrics previous = m_owner->m_metrics;
+  const std::optional<ViewType> previousViewType = m_lastLaidOutViewType;
   calculateVirtualMetrics();
+  const GridMetrics &current = m_owner->m_metrics;
+  const ViewType currentViewType = m_owner->m_context.config.viewType;
+  m_lastLaidOutViewType = currentViewType;
+
+  // What actually demands FRESH widgets: a view-type switch (list mode builds
+  // no image label, so construction differs) or a change in the per-widget
+  // geometry the factory bakes in at configure time. A wider sidebar or a
+  // narrower grid is neither — updateVirtualView's ensureWidgetForIndex
+  // already repositions every live widget on each pass, so a reflow suffices
+  // and the artwork survives.
+  const bool structural = !previousViewType.has_value() || *previousViewType != currentViewType ||
+                          previous.isHorizontal != current.isHorizontal ||
+                          previous.itemsPerRow != current.itemsPerRow ||
+                          previous.itemWidth != current.itemWidth ||
+                          previous.itemHeight != current.itemHeight;
+
+  if (structural) {
+    const int visibleRows = (m_owner->getLastVisibleRow() - m_owner->getFirstVisibleRow()) + 1;
+    qCDebug(lcScrollManager).nospace()
+        << "WIDGETREL reason=handleLayoutChange-release-ALL n=" << m_owner->m_activeWidgets.size();
+    for (auto it = m_owner->m_activeWidgets.begin(); it != m_owner->m_activeWidgets.end(); ++it) {
+      if (ItemWidget *widget = it.value()) {
+        m_owner->releaseWidget(widget, visibleRows);
+      }
+    }
+    m_owner->clearActiveWidgets();
+  } else {
+    qCDebug(lcScrollManager).nospace()
+        << "WIDGETREL reason=handleLayoutChange-geometry-only-KEPT n="
+        << m_owner->m_activeWidgets.size();
+  }
 
   // Update factory with new metrics before creating widgets
   // Critical for view type changes where item dimensions differ significantly

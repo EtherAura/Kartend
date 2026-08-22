@@ -442,6 +442,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   job, and a wheel step stands down any that an interrupted gesture left
   behind, so wheel scrolling after a click tracks the wheel and nothing else.
 
+- **Dragging the details pane's edge no longer blanks the cover art.** Resizing
+  the pane threw away every visible tile's widget and built fresh ones, and a
+  rebuilt tile shows the hatched placeholder until the artwork pass catches up
+  about a tenth of a second later — so the whole grid blinked to placeholders
+  mid-drag and filled back in. A resize only moves tiles around; it does not
+  change what they are. The grid now rebuilds only when the layout genuinely
+  changes shape — switching between grid and list, or a change in tile size or
+  row width — and reflows in place otherwise, keeping the art on screen
+  throughout the drag (Kartend-8pxzi).
+
 - **A .kart backup no longer forgets your notes, ratings, pins — or your
   hand-picked covers.** Exporting a collection silently dropped the
   personal half of each item's metadata: notes, rating, source URL and

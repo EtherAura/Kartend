@@ -4,6 +4,7 @@
 #include "collection/collectionconfig.h"
 
 #include <limits>
+#include <optional>
 
 #include <QObject>
 #include <QPointer>
@@ -112,6 +113,15 @@ private:
   // Defaults differ from any real config so the first pass always re-applies.
   WidgetVisualConfig m_lastWidgetVisualConfig;
   bool m_widgetVisualConfigDirty = true;
+
+  // View type this engine last laid out with (Kartend-8pxzi). handleLayoutChange
+  // needs to tell a view-type SWITCH, which genuinely needs fresh widgets (list
+  // mode builds no image label), from a geometry-only relayout such as a
+  // details-pane resize, which does not. The config is already updated by the
+  // time handleLayoutChange runs, so the previous value cannot be recovered
+  // from it and has to be remembered here. Empty until the first layout, so
+  // that first pass always counts as structural.
+  std::optional<ViewType> m_lastLaidOutViewType;
 };
 
 #endif // VIRTUALSCROLLENGINE_H
