@@ -37,6 +37,22 @@
     <binary>kartend</binary>
   </provides>
   <releases>
+    <release version="0.0.19" date="2026-08-22">
+      <description>
+        <p>A collection tree, many more launchers, and a large performance pass:</p>
+        <ul>
+          <li>New collection tree panel — see your whole library at a glance and jump between collections, with each collection's artwork on its row</li>
+          <li>Launcher import now covers Heroic, itch.io, Bottles, and ES-DE, and collections can be built straight from Steam, Flatpak, and Lutris — with cover art fetched for them</li>
+          <li>A release split across several discs can now appear as a single item</li>
+          <li>A smart playlist can hold more than one rule</li>
+          <li>New Sidebars settings page: pick each panel's side, and whether it sits below the toolbar or runs the full window height; a sidebar can also overlap the grid instead of pushing it aside</li>
+          <li>Every scrollbar is now a three-way choice — Show, Auto-hide, or Hide — alongside a new slim overlay scrollbar style</li>
+          <li>Gamepad: the right stick drives the details pane with a ringed selection, and the shoulder buttons fold each sidebar</li>
+          <li>Uses roughly half the memory during long sessions, and moves video-frame conversion and other heavy work off the interface thread so the window stays responsive</li>
+        </ul>
+        <p>Also includes a long list of fixes to scrolling, selection, and artwork loading.</p>
+      </description>
+    </release>
     <release version="0.0.18" date="2026-07-29"/>
     <release version="0.0.17" date="2026-07-19">
       <description>
