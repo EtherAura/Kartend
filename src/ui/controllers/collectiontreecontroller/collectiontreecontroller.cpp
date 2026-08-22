@@ -1281,8 +1281,16 @@ void CollectionTreeController::refreshIcons() {
     // band that distinguishes them from leaves; the Playlists group header
     // (index < 0) keeps its text-only look.
     const bool isRootCollection = (item->parent() == nullptr) && index >= 0;
-    const QColor rootFill = isRootCollection ? KdeColorScheme::activeTitlebarColor() : QColor();
-    if (isRootCollection && rootFill.isValid()) {
+    // ONLY THE TOPMOST root row is chrome (user request 2026-08-22: "on the
+    // navbar, only the top one should be the titlebar color"). The point of
+    // the titlebar fill is to continue the toolbar across the top of the
+    // panel, and only the first row touches the toolbar — painting every root
+    // collection with it turned a library with several roots into a stack of
+    // chrome bars with no visual hierarchy. Lower roots keep the rest of their
+    // root styling (centred, tinted, square) and simply lose the fill.
+    const bool isTopRootRow = isRootCollection && m_tree && m_tree->indexOfTopLevelItem(item) == 0;
+    const QColor rootFill = isTopRootRow ? KdeColorScheme::activeTitlebarColor() : QColor();
+    if (isTopRootRow && rootFill.isValid()) {
       // Handed to the delegate rather than set as the item's background:
       // an item background stops at the indented item rect and leaves a
       // gap down the left, so the delegate fills the row edge to edge.
@@ -1513,7 +1521,14 @@ void CollectionTreeController::refreshIcons() {
       cached = cache.insert(cacheKey, baked);
     }
 
-    const QPixmap &baked = cached.value().pixmap;
+    const QPixmap &bakedRaw = cached.value().pixmap;
+    // Kartend-j1mtg: in TextOnly the pixmap is still CACHED (switching modes
+    // must not force a re-bake) but it is invisible to everything downstream —
+    // the delegate does not draw it, and, just as importantly, the row must not
+    // be SIZED for it. Sizing ran off the baked height regardless of mode, so
+    // text-only rows kept icon-tall gaps between one-line labels.
+    const bool iconHidden = (m_iconDisplay == TreeIconDisplay::TextOnly);
+    const QPixmap baked = iconHidden ? QPixmap() : bakedRaw;
     item->setIcon(0, QIcon()); // TreeIconDelegate paints; no decoration
     item->setData(0, kRoleBakedPixmap, baked.isNull() ? QVariant() : QVariant(baked));
     // Per-row height hugs the baked pixmap plus a breathing gap that

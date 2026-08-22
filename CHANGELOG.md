@@ -435,6 +435,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   artwork show their name in every mode, as before. An existing icons-only
   setting carries over to *Icon only*; everything else becomes *Icon and name*.
 
+- **Only the topmost sidebar row is painted as chrome.** Every top-level
+  collection took the titlebar colour, so a library with several of them
+  turned the sidebar into a stack of full-width bars with no sense of
+  hierarchy. The point of that fill is to carry the toolbar across the top of
+  the panel, and only the first row touches the toolbar — the rest now look
+  like the collections they are.
+
 ### Fixed
 
 - **The window titlebar and the app's own chrome are now exactly the same
