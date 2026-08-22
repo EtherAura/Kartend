@@ -24,7 +24,8 @@ SidebarsLayoutPanel::SidebarsLayoutPanel(QWidget *parent)
     connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [this](int) { emit changed(); });
   }
-  connect(ui->treeIconsOnlyCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
+  connect(ui->treeIconDisplayComboBox, &QComboBox::currentIndexChanged, this,
+          [this](int) { emit changed(); });
   connect(ui->treeShowLinesCheckBox, &QCheckBox::toggled, this, [this](bool) { emit changed(); });
   connect(ui->treeColorizeSelectedCheckBox, &QCheckBox::toggled, this,
           [this](bool) { emit changed(); });
@@ -63,7 +64,8 @@ void SidebarsLayoutPanel::load() {
   ui->treeJustificationComboBox->setCurrentIndex(
       static_cast<int>(current->collectionTree.treeJustification));
   ui->treeModeComboBox->setCurrentIndex(static_cast<int>(current->collectionTree.treeMode));
-  ui->treeIconsOnlyCheckBox->setChecked(current->collectionTree.treeIconsOnly);
+  ui->treeIconDisplayComboBox->setCurrentIndex(
+      static_cast<int>(current->collectionTree.treeIconDisplay));
   ui->treeShowLinesCheckBox->setChecked(current->collectionTree.treeShowLines);
   ui->treeColorizeSelectedCheckBox->setChecked(current->collectionTree.treeColorizeSelected);
   ui->treeIconSizeSpinBox->setValue(current->collectionTree.treeIconSize);
@@ -88,7 +90,8 @@ void SidebarsLayoutPanel::clear() {
   ui->treeJustificationComboBox->setCurrentIndex(
       static_cast<int>(CollectionTreeSettings{}.treeJustification));
   ui->treeModeComboBox->setCurrentIndex(static_cast<int>(CollectionTreeSettings{}.treeMode));
-  ui->treeIconsOnlyCheckBox->setChecked(CollectionTreeSettings{}.treeIconsOnly);
+  ui->treeIconDisplayComboBox->setCurrentIndex(
+      static_cast<int>(CollectionTreeSettings{}.treeIconDisplay));
   ui->treeShowLinesCheckBox->setChecked(CollectionTreeSettings{}.treeShowLines);
   ui->treeColorizeSelectedCheckBox->setChecked(CollectionTreeSettings{}.treeColorizeSelected);
   ui->treeIconSizeSpinBox->setValue(CollectionTreeSettings{}.treeIconSize);
@@ -121,7 +124,8 @@ void SidebarsLayoutPanel::save() {
   // Combo order matches DetailsPaneMode (Overlay = 0, Expand = 1).
   current->collectionTree.treeMode =
       static_cast<DetailsPaneMode>(ui->treeModeComboBox->currentIndex());
-  current->collectionTree.treeIconsOnly = ui->treeIconsOnlyCheckBox->isChecked();
+  current->collectionTree.treeIconDisplay =
+      static_cast<TreeIconDisplay>(ui->treeIconDisplayComboBox->currentIndex());
   current->collectionTree.treeShowLines = ui->treeShowLinesCheckBox->isChecked();
   current->collectionTree.treeColorizeSelected = ui->treeColorizeSelectedCheckBox->isChecked();
   current->collectionTree.treeIconSize = ui->treeIconSizeSpinBox->value();

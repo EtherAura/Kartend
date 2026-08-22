@@ -107,14 +107,41 @@ QColor desktopAccentColor() {
   return readKdeGlobalsColor(QStringLiteral("General/AccentColor"));
 }
 
+// Kartend-5w1zb: HEADER FIRST, [WM] ONLY AS A FALLBACK.
+//
+// Breeze has drawn the window decoration from the Colors:Header group since
+// Plasma 5.23; [WM] is the pre-5.23 key and is no longer what the titlebar
+// you can see is painted with. Reading [WM] therefore produced chrome that was
+// CLOSE to the decoration but not equal to it, and the seam was visible where
+// the toolbar meets the titlebar. Measured under Breeze Dark:
+//
+//   [Colors:Header] BackgroundNormal = 41,44,48   <- what KWin actually renders
+//   [WM]            activeBackground = 39,44,49   <- what we used to read
+//
+// Sampling the framebuffer confirmed the decoration at (41,44,48) against our
+// menu bar, toolbar and sidebar all at (39,44,49) — a 2/255 red, 1/255 blue
+// mismatch, small but exactly the "titlebar does not match the toolbar"
+// report. This is a KEY CHOICE, not a fudge: no offset is applied anywhere, so
+// a scheme whose Header and WM groups agree is unaffected, and a scheme that
+// omits Header (anything pre-5.23, or a hand-written .colors) still resolves
+// through the old key.
+//
+// Neither read is cached — see readKdeGlobalsColor. That is what makes a
+// Plasma activity switch, or any scheme change, repaint in the new colours
+// without a restart.
 QColor activeTitlebarTextColor() {
+  if (const QColor header = readKdeGlobalsColor(QStringLiteral("Colors:Header/ForegroundNormal"));
+      header.isValid()) {
+    return header;
+  }
   return readKdeGlobalsColor(QStringLiteral("WM/activeForeground"));
 }
 
 QColor activeTitlebarColor() {
-  // NOT cached — see readKdeGlobalsColor. The old static assumed "the
-  // session's decoration colour does not change without a restart", which a
-  // Plasma activity switch with per-activity wallpapers disproves.
+  if (const QColor header = readKdeGlobalsColor(QStringLiteral("Colors:Header/BackgroundNormal"));
+      header.isValid()) {
+    return header;
+  }
   return readKdeGlobalsColor(QStringLiteral("WM/activeBackground"));
 }
 

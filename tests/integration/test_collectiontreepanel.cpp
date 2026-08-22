@@ -103,18 +103,24 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAtConfiguredSiz
   CollectionConfig shell;
   shell.name = QStringLiteral("Shell");
   shell.collectionTree.treeIconStyle = TreeIconStyle::Normal;
+  // Kartend-j1mtg: centring is the ICON-ONLY contract. The default is now
+  // IconAndText, which left-aligns a small icon and puts the name beside it —
+  // so this test has to say which mode it is asserting rather than inherit it.
+  shell.collectionTree.treeIconDisplay = TreeIconDisplay::IconOnly;
   shell.collectionTree.treeWidth = CollectionTreeSettings::kMinWidth;
   CollectionConfig child;
   child.name = QStringLiteral("Child");
   child.parentCollectionIndex = 0;
   child.collectionIcon = squarePath; // square: must NOT inherit boost height
   child.collectionTree.treeIconStyle = TreeIconStyle::Normal;
+  child.collectionTree.treeIconDisplay = TreeIconDisplay::IconOnly;
   child.collectionTree.treeWidth = CollectionTreeSettings::kMinWidth;
   CollectionConfig grand;
   grand.name = QStringLiteral("Grand");
   grand.parentCollectionIndex = 1;
   grand.collectionIcon = iconPath; // depth-3 row carries the probe icon
   grand.collectionTree.treeIconStyle = TreeIconStyle::Normal;
+  grand.collectionTree.treeIconDisplay = TreeIconDisplay::IconOnly;
   grand.collectionTree.treeWidth = CollectionTreeSettings::kMinWidth;
   KartendTest::MockedMainWindowFixture fixture({shell, child, grand});
   MainWindow *win = fixture.window();
@@ -217,6 +223,62 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAtConfiguredSiz
                                      "widest-logo boost ceiling allows")
                           .arg(childRowH)
                           .arg(baseIconSize)));
+}
+
+void TestCollectionTreePanel::iconAndText_drawsTheNameBesideTheIcon() {
+  // Kartend-j1mtg. The DEFAULT mode. Before this existed, TreeIconDelegate did
+  // opt.text.clear() on any row carrying artwork, so the name was set on the
+  // item and then silently dropped — every 0.0.19 screenshot showed unlabelled
+  // tiles. The icon is now drawn small and LEFT-ALIGNED with the label beside
+  // it, which is what this pins: an icon centred on the panel means the
+  // icon-only path ran and the label is gone again.
+  QTemporaryDir artDir;
+  QVERIFY(artDir.isValid());
+  const QString iconPath = artDir.path() + QStringLiteral("/probe.png");
+  {
+    QImage art(24, 24, QImage::Format_ARGB32);
+    art.fill(QColor(255, 0, 0));
+    QVERIFY(art.save(iconPath));
+  }
+  CollectionConfig shell;
+  shell.name = QStringLiteral("Shell");
+  shell.collectionIcon = iconPath;
+  shell.collectionTree.treeIconStyle = TreeIconStyle::Normal;
+  shell.collectionTree.treeIconDisplay = TreeIconDisplay::IconAndText;
+  KartendTest::MockedMainWindowFixture fixture({shell});
+  MainWindow *win = fixture.window();
+  QVERIFY(win);
+  win->show();
+  QVERIFY(QTest::qWaitForWindowExposed(win));
+  auto *controller = win->findChild<CollectionTreeController *>();
+  QVERIFY(controller);
+  controller->onCollectionSwitched(0);
+  auto *tree = win->findChild<QTreeWidget *>(QStringLiteral("collectionTreeWidget"));
+  QVERIFY(tree);
+  QVERIFY(tree->viewport());
+  QTest::qWait(80);
+
+  const QImage frame = tree->viewport()->grab().toImage();
+  QVERIFY(!frame.isNull());
+  int left = frame.width();
+  int right = -1;
+  for (int y = 0; y < frame.height(); ++y) {
+    for (int x = 0; x < frame.width(); ++x) {
+      const QColor c = frame.pixelColor(x, y);
+      if (c.red() > 180 && c.green() < 90 && c.blue() < 90) {
+        left = qMin(left, x);
+        right = qMax(right, x);
+      }
+    }
+  }
+  QVERIFY2(right >= 0, "the icon must still be drawn in icon-and-text mode");
+  const int iconCenter = (left + right) / 2;
+  QVERIFY2(iconCenter < frame.width() / 2,
+           qPrintable(QStringLiteral("icon centre %1 should sit LEFT of the panel centre %2 — "
+                                     "centred means the icon-only path ran and the name was "
+                                     "dropped")
+                          .arg(iconCenter)
+                          .arg(frame.width() / 2)));
 }
 
 void TestCollectionTreePanel::focusSectionChord_movesBetweenTreeAndGrid() {

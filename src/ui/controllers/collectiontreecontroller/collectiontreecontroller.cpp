@@ -66,6 +66,12 @@ constexpr int kRowLogoPadding = 10;
 /// Symmetric horizontal margin the icons keep from the panel edges
 /// (widened from 8 on 2026-08-18 — logos ran too close to both edges).
 constexpr int kPanelChrome = 18;
+/// Icon-and-text mode only (Kartend-j1mtg): breathing room above/below the
+/// inline icon so it cannot press against the row edge, and the gap between it
+/// and the label. Small deliberately — the point of the mode is that the icon
+/// accompanies the name rather than competing with it.
+constexpr int kIconTextVMargin = 3;
+constexpr int kIconTextGap = 8;
 
 /// Expansion-memory key for the synthetic Playlists group row. UUIDs are
 /// derived from name+mediaDirectory, so a literal that can't collide.
@@ -378,7 +384,15 @@ protected:
     base.state &= ~(QStyle::State_Selected | QStyle::State_MouseOver);
 
     const QPixmap pm = index.data(kRoleBakedPixmap).value<QPixmap>();
-    if (pm.isNull()) {
+    // Kartend-j1mtg. The mode rides on the view as a property, the same way
+    // kartendShowLines does — a delegate has no route to the collection config.
+    const auto display = static_cast<TreeIconDisplay>(
+        option.widget ? option.widget->property("kartendIconDisplay").toInt()
+                      : static_cast<int>(TreeIconDisplay::IconAndText));
+    // TextOnly takes the no-pixmap path even though a pixmap exists. The art
+    // is still BAKED — switching back to a showing mode must not need a
+    // re-bake — it is simply not drawn.
+    if (pm.isNull() || display == TreeIconDisplay::TextOnly) {
       // Text-only row with an explicit colour: draw the label HERE rather
       // than handing it to the style. QStyleSheetStyle resolves `color:`
       // from the panel stylesheet and ignores both the item's ForegroundRole
@@ -466,6 +480,52 @@ protected:
       // in its pill.
       x = qMin(x, panelRight - kPanelChrome - w);
       x = qMax(x, kPanelChrome);
+    }
+    if (display == TreeIconDisplay::IconAndText) {
+      // Small icon at the pill's left edge, name beside it (user request
+      // 2026-08-22: "show the text, but make the icon small and next to the
+      // text"). Deliberately NOT the centred full-size draw below: that one
+      // fills the row, which is what left no room for a label in the first
+      // place.
+      //
+      // Height is capped to the row so a tall poster cannot stretch it, and
+      // the width follows the SOURCE aspect ratio rather than the baked box —
+      // baking pads compact marks toward a common box (Kartend-ob1c9), and
+      // reusing that padded width here would leave a wide gap between a round
+      // logo and its name.
+      const int rowH = option.rect.height();
+      const int iconH = qMax(1, qMin(h, rowH - 2 * kIconTextVMargin));
+      const int iconW = qMax(1, qRound(static_cast<qreal>(w) * iconH / qMax(1, h)));
+      const int iconX = qMax(pill.left() + kPanelChrome, kPanelChrome);
+      const int iconY = option.rect.top() + (rowH - iconH) / 2;
+      painter->drawPixmap(QRect(iconX, iconY, iconW, iconH), pm);
+
+      const QString label = index.data(Qt::DisplayRole).toString();
+      if (!label.isEmpty()) {
+        QRect textRect(iconX + iconW + kIconTextGap, option.rect.top(),
+                       pill.right() - (iconX + iconW + kIconTextGap) - kPanelChrome, rowH);
+        if (textRect.width() > 0) {
+          painter->save();
+          // Same ink resolution as the text-only path: the panel stylesheet's
+          // `color:` wins over ForegroundRole and the option palette, so the
+          // label has to be painted directly to be tinted at all.
+          const QVariant fg = index.data(Qt::ForegroundRole);
+          if (const QColor ink = fg.canConvert<QBrush>() ? fg.value<QBrush>().color() : QColor();
+              ink.isValid()) {
+            painter->setPen(ink);
+          }
+          if (const QVariant fnt = index.data(Qt::FontRole); fnt.canConvert<QFont>()) {
+            painter->setFont(fnt.value<QFont>());
+          } else {
+            painter->setFont(option.font);
+          }
+          const QString elided =
+              painter->fontMetrics().elidedText(label, Qt::ElideRight, textRect.width());
+          painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, elided);
+          painter->restore();
+        }
+      }
+      return;
     }
     const int y = option.rect.top() + (option.rect.height() - h) / 2;
     painter->drawPixmap(QRect(x, y, w, h), pm);
@@ -679,6 +739,8 @@ void CollectionTreeController::setupPanel() {
   // they are collections") — the tree starts at the panel's top edge.
   m_tree = new TreeBranchView(content);
   m_tree->setProperty("kartendShowLines", false);
+  m_tree->setProperty("kartendIconDisplay",
+                      static_cast<int>(CollectionTreeSettings{}.treeIconDisplay));
   m_tree->setObjectName(QStringLiteral("collectionTreeWidget"));
   m_tree->setHeaderHidden(true);
   m_tree->setRootIsDecorated(true);
@@ -1219,8 +1281,16 @@ void CollectionTreeController::refreshIcons() {
     // band that distinguishes them from leaves; the Playlists group header
     // (index < 0) keeps its text-only look.
     const bool isRootCollection = (item->parent() == nullptr) && index >= 0;
-    const QColor rootFill = isRootCollection ? KdeColorScheme::activeTitlebarColor() : QColor();
-    if (isRootCollection && rootFill.isValid()) {
+    // ONLY THE TOPMOST root row is chrome (user request 2026-08-22: "on the
+    // navbar, only the top one should be the titlebar color"). The point of
+    // the titlebar fill is to continue the toolbar across the top of the
+    // panel, and only the first row touches the toolbar — painting every root
+    // collection with it turned a library with several roots into a stack of
+    // chrome bars with no visual hierarchy. Lower roots keep the rest of their
+    // root styling (centred, tinted, square) and simply lose the fill.
+    const bool isTopRootRow = isRootCollection && m_tree && m_tree->indexOfTopLevelItem(item) == 0;
+    const QColor rootFill = isTopRootRow ? KdeColorScheme::activeTitlebarColor() : QColor();
+    if (isTopRootRow && rootFill.isValid()) {
       // Handed to the delegate rather than set as the item's background:
       // an item background stops at the indented item rect and leaves a
       // gap down the left, so the delegate fills the row edge to edge.
@@ -1451,7 +1521,14 @@ void CollectionTreeController::refreshIcons() {
       cached = cache.insert(cacheKey, baked);
     }
 
-    const QPixmap &baked = cached.value().pixmap;
+    const QPixmap &bakedRaw = cached.value().pixmap;
+    // Kartend-j1mtg: in TextOnly the pixmap is still CACHED (switching modes
+    // must not force a re-bake) but it is invisible to everything downstream —
+    // the delegate does not draw it, and, just as importantly, the row must not
+    // be SIZED for it. Sizing ran off the baked height regardless of mode, so
+    // text-only rows kept icon-tall gaps between one-line labels.
+    const bool iconHidden = (m_iconDisplay == TreeIconDisplay::TextOnly);
+    const QPixmap baked = iconHidden ? QPixmap() : bakedRaw;
     item->setIcon(0, QIcon()); // TreeIconDelegate paints; no decoration
     item->setData(0, kRoleBakedPixmap, baked.isNull() ? QVariant() : QVariant(baked));
     // Per-row height hugs the baked pixmap plus a breathing gap that
@@ -1485,7 +1562,7 @@ void CollectionTreeController::refreshIcons() {
     }
     // Icons-only mode: the name moves to the tooltip. Rows whose icon did
     // NOT resolve keep their text — a blank row would be unusable.
-    if (!baked.isNull() && m_iconsOnly) {
+    if (!baked.isNull() && m_iconDisplay == TreeIconDisplay::IconOnly) {
       item->setText(0, QString());
       item->setToolTip(0, name);
     } else {
@@ -1536,11 +1613,15 @@ void CollectionTreeController::applyStateForCollection(int collectionIndex) {
   // under icons baked for the previous width — wide logos then clip at the
   // new edge. m_bakedPanelWidth is stamped by refreshIcons itself.
   const bool displayChanged =
-      m_iconsOnly != tree.treeIconsOnly || m_iconSize != tree.treeIconSize ||
+      m_iconDisplay != tree.treeIconDisplay || m_iconSize != tree.treeIconSize ||
       m_iconStyle != tree.treeIconStyle || m_iconTint != tree.treeIconTintColor ||
       m_colorizeSelected != tree.treeColorizeSelected ||
       (m_panel && m_panel->width() != m_bakedPanelWidth);
-  m_iconsOnly = tree.treeIconsOnly;
+  m_iconDisplay = tree.treeIconDisplay;
+  // The delegate reads the mode off the view; publish it before any repaint.
+  if (m_tree) {
+    m_tree->setProperty("kartendIconDisplay", static_cast<int>(tree.treeIconDisplay));
+  }
   m_iconSize = tree.treeIconSize;
   m_iconStyle = tree.treeIconStyle;
   m_iconTint = tree.treeIconTintColor;

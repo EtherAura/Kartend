@@ -46,7 +46,11 @@ inline constexpr auto kCollectionTreePosition = "collectionTreePosition";
 inline constexpr auto kCollectionTreeIconSize = "collectionTreeIconSize";
 inline constexpr auto kCollectionTreeIconStyle = "collectionTreeIconStyle";
 inline constexpr auto kCollectionTreeIconTint = "collectionTreeIconTint";
+/// Legacy bool, read once for migration into kCollectionTreeIconDisplay and
+/// then no longer written (Kartend-j1mtg). Kept so an existing kartend.cfg
+/// still lands on the mode the user had chosen.
 inline constexpr auto kCollectionTreeIconsOnly = "collectionTreeIconsOnly";
+inline constexpr auto kCollectionTreeIconDisplay = "collectionTreeIconDisplay";
 inline constexpr auto kCollectionTreeShowLines = "collectionTreeShowLines";
 inline constexpr auto kCollectionTreeColorizeSelected = "collectionTreeColorizeSelected";
 inline constexpr auto kCollectionTreeHideScrollbar = "collectionTreeHideScrollbar";

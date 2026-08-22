@@ -427,7 +427,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchecked (the default), the imported files stay behind for a future
   re-import to pick up, as before (Kartend-i366w).
 
+- **Collection tree rows can show their name, their icon, or both.** A row
+  that had artwork used to lose its name entirely — the tree drew the picture
+  and nothing else — which made a library of logos hard to read and had no
+  setting to change it. The Sidebars page now has a **Rows show** choice:
+  *Name only* keeps the artwork on file but draws just the text, *Icon and
+  name* puts a small icon beside the name (the new default), and *Icon only*
+  is the previous picture-only look with the name in the tooltip. Rows without
+  artwork show their name in every mode, as before. An existing icons-only
+  setting carries over to *Icon only*; everything else becomes *Icon and name*.
+
+- **Only the topmost sidebar row is painted as chrome.** Every top-level
+  collection took the titlebar colour, so a library with several of them
+  turned the sidebar into a stack of full-width bars with no sense of
+  hierarchy. The point of that fill is to carry the toolbar across the top of
+  the panel, and only the first row touches the toolbar — the rest now look
+  like the collections they are.
+
 ### Fixed
+
+- **The window titlebar and the app's own chrome are now exactly the same
+  colour.** With the toolbar colour set to follow the titlebar the two were
+  close but never equal, leaving a faint seam where the toolbar met the
+  titlebar. Kartend read the colour from the older of the two places KDE keeps
+  it; Plasma has painted window decorations from the newer one since 5.23, and
+  they hold slightly different values. It now reads the one the decoration
+  actually uses, falling back to the older key for colour schemes that lack it.
+  Switching activities or colour schemes still recolours everything without a
+  restart.
 
 - **The keyboard shortcuts dialog no longer lists a quick-filter that does not
   exist.** It advertised "Type letters → Quick filter (when search not

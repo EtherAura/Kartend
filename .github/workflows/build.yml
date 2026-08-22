@@ -1100,7 +1100,14 @@ jobs:
   # macOS keychain backend, case-sensitivity) that the Linux/Windows jobs miss.
   macos-build-test:
     runs-on: macos-14
-    timeout-minutes: 45
+    # Kartend-a9hc6: was 45, which left no room for a COLD ccache. Measured on
+    # main: warm build 34:45 (f8ba1c45, passing), cold build 42:50 (ede9e83a,
+    # killed). Add setup and tests and a cold run needs ~46 — just past the old
+    # budget, so it was cancelled, and a cancelled job skips the cache save,
+    # which meant it could never warm up again. 60 leaves genuine headroom for
+    # a cold rebuild after any cache eviction or config-hash roll, instead of
+    # depending on the cache always being there.
+    timeout-minutes: 60
     # h4j5s: also build+test Debug so Q_ASSERT and debug-iterator checks run on
     # macOS, not just the Release pipeline. fail-fast off so a Debug-only failure
     # doesn't cancel the Release leg (or vice versa).
@@ -1136,11 +1143,24 @@ jobs:
         # macos-15) starts from a clean ccache rather than reusing objects
         # built against the old SDK. (A runs-on change also rolls the
         # hashFiles() component, but the literal makes the intent explicit.)
+        #
+        # Kartend-a9hc6: fallback-infix MUST keep build_type. It used to be
+        # the bare "macos14-ccache", whose restore prefix
+        # "macOS-macos14-ccache-" is a prefix of the Debug key as well as the
+        # Release one — so once the Release entry aged out, the Release job
+        # restored a DEBUG ccache. Different optimisation flags hash
+        # differently, so that is a ~500 MB download for approximately zero
+        # hits, and the from-scratch build then overran the job timeout.
+        # Because a cancelled job SKIPS the cache save, no fresh Release
+        # entry was ever written and every subsequent run repeated it — the
+        # reason this failed continuously from 2026-08-19 rather than
+        # intermittently. Scoped like the Linux job above, which widens
+        # across compiler but never across build type.
         uses: ./.github/actions/setup-ccache
         with:
           key-infix: macos14-ccache-${{ matrix.build_type }}
           cache-path: ~/Library/Caches/ccache
-          fallback-infix: macos14-ccache
+          fallback-infix: macos14-ccache-${{ matrix.build_type }}
 
       - name: Configure CMake
         run: |

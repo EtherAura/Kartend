@@ -201,6 +201,29 @@ inline QString scrollbarModeToString(ScrollbarMode mode) {
   return ScrollbarMode::Show;
 }
 
+inline QString treeIconDisplayToString(TreeIconDisplay display) {
+  switch (display) {
+  case TreeIconDisplay::TextOnly:
+    return QStringLiteral("text-only");
+  case TreeIconDisplay::IconOnly:
+    return QStringLiteral("icon-only");
+  case TreeIconDisplay::IconAndText:
+    break;
+  }
+  return QStringLiteral("icon-and-text");
+}
+
+[[nodiscard]] inline TreeIconDisplay stringToTreeIconDisplay(const QString &str,
+                                                             bool *unknownFallback = nullptr) {
+  const QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
+  if (lower == "text-only") return TreeIconDisplay::TextOnly;
+  if (lower == "icon-only") return TreeIconDisplay::IconOnly;
+  if (lower == "icon-and-text") return TreeIconDisplay::IconAndText;
+  if (unknownFallback) *unknownFallback = true;
+  return TreeIconDisplay::IconAndText;
+}
+
 inline QString treeIconStyleToString(TreeIconStyle style) {
   switch (style) {
   case TreeIconStyle::MonochromeDark:

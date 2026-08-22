@@ -203,7 +203,7 @@ private:
   /// Active collection's icon display options (user request 2026-08-17),
   /// cached so applyStateForCollection can detect a change and rebuild —
   /// rebuildTree() bakes them into the rows.
-  bool m_iconsOnly = false;
+  TreeIconDisplay m_iconDisplay = TreeIconDisplay::IconAndText;
   int m_iconSize = 16;
   TreeIconStyle m_iconStyle = TreeIconStyle::Normal;
   QString m_iconTint;

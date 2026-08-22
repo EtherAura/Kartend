@@ -442,14 +442,22 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   QCOMPARE(widthClamped[0].collectionTree.treeWidth, CollectionTreeSettings::kMinWidth);
   // Icon options (user request 2026-08-17): bools round-trip, size clamps.
   // Tree lines default OFF; absence of the key must read false.
-  QVERIFY(widthClamped[0].collectionTree.treeIconsOnly);
+  // Kartend-j1mtg: this fixture writes the LEGACY collectionTreeIconsOnly=true,
+  // so it now also pins the migration — true must land on IconOnly, and the
+  // save below must re-emit it under the new key so the second load agrees.
+  QCOMPARE(widthClamped[0].collectionTree.treeIconDisplay, TreeIconDisplay::IconOnly);
   QVERIFY(widthClamped[0].collectionTree.treeShowLines);
   QVERIFY(widthClamped[0].collectionTree.treeColorizeSelected);
   QCOMPARE(widthClamped[0].collectionTree.treeIconSize, CollectionTreeSettings::kMaxIconSize);
   mgr.saveCollections(widthClamped);
   QList<CollectionConfig> iconReloaded;
   mgr.loadCollections(iconReloaded);
-  QVERIFY(iconReloaded[0].collectionTree.treeIconsOnly);
+  QCOMPARE(iconReloaded[0].collectionTree.treeIconDisplay, TreeIconDisplay::IconOnly);
+  // And the legacy bool is GONE from the file, not just unwritten — leaving it
+  // beside the new key would contradict it for anyone reading the config.
+  QVERIFY2(!readConfigIni().contains(QStringLiteral("collectionTreeIconsOnly")),
+           "migrated config must not keep the legacy collectionTreeIconsOnly key beside "
+           "collectionTreeIconDisplay — a reader cannot tell which one wins");
   QVERIFY(iconReloaded[0].collectionTree.treeShowLines);
   QVERIFY(iconReloaded[0].collectionTree.treeColorizeSelected);
   QCOMPARE(iconReloaded[0].collectionTree.treeIconSize, CollectionTreeSettings::kMaxIconSize);
