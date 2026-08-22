@@ -68,10 +68,6 @@ void AnimationManager::configureAndStartVerticalAnimation(QScrollBar *vScrollBar
   InteractionStateHolder *state = m_ctx ? m_ctx->interactionState() : nullptr;
   ensureVAnimCreated(vScrollBar);
 
-  // TEMPORARY DIAGNOSTIC (2026-08-21) — see VANIM note below.
-  qCWarning(lcAnimationManager).nospace()
-      << "VANIM configureAndStart from=" << curY << " to=" << targetY << " dur=" << duration
-      << " delta=" << (targetY - curY);
   m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
   m_vScrollAnim->setStartValue(curY);
   m_vScrollAnim->setEndValue(targetY);
@@ -286,12 +282,6 @@ void AnimationManager::startEnsureVisibleVAnim(QScrollBar *vScrollBar, int start
   int duration =
       computeVerticalCenterDuration(distance, itemHeight, verticalSpacing, isRepeating, durationMs);
 
-  // TEMPORARY DIAGNOSTIC (2026-08-21). PRIME SUSPECT: this is the
-  // ensure-visible / centre-on-selection glide. A line here whose delta
-  // OPPOSES the direction the user is scrolling is the snap-back.
-  qCWarning(lcAnimationManager).nospace()
-      << "VANIM ensureVisible   from=" << startVal << " to=" << endVal << " dur=" << duration
-      << " delta=" << (endVal - startVal);
   m_vScrollAnim->setEasingCurve(QEasingCurve::OutCubic);
   m_vScrollAnim->setStartValue(startVal);
   m_vScrollAnim->setEndValue(endVal);
@@ -330,18 +320,6 @@ void AnimationManager::startWheelScrollAnimation(QScrollBar *vScrollBar, int sta
     m_vScrollAnim->stop();
   }
 
-  // TEMPORARY DIAGNOSTIC (2026-08-21) — the user's own wheel glide. Pair each
-  // of these with the next VANIM line: a wheel glide immediately followed by
-  // an ensureVisible glide in the OPPOSITE direction is the revert.
-  qCWarning(lcAnimationManager).nospace()
-      << "VANIM wheelScroll     from=" << effectiveStart << " to=" << endVal
-      << " delta=" << (endVal - effectiveStart) << " (requestedStart=" << startVal
-      << ")"
-      // barValue==barMax on every line means the bar is simply CLAMPED at the
-      // end of its range; a barValue that keeps snapping back below barMax
-      // means a second writer is resetting it.
-      << " barValue=" << (vScrollBar ? vScrollBar->value() : -1)
-      << " barMax=" << (vScrollBar ? vScrollBar->maximum() : -1);
   m_vScrollAnim->setStartValue(effectiveStart);
   m_vScrollAnim->setEndValue(endVal);
 

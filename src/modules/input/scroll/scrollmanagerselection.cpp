@@ -4,9 +4,6 @@
 #include "coverflowcontroller.h"
 #include "scrollmanager.h"
 #include "selectiondisplaymanager.h"
-#include <QLoggingCategory>
-
-Q_DECLARE_LOGGING_CATEGORY(lcScrollManager)
 
 void ScrollManager::onArrowKeyViewUpdate() {
   if (m_selectionDisplay) {
@@ -15,11 +12,6 @@ void ScrollManager::onArrowKeyViewUpdate() {
 }
 
 void ScrollManager::updateSelectionForIndex(int selectedIndex) {
-  // TEMPORARY DIAGNOSTIC (2026-08-21): the layer ABOVE SelectionDisplayManager.
-  // Pairing the two shows whether the stale index (1491 in the report) enters
-  // here — i.e. some caller genuinely asks for it — or is invented downstream.
-  qCWarning(lcScrollManager).nospace()
-      << "SELREQ ScrollManager::updateSelectionForIndex=" << selectedIndex;
   if (m_selectionDisplay) {
     m_selectionDisplay->updateSelectionForIndex(selectedIndex);
   }

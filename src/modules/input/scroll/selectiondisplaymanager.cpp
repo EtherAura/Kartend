@@ -563,11 +563,6 @@ void SelectionDisplayManager::scheduleArrowKeyUpdate(int selectedIndex) {
 }
 
 void SelectionDisplayManager::updateSelectionForIndex(int selectedIndex) {
-  // TEMPORARY DIAGNOSTIC (2026-08-21) — the reporter observes the selection
-  // RECTANGLE moving, not just the viewport. This is where the drawn
-  // selection is repositioned, so a line here carrying an index that goes
-  // BACKWARDS is the rectangle jumping, independently of the toolbar counter.
-  qCWarning(lcSelectionDisplay).nospace() << "SELDRAW updateSelectionForIndex=" << selectedIndex;
   if (!m_stateTracker || !m_metrics || !m_activeWidgets || !m_totalItemsProvider) {
     return;
   }
