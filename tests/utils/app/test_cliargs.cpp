@@ -27,6 +27,8 @@ private slots:
   void onConflict_overwriteRecognized();
   void onConflict_mergeRecognized();
   void onConflict_unknownIsRejected();
+  void allowUntrustedLauncher_defaultsOff();
+  void allowUntrustedLauncher_setByFlag();
 };
 
 void TestCliArgs::noOptions_returnsEmptyOverride() {
@@ -197,6 +199,32 @@ void TestCliArgs::onConflict_unknownIsRejected() {
   QCOMPARE(opts.pathValidationError.code, ErrorUtils::ErrorCode::InvalidArgument);
   // onConflict is left at its safe default; the error is what fails the run.
   QCOMPARE(static_cast<int>(opts.onConflict), static_cast<int>(CliArgs::KartConflictPolicy::Skip));
+}
+
+void TestCliArgs::allowUntrustedLauncher_defaultsOff() {
+  // Kartend-l8vt8 / Kartend-u8wf0. This flag gates whether a headless
+  // --import-kart may register a launcher path pointing INSIDE the extracted
+  // kart tree, i.e. run an executable the archive shipped. Default-off is the
+  // security property, so assert it on a command line that carries an import
+  // but not the flag — not on an empty one, where a default-constructed
+  // struct would pass without the parser doing anything.
+  const auto opts = CliArgs::parseStartupArguments(
+      {QStringLiteral("kartend"), QStringLiteral("--import-kart=/tmp/x.kart")});
+  QVERIFY(!opts.allowUntrustedLauncher);
+}
+
+void TestCliArgs::allowUntrustedLauncher_setByFlag() {
+  // The option exists only in main.cpp until Kartend-l8vt8 mirrored it here,
+  // so this is the first coverage it has had. If the shim ever stops
+  // registering the option, parse() treats it as unknown and isSet() returns
+  // false — this fails rather than silently losing the flag.
+  const auto opts = CliArgs::parseStartupArguments({QStringLiteral("kartend"),
+                                                    QStringLiteral("--import-kart=/tmp/x.kart"),
+                                                    QStringLiteral("--allow-untrusted-launcher")});
+  QVERIFY(opts.allowUntrustedLauncher);
+  // The flag must not disturb the rest of the parse.
+  QCOMPARE(opts.importKartPath, QStringLiteral("/tmp/x.kart"));
+  QVERIFY(!opts.pathValidationError.isError());
 }
 
 QTEST_MAIN(TestCliArgs)

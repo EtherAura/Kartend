@@ -27,6 +27,12 @@ struct StartupOptions {
   QString exportOutPath;
   KartConflictPolicy onConflict = KartConflictPolicy::Skip;
 
+  // Kartend-u8wf0: opt-in to importing a .kart that bundles its own launcher
+  // executable. Headless import refuses a self-bundled launcher by default,
+  // because there is no interactive confirmer to warn the user. Off unless
+  // --allow-untrusted-launcher is passed; main.cpp forwards it to the import.
+  bool allowUntrustedLauncher = false;
+
   // Non-Success when a CLI argument failed CLI-layer validation: an
   // --import-kart / --to path issue (shell metachars, NUL byte,
   // blank-after-expansion) or an unrecognized --on-conflict policy value.

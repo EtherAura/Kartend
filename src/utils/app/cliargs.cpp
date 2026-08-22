@@ -53,6 +53,17 @@ StartupOptions parseStartupArguments(const QStringList &arguments) {
       QCoreApplication::translate("CliArgs", "policy"), QStringLiteral("skip"));
   parser.addOption(onConflictOption);
 
+  // Kartend-u8wf0. Mirrors main.cpp's option of the same name — this shim must
+  // register every option the real parser does, or the flag is unreachable
+  // from any test (Kartend-l8vt8). docs/user/CLI-Reference.md documents that
+  // mirroring as an invariant.
+  QCommandLineOption allowUntrustedLauncherOption(
+      QStringLiteral("allow-untrusted-launcher"),
+      QCoreApplication::translate(
+          "CliArgs", "Permit --import-kart to register a launcher path that points inside the "
+                     "extracted kart tree (a self-bundled executable). Off by default."));
+  parser.addOption(allowUntrustedLauncherOption);
+
   // parse() never exits on its own; process() would call exit() on unknown
   // options or --help. Using parse() keeps this function unit-testable. The
   // production caller in main.cpp uses process() so users still get the
@@ -115,6 +126,7 @@ StartupOptions parseStartupArguments(const QStringList &arguments) {
           QStringLiteral("CliArgs::parseStartupArguments"));
     }
   }
+  options.allowUntrustedLauncher = parser.isSet(allowUntrustedLauncherOption);
   return options;
 }
 
