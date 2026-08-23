@@ -110,7 +110,19 @@ void TestLauncherManifestWatcher::directoryRecreatedAfterDeletionIsWatchedAgain(
   watcher.notifyChangeForTesting(steamapps);
   QTRY_COMPARE_WITH_TIMEOUT(syncs, 1, 2000);
   // Reconciled on the debounce tick, so the next install is still noticed.
-  QCOMPARE(watcher.activeDirectories(), QStringList{steamapps});
+  //
+  // WAITED FOR, not sampled (Kartend-llk3j). This was a bare QCOMPARE and went
+  // red intermittently on macOS only: re-registering the recreated path is
+  // ordered against the FILESYSTEM notification, not against the sync
+  // callback, and FSEvents delivers on its own schedule where inotify is
+  // effectively immediate. Sampling one event-loop turn after `syncs` hit 1
+  // therefore raced the re-add rather than testing it.
+  //
+  // The contract is that the directory ends up watched again — not that it
+  // happens in the same turn as the sync — so waiting for it tests the real
+  // guarantee. A genuine failure to re-register still fails, just after the
+  // timeout instead of instantly.
+  QTRY_COMPARE_WITH_TIMEOUT(watcher.activeDirectories(), QStringList{steamapps}, 2000);
 }
 
 void TestLauncherManifestWatcher::reconfiguringDropsAPendingBurst() {

@@ -112,6 +112,27 @@ auto ExtensionUtils::imageExtensionForBytes(const QString &urlPath, const QByteA
   if (kImageExts.contains(rawExt)) {
     return rawExt;
   }
+  // SVG IS DECIDED HERE, FROM THE BYTES — before QImageReader is consulted,
+  // and its answer for svg is discarded below (Kartend-mwfqr).
+  //
+  // QImageReader delegates to whichever plugins are DEPLOYED, and the SVG
+  // plugin's canRead has never been a reliable oracle: Qt 6.7's accepts a bare
+  // "<?xml" prefix, so an ordinary non-SVG XML document came back as "svg",
+  // while 6.11's rejects the same bytes. That made this function's output a
+  // property of the runner's plugin set rather than of the payload — green on
+  // Linux, red on Windows, for the same input. Sniffing here makes the answer
+  // identical everywhere, and it is also the more correct answer: a document
+  // with no <svg> element is not an SVG whatever a plugin claims.
+  //
+  // A leading XML/SVG marker plus an actual <svg> token is definitive; the
+  // marker alone is not. This is also the path that rescues an extension-less
+  // vector whose suffix was lost through a redirect (field report 2026-08-17).
+  const QByteArray head = bytes.left(256).trimmed();
+  if ((head.startsWith(QByteArrayLiteral("<svg")) || head.startsWith(QByteArrayLiteral("<?xml"))) &&
+      bytes.left(2048).contains(QByteArrayLiteral("<svg"))) {
+    return QStringLiteral("svg");
+  }
+
   QBuffer probe;
   probe.setData(bytes);
   if (probe.open(QIODevice::ReadOnly)) {
@@ -119,20 +140,11 @@ auto ExtensionUtils::imageExtensionForBytes(const QString &urlPath, const QByteA
     if (format == QLatin1String("jpeg")) {
       format = QStringLiteral("jpg");
     }
-    if (kImageExts.contains(format)) {
+    // Raster formats only. An "svg" answer is ignored on purpose: the block
+    // above already settled that question from the bytes, so accepting one
+    // here could only ever re-introduce the plugin-dependent result.
+    if (format != QLatin1String("svg") && kImageExts.contains(format)) {
       return format;
-    }
-  }
-  // SVG sniff by prefix: QImageReader::imageFormat only answers for formats
-  // whose plugin implements canRead peeking, and the SVG plugin's detection
-  // is unreliable enough that an extension-less vector fell through to the
-  // .png default (Kartend field report 2026-08-17 — the fetch URL had lost
-  // its suffix through a redirect). A leading XML/SVG marker is definitive.
-  const QByteArray head = bytes.left(256).trimmed();
-  if (head.startsWith(QByteArrayLiteral("<svg")) || head.startsWith(QByteArrayLiteral("<?xml"))) {
-    if (head.contains(QByteArrayLiteral("<svg")) ||
-        bytes.left(2048).contains(QByteArrayLiteral("<svg"))) {
-      return QStringLiteral("svg");
     }
   }
   return QStringLiteral("png");

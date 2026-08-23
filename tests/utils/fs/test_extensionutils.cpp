@@ -18,6 +18,7 @@ private slots:
   void webpIsAlwaysDecodable();
   void avifTracksRuntimePluginSupport();
   void svgSuffixAndSniffResolveToSvg();
+  void svgVerdictDoesNotDependOnTheDeployedPlugins();
   void videoBaseExtensions_returnsKnownExtensions();
   void normalizeStoredExtensions_canonicalizesToBare();
   void normalizeStoredExtensions_isIdempotent();
@@ -171,6 +172,37 @@ void TestExtensionUtils::svgSuffixAndSniffResolveToSvg() {
   QCOMPARE(ExtensionUtils::imageExtensionForBytes(
                QStringLiteral("/cover.php"), QByteArrayLiteral("<?xml version=\"1.0\"?><feed/>")),
            QStringLiteral("png"));
+}
+
+void TestExtensionUtils::svgVerdictDoesNotDependOnTheDeployedPlugins() {
+  // Kartend-mwfqr: this test's sibling above was RED ON WINDOWS ONLY for days.
+  // QImageReader delegates to whichever image plugins are deployed, and the
+  // SVG plugin's canRead is not a stable oracle across Qt versions — 6.7's
+  // accepts a bare "<?xml" prefix and answers "svg", 6.11's rejects the same
+  // bytes. So imageExtensionForBytes returned "svg" on a Windows runner and
+  // "png" on Linux for one identical input, and which one you saw depended on
+  // the machine rather than the payload.
+  //
+  // The verdict is now taken from the bytes before QImageReader is consulted,
+  // and an "svg" answer from a plugin is discarded. These cases pin that: each
+  // one is XML whose classification a loose plugin would get wrong.
+  const auto ext = [](const QByteArray &bytes) {
+    return ExtensionUtils::imageExtensionForBytes(QStringLiteral("/cover.php"), bytes);
+  };
+  // XML prologue, no <svg> anywhere — a plugin claiming this is wrong.
+  QCOMPARE(ext(QByteArrayLiteral("<?xml version=\"1.0\"?><rss><channel/></rss>")),
+           QStringLiteral("png"));
+  // An XML comment before the prologue: still not an SVG.
+  QCOMPARE(ext(QByteArrayLiteral("<?xml version=\"1.0\"?><!-- drawing --><nope/>")),
+           QStringLiteral("png"));
+  // Leading whitespace must not change the verdict in either direction.
+  QCOMPARE(ext(QByteArrayLiteral("\n\t  <?xml version=\"1.0\"?><svg/>")), QStringLiteral("svg"));
+  QCOMPARE(ext(QByteArrayLiteral("\n\t  <?xml version=\"1.0\"?><feed/>")), QStringLiteral("png"));
+  // The <svg> token may sit beyond the 256-byte head, which is why the
+  // containment check reads further into the payload than the prefix does.
+  QByteArray padded = QByteArrayLiteral("<?xml version=\"1.0\"?>");
+  padded.append(QByteArray(600, ' ')).append(QByteArrayLiteral("<svg width=\"5\"/>"));
+  QCOMPARE(ext(padded), QStringLiteral("svg"));
 }
 
 QTEST_MAIN(TestExtensionUtils)
