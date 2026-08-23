@@ -27,7 +27,16 @@
 /// pattern (CollectionFilterPreferences::titleExclusionPatterns,
 /// LauncherProfile::launcherPath).
 struct SidebarAppearance {
-  bool sidebarVisible = false;
+  /// The details pane is shown by default (user request 2026-08-22). It is
+  /// where an item's artwork, metadata and file information live, and leaving
+  /// it shut on a fresh install hid the feature behind a keystroke nobody had
+  /// been told about (F9). Per collection, so turning it off for one library
+  /// does not turn it off everywhere.
+  ///
+  /// Reached only by a config with no stored value — an existing collection
+  /// has sidebarVisible written (F9 live-saves it), so upgrades keep whatever
+  /// state their owner left.
+  bool sidebarVisible = true;
   DetailsPaneMode sidebarMode = DetailsPaneMode::Overlay;
   /// sidebar enhancements. Position controls left/right placement;
   /// in Fixed mode this swaps the QHBoxLayout insertion index, in Overlay

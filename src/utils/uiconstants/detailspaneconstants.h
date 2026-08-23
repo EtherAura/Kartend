@@ -12,7 +12,12 @@ namespace DetailsPane {
 /// Minimum details-pane width in pixels (Left/Right dock).
 inline constexpr int MIN_WIDTH = 150;
 /// Default details-pane width when first shown (Left/Right dock).
-inline constexpr int FIXED_WIDTH = 300;
+///
+/// 420 rather than 300 (user request 2026-08-22). The pane now opens by
+/// default, so its first impression is its usual one, and 300px wrapped the
+/// description to three or four words a line and squeezed the media-gallery
+/// thumbnails. Still user-resizable and still clamped to MIN_WIDTH.
+inline constexpr int FIXED_WIDTH = 420;
 /// minimum details-pane height in pixels (Top/Bottom dock).
 inline constexpr int MIN_HEIGHT = 120;
 /// default details-pane height in pixels (Top/Bottom dock).

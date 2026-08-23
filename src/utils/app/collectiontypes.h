@@ -71,6 +71,37 @@ enum class TreeIconStyle { Normal = 0, MonochromeDark = 1, MonochromeLight = 2, 
 /// Order matters for the settings combo, which casts index <-> enum.
 enum class TreeIconDisplay { TextOnly = 0, IconAndText = 1, IconOnly = 2 };
 
+/// What a collection's RetroArch system glyph depicts (Kartend-1kkk2, user
+/// request 2026-08-22: "i want to support the console icon or controller
+/// icon"). This is a SEPARATE mark from the row artwork TreeIconDisplay
+/// governs — a small fixed-size glyph drawn left of the name in every display
+/// mode, sourced from a local RetroArch install rather than from a scrape.
+///
+/// The three values do not select three files. RetroArch's icon packs are
+/// subject-consistent — `monochrome` draws a controller for every system,
+/// `systematic` draws a console for every system — so Console and Controller
+/// resolve the SAME per-system file out of DIFFERENT packs. Content is the
+/// odd one out: it is the `-content` sibling (cartridge, disc, tape) that
+/// every pack ships beside each system icon, so it is a file variant within
+/// whichever pack is in play. See retroarchicons.h.
+///
+/// Order matters for the settings combo, which casts index <-> enum.
+enum class SystemIconSubject { Controller = 0, Console = 1, Content = 2 };
+
+/// Where the system glyph sits relative to the collection's name (user
+/// request 2026-08-22: "can we have an option to put the icons on the right of
+/// the text - after the title/before the nav border").
+///
+/// BeforeName and AfterName travel WITH the name — the glyph hugs it, so on a
+/// centred row the pair stays centred together and the glyph's x follows the
+/// text. RowEnd instead pins the glyph to the panel's inner edge, which lines
+/// every glyph up in a column no matter how long the names are; the trade is
+/// that on a short name the glyph sits outside the row's highlight rather than
+/// inside it.
+///
+/// Order matters for the settings combo, which casts index <-> enum.
+enum class SystemIconPlacement { BeforeName = 0, AfterName = 1, RowEnd = 2 };
+
 /// how the details-pane background is rendered. Color and Image
 /// mirror the main-view BackgroundType values. Pattern adds a
 /// procedurally-drawn pattern (currently only Crosshatch) tinted by

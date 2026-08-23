@@ -33,6 +33,7 @@
 #include "listviewoptions.h"
 #include "scraperoverrides.h"
 #include "sidebarappearance.h"
+#include "systemicon_settings.h"
 #include <uiconstants/detailspaneconstants.h>
 #include <uiconstants/grid.h>
 #include <uiconstants/item.h>
@@ -123,6 +124,12 @@ struct CollectionConfig {
   /// pane's `sidebar` block above. Accessed as
   /// `cfg.collectionTree.treeVisible` / `.treePosition`.
   CollectionTreeSettings collectionTree;
+  /// The small RetroArch-sourced system glyph drawn beside this collection's
+  /// name in the navigation sidebar (Kartend-1kkk2). A SEPARATE option set
+  /// from `collectionTree` above, which governs the row artwork — see the
+  /// struct's own note for why the two are not merged. Accessed as
+  /// `cfg.systemIcon.enabled` / `.systemName`.
+  SystemIconSettings systemIcon;
   ViewType viewType = ViewType::Grid; // Grid (default) or List view
   /// when true, media items whose artwork lookup returns no
   /// match are hidden from the items page. Subcollections and virtual folders
@@ -289,8 +296,8 @@ struct CollectionConfig {
            hideTitles == other.hideTitles &&
            hideSubcollectionTitles == other.hideSubcollectionTitles && filter == other.filter &&
            horizontalAlignment == other.horizontalAlignment && sidebar == other.sidebar &&
-           collectionTree == other.collectionTree && viewType == other.viewType &&
-           hideMissingArtwork == other.hideMissingArtwork &&
+           collectionTree == other.collectionTree && systemIcon == other.systemIcon &&
+           viewType == other.viewType && hideMissingArtwork == other.hideMissingArtwork &&
            groupMultiDisc == other.groupMultiDisc && background == other.background &&
            archive == other.archive && expandMode == other.expandMode &&
            watchFilesystem == other.watchFilesystem && importSource == other.importSource &&

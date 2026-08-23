@@ -29,6 +29,11 @@ private slots:
   void resolveCoreDirectory_missingOverrideFallsThrough();
   void discoverCores_listsAndNamesLibretroFiles();
   void discoverCores_emptyForMissingDirectory();
+  void assetsDirectoryFromConfig_readsTheKey();
+  void assetsDirectoryFromConfig_isNotFooledByANeighbouringKey();
+  void assetsDirectoryFromConfig_fallsBackToASiblingAssetsTree();
+  void resolveAssetsDirectory_acceptsTheTreeItselfAsAnOverride();
+  void resolveAssetsDirectory_readsTheKeyFromACfgOverride();
 
 private:
   QTemporaryDir m_dir;
@@ -135,6 +140,68 @@ void TestRetroArchUtils::discoverCores_listsAndNamesLibretroFiles() {
 void TestRetroArchUtils::discoverCores_emptyForMissingDirectory() {
   QVERIFY(RetroArchUtils::discoverCores(m_dir.filePath(QStringLiteral("absent"))).isEmpty());
   QVERIFY(RetroArchUtils::discoverCores(QString()).isEmpty());
+}
+
+void TestRetroArchUtils::assetsDirectoryFromConfig_readsTheKey() {
+  const QString assets = m_dir.filePath(QStringLiteral("ra-assets"));
+  QVERIFY(QDir().mkpath(assets + QStringLiteral("/xmb")));
+  const QString cfg = m_dir.filePath(QStringLiteral("assets.cfg"));
+  writeFile(cfg, QStringLiteral("libretro_directory = \"/tmp/cores\"\n"
+                                "assets_directory = \"%1\"\n")
+                     .arg(assets)
+                     .toUtf8());
+  QCOMPARE(RetroArchUtils::assetsDirectoryFromConfig(cfg), QDir::cleanPath(assets));
+}
+
+void TestRetroArchUtils::assetsDirectoryFromConfig_isNotFooledByANeighbouringKey() {
+  // retroarch.cfg really does ship `core_assets_directory` (the downloads
+  // folder) alongside `assets_directory`, and it sorts FIRST. Matching on a
+  // prefix would hand back the wrong tree.
+  const QString assets = m_dir.filePath(QStringLiteral("real-assets"));
+  const QString downloads = m_dir.filePath(QStringLiteral("downloads"));
+  QVERIFY(QDir().mkpath(assets + QStringLiteral("/xmb")));
+  QVERIFY(QDir().mkpath(downloads));
+  const QString cfg = m_dir.filePath(QStringLiteral("neighbour.cfg"));
+  writeFile(cfg, QStringLiteral("core_assets_directory = \"%1\"\n"
+                                "assets_directory = \"%2\"\n")
+                     .arg(downloads, assets)
+                     .toUtf8());
+  QCOMPARE(RetroArchUtils::assetsDirectoryFromConfig(cfg), QDir::cleanPath(assets));
+}
+
+void TestRetroArchUtils::assetsDirectoryFromConfig_fallsBackToASiblingAssetsTree() {
+  // RetroArch only writes assets_directory once the path has been resolved.
+  // A config without it still sits beside the assets it uses.
+  const QString home = m_dir.filePath(QStringLiteral("ra-home"));
+  QVERIFY(QDir().mkpath(home + QStringLiteral("/assets/xmb")));
+  const QString cfg = QDir(home).filePath(QStringLiteral("retroarch.cfg"));
+  writeFile(cfg, QByteArrayLiteral("video_driver = \"gl\"\n"));
+  QCOMPARE(RetroArchUtils::assetsDirectoryFromConfig(cfg),
+           QDir::cleanPath(home + QStringLiteral("/assets")));
+
+  // But only when it LOOKS like an assets tree — an unrelated directory that
+  // happens to be called `assets` is not one.
+  const QString bogus = m_dir.filePath(QStringLiteral("not-ra"));
+  QVERIFY(QDir().mkpath(bogus + QStringLiteral("/assets")));
+  const QString bogusCfg = QDir(bogus).filePath(QStringLiteral("retroarch.cfg"));
+  writeFile(bogusCfg, QByteArrayLiteral("video_driver = \"gl\"\n"));
+  QVERIFY(RetroArchUtils::assetsDirectoryFromConfig(bogusCfg).isEmpty());
+}
+
+void TestRetroArchUtils::resolveAssetsDirectory_acceptsTheTreeItselfAsAnOverride() {
+  // The same setting is documented as "your RetroArch install", so a user may
+  // well point it straight at the assets tree.
+  const QString assets = m_dir.filePath(QStringLiteral("override-assets"));
+  QVERIFY(QDir().mkpath(assets + QStringLiteral("/ozone")));
+  QCOMPARE(RetroArchUtils::resolveAssetsDirectory(assets), QDir::cleanPath(assets));
+}
+
+void TestRetroArchUtils::resolveAssetsDirectory_readsTheKeyFromACfgOverride() {
+  const QString assets = m_dir.filePath(QStringLiteral("cfg-assets"));
+  QVERIFY(QDir().mkpath(assets + QStringLiteral("/xmb")));
+  const QString cfg = m_dir.filePath(QStringLiteral("assets-override.cfg"));
+  writeFile(cfg, QStringLiteral("assets_directory = \"%1\"\n").arg(assets).toUtf8());
+  QCOMPARE(RetroArchUtils::resolveAssetsDirectory(cfg), QDir::cleanPath(assets));
 }
 
 QTEST_MAIN(TestRetroArchUtils)

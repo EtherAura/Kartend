@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include <QComboBox>
+#include <QCompleter>
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -21,6 +22,7 @@
 #include "collection/typehelpers.h"
 #include "metadataproviderregistry.h"
 #include "pathutils.h"
+#include "retroarchicons.h"
 #include "retroarchutils.h"
 #include "screenscrapersystemcache.h"
 #include "screenscrapersystems.h"
@@ -206,6 +208,41 @@ void CreateCollectionDialog::buildUi() {
   m_screenscraperSystems = populateScreenscraperSystems(m_screenscraperSystemCombo);
   m_form->addRow(tr("ScreenScraper System:"), m_screenscraperSystemCombo);
 
+  // Navigation-sidebar glyph (Kartend-1kkk2) — a small console / controller /
+  // cartridge mark beside this collection's name, read out of a local
+  // RetroArch install. Game-only, like the ScreenScraper row above it, and
+  // hidden by the same trigger: it is keyed on libretro's system names, which
+  // is a vocabulary only a game collection has.
+  m_systemIconSubjectCombo = new QComboBox(this);
+  m_systemIconSubjectCombo->setToolTip(tr("What the sidebar glyph shows for this collection."));
+  // Order must match SystemIconSubject — the value is cast from the index.
+  m_systemIconSubjectCombo->addItem(tr("Controller"));
+  m_systemIconSubjectCombo->addItem(tr("Console"));
+  m_systemIconSubjectCombo->addItem(tr("Cartridge / disc"));
+  m_systemIconCombo = new QComboBox(this);
+  // Editable so a 300-entry list is typed into rather than scrolled through;
+  // the completer matches anywhere in the name, since a collection is far more
+  // often named for the system ("Mega Drive") than for its manufacturer, and
+  // libretro leads every name with the manufacturer.
+  m_systemIconCombo->setEditable(true);
+  m_systemIconCombo->setInsertPolicy(QComboBox::NoInsert);
+  if (QCompleter *completer = m_systemIconCombo->completer()) {
+    completer->setCompletionMode(QCompleter::PopupCompletion);
+    completer->setFilterMode(Qt::MatchContains);
+    completer->setCaseSensitivity(Qt::CaseInsensitive);
+  }
+  m_systemIconCombo->setToolTip(tr("System whose icon appears beside this collection "
+                                   "in the navigation sidebar."));
+  m_systemIconRow = new QHBoxLayout;
+  m_systemIconRow->addWidget(m_systemIconSubjectCombo);
+  m_systemIconRow->addWidget(m_systemIconCombo, /*stretch=*/1);
+  m_form->addRow(tr("Sidebar Icon:"), m_systemIconRow);
+  // Resolved from the (as yet unset) override, which means "probe the standard
+  // locations" — so a caller that never calls setRetroarchConfigOverride still
+  // finds a stock install, exactly as populateCoreCombo above already does.
+  m_assetsDirectory = RetroArchUtils::resolveAssetsDirectory(m_retroarchOverride);
+  populateSystemIconCombo();
+
   root->addLayout(m_form);
 
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -235,6 +272,7 @@ void CreateCollectionDialog::buildUi() {
     // The collection name carries the platform tag autodetect scores
     // against — re-resolve the ScreenScraper system as the user types.
     syncScreenscraperSystemToName();
+    syncSystemIconToName();
   });
 
   // Type drives the suggested scraper; a hand-pick on the scraper combo
@@ -244,6 +282,7 @@ void CreateCollectionDialog::buildUi() {
     syncScraperToType();
     updateConditionalRows();
     syncScreenscraperSystemToName();
+    syncSystemIconToName();
   });
   connect(m_scraperCombo, &QComboBox::activated, this,
           [this](int) { m_scraperManuallySet = true; });
@@ -251,6 +290,21 @@ void CreateCollectionDialog::buildUi() {
   // exactly like the scraper combo above.
   connect(m_screenscraperSystemCombo, &QComboBox::activated, this,
           [this](int) { m_screenscraperSystemManuallySet = true; });
+  // Changing the subject can change the PACK, and packs cover different sets
+  // of systems — so the list is rebuilt, then the current pick re-resolved
+  // against it rather than silently dropped.
+  connect(m_systemIconSubjectCombo, &QComboBox::activated, this, [this](int) {
+    populateSystemIconCombo();
+    syncSystemIconToName();
+  });
+  connect(m_systemIconCombo, &QComboBox::activated, this,
+          [this](int) { m_systemIconManuallySet = true; });
+  // Typing into the editable combo is a hand-pick too — without this, the
+  // next keystroke in the NAME field would overwrite what was just typed.
+  if (QLineEdit *systemEdit = m_systemIconCombo->lineEdit()) {
+    connect(systemEdit, &QLineEdit::textEdited, this,
+            [this](const QString &) { m_systemIconManuallySet = true; });
+  }
   // The core row appears the moment the launcher path becomes a RetroArch
   // executable.
   connect(m_launcherEdit, &QLineEdit::textChanged, this,
@@ -274,6 +328,12 @@ void CreateCollectionDialog::syncScraperToType() {
 void CreateCollectionDialog::setRetroarchConfigOverride(const QString &path) {
   m_retroarchOverride = path;
   populateCoreCombo();
+  // The same override locates the assets tree, so the sidebar glyph's system
+  // list follows the install the user pointed at rather than probing for a
+  // second one (Kartend-1kkk2).
+  m_assetsDirectory = RetroArchUtils::resolveAssetsDirectory(m_retroarchOverride);
+  populateSystemIconCombo();
+  syncSystemIconToName();
 }
 
 void CreateCollectionDialog::populateCoreCombo() {
@@ -308,6 +368,95 @@ void CreateCollectionDialog::syncScreenscraperSystemToName() {
   m_screenscraperSystemCombo->setCurrentIndex(idx >= 0 ? idx : 0);
 }
 
+void CreateCollectionDialog::populateSystemIconCombo() {
+  const QString previous = m_systemIconCombo->currentText().trimmed();
+  m_systemIconCombo->clear();
+  const auto subject = static_cast<SystemIconSubject>(m_systemIconSubjectCombo->currentIndex());
+  // Through the shared rule even though this dialog has no set picker (so the
+  // override is always empty) — one resolution path, no second place to drift.
+  const QString pack = RetroArchIcons::resolvePack(
+      subject, QString(), RetroArchIcons::discoverPacks(m_assetsDirectory));
+  const QStringList systems = RetroArchIcons::discoverSystems(m_assetsDirectory, pack);
+  if (systems.isEmpty()) {
+    // No RetroArch, or no pack that covers this subject. Say which, rather
+    // than offering an empty dropdown the user cannot act on.
+    m_systemIconCombo->addItem(m_assetsDirectory.isEmpty() ? tr("RetroArch not detected")
+                                                           : tr("No icons for this style"));
+    m_systemIconCombo->setEnabled(false);
+    return;
+  }
+  m_systemIconCombo->setEnabled(true);
+  // Index 0 = no glyph, and the default: a collection gets one because
+  // detection found its system or the user picked one, never by falling into
+  // whatever sorts first.
+  m_systemIconCombo->addItem(tr("None"), QString());
+  for (const QString &system : systems) {
+    m_systemIconCombo->addItem(system, system);
+  }
+  if (!previous.isEmpty()) {
+    if (const int idx = m_systemIconCombo->findData(previous); idx >= 0) {
+      m_systemIconCombo->setCurrentIndex(idx);
+    }
+  }
+}
+
+void CreateCollectionDialog::syncSystemIconToName() {
+  if (m_systemIconManuallySet || !isGamesType() || !m_systemIconCombo->isEnabled()) {
+    return;
+  }
+  // Hand the icon matcher the aliases ScreenScraper already holds for
+  // whichever system it detected. Those carry the recalbox / retropie /
+  // launchbox shorthand ("snes", "megadrive", "psx") that no amount of word
+  // matching recovers from a libretro name — and they cost nothing here,
+  // since the catalog is already loaded for the row above.
+  QStringList aliases;
+  if (const int ssId = m_screenscraperSystemCombo->currentData().toInt(); ssId > 0) {
+    if (const ScreenScraperSystems::System *system =
+            ScreenScraperSystems::find(m_screenscraperSystems, ssId)) {
+      aliases = system->aliases;
+      aliases.append(system->displayName);
+    }
+  }
+  QStringList systems;
+  systems.reserve(m_systemIconCombo->count());
+  for (int i = 0; i < m_systemIconCombo->count(); ++i) {
+    if (const QString system = m_systemIconCombo->itemData(i).toString(); !system.isEmpty()) {
+      systems.append(system);
+    }
+  }
+  const QString detected =
+      RetroArchIcons::autodetectSystem(m_nameEdit->text().trimmed(), systems, aliases);
+  const int idx = detected.isEmpty() ? 0 : m_systemIconCombo->findData(detected);
+  m_systemIconCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+}
+
+SystemIconSettings CreateCollectionDialog::systemIcon() const {
+  SystemIconSettings icon;
+  // Non-game types never showed the row, so a value left in it from before a
+  // type change must not leak into the config — the same rule corePath()
+  // applies to a hidden core row.
+  if (!isGamesType() || !m_systemIconCombo->isEnabled()) {
+    return icon;
+  }
+  icon.subject = static_cast<SystemIconSubject>(m_systemIconSubjectCombo->currentIndex());
+  // currentData is empty for the "None" entry AND for free text typed into the
+  // editable combo, so fall back to the text and let resolution decide: an
+  // exact system name typed by hand should work, and a typo becomes "no
+  // glyph" rather than an error at creation time.
+  const QString byData = m_systemIconCombo->currentData().toString();
+  icon.systemName = byData.isEmpty() && m_systemIconCombo->currentIndex() != 0
+                        ? m_systemIconCombo->currentText().trimmed()
+                        : byData;
+  // Anything the dialog resolved is DETECTION's, so a later re-run may revise
+  // it; a system the user picked from the list is theirs and is left alone.
+  icon.systemAutoDetected = !m_systemIconManuallySet;
+  // Turning it ON is what a resolved system MEANS. Left off when nothing
+  // resolved, so a collection never carries an enabled option that draws
+  // nothing.
+  icon.enabled = !icon.systemName.isEmpty();
+  return icon;
+}
+
 bool CreateCollectionDialog::isGamesType() const {
   // Reuse the scraper registry's synonym normalisation so game synonyms
   // ("rom", "emulator", …) count too, not just the literal "Games" preset.
@@ -323,6 +472,12 @@ void CreateCollectionDialog::updateConditionalRows() {
   const bool games = isGamesType();
   if (m_form->isRowVisible(m_screenscraperSystemCombo) != games) {
     m_form->setRowVisible(m_screenscraperSystemCombo, games);
+    flipped = true;
+  }
+  // The sidebar glyph is keyed on libretro's system names, so it shares the
+  // ScreenScraper row's game-only trigger.
+  if (m_form->isRowVisible(m_systemIconRow) != games) {
+    m_form->setRowVisible(m_systemIconRow, games);
     flipped = true;
   }
   const bool retro = LauncherUtils::usesLibretroCore(m_launcherEdit->text());

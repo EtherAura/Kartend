@@ -198,6 +198,150 @@ Reserved for future customization. Today it renders a placeholder; the
 intent is for advanced users to define their own template in a future
 release.
 
+## System icon (from RetroArch)
+
+A game collection can carry a small **console, controller or cartridge icon
+to the left of its name** in the navigation sidebar, taken from a local
+RetroArch installation. Nothing is downloaded: if RetroArch is installed, its
+icons are already on disk, they match the version you actually have, and they
+cost no network.
+
+> **Where to find this** — Settings Dialog → Appearance → **Sidebars** →
+> **System Icon (from RetroArch)**. New game collections also get a
+> **Sidebar Icon** row in the create-collection dialog.
+
+This is a **separate setting from *Rows show*** above. That one governs the
+collection's *artwork* — the logo a scrape fetched. This is a small fixed
+glyph that says *what machine this is*, and it appears in every *Rows show*
+mode that draws a name, including the default *Name only*. (It is skipped in
+*Icon only*, where the row deliberately **is** the picture and there is no
+name for it to sit beside.)
+
+| Setting | INI key | Notes |
+|---------|---------|-------|
+| Show an icon beside this collection's name | `systemIconEnabled` | Off by default. |
+| Show | `systemIconSubject` | *Controller*, *Console*, or *Cartridge / disc*. |
+| System | `systemIconName` | Which machine. Type to search — the list is long. |
+| Icon set | `systemIconPack` | *Automatic* suits the subject; or name a set. |
+| Icon style | `systemIconStyle` | Normal, monochrome dark/light, or tinted. |
+| Position | `systemIconPlacement` | Before the name, after it, or at the panel edge. |
+| Icon height | `systemIconSize` | 8–64 px. Small by intent. |
+
+### Choosing a subject
+
+RetroArch ships several icon sets, and each holds exactly **one icon per
+system** — so whether you get a console or a controller is decided by the set,
+not chosen within it. `monochrome`, `retrosystem`, `flatux`, `flatui`, `pixel`
+and `daite` draw the **controller**; `automatic`, `systematic` and `dot-art`
+draw the **console**.
+
+Because of that, **the Icon set list only offers sets that actually hold art
+for the subject you picked**. Choosing *Console* will not list `monochrome`:
+it has no console art, so picking it there could only ever hand back the
+controller. For a plain outline console, pick *Console* and then `automatic`.
+
+If a set saved earlier no longer matches the subject — from an older config,
+or a hand-edited one — the subject wins and the icon comes from a set that can
+draw it, rather than quietly giving you the wrong kind.
+
+One wrinkle worth knowing: for a handheld, a home computer or an arcade board
+there is no separate controller, so **every** set draws the machine itself. A
+Game Boy is a Game Boy in `monochrome` just as much as in `systematic`. The
+filter still applies there, so you get the machine from a console set instead
+— the same subject, a different style.
+
+*Cartridge / disc* is different again — it is the media icon that ships
+beside every system icon, so it works in whichever set is in play.
+
+Sets differ enormously in how many systems they cover — from a few dozen to a
+few hundred — so the picker shows the count beside each name. If you name a
+set that has no icon for your system, the row simply shows no icon and the
+settings page says so; it will not quietly substitute a different set's art.
+
+### Where the icon sits
+
+*Position* offers three placements. **Before the name** and **After the name**
+keep the icon next to the text, so it travels with the name — on a centred
+row the pair stays centred together. **At the panel edge** pins the icon to
+the sidebar's inner edge instead, so a column of icons lines up regardless of
+how long the names are; the trade is that on a short name the icon sits
+outside the row's highlight rather than inside it.
+
+Icons are never drawn in *Icon only* mode — there is no name for them to
+accompany there.
+
+### Getting the icon onto a collection
+
+New game collections pick their system up automatically: type the collection
+name in the create dialog and the **Sidebar Icon** row fills itself in, using
+the same detection that fills the ScreenScraper System row beside it.
+Shorthand works — a collection called *SNES* finds *Nintendo - Super
+Nintendo Entertainment System*.
+
+For collections you already have, open Settings → Appearance → Sidebars, tick
+the box and press **Detect** to guess from the collection's name, or pick the
+system yourself. Detection deliberately gives up rather than guess between
+two equally good candidates, so an ambiguous name leaves the list on *None*.
+
+To do a whole tree at once, set it up on the parent collection and switch
+**Mode** (above the collections list) to *Current + subcollections* before
+saving. The look — subject, set, position, size — is copied down to every
+subcollection, but the *system* is not: each one detects its own from its own
+name, so a shelf of platforms ends up with a different icon each rather than
+the parent's repeated. Subcollections that already name a system keep it.
+
+Two kinds of collection are skipped by detection entirely, because neither is
+a machine:
+
+- **Launcher imports** — Steam, Flatpak, Lutris and the rest are storefronts,
+  and RetroArch's sets have no icon for them.
+- **Shells** — a collection with children, like a *Nintendo* or *Sega* group,
+  organises systems rather than being one. Matching a bare manufacturer name
+  against system names could only pick one of its children at random.
+
+The **System** list starts with two answers that are not systems at all:
+*None (no icon)* leaves the row bare, and *This collection's own artwork* draws
+whatever art the collection already has. Those are how you clear or override a
+row individually — useful where a manufacturer's logo just repeats the name
+next to it.
+
+Choosing a collection's own artwork puts it at the same size
+and position as the icon — so a manufacturer shell shows the company logo a
+scrape fetched for it, and a shelf of platforms and their manufacturers reads
+as one list rather than two different treatments. **Icon style** inks both kinds of art the same way — system icons and
+collection artwork alike — so a manufacturer logo matches the platform icons
+beneath it instead of being the one thing in colour. *Tinted* follows the
+navigation sidebar's tint colour. Whatever you pick, the luminance of the
+original is preserved, so a logo keeps its internal detail rather than
+flattening into a blob.
+
+Re-running the apply **corrects** these rows: a shell or launcher import that
+picked up a wrong system in an earlier run has it cleared, not preserved. A
+system you chose yourself on an ordinary collection is never overwritten.
+
+### Right-click a row
+
+The navigation sidebar has a context menu, and it acts on **the row you
+right-clicked** rather than the collection you are currently in — so you can
+fix a row without navigating to it first.
+
+| Action | What it does |
+|--------|--------------|
+| **Set Custom Icon…** | Pick any image file for that row. It becomes the collection's icon and is shown at the same size and position as the system icons. |
+| **Detect System Icon** | Guess the system from the row's name. Says so if nothing matches, rather than appearing to do nothing. |
+| **Remove Icon** | Turns the icon off for that row. The system and artwork are kept, so switching it back on restores them. |
+
+Detection may revise a system **it** guessed earlier — so if an earlier version
+put the wrong icon on a row, re-running detection now corrects it. A system you
+picked yourself is never overwritten.
+
+### If RetroArch is not found
+
+The whole section is disabled and says so. Kartend looks in the standard
+per-OS locations, and honours the RetroArch path you may already have set
+under Settings → Launchers — the same one the libretro core picker uses, so
+you never point at your install twice.
+
 ## Styling per-collection
 
 The sidebar inherits its colors from the collection's general theme by

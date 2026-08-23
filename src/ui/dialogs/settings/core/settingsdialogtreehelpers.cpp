@@ -7,6 +7,7 @@
 
 #include "collection/validationhelpers.h"
 #include "pathutils.h"
+#include "retroarchicons.h"
 
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -75,6 +76,25 @@ void copyAppearanceAndLayoutFields(const CollectionConfig &src, CollectionConfig
     // whatever gets added next.
     dst.sidebar = src.sidebar;
     dst.collectionTree = src.collectionTree;
+    // The system glyph is the ONE part of the sidebar block that is not purely
+    // presentational, so it cannot be a whole-struct copy (field report
+    // 2026-08-22: glyphs missing from every subcollection after applying a
+    // root's settings down the tree).
+    //
+    // systemName identifies a MACHINE. Copied verbatim, every subcollection
+    // under a "Games" shell would claim the shell's system and a column of
+    // different platforms would wear one identical icon — the same
+    // misattribution the recursive import already avoids by clearing
+    // screenscraperSystemId and collectionIcon on generated children.
+    //
+    // So: the presentation settings travel, the identity does not. Each target
+    // keeps whatever system it already had; resolveSystemIconIdentities fills
+    // in the ones that have none from their OWN names, which is what makes
+    // applying a root's settings across the tree actually produce a glyph per
+    // platform instead of switching the option on and leaving every row blank.
+    const QString keptSystem = dst.systemIcon.systemName;
+    dst.systemIcon = src.systemIcon;
+    dst.systemIcon.systemName = keptSystem;
   }
   dst.clampValues();
 }
@@ -107,6 +127,93 @@ int applyCategoriesToLists(QList<CollectionConfig> &collections,
     ++applied;
   }
   return applied;
+}
+
+int resolveSystemIconIdentities(QList<CollectionConfig> &collections,
+                                QList<CollectionConfig> *workingCollections,
+                                const QList<int> &targetIndices, const QStringList &systems) {
+  if (systems.isEmpty()) {
+    // No RetroArch, or a pack that covers nothing. Leave every target alone
+    // rather than clearing what is there — a system named in the config is
+    // still the user's answer even when this machine cannot draw it.
+    return 0;
+  }
+  int resolved = 0;
+  for (int idx : targetIndices) {
+    if (idx < 0 || idx >= collections.size()) {
+      continue;
+    }
+    CollectionConfig &target = collections[idx];
+    if (!target.systemIcon.enabled) {
+      continue;
+    }
+    // Neither of these is a MACHINE, so neither may name a system.
+    //
+    //   * A launcher import is a storefront (user 2026-08-22: "dont try to
+    //     pair steam with the retroarch icons"). libretro has no icon for one,
+    //     so anything a match found would be an accident of wording — which is
+    //     exactly how "Steam" once landed on an adult-content DAT entry.
+    //   * A SHELL — a collection with children — groups systems rather than
+    //     being one (user 2026-08-22: "manufacturers should show their logos
+    //     instead of a console icon"). A bare "Nintendo" scores equally against
+    //     every Nintendo system, so the shortest name wins and the row wears an
+    //     arbitrary child: a Wii, a 32X.
+    //
+    // CLEARED, not merely skipped (user 2026-08-23: "regenerated through
+    // options but still seeing some wrong icons"). Skipping only stops a blank
+    // being filled; a row that already held a bad guess from an earlier run
+    // kept it forever, so re-running the apply — the obvious way to fix it —
+    // changed nothing. Re-running is a deliberate act on the user's part and
+    // is entitled to correct what a previous run got wrong.
+    //
+    // Left with no system, the row falls back to its own scraped artwork,
+    // which for a manufacturer is its logo — see the glyph bake in
+    // CollectionTreeController::refreshIcons.
+    const bool isShell =
+        std::any_of(collections.cbegin(), collections.cend(),
+                    [idx](const CollectionConfig &c) { return c.parentCollectionIndex == idx; });
+    if (isShell || !target.importSource.trimmed().isEmpty()) {
+      // Point it at its OWN artwork — for a manufacturer that is the company
+      // logo, for a launcher import the storefront's. Setting the flag as well
+      // as clearing the system is what makes the row show something rather
+      // than nothing, now that the artwork is an explicit choice instead of an
+      // implicit fallback.
+      if (!target.systemIcon.systemName.isEmpty() || !target.systemIcon.useCollectionArtwork) {
+        target.systemIcon.systemName.clear();
+        target.systemIcon.useCollectionArtwork = true;
+        if (workingCollections && idx < workingCollections->size()) {
+          (*workingCollections)[idx].systemIcon.systemName.clear();
+          (*workingCollections)[idx].systemIcon.useCollectionArtwork = true;
+        }
+        ++resolved;
+      }
+      continue;
+    }
+    // Otherwise fill a blank, or REFRESH a previous guess. A system the user
+    // picked themselves is never overruled — but one that detection wrote is
+    // detection's to revise, and refusing to revise it meant a wrong guess
+    // from an older matcher survived every attempt to correct it (user
+    // 2026-08-23: "cant seem to get the snes icon"). Re-running detection is
+    // the obvious fix and now actually converges.
+    if (!target.systemIcon.systemName.isEmpty() && !target.systemIcon.systemAutoDetected) {
+      continue;
+    }
+    const QString detected = RetroArchIcons::autodetectSystem(target.name, systems);
+    if (detected.isEmpty()) {
+      continue; // no confident match — the row keeps its name and no glyph
+    }
+    if (target.systemIcon.systemName == detected) {
+      continue; // already right — not a change worth reporting
+    }
+    target.systemIcon.systemName = detected;
+    target.systemIcon.systemAutoDetected = true;
+    if (workingCollections && idx < workingCollections->size()) {
+      (*workingCollections)[idx].systemIcon.systemName = detected;
+      (*workingCollections)[idx].systemIcon.systemAutoDetected = true;
+    }
+    ++resolved;
+  }
+  return resolved;
 }
 
 void applySubcollectionDefaults(CollectionConfig &child, const CollectionConfig &parent,

@@ -82,7 +82,11 @@ void TestCollectionDiffFingerprint::gridLayoutHashTracksEachField() {
 
 void TestCollectionDiffFingerprint::sidebarHashTracksEachField() {
   using T = SidebarAppearance;
-  hashDetects<T>("sidebarVisible", [](T &c) { c.sidebarVisible = true; });
+  // Negated rather than assigned true — see the same fix in
+  // test_collectionconfigequality. A literal stops being a mutation as soon as
+  // it matches the default, and the failure then points at qHash rather than at
+  // the test.
+  hashDetects<T>("sidebarVisible", [](T &c) { c.sidebarVisible = !c.sidebarVisible; });
   hashDetects<T>("sidebarMode", [](T &c) { c.sidebarMode = DetailsPaneMode::Expand; });
   hashDetects<T>("sidebarPosition", [](T &c) { c.sidebarPosition = DetailsPanePosition::Left; });
   // Kartend-g3fth: this field was in NEITHER operator== nor qHash, so a

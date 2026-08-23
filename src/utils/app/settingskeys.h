@@ -52,11 +52,27 @@ inline constexpr auto kCollectionTreeIconTint = "collectionTreeIconTint";
 inline constexpr auto kCollectionTreeIconsOnly = "collectionTreeIconsOnly";
 inline constexpr auto kCollectionTreeIconDisplay = "collectionTreeIconDisplay";
 inline constexpr auto kCollectionTreeShowLines = "collectionTreeShowLines";
+inline constexpr auto kCollectionTreeScrollClippedLabels = "collectionTreeScrollClippedLabels";
+inline constexpr auto kCollectionTreeScrollClippedLabelsOnHover =
+    "collectionTreeScrollClippedLabelsOnHover";
 inline constexpr auto kCollectionTreeColorizeSelected = "collectionTreeColorizeSelected";
 inline constexpr auto kCollectionTreeHideScrollbar = "collectionTreeHideScrollbar";
 inline constexpr auto kCollectionTreeVisible = "collectionTreeVisible";
 inline constexpr auto kCollectionTreeWidth = "collectionTreeWidth";
 inline constexpr auto kCollectionTypeFilter = "collectionTypeFilter";
+// Kartend-1kkk2: the RetroArch-sourced system glyph beside the collection
+// name. Deliberately NOT prefixed collectionTree* — it is a separate option
+// set from the tree's row artwork, and sharing the prefix would imply the two
+// migrate and clamp together when they do not.
+inline constexpr auto kSystemIconEnabled = "systemIconEnabled";
+inline constexpr auto kSystemIconName = "systemIconName";
+inline constexpr auto kSystemIconSubject = "systemIconSubject";
+inline constexpr auto kSystemIconPack = "systemIconPack";
+inline constexpr auto kSystemIconPlacement = "systemIconPlacement";
+inline constexpr auto kSystemIconStyle = "systemIconStyle";
+inline constexpr auto kSystemIconAutoDetected = "systemIconAutoDetected";
+inline constexpr auto kSystemIconUseCollectionArtwork = "systemIconUseCollectionArtwork";
+inline constexpr auto kSystemIconSize = "systemIconSize";
 inline constexpr auto kCorePath = "corePath";
 inline constexpr auto kCornerRadius = "cornerRadius";
 // Meta key inside [Scrapers] (no provider/field slash, so the credential

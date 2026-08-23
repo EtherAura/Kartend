@@ -694,6 +694,15 @@ void DetailsPane::constrainContentToViewport() {
 void DetailsPane::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
 
+  // Re-cap the content on the PANE's own resize, not only the viewport's. The
+  // pane is built at FIXED_WIDTH and resized later to the collection's
+  // sidebarWidth (DetailsPaneManager::applyDockSizing), and until the cap
+  // caught up, contentWidget stayed pinned to the construction width while the
+  // pane around it was wider — so a widened pane clipped its own artwork and
+  // metadata against a stale bound, with no horizontal scrollbar to reach what
+  // was cut. Cheap: setMaximumWidth is a no-op when the value is unchanged.
+  constrainContentToViewport();
+
   // Permanent diagnostic for "the gap is in the details pane" reports. Every
   // x is relative to the PANE's own left edge, so a non-zero value is dead
   // space this widget is responsible for and a zero is not. Enable with:

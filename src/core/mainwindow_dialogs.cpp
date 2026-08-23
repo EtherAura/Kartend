@@ -540,6 +540,7 @@ QString MainWindow::createCollectionForDat(const QString &datPath) {
   c.type = dialog.collectionType();
   c.scraperOverrides.scraperProviderId = dialog.scraperProviderId();
   c.scraperOverrides.screenscraperSystemId = dialog.screenscraperSystemId();
+  c.systemIcon = dialog.systemIcon();
   c.launcher.launcherPath = dialog.launcherPath();
   c.launcher.corePath = dialog.corePath();
   c.mediaDirectory = dialog.contentPath();

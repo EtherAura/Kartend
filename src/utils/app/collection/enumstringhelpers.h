@@ -250,6 +250,52 @@ inline QString treeIconStyleToString(TreeIconStyle style) {
   return TreeIconStyle::Normal;
 }
 
+inline QString systemIconSubjectToString(SystemIconSubject subject) {
+  switch (subject) {
+  case SystemIconSubject::Console:
+    return QStringLiteral("console");
+  case SystemIconSubject::Content:
+    return QStringLiteral("content");
+  case SystemIconSubject::Controller:
+    break;
+  }
+  return QStringLiteral("controller");
+}
+
+[[nodiscard]] inline SystemIconSubject stringToSystemIconSubject(const QString &str,
+                                                                 bool *unknownFallback = nullptr) {
+  const QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
+  if (lower == "console") return SystemIconSubject::Console;
+  if (lower == "content") return SystemIconSubject::Content;
+  if (lower == "controller") return SystemIconSubject::Controller;
+  if (unknownFallback && !str.isEmpty()) *unknownFallback = true;
+  return SystemIconSubject::Controller;
+}
+
+inline QString systemIconPlacementToString(SystemIconPlacement placement) {
+  switch (placement) {
+  case SystemIconPlacement::AfterName:
+    return QStringLiteral("after-name");
+  case SystemIconPlacement::RowEnd:
+    return QStringLiteral("row-end");
+  case SystemIconPlacement::BeforeName:
+    break;
+  }
+  return QStringLiteral("before-name");
+}
+
+[[nodiscard]] inline SystemIconPlacement
+stringToSystemIconPlacement(const QString &str, bool *unknownFallback = nullptr) {
+  const QString lower = str.toLower();
+  if (unknownFallback) *unknownFallback = false;
+  if (lower == "after-name") return SystemIconPlacement::AfterName;
+  if (lower == "row-end") return SystemIconPlacement::RowEnd;
+  if (lower == "before-name") return SystemIconPlacement::BeforeName;
+  if (unknownFallback && !str.isEmpty()) *unknownFallback = true;
+  return SystemIconPlacement::BeforeName;
+}
+
 [[nodiscard]] inline QString detailsPaneBackgroundTypeToString(DetailsPaneBackgroundType type) {
   switch (type) {
   case DetailsPaneBackgroundType::Image:

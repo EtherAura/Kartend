@@ -36,7 +36,13 @@ struct ViewSettings {
   /// Show the collection name / breadcrumb path in the toolbar (user
   /// request 2026-08-18). Off hides both the title and the subfolder path,
   /// leaving the toolbar to its controls.
-  bool showToolbarBreadcrumbs = true;
+  ///
+  /// Defaults OFF (user request 2026-08-22). The window title already names
+  /// the collection, and the navigation sidebar shows where you are in the
+  /// hierarchy, so the toolbar copy was a third statement of the same thing.
+  /// Anyone who had it on keeps it: the key is written to the config, so only
+  /// installs with no value stored take this default.
+  bool showToolbarBreadcrumbs = false;
   bool fullscreen = false;
   // Defaulted memberwise equality — keeps GeneralSettings::operator== and the
   // settings dirty-check field-complete automatically (Kartend-6oqat).

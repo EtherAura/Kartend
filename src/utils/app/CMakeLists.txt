@@ -30,6 +30,7 @@ target_sources(kartend_utils PRIVATE
   collection/sidebarappearance_persistence.cpp
   collection/splash_settings_persistence.cpp
   collection/startup_settings_persistence.cpp
+  collection/systemicon_settings_persistence.cpp
   collection/themepreset.cpp
   collection/toolbar_settings_persistence.cpp
   collection/typehelpers.cpp
@@ -100,6 +101,8 @@ target_sources(kartend_utils PRIVATE
   collection/splash_settings_persistence.h
   collection/startup_settings.h
   collection/startup_settings_persistence.h
+  collection/systemicon_settings.h
+  collection/systemicon_settings_persistence.h
   collection/themepreset.h
   collection/toolbar_settings.h
   collection/toolbar_settings_persistence.h

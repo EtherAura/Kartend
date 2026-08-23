@@ -91,7 +91,14 @@ void TestCollectionConfigEquality::mutatingAnyComparedFieldBreaksEquality() {
   detects("launcher", [](CollectionConfig &c) { c.launcher.launcherPath = QStringLiteral("x"); });
   detects("gridLayout", [](CollectionConfig &c) { c.gridLayout.gridWidth = 99; });
   detects("filter", [](CollectionConfig &c) { c.filter.titleExclusionEnabled = false; });
-  detects("sidebar", [](CollectionConfig &c) { c.sidebar.sidebarVisible = true; });
+  // NEGATE, never assign a literal. `= true` silently stopped being a mutation
+  // the moment sidebarVisible's default became true (2026-08-22), so this case
+  // compared a struct against an identical copy and failed with "operator==
+  // does not detect a change to 'sidebar'" — which reads like an operator== bug
+  // and is really a stale test assumption. Flipping whatever the default is
+  // keeps the case meaningful across future default changes.
+  detects("sidebar",
+          [](CollectionConfig &c) { c.sidebar.sidebarVisible = !c.sidebar.sidebarVisible; });
   detects("background",
           [](CollectionConfig &c) { c.background.backgroundColor = QStringLiteral("#123456"); });
   detects("archive", [](CollectionConfig &c) { c.archive.extractArchives = true; });
@@ -100,6 +107,9 @@ void TestCollectionConfigEquality::mutatingAnyComparedFieldBreaksEquality() {
   detects("listView", [](CollectionConfig &c) { c.listView.listFontSize = 99; });
   detects("scraperOverrides",
           [](CollectionConfig &c) { c.scraperOverrides.screenscraperSystemId = 5; });
+  detects("systemIcon", [](CollectionConfig &c) {
+    c.systemIcon.systemName = QStringLiteral("Nintendo - Game Boy");
+  });
 }
 
 void TestCollectionConfigEquality::preservedKeysIsExcludedFromEquality() {

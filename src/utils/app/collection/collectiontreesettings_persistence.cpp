@@ -64,6 +64,15 @@ void load(QSettings &settings, CollectionTreeSettings &tree, const QString &coll
   tree.treeShowLines =
       settings.value(keys::kCollectionTreeShowLines, CollectionTreeSettings{}.treeShowLines)
           .toBool();
+  tree.treeScrollClippedLabels = settings
+                                     .value(keys::kCollectionTreeScrollClippedLabels,
+                                            CollectionTreeSettings{}.treeScrollClippedLabels)
+                                     .toBool();
+  tree.treeScrollClippedLabelsOnHover =
+      settings
+          .value(keys::kCollectionTreeScrollClippedLabelsOnHover,
+                 CollectionTreeSettings{}.treeScrollClippedLabelsOnHover)
+          .toBool();
   tree.treeColorizeSelected = settings
                                   .value(keys::kCollectionTreeColorizeSelected,
                                          CollectionTreeSettings{}.treeColorizeSelected)
@@ -123,6 +132,9 @@ void save(QSettings &settings, const CollectionTreeSettings &tree) {
   settings.setValue(keys::kCollectionTreeIconDisplay,
                     CollectionUtils::treeIconDisplayToString(tree.treeIconDisplay));
   settings.setValue(keys::kCollectionTreeShowLines, tree.treeShowLines);
+  settings.setValue(keys::kCollectionTreeScrollClippedLabels, tree.treeScrollClippedLabels);
+  settings.setValue(keys::kCollectionTreeScrollClippedLabelsOnHover,
+                    tree.treeScrollClippedLabelsOnHover);
   settings.setValue(keys::kCollectionTreeColorizeSelected, tree.treeColorizeSelected);
   settings.setValue(keys::kCollectionTreeHideScrollbar,
                     CollectionUtils::scrollbarModeToString(tree.treeScrollbarMode));

@@ -516,6 +516,29 @@ See [Sidebar & Details Pane](Sidebar-and-Details-Pane.md) for behavior.
 | `sidebarFontPointSize` | int | `0` | Sidebar font size. `0` = inherit. |
 | `sidebarActiveTab` | enum | `item` | Active tab on first show: `item` / `collection` / `file`. An unrecognized value falls back to `item` and logs a warning. |
 
+### System icon (navigation sidebar)
+
+The small console / controller / cartridge icon drawn to the left of this
+collection's name in the navigation sidebar, read from a local RetroArch
+installation. See [Sidebar & Details Pane](Sidebar-and-Details-Pane.md#system-icon-from-retroarch).
+
+Nothing here stores a file path: the icon is resolved from the *system* every
+time it is drawn, so updating or re-theming RetroArch is picked up without
+touching your config, and a config shared between machines carries the
+system's identity rather than one machine's filesystem layout.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `systemIconEnabled` | bool | `false` | Draw the icon for this collection. |
+| `systemIconName` | string | empty | libretro system name, matching RetroArch's own playlist naming — e.g. `Nintendo - Game Boy Advance`. Empty means no icon whatever `systemIconEnabled` says. |
+| `systemIconSubject` | enum | `controller` | `controller` / `console` / `content`. The first two come from *different RetroArch icon sets* (each set draws one or the other for every system); `content` is the cartridge/disc icon that ships beside each system icon in every set. An unrecognized value falls back to `controller` and logs a warning. |
+| `systemIconPack` | string | empty | RetroArch icon set to source from (the directory name under `assets/xmb/`, e.g. `monochrome`). Empty picks one to suit `systemIconSubject`, which is what most configs should do. An explicit set is honoured strictly — if it has no icon for this system you get no icon, rather than a silent switch to a different art style. A set holds one icon per system, so it — not `systemIconSubject` — decides console vs controller. Naming a set that cannot draw the requested subject is resolved in the SUBJECT's favour (a set is a style preference; the subject is the requirement), so a stale `monochrome` alongside `console` yields the console set's art rather than a controller. The settings page filters the list so the mismatch is only reachable by hand-editing. |
+| `systemIconPlacement` | enum | `before-name` | Where the icon sits: `before-name` / `after-name` keep it next to the text so it moves with the name; `row-end` pins it to the panel's inner edge instead, lining every icon up in a column whatever the names are. An unrecognized value falls back to `before-name` and logs a warning. |
+| `systemIconStyle` | enum | `normal` | How the icon is inked: `normal` (own colours) / `monochrome-dark` / `monochrome-light` / `tinted` (uses `collectionTreeIconTint`, else the collection accent). Applies to system icons *and* collection artwork, so a manufacturer logo matches the platform icons beneath it. A flat white-on-transparent set is always inked to the label colour regardless, or it would be invisible on a light theme. |
+| `systemIconAutoDetected` | bool | `false` | True when `systemIconName` was guessed rather than chosen. Detection revises its own past guesses and never overrides a hand-picked system, so a wrong guess from an older release is corrected by re-running detection instead of surviving forever. |
+| `systemIconUseCollectionArtwork` | bool | `false` | Draw this collection's own artwork in the icon slot when it names no system — the company logo for a manufacturer shell, the storefront's for a launcher import. With this off and no system, the row simply gets no icon. |
+| `systemIconSize` | int (8–64) | `16` | Icon height in pixels. Clamped on load. This is the small icon beside the name, *not* `collectionTreeIconSize`, which sizes the row artwork. |
+
 ### Per-collection display behavior
 
 | Key | Type | Default | Description |

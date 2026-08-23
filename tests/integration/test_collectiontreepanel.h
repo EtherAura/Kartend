@@ -28,6 +28,18 @@ private slots:
   void icons_onIndentedRows_renderCenteredAtConfiguredSize();
   void iconAndText_drawsTheNameBesideTheIcon();
 
+  // Kartend-1kkk2: the RetroArch system glyph is an option set of its own, so
+  // it must render in the DEFAULT Name-only mode and with no collectionIcon
+  // set — i.e. without borrowing anything from the row-artwork pipeline. That
+  // independence is the whole design decision, so it is what gets pinned.
+  void systemIcon_drawsInNameOnlyModeAtTheConfiguredSize();
+
+  // Kartend-1kkk2, field report 2026-08-22 ("still shows controller icon
+  // after choosing console"): editing ONLY the glyph's settings must rebake
+  // the rows. The rebake test enumerated the tree's own icon prefs and not
+  // this separate cluster, so the setting saved and the screen did not move.
+  void systemIcon_settingsChangeRebakesTheRow();
+
   // Select+direction section chord (2026-08-17): left focuses the tree,
   // right returns to the grid; a hidden tree is skipped.
   void focusSectionChord_movesBetweenTreeAndGrid();

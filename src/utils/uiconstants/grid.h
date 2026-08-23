@@ -18,7 +18,12 @@ inline constexpr int MIN_WIDTH = 1;
 // GridLayoutCalculator (kQtMaxWidgetSize - 1000) is what actually catches
 // runaway values, not a column-count cap.
 /// Spacing between grid items in pixels
-inline constexpr int SPACING = 20;
+///
+/// 10 rather than 20 (user request 2026-08-22). Tiles already carry their own
+/// padding around the artwork, so 20px between them read as a gap rather than
+/// a gutter and cost a column at common window widths. Per collection and
+/// still settable to anything in [-100, 200].
+inline constexpr int SPACING = 10;
 /// Margins around the grid in pixels
 inline constexpr int MARGINS = 10;
 /// Extra rows to render above/below viewport for smooth scrolling

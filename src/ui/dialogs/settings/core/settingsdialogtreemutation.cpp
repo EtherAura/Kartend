@@ -19,6 +19,8 @@
 #include "collectiontreewidget.h"
 #include "createcollectiondialog.h"
 #include "errordialog.h"
+#include "retroarchicons.h"
+#include "retroarchutils.h"
 #include "settingsdialog.h"
 #include "settingsdialogtreehelpers.h"
 #include "treemanager.h"
@@ -56,6 +58,7 @@ void SettingsDialog::addCollection() {
   newCollection.type = dialog.collectionType();
   newCollection.scraperOverrides.scraperProviderId = dialog.scraperProviderId();
   newCollection.scraperOverrides.screenscraperSystemId = dialog.screenscraperSystemId();
+  newCollection.systemIcon = dialog.systemIcon();
   newCollection.launcher.launcherPath = dialog.launcherPath();
   newCollection.launcher.corePath = dialog.corePath();
   newCollection.launcher.launchParameters = "";
@@ -143,6 +146,7 @@ void SettingsDialog::ensureRootCollectionExists() {
     newCollection.type = dialog.collectionType();
     newCollection.scraperOverrides.scraperProviderId = dialog.scraperProviderId();
     newCollection.scraperOverrides.screenscraperSystemId = dialog.screenscraperSystemId();
+    newCollection.systemIcon = dialog.systemIcon();
     newCollection.mediaDirectory = dialog.contentPath();
     newCollection.artworkDirectory = dialog.artworkDirectory();
     newCollection.launcher.launcherPath = dialog.launcherPath();
@@ -186,8 +190,30 @@ void SettingsDialog::ensureRootCollectionExists() {
 int SettingsDialog::applyCategoriesToIndices(const QList<int> &targetIndices,
                                              ApplySettingsDialog::FieldCategories categories,
                                              int sourceIndex) {
-  return SettingsTreeHelpers::applyCategoriesToLists(collections, m_workingCollections,
-                                                     targetIndices, categories, sourceIndex);
+  const int applied = SettingsTreeHelpers::applyCategoriesToLists(
+      collections, m_workingCollections, targetIndices, categories, sourceIndex);
+  // Kartend-1kkk2: the Sidebars category carries how the system glyph LOOKS
+  // but not which machine it names, so each target now resolves its own from
+  // its own name. Without this, applying a root's settings down the tree
+  // switched the glyph on for every subcollection and left them all blank —
+  // which is exactly how it was reported.
+  if (applied > 0 && categories.testFlag(ApplySettingsDialog::Sidebars) &&
+      CollectionUtils::isValidIndex(sourceIndex, collections)) {
+    const SystemIconSettings &sourceIcon = collections[sourceIndex].systemIcon;
+    if (sourceIcon.enabled) {
+      // Enumerated ONCE for the whole apply, against the pack the propagated
+      // settings will actually resolve through — a per-target walk of the
+      // assets tree would be a directory scan per collection.
+      const QString assetsDir =
+          RetroArchUtils::resolveAssetsDirectory(m_generalSettings.launchers.retroarchConfigPath);
+      const QString pack = RetroArchIcons::resolvePack(sourceIcon.subject, sourceIcon.packOverride,
+                                                       RetroArchIcons::discoverPacks(assetsDir));
+      SettingsTreeHelpers::resolveSystemIconIdentities(
+          collections, &m_workingCollections, targetIndices,
+          RetroArchIcons::discoverSystems(assetsDir, pack));
+    }
+  }
+  return applied;
 }
 
 void SettingsDialog::duplicateCollection() {

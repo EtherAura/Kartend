@@ -11,6 +11,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A console or controller icon beside each game collection's name, from
+  your RetroArch install.** Game collections can now carry a small icon to
+  the left of their name in the navigation sidebar — the machine's
+  controller, the console itself, or the cartridge or disc it played — taken
+  straight from the RetroArch you already have installed. Nothing is
+  downloaded, and nothing is copied: the icons are read where they sit, so
+  they match the RetroArch version you are running and follow it when you
+  update or re-theme it. New game collections detect their system as you type
+  the name, including shorthand — a collection called *SNES* finds the Super
+  Nintendo. Existing collections get there in one press of **Detect** on the
+  new *System Icon* section under Settings → Appearance → Sidebars, or you can
+  pick the system yourself from a searchable list. Controller and console come
+  from different RetroArch icon sets — a set holds one icon per system, so the
+  set decides which you get — and the set list offers only those that actually
+  hold art for what you asked for, with the system count beside each name. Put the icon
+  **before the name, after it, or out at the panel edge**, where a column of
+  them lines up however long the names are. Off until you ask for it, and the
+  section explains itself when RetroArch is not installed. This is separate
+  from *Rows show* — that setting governs a collection's scraped artwork,
+  while this small glyph appears alongside the name in every mode that shows
+  one, including the default *Name only*.
+
+  Setting it up on a parent collection and saving with **Mode** on *Current +
+  subcollections* fits out a whole shelf at once: the look is copied down,
+  but each subcollection detects its own system from its own name, so you get
+  a different icon per platform rather than the parent's repeated. Collections
+  imported from a launcher — Steam, Flatpak, Lutris — are left alone, since a
+  storefront is not a machine, and so are grouping shells like a *Nintendo* or
+  *Sega* folder: those show the company logo already on file instead, at the
+  same size and place as the platform icons beneath them. Re-running the apply
+  corrects rows that picked up a wrong system earlier, rather than leaving them
+  as they were.
+
+  **Right-click any sidebar row** to set a custom icon from a file, detect the
+  system from the row's name, or remove the icon — acting on the row you
+  clicked rather than the collection you happen to be in. Detection also
+  revises guesses it made itself, so a row that picked up the wrong icon in an
+  earlier attempt is corrected by running it again; an icon you chose by hand
+  is never overwritten.
+
+  An **Icon style** choice — normal, monochrome dark or light, or tinted —
+  inks system icons and collection artwork the same way, so a manufacturer
+  logo matches the platform icons beneath it instead of being the one thing in
+  colour. And the System list now opens with two answers that are not systems:
+  *None* for no icon at all, and *this collection's own artwork*, which is how
+  you clear or override a single row where the logo just repeats the name.
+
 - **One Sidebar settings page — pick each side panel's side and shape.**
   A single page in Settings to put the details pane and the new collection tree on
   the left or the right, per collection, plus a new **justification**
@@ -366,6 +413,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Point at a long collection name to read all of it.** In a narrow sidebar,
+  names that do not fit end in an ellipsis — unhelpful precisely when several
+  of them start the same way, since the part that tells them apart is the part
+  being hidden. Hovering a row whose name is cut off now scrolls it sideways
+  so you can read the whole thing, pausing at each end rather than crawling,
+  and putting it back when you move away. Only the row under the pointer
+  moves, and names that already fit never move at all. On by default as
+  *Scroll the row under the pointer* on the Sidebars settings page; a second
+  option there, *Scroll names that do not fit*, does the same for every
+  clipped row at once and is off by default.
+
+- **Level-one collections line up with the Playlists heading.** The row at the
+  top of the sidebar names the collection you are in and reads as a heading, so
+  the collections beneath it no longer sit indented under it — they start at
+  the same place as *Playlists*, with their own subcollections stepping in from
+  there.
+
+- **Tidier highlights in the navigation sidebar.** With rows set to show just
+  their names, the rounded highlight behind a row is now sized to the name it
+  sits behind — close around the text, the same height on every row, and with
+  the name centred inside it — instead of running most of the way across the
+  panel and standing as tall as whatever artwork the row could have held. A
+  short name like *Sega* no longer wears a backdrop several times its own size.
+  The **Playlists** heading gets exactly the same highlight as every other
+  section, where it previously had a square band of a different height.
+
+- **The details pane is open by default.** A new library now starts with the
+  pane showing, so an item's artwork, metadata and file information are
+  visible straight away instead of waiting behind an F9 nobody had been told
+  about. It is per collection and still toggles from View → Show Details Pane,
+  and collections you have already used keep the state you left them in.
+
+- **The toolbar no longer repeats the collection name by default.** The
+  window title already names the collection you are in, and the navigation
+  sidebar shows where that sits in your library, so the breadcrumb across
+  the toolbar was saying the same thing a third time and taking room from
+  the controls. It is still a setting — tick *Collection Breadcrumb* under
+  Settings → Appearance → Toolbar to bring it back, along with its
+  clickable path segments — and if you had already set it either way, your
+  choice is kept.
+
 - **Importing a .kart can no longer touch files you already have.** An
   import used to unpack straight into whatever directory you picked — and
   a hostile bundle didn't need any path trickery to abuse that: pointed at
@@ -431,11 +519,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that had artwork used to lose its name entirely — the tree drew the picture
   and nothing else — which made a library of logos hard to read and had no
   setting to change it. The Sidebars page now has a **Rows show** choice:
-  *Name only* keeps the artwork on file but draws just the text, *Icon and
-  name* puts a small icon beside the name (the new default), and *Icon only*
-  is the previous picture-only look with the name in the tooltip. Rows without
-  artwork show their name in every mode, as before. An existing icons-only
-  setting carries over to *Icon only*; everything else becomes *Icon and name*.
+  *Name only* keeps the artwork on file but draws just the text and is the
+  new default, *Icon and name* puts a small icon beside the name, and *Icon
+  only* is the previous picture-only look with the name in the tooltip. Rows
+  without artwork show their name in every mode, as before. Your existing
+  choice is kept either way: an icons-only setting carries over to *Icon
+  only*, anything else to *Icon and name*, so only a fresh library starts on
+  *Name only*.
 
 - **Only the topmost sidebar row is painted as chrome.** Every top-level
   collection took the titlebar colour, so a library with several of them

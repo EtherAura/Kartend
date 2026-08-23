@@ -61,15 +61,44 @@ struct CollectionTreeSettings {
   /// available. or, show the text, but make the icon small and next to the
   /// text"). Replaces the treeIconsOnly bool from 2026-08-17.
   ///
-  /// IconAndText is the DEFAULT and is new behaviour: a row with artwork used
-  /// to lose its name outright, because TreeIconDelegate cleared the label on
-  /// its icon path whatever treeIconsOnly said. The old bool therefore chose
-  /// between IconOnly (true, name to tooltip) and IconAndText-without-the-text
-  /// (false) — never text alongside an icon.
+  /// TextOnly is the DEFAULT (user request 2026-08-22, revising the
+  /// IconAndText default this setting shipped with earlier the same day). A
+  /// column of names reads as a list of places to go; once every row carries a
+  /// picture the sidebar competes with the artwork grid it sits beside, which
+  /// is the thing actually worth looking at. Artwork is still on file and one
+  /// setting away.
+  ///
+  /// Note this default is reached only by a config with NO tree-mode key at
+  /// all. An existing install has either the tri-state key or the legacy
+  /// treeIconsOnly bool, both of which are honoured on load, so nobody's
+  /// icons disappear on upgrade.
   ///
   /// Rows with NO artwork keep their name in every mode; a blank unlabelled
   /// row would be unusable, so text is the fallback, not a casualty.
-  TreeIconDisplay treeIconDisplay = TreeIconDisplay::IconAndText;
+  TreeIconDisplay treeIconDisplay = TreeIconDisplay::TextOnly;
+  /// Scroll a row's name horizontally when it does not fit (user request
+  /// 2026-08-22). It answers a real problem — a narrow sidebar elides long
+  /// platform names to a common prefix, "Famicom - Nintendo Enterta…" beside
+  /// "Super Famicom - Super Nint…", so the elision hides exactly the part that
+  /// tells them apart — but movement in a sidebar is intrusive enough that it
+  /// should be asked for rather than arrive unannounced.
+  ///
+  /// OFF by default (user request 2026-08-22, revising the on-by-default this
+  /// shipped with earlier the same day).
+  ///
+  /// Only rows whose text actually overflows move; everything else is drawn
+  /// exactly as before, so a library of short names sees no motion at all.
+  bool treeScrollClippedLabels = false;
+  /// Scroll a clipped name while the pointer is OVER that row (user request
+  /// 2026-08-22). ON by default, and the reason the always-on variant above
+  /// can safely default off: pointing at a row is a deliberate "what is this?",
+  /// so the movement is asked for, affects exactly one row, and stops the
+  /// moment the pointer leaves. Nothing moves unprompted.
+  ///
+  /// Independent of treeScrollClippedLabels rather than a mode of it — with
+  /// both off nothing ever scrolls, with both on the hovered row is simply
+  /// already scrolling.
+  bool treeScrollClippedLabelsOnHover = true;
   /// Branch connector lines (user request 2026-08-17). OFF by default —
   /// the chevrons alone carry the structure; the lines are visual noise
   /// most themes are better without. Chevrons stay either way.

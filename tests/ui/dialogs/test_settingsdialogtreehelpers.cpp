@@ -41,6 +41,15 @@ private slots:
   void applyCategories_mutatesBothLists();
   void applyCategories_workingListShorterStillMutatesLive();
 
+  // Kartend-1kkk2: the system glyph is the one part of the sidebar block that
+  // is not purely presentational, so the Sidebars category splits it — look
+  // travels, machine identity does not.
+  void sidebarsCategory_copiesGlyphLookButNotItsSystem();
+  void resolveSystemIcons_fillsBlankTargetsFromTheirOwnNames();
+  void resolveSystemIcons_neverOverwritesADeliberatePick();
+  void resolveSystemIcons_skipsShellsAndLauncherImports();
+  void resolveSystemIcons_refreshesItsOwnGuessButNotAHandPick();
+
   // applySubcollectionDefaults
   void subcollectionDefaults_setLinkageAndInheritedSubset();
 
@@ -277,6 +286,197 @@ void TestSettingsDialogTreeHelpers::allMask_neverTouchesIdentityOrPaths() {
   QCOMPARE(dst.extensions, QStringList{QStringLiteral("flac")});
   QCOMPARE(dst.launcher.launcherPath, QStringLiteral("/usr/bin/other"));
   QCOMPARE(dst.collectionIcon, QStringLiteral("/icons/plain.png"));
+}
+
+void TestSettingsDialogTreeHelpers::sidebarsCategory_copiesGlyphLookButNotItsSystem() {
+  // Field report 2026-08-22: after applying a root collection's settings to
+  // all its subcollections, no glyph appeared on any of them. The Sidebars
+  // category whole-struct-copies cfg.sidebar and cfg.collectionTree, and the
+  // new systemIcon cluster was in neither — so it propagated nothing at all.
+  CollectionConfig src = styledSource();
+  src.systemIcon.enabled = true;
+  src.systemIcon.systemName = QStringLiteral("Nintendo - Game Boy");
+  src.systemIcon.subject = SystemIconSubject::Console;
+  src.systemIcon.packOverride = QStringLiteral("systematic");
+  src.systemIcon.iconSize = 24;
+
+  CollectionConfig dst = plainTarget();
+  QVERIFY(!dst.systemIcon.enabled);
+
+  SettingsTreeHelpers::copyAppearanceAndLayoutFields(src, dst, ApplySettingsDialog::Sidebars);
+
+  // How it LOOKS travels.
+  QVERIFY(dst.systemIcon.enabled);
+  QCOMPARE(dst.systemIcon.subject, SystemIconSubject::Console);
+  QCOMPARE(dst.systemIcon.packOverride, QStringLiteral("systematic"));
+  QCOMPARE(dst.systemIcon.iconSize, 24);
+  // Which MACHINE it names does not. Copied verbatim, every subcollection
+  // under a shell would claim the shell's system and a column of different
+  // platforms would wear one identical icon.
+  QVERIFY2(dst.systemIcon.systemName.isEmpty(),
+           "the source's system must not be stamped onto the target");
+
+  // And a target that already names its own system keeps it.
+  CollectionConfig owned = plainTarget();
+  owned.systemIcon.systemName = QStringLiteral("Sega - Mega Drive - Genesis");
+  SettingsTreeHelpers::copyAppearanceAndLayoutFields(src, owned, ApplySettingsDialog::Sidebars);
+  QCOMPARE(owned.systemIcon.systemName, QStringLiteral("Sega - Mega Drive - Genesis"));
+}
+
+void TestSettingsDialogTreeHelpers::resolveSystemIcons_fillsBlankTargetsFromTheirOwnNames() {
+  // The other half of the fix: propagating the look alone would switch the
+  // glyph on everywhere and leave every row blank. Each target resolves its
+  // OWN machine from its OWN name, which is what the user was reaching for.
+  const QStringList systems{QStringLiteral("Nintendo - Game Boy"),
+                            QStringLiteral("Nintendo - Super Nintendo Entertainment System"),
+                            QStringLiteral("Sega - Mega Drive - Genesis")};
+  QList<CollectionConfig> live;
+  for (const QString &name : {QStringLiteral("SNES"), QStringLiteral("Mega Drive"),
+                              QStringLiteral("Assorted Oddities")}) {
+    CollectionConfig c;
+    c.name = name;
+    c.systemIcon.enabled = true;
+    live.append(c);
+  }
+  QList<CollectionConfig> working = live;
+
+  const int resolved =
+      SettingsTreeHelpers::resolveSystemIconIdentities(live, &working, {0, 1, 2}, systems);
+
+  QCOMPARE(resolved, 2);
+  QCOMPARE(live[0].systemIcon.systemName,
+           QStringLiteral("Nintendo - Super Nintendo Entertainment System"));
+  QCOMPARE(live[1].systemIcon.systemName, QStringLiteral("Sega - Mega Drive - Genesis"));
+  // No confident match — left blank rather than guessed at, so the row keeps
+  // its name and simply carries no glyph.
+  QVERIFY(live[2].systemIcon.systemName.isEmpty());
+  // Both lists move together, or the dialog's working copy would revert the
+  // change on the next reload.
+  QCOMPARE(working[0].systemIcon.systemName, live[0].systemIcon.systemName);
+  QCOMPARE(working[1].systemIcon.systemName, live[1].systemIcon.systemName);
+
+  // No RetroArch (empty candidate list) resolves nothing and clears nothing.
+  QList<CollectionConfig> untouched = live;
+  QCOMPARE(SettingsTreeHelpers::resolveSystemIconIdentities(untouched, nullptr, {0, 1, 2}, {}), 0);
+  QCOMPARE(untouched[0].systemIcon.systemName, live[0].systemIcon.systemName);
+}
+
+void TestSettingsDialogTreeHelpers::resolveSystemIcons_neverOverwritesADeliberatePick() {
+  const QStringList systems{QStringLiteral("Nintendo - Game Boy"),
+                            QStringLiteral("Nintendo - Super Nintendo Entertainment System")};
+  QList<CollectionConfig> live;
+  // Named SNES but deliberately pointed at the Game Boy icon — a bulk apply of
+  // somebody else's settings has no business overruling that.
+  CollectionConfig deliberate;
+  deliberate.name = QStringLiteral("SNES");
+  deliberate.systemIcon.enabled = true;
+  deliberate.systemIcon.systemName = QStringLiteral("Nintendo - Game Boy");
+  live.append(deliberate);
+  // Glyph switched OFF: nothing to resolve, so it stays empty.
+  CollectionConfig disabled;
+  disabled.name = QStringLiteral("SNES");
+  live.append(disabled);
+
+  QCOMPARE(SettingsTreeHelpers::resolveSystemIconIdentities(live, nullptr, {0, 1}, systems), 0);
+  QCOMPARE(live[0].systemIcon.systemName, QStringLiteral("Nintendo - Game Boy"));
+  QVERIFY(live[1].systemIcon.systemName.isEmpty());
+}
+
+void TestSettingsDialogTreeHelpers::resolveSystemIcons_skipsShellsAndLauncherImports() {
+  // Field report 2026-08-22: "manufacturers should show their logos instead of
+  // a console icon". A row called "Nintendo" or "Sega" GROUPS systems rather
+  // than being one, and matching a bare manufacturer against system names can
+  // only pick one of its children arbitrarily — those rows ended up wearing a
+  // Wii and a 32X. A launcher import is skipped for the same class of reason:
+  // a storefront is not a machine.
+  const QStringList systems{QStringLiteral("Nintendo - Wii"), QStringLiteral("Nintendo - Game Boy"),
+                            QStringLiteral("Sega - Mega Drive - Genesis")};
+  QList<CollectionConfig> live;
+  CollectionConfig shell; // index 0 — has a child, so a manufacturer
+  shell.name = QStringLiteral("Nintendo");
+  shell.systemIcon.enabled = true;
+  live.append(shell);
+  CollectionConfig leaf; // index 1 — child of the shell
+  leaf.name = QStringLiteral("Game Boy");
+  leaf.parentCollectionIndex = 0;
+  leaf.isSubcollection = true;
+  leaf.systemIcon.enabled = true;
+  live.append(leaf);
+  CollectionConfig store; // index 2 — launcher import
+  store.name = QStringLiteral("Steam");
+  store.importSource = QStringLiteral("steam");
+  store.systemIcon.enabled = true;
+  live.append(store);
+
+  // 3 changes: the leaf gains its system, and the shell and the import are
+  // each pointed at their own artwork.
+  QCOMPARE(SettingsTreeHelpers::resolveSystemIconIdentities(live, nullptr, {0, 1, 2}, systems), 3);
+  QVERIFY2(live[0].systemIcon.systemName.isEmpty(),
+           "a shell groups systems and must not claim one of them");
+  QVERIFY(live[0].systemIcon.useCollectionArtwork);
+  QCOMPARE(live[1].systemIcon.systemName, QStringLiteral("Nintendo - Game Boy"));
+  QVERIFY(live[2].systemIcon.systemName.isEmpty());
+
+  // CLEARING, not just skipping (user 2026-08-23: "regenerated through options
+  // but still seeing some wrong icons"). A shell or a launcher import that
+  // already holds a bad guess from an earlier run must be CORRECTED by
+  // re-running, or the obvious fix does nothing.
+  QList<CollectionConfig> stale = live;
+  QList<CollectionConfig> staleWorking = live;
+  stale[0].systemIcon.systemName = QStringLiteral("Nintendo - Wii"); // shell
+  staleWorking[0].systemIcon.systemName = QStringLiteral("Nintendo - Wii");
+  stale[2].systemIcon.systemName = QStringLiteral("Sega - Mega Drive - Genesis"); // import
+  staleWorking[2].systemIcon.systemName = QStringLiteral("Sega - Mega Drive - Genesis");
+
+  QCOMPARE(
+      SettingsTreeHelpers::resolveSystemIconIdentities(stale, &staleWorking, {0, 1, 2}, systems),
+      2);
+  QVERIFY2(stale[0].systemIcon.systemName.isEmpty(),
+           "re-running must clear a shell's stale system, not preserve it");
+  QVERIFY(stale[2].systemIcon.systemName.isEmpty());
+  // ...and point it at its own artwork, so the row shows the company /
+  // storefront logo rather than nothing at all.
+  QVERIFY(stale[0].systemIcon.useCollectionArtwork);
+  QVERIFY(stale[2].systemIcon.useCollectionArtwork);
+  // Both lists move together, or the dialog's working copy reinstates it.
+  QVERIFY(staleWorking[0].systemIcon.systemName.isEmpty());
+  QVERIFY(staleWorking[2].systemIcon.systemName.isEmpty());
+  // The real system on the leaf is untouched — clearing is for rows that must
+  // not have one, never a correction of the user's own pick.
+  QCOMPARE(stale[1].systemIcon.systemName, QStringLiteral("Nintendo - Game Boy"));
+}
+
+void TestSettingsDialogTreeHelpers::resolveSystemIcons_refreshesItsOwnGuessButNotAHandPick() {
+  // Field report 2026-08-23: "cant seem to get the snes icon". An older,
+  // buggier matcher had written the NES onto an SNES collection, and
+  // "already has a system" was read as "the user picked it" — so re-running
+  // detection, the obvious way to correct it, refused to touch it forever.
+  //
+  // Provenance is what separates the two cases: detection may revise its OWN
+  // past guess, and must still never override a hand pick.
+  const QStringList systems{
+      QStringLiteral("Nintendo - Nintendo Entertainment System"),
+      QStringLiteral("Nintendo - Super Nintendo Entertainment System"),
+  };
+  CollectionConfig guessed;
+  guessed.name = QStringLiteral("Super Famicom - Super Nintendo Entertainment System");
+  guessed.systemIcon.enabled = true;
+  guessed.systemIcon.systemName = QStringLiteral("Nintendo - Nintendo Entertainment System");
+  guessed.systemIcon.systemAutoDetected = true; // detection's own, stale answer
+
+  CollectionConfig handPicked = guessed;
+  handPicked.systemIcon.systemAutoDetected = false; // the user chose the NES
+
+  QList<CollectionConfig> live{guessed, handPicked};
+  QCOMPARE(SettingsTreeHelpers::resolveSystemIconIdentities(live, nullptr, {0, 1}, systems), 1);
+  QCOMPARE(live[0].systemIcon.systemName,
+           QStringLiteral("Nintendo - Super Nintendo Entertainment System"));
+  QVERIFY2(live[1].systemIcon.systemName ==
+               QStringLiteral("Nintendo - Nintendo Entertainment System"),
+           "a hand-picked system must survive a re-run, however wrong it looks");
+
+  // Re-running once the guess is already right is not a change.
+  QCOMPARE(SettingsTreeHelpers::resolveSystemIconIdentities(live, nullptr, {0, 1}, systems), 0);
 }
 
 void TestSettingsDialogTreeHelpers::applyCategories_invalidSourceOrEmptyMaskReturnsZero() {

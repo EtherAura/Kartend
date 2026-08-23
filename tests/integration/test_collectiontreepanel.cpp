@@ -205,10 +205,22 @@ void TestCollectionTreePanel::icons_onIndentedRows_renderCenteredAtConfiguredSiz
   // that still protects the user — growth is BOUNDED. A row may not exceed
   // what the widest-logo boost can justify, so open-ended ballooning is
   // still caught. Logical units throughout (visualItemRect).
+  // WHERE THE LOGO-BEARING ROW LIVES depends on the tree's shape, which
+  // changed on 2026-08-22: the topmost row reads as a heading for the panel, so
+  // its children are promoted to TOP-LEVEL items to align them with the
+  // Playlists heading (Kartend-xzxaj). topLevelItem(0) is therefore the heading
+  // and has no children, where it used to be a shell with the row under test
+  // beneath it.
+  //
+  // Resolved rather than hard-coded to either shape: take a child of the first
+  // row when there is one, otherwise the next top-level row. The assertion
+  // below is about row HEIGHT for a logo-bearing row and does not care which
+  // depth that row sits at, so this stays honest under either structure.
   QTreeWidgetItem *shellItem = tree->topLevelItem(0);
   QVERIFY(shellItem);
-  QVERIFY(shellItem->childCount() >= 1);
-  QTreeWidgetItem *childItem = shellItem->child(0);
+  QTreeWidgetItem *childItem =
+      shellItem->childCount() >= 1 ? shellItem->child(0) : tree->topLevelItem(1);
+  QVERIFY2(childItem, "expected a logo-bearing row below the heading row");
   const int baseIconSize = CollectionTreeSettings{}.treeIconSize;
   const int childRowH = tree->visualItemRect(childItem).height();
   // Tallest-boost height + the proportional row pad + slack. Rows carrying a
@@ -279,6 +291,178 @@ void TestCollectionTreePanel::iconAndText_drawsTheNameBesideTheIcon() {
                                      "dropped")
                           .arg(iconCenter)
                           .arg(frame.width() / 2)));
+}
+
+void TestCollectionTreePanel::systemIcon_drawsInNameOnlyModeAtTheConfiguredSize() {
+  // A miniature RetroArch assets tree, so the test says the same thing on a
+  // machine with no RetroArch installed — which is every CI runner.
+  QTemporaryDir raDir;
+  QVERIFY(raDir.isValid());
+  const QString pngDir = raDir.path() + QStringLiteral("/assets/xmb/monochrome/png");
+  QVERIFY(QDir().mkpath(pngDir));
+  const QString system = QStringLiteral("Nintendo - Game Boy");
+  // Deliberately NOT a flat fill. A single-colour mark is a silhouette by the
+  // delegate's own test and gets recoloured to the label ink, which would
+  // leave nothing green to scan for — so the probe carries a second colour
+  // across enough of its area to read as coloured art and pass through as-is.
+  // That also exercises the "colour packs keep their colours" branch.
+  {
+    QImage art(24, 24, QImage::Format_ARGB32);
+    art.fill(QColor(0, 200, 0));
+    QPainter painter(&art);
+    painter.fillRect(QRect(0, 0, 8, 8), QColor(0, 0, 200));
+    painter.end();
+    QVERIFY(art.save(pngDir + QLatin1Char('/') + system + QStringLiteral(".png")));
+    // The -content sibling is what makes this count as a SYSTEM rather than a
+    // menu glyph, so discovery needs it present even though the Controller
+    // subject resolves the plain file.
+    QVERIFY(art.save(pngDir + QLatin1Char('/') + system + QStringLiteral("-content.png")));
+  }
+
+  constexpr int kGlyphSize = 16;
+  CollectionConfig shell;
+  shell.name = QStringLiteral("Shell");
+  // No collectionIcon, and the DEFAULT display mode — the two things that
+  // would hide a glyph that had been folded into the row-artwork pipeline.
+  QCOMPARE(shell.collectionTree.treeIconDisplay, TreeIconDisplay::TextOnly);
+  QVERIFY(shell.collectionIcon.isEmpty());
+  shell.systemIcon.enabled = true;
+  shell.systemIcon.systemName = system;
+  shell.systemIcon.subject = SystemIconSubject::Controller;
+  shell.systemIcon.packOverride = QStringLiteral("monochrome");
+  shell.systemIcon.iconSize = kGlyphSize;
+
+  KartendTest::MockedMainWindowFixture fixture({shell});
+  MainWindow *win = fixture.window();
+  QVERIFY(win);
+  // The same override the core picker uses. Set BEFORE the bake — resolution
+  // reads it once per refresh pass.
+  win->generalSettings().launchers.retroarchConfigPath = raDir.path() + QStringLiteral("/assets");
+  win->show();
+  QVERIFY(QTest::qWaitForWindowExposed(win));
+  auto *controller = win->findChild<CollectionTreeController *>();
+  QVERIFY(controller);
+  controller->onCollectionSwitched(0);
+  auto *tree = win->findChild<QTreeWidget *>(QStringLiteral("collectionTreeWidget"));
+  QVERIFY(tree);
+  QVERIFY(tree->viewport());
+  QTest::qWait(80);
+
+  const QPixmap grabbed = tree->viewport()->grab();
+  const QImage frame = grabbed.toImage();
+  QVERIFY(!frame.isNull());
+  if (const QByteArray dumpDir = qgetenv("KARTEND_TEST_DUMP_DIR"); !dumpDir.isEmpty()) {
+    frame.save(QString::fromLocal8Bit(dumpDir) + QStringLiteral("/treepanel-systemicon.png"));
+  }
+  int left = frame.width();
+  int right = -1;
+  int top = frame.height();
+  int bottom = -1;
+  for (int y = 0; y < frame.height(); ++y) {
+    for (int x = 0; x < frame.width(); ++x) {
+      const QColor c = frame.pixelColor(x, y);
+      if (c.green() > 150 && c.red() < 90 && c.blue() < 90) {
+        left = qMin(left, x);
+        right = qMax(right, x);
+        top = qMin(top, y);
+        bottom = qMax(bottom, y);
+      }
+    }
+  }
+  QVERIFY2(right >= 0,
+           "the system glyph must be drawn in Name-only mode — it is a separate option set "
+           "from the row artwork, not a mode of it");
+
+  // The grab is in PHYSICAL pixels while iconSize is logical (the same unit
+  // trap the icon test above documents), so convert before comparing.
+  const qreal dpr = grabbed.devicePixelRatio() > 0 ? grabbed.devicePixelRatio() : 1.0;
+  const int expected = qRound(kGlyphSize * dpr);
+  const int drawnHeight = bottom - top + 1;
+  // Tolerance covers the trim-then-scale rounding; the point is that the
+  // configured size is honoured, not that it is exact to the pixel.
+  QVERIFY2(qAbs(drawnHeight - expected) <= qMax(2, expected / 4),
+           qPrintable(QStringLiteral("glyph height %1px should be about the configured %2px")
+                          .arg(drawnHeight)
+                          .arg(expected)));
+  // Left of centre: it introduces the name rather than replacing it.
+  QVERIFY2((left + right) / 2 < frame.width() / 2, "the glyph belongs to the LEFT of the name");
+}
+
+void TestCollectionTreePanel::systemIcon_settingsChangeRebakesTheRow() {
+  // Two sets, two visibly different colours for the SAME system, so "did the
+  // row rebake" is answerable by looking at the pixels rather than by
+  // inspecting internals. Green stands in for the controller set, blue for
+  // the console set.
+  QTemporaryDir raDir;
+  QVERIFY(raDir.isValid());
+  const QString system = QStringLiteral("Nintendo - Game Boy");
+  const auto writeSet = [&](const QString &pack, const QColor &fill) {
+    const QString dir =
+        raDir.path() + QStringLiteral("/assets/xmb/") + pack + QStringLiteral("/png");
+    QVERIFY(QDir().mkpath(dir));
+    QImage art(24, 24, QImage::Format_ARGB32);
+    art.fill(fill);
+    // Second colour across enough area to read as COLOURED art, so the
+    // silhouette recolouring leaves it alone and the probe colour survives.
+    QPainter painter(&art);
+    painter.fillRect(QRect(0, 0, 8, 8), QColor(90, 90, 90));
+    painter.end();
+    QVERIFY(art.save(dir + QLatin1Char('/') + system + QStringLiteral(".png")));
+    QVERIFY(art.save(dir + QLatin1Char('/') + system + QStringLiteral("-content.png")));
+  };
+  writeSet(QStringLiteral("monochrome"), QColor(0, 200, 0)); // curated CONTROLLER set
+  writeSet(QStringLiteral("systematic"), QColor(0, 0, 200)); // curated CONSOLE set
+
+  CollectionConfig shell;
+  shell.name = QStringLiteral("Shell");
+  shell.systemIcon.enabled = true;
+  shell.systemIcon.systemName = system;
+  shell.systemIcon.subject = SystemIconSubject::Controller;
+  shell.systemIcon.iconSize = 16;
+
+  KartendTest::MockedMainWindowFixture fixture({shell});
+  MainWindow *win = fixture.window();
+  QVERIFY(win);
+  win->generalSettings().launchers.retroarchConfigPath = raDir.path() + QStringLiteral("/assets");
+  win->show();
+  QVERIFY(QTest::qWaitForWindowExposed(win));
+  auto *controller = win->findChild<CollectionTreeController *>();
+  QVERIFY(controller);
+  auto *tree = win->findChild<QTreeWidget *>(QStringLiteral("collectionTreeWidget"));
+  QVERIFY(tree);
+  QVERIFY(tree->viewport());
+  controller->onCollectionSwitched(0);
+  QTest::qWait(80);
+
+  const auto countPixels = [&tree](bool wantGreen) {
+    const QImage frame = tree->viewport()->grab().toImage();
+    int hits = 0;
+    for (int y = 0; y < frame.height(); ++y) {
+      for (int x = 0; x < frame.width(); ++x) {
+        const QColor c = frame.pixelColor(x, y);
+        const bool green = c.green() > 150 && c.red() < 90 && c.blue() < 90;
+        const bool blue = c.blue() > 150 && c.red() < 90 && c.green() < 90;
+        if (wantGreen ? green : blue) ++hits;
+      }
+    }
+    return hits;
+  };
+  QVERIFY2(countPixels(/*wantGreen=*/true) > 0, "the controller set's glyph should be on screen");
+  QCOMPARE(countPixels(/*wantGreen=*/false), 0);
+
+  // Flip ONLY the subject — nothing in cfg.collectionTree moves. Before the
+  // fix, applyStateForCollection's rebake test enumerated only the tree's own
+  // icon prefs, so this changed nothing on screen and the row kept showing
+  // the set it was baked with.
+  auto &collections = const_cast<QList<CollectionConfig> &>(win->collections());
+  collections[0].systemIcon.subject = SystemIconSubject::Console;
+  controller->onCollectionSwitched(0);
+  QTest::qWait(80);
+
+  QVERIFY2(countPixels(/*wantGreen=*/false) > 0,
+           "changing the subject must rebake the row — the console set's glyph should now be "
+           "on screen");
+  QCOMPARE(countPixels(/*wantGreen=*/true), 0);
 }
 
 void TestCollectionTreePanel::focusSectionChord_movesBetweenTreeAndGrid() {

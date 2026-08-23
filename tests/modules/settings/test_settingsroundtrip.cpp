@@ -491,6 +491,62 @@ void TestSettingsRoundtrip::collectionTreeBlock_roundTripsAndClampsPosition() {
   QCOMPARE(styleClamped[0].collectionTree.treeIconStyle, TreeIconStyle::Normal);
   QVERIFY(styleClamped[0].collectionTree.treeIconTintColor.isEmpty());
 
+  // Kartend-1kkk2: the RetroArch system glyph is its own option cluster with
+  // its own keys — round-trip, unknown subject clamps to controller, size
+  // clamps, and an absent block reads as the (off) defaults.
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=4\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "systemIconEnabled=true\n"
+                                "systemIconName=Nintendo - Game Boy Advance\n"
+                                "systemIconSubject=console\n"
+                                "systemIconPack=systematic\n"
+                                "systemIconPlacement=row-end\n"
+                                "systemIconStyle=tinted\n"
+                                "systemIconUseCollectionArtwork=true\n"
+                                "systemIconSize=24\n"));
+  QList<CollectionConfig> glyph;
+  mgr.loadCollections(glyph);
+  QVERIFY(glyph[0].systemIcon.enabled);
+  QCOMPARE(glyph[0].systemIcon.systemName, QStringLiteral("Nintendo - Game Boy Advance"));
+  QCOMPARE(glyph[0].systemIcon.subject, SystemIconSubject::Console);
+  QCOMPARE(glyph[0].systemIcon.packOverride, QStringLiteral("systematic"));
+  QCOMPARE(glyph[0].systemIcon.placement, SystemIconPlacement::RowEnd);
+  QCOMPARE(glyph[0].systemIcon.style, TreeIconStyle::Tinted);
+  QVERIFY(glyph[0].systemIcon.useCollectionArtwork);
+  QCOMPARE(glyph[0].systemIcon.iconSize, 24);
+  mgr.saveCollections(glyph);
+  QList<CollectionConfig> glyphReloaded;
+  mgr.loadCollections(glyphReloaded);
+  QCOMPARE(glyphReloaded[0].systemIcon, glyph[0].systemIcon);
+
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=4\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"
+                                "systemIconEnabled=true\n"
+                                "systemIconSubject=hologram\n"
+                                "systemIconPlacement=diagonally\n"
+                                "systemIconStyle=sepia\n"
+                                "systemIconSize=9000\n"));
+  QList<CollectionConfig> glyphClamped;
+  mgr.loadCollections(glyphClamped);
+  QCOMPARE(glyphClamped[0].systemIcon.subject, SystemIconSubject::Controller);
+  QCOMPARE(glyphClamped[0].systemIcon.placement, SystemIconPlacement::BeforeName);
+  QCOMPARE(glyphClamped[0].systemIcon.style, TreeIconStyle::Normal);
+  QCOMPARE(glyphClamped[0].systemIcon.iconSize, SystemIconSettings::kMaxIconSize);
+
+  // No block at all — the option is opt-in, so a config that predates it must
+  // read as off with nothing selected rather than picking something up.
+  writeConfigIni(QStringLiteral("[General]\nschemaVersion=4\n\n"
+                                "[TreeCol]\n"
+                                "name=TreeCol\n"
+                                "mediaDirectory=/tmp/media\n"));
+  QList<CollectionConfig> glyphAbsent;
+  mgr.loadCollections(glyphAbsent);
+  QCOMPARE(glyphAbsent[0].systemIcon, SystemIconSettings{});
+
   // Kartend-auh7u: justification round-trips for BOTH panels, absent keys
   // default to below-toolbar, and an unknown value clamps instead of
   // importing.

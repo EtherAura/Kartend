@@ -218,9 +218,28 @@ void DetailsPaneMetadataView::appendDetailRow(const QString &label, const QStrin
   // renders the prefix bold (so a plain fontMetrics call underestimates
   // the rendered width). Subtract the per-cell bubble padding from the
   // half-column budget so we don't over-pack rows the bubble would clip.
-  const int viewportW = (m_host->ui->scrollArea && m_host->ui->scrollArea->viewport())
-                            ? m_host->ui->scrollArea->viewport()->width()
-                            : 0;
+  // MEASURE THE WIDTH THE ROW ACTUALLY GETS, which is not always the
+  // viewport's. DetailsPane::constrainContentToViewport() caps contentWidget's
+  // maximumWidth at the viewport width, and that cap can lag the viewport --
+  // the pane is constructed at DetailsPane::FIXED_WIDTH and only later resized
+  // to the collection's sidebarWidth. While the two disagree, the viewport
+  // reports the NEW width and the row is laid out inside the OLD one.
+  //
+  // That mismatch is what made a wider pane clip its own content: at a 420px
+  // viewport halfW is ~176, wide enough for "Developer: Wildfire Games", so
+  // the row was packed into a half cell -- then rendered inside a contentWidget
+  // still capped at 300, where half a cell is ~116, and the value was cut with
+  // no horizontal scrollbar to reach it (horizontalScrollBarPolicy is
+  // AlwaysOff). Taking the smaller of the two makes the heuristic pessimistic
+  // exactly when they disagree, so a row that cannot fit becomes a full row
+  // instead of a clipped half one.
+  const int viewportOnly = (m_host->ui->scrollArea && m_host->ui->scrollArea->viewport())
+                               ? m_host->ui->scrollArea->viewport()->width()
+                               : 0;
+  const int contentCap = m_host->ui->contentWidget ? m_host->ui->contentWidget->maximumWidth() : 0;
+  const int viewportW = (viewportOnly > 0 && contentCap > 0 && contentCap < QWIDGETSIZE_MAX)
+                            ? qMin(viewportOnly, contentCap)
+                            : viewportOnly;
   // 28 = contentLayout l+r margin, 8 = column gap, 32 = 2*16 bubble padding.
   const int halfW = qMax(0, (viewportW - 28 - 8 - 32) / 2);
   QFont boldFont = rowLabel->font();

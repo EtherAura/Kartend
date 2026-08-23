@@ -48,7 +48,10 @@ struct GridLayoutPreferences {
   /// round-trip the value through INI and the kart manifest.
   int gridHeightSidebarHidden = 0;
   int horizontalSpacing = UIConstants::Grid::SPACING;
-  int verticalSpacing = 20;
+  /// Matches the horizontal default rather than restating 20 (user request
+  /// 2026-08-22, same rationale). Kept as its own key because the two are
+  /// independently settable per collection.
+  int verticalSpacing = UIConstants::Grid::SPACING;
   /// Scrollbar policy per axis (user request 2026-08-19). These were plain
   /// hide-yes/no bools until Autohide needed a third state. The INI KEYS keep
   /// their old "hide…" names so an existing config migrates itself — the

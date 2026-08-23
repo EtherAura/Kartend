@@ -6,6 +6,7 @@
 #include <QPair>
 #include <QString>
 
+#include "collection/systemicon_settings.h"
 #include "screenscrapersystems.h"
 
 QT_BEGIN_NAMESPACE
@@ -74,6 +75,13 @@ public:
   /// and the value irrelevant for other types.
   [[nodiscard]] int screenscraperSystemId() const;
 
+  /// The navigation sidebar's RetroArch system glyph for the new collection
+  /// (Kartend-1kkk2). `enabled` comes back true only when the media type is a
+  /// game category AND a system was actually resolved — a collection created
+  /// without RetroArch installed, or one whose name matched nothing, gets the
+  /// default (off, no system) rather than an option that draws nothing.
+  [[nodiscard]] SystemIconSettings systemIcon() const;
+
   /// Point the Core picker at a RetroArch install (a retroarch.cfg file
   /// or a core directory). Empty auto-detects the standard location.
   /// Call before exec() so the detected-cores dropdown is populated.
@@ -95,6 +103,16 @@ private:
   /// resolves from the collection name + type. No-op once the user has
   /// picked a system by hand, or for non-game media types.
   void syncScreenscraperSystemToName();
+  /// Fill the sidebar-icon system combo from the pack that suits the current
+  /// subject. Called on construction and whenever the subject changes, since
+  /// packs cover different numbers of systems.
+  void populateSystemIconCombo();
+  /// Re-point the sidebar-icon system combo at the system RetroArchIcons
+  /// resolves from the collection name. No-op once the user has picked one by
+  /// hand, or for non-game media types. Seeded with the aliases the
+  /// ScreenScraper catalog already holds for the detected system, which is
+  /// what lets "SNES" reach "Nintendo - Super Nintendo Entertainment System".
+  void syncSystemIconToName();
   /// Fill the Core combo with libretro cores discovered in the
   /// RetroArch install (per the override / autodetect).
   void populateCoreCombo();
@@ -121,6 +139,14 @@ private:
   QComboBox *m_typeCombo = nullptr;
   QComboBox *m_scraperCombo = nullptr;
   QComboBox *m_screenscraperSystemCombo = nullptr;
+  /// Sidebar glyph: what it depicts, and which system it is for.
+  QComboBox *m_systemIconSubjectCombo = nullptr;
+  QComboBox *m_systemIconCombo = nullptr;
+  QHBoxLayout *m_systemIconRow = nullptr;
+  /// RetroArch assets tree, resolved once from the same override the core
+  /// picker uses. Empty when RetroArch is not installed — the row then offers
+  /// nothing and stays disabled.
+  QString m_assetsDirectory;
   /// Dropdown of libretro cores discovered in the RetroArch install;
   /// picking one fills m_coreEdit.
   QComboBox *m_coreCombo = nullptr;
@@ -134,6 +160,8 @@ private:
   /// Set once the user picks a ScreenScraper system by hand — freezes
   /// the name→system autodetect the same way.
   bool m_screenscraperSystemManuallySet = false;
+  /// Same freeze for the sidebar glyph's system pick.
+  bool m_systemIconManuallySet = false;
   /// SS catalog kept for name-driven autodetect (the combo only stores
   /// id + display name, not the aliases autodetect scores against).
   QList<ScreenScraperSystems::System> m_screenscraperSystems;

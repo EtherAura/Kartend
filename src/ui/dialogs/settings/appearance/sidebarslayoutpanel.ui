@@ -111,11 +111,104 @@
         <property name="text"><string>Show the active collection's logo in colour</string></property>
        </widget>
       </item>
+      <item row="11" column="0"><widget class="QLabel" name="treeScrollClippedLabelsLabel"><property name="text"><string>Long names:</string></property></widget></item>
+      <item row="11" column="1">
+       <widget class="QCheckBox" name="treeScrollClippedLabelsCheckBox">
+        <property name="toolTip"><string>When a collection's name is too long for the panel, scroll it sideways so the whole name can be read. Names that already fit never move.</string></property>
+        <property name="text"><string>Scroll names that do not fit</string></property>
+       </widget>
+      </item>
+      <item row="12" column="1">
+       <widget class="QCheckBox" name="treeScrollClippedLabelsOnHoverCheckBox">
+        <property name="toolTip"><string>Scroll a name that does not fit while the pointer is over its row, then put it back when the pointer leaves. Only the row you are pointing at moves.</string></property>
+        <property name="text"><string>Scroll the row under the pointer</string></property>
+       </widget>
+      </item>
       <item row="9" column="0"><widget class="QLabel" name="treeIconTintLabel"><property name="text"><string>Tint colour:</string></property></widget></item>
       <item row="9" column="1">
        <widget class="QLineEdit" name="treeIconTintEdit">
         <property name="toolTip"><string>Hex colour (e.g. #e0a030) used by the Tinted style. Leave empty to use the collection's accent colour.</string></property>
         <property name="placeholderText"><string>Accent colour (default)</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="systemIconGroup">
+     <property name="title"><string>System Icon (from RetroArch)</string></property>
+     <layout class="QFormLayout" name="systemIconForm">
+      <item row="0" column="1">
+       <widget class="QCheckBox" name="systemIconEnabledCheckBox">
+        <property name="toolTip"><string>Draw a small console, controller or cartridge icon to the left of this collection's name in the navigation sidebar. The icons come from your local RetroArch installation.</string></property>
+        <property name="text"><string>Show an icon beside this collection's name</string></property>
+       </widget>
+      </item>
+      <item row="1" column="0"><widget class="QLabel" name="systemIconSubjectLabel"><property name="text"><string>Show:</string></property></widget></item>
+      <item row="1" column="1">
+       <widget class="QComboBox" name="systemIconSubjectComboBox">
+        <property name="toolTip"><string>What the icon depicts. Controller and Console come from different RetroArch icon sets; Cartridge / disc is the media icon that ships alongside each system.</string></property>
+        <item><property name="text"><string>Controller</string></property></item>
+        <item><property name="text"><string>Console</string></property></item>
+        <item><property name="text"><string>Cartridge / disc</string></property></item>
+       </widget>
+      </item>
+      <item row="2" column="0"><widget class="QLabel" name="systemIconSystemLabel"><property name="text"><string>System:</string></property></widget></item>
+      <item row="2" column="1">
+       <layout class="QHBoxLayout" name="systemIconSystemRow">
+        <item>
+         <widget class="QComboBox" name="systemIconSystemComboBox">
+          <property name="editable"><bool>true</bool></property>
+          <property name="toolTip"><string>Which system's icon to show. Type to search.</string></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="systemIconDetectButton">
+          <property name="toolTip"><string>Guess the system from this collection's name.</string></property>
+          <property name="text"><string>Detect</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item row="3" column="0"><widget class="QLabel" name="systemIconPackLabel"><property name="text"><string>Icon set:</string></property></widget></item>
+      <item row="3" column="1">
+       <widget class="QComboBox" name="systemIconPackComboBox">
+        <property name="toolTip"><string>Which RetroArch icon set to take the icon from. Automatic picks one to match the style above. Sets cover different numbers of systems — one that does not cover this system shows no icon.</string></property>
+       </widget>
+      </item>
+      <item row="4" column="0"><widget class="QLabel" name="systemIconStyleLabel"><property name="text"><string>Icon style:</string></property></widget></item>
+      <item row="4" column="1">
+       <widget class="QComboBox" name="systemIconStyleComboBox">
+        <property name="toolTip"><string>How the icon is coloured. Normal leaves it in its own colours. Monochrome inks it in a fixed dark or light shade. Tinted inks it with the navigation sidebar's tint colour. Applies to system icons and collection artwork alike, so a manufacturer logo matches the platform icons beneath it.</string></property>
+        <item><property name="text"><string>Normal</string></property></item>
+        <item><property name="text"><string>Monochrome (dark)</string></property></item>
+        <item><property name="text"><string>Monochrome (light)</string></property></item>
+        <item><property name="text"><string>Tinted</string></property></item>
+       </widget>
+      </item>
+      <item row="5" column="0"><widget class="QLabel" name="systemIconPlacementLabel"><property name="text"><string>Position:</string></property></widget></item>
+      <item row="5" column="1">
+       <widget class="QComboBox" name="systemIconPlacementComboBox">
+        <property name="toolTip"><string>Where the icon sits. Before and after the name keep the icon next to the text, so it moves with it. At the panel edge pins every icon to the right-hand edge instead, lining them up in a column whatever the names are.</string></property>
+        <item><property name="text"><string>Before the name</string></property></item>
+        <item><property name="text"><string>After the name</string></property></item>
+        <item><property name="text"><string>At the panel edge</string></property></item>
+       </widget>
+      </item>
+      <item row="6" column="0"><widget class="QLabel" name="systemIconSizeLabel"><property name="text"><string>Icon height:</string></property></widget></item>
+      <item row="6" column="1">
+       <widget class="QSpinBox" name="systemIconSizeSpinBox">
+        <property name="toolTip"><string>Height of the icon in pixels. This is the small icon beside the name, not the row artwork above.</string></property>
+        <property name="minimum"><number>8</number></property>
+        <property name="maximum"><number>64</number></property>
+        <property name="value"><number>16</number></property>
+        <property name="suffix"><string> px</string></property>
+       </widget>
+      </item>
+      <item row="7" column="1">
+       <widget class="QLabel" name="systemIconStatusLabel">
+        <property name="wordWrap"><bool>true</bool></property>
+        <property name="text"><string/></property>
        </widget>
       </item>
      </layout>

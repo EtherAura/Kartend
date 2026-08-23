@@ -33,6 +33,7 @@
 #include "collection/listviewoptions_persistence.h"
 #include "collection/scraperoverrides_persistence.h"
 #include "collection/sidebarappearance_persistence.h"
+#include "collection/systemicon_settings_persistence.h"
 #include "collection/typehelpers.h"
 #include "configvalidation.h"
 #include "errorutils.h"
@@ -155,6 +156,7 @@ void SettingsManager::loadCollections(QList<CollectionConfig> &collections) {
     GridLayoutPreferencesPersistence::load(settings, config.gridLayout);
     SidebarAppearancePersistence::load(settings, config.sidebar, config.name, sanitize);
     CollectionTreeSettingsPersistence::load(settings, config.collectionTree, config.name);
+    SystemIconSettingsPersistence::load(settings, config.systemIcon, config.name);
     CollectionFilterPreferencesPersistence::load(settings, config.filter);
     CollectionBackgroundPersistence::load(settings, config.background, config.name, sanitize);
     ListViewOptionsPersistence::load(settings, config.listView);
@@ -355,6 +357,7 @@ SettingsManager::saveCollections(const QList<CollectionConfig> &collections) {
     GridLayoutPreferencesPersistence::save(settings, c.gridLayout);
     SidebarAppearancePersistence::save(settings, c.sidebar, sanitize);
     CollectionTreeSettingsPersistence::save(settings, c.collectionTree);
+    SystemIconSettingsPersistence::save(settings, c.systemIcon);
     CollectionFilterPreferencesPersistence::save(settings, c.filter);
     CollectionBackgroundPersistence::save(settings, c.background, sanitize);
     ListViewOptionsPersistence::save(settings, c.listView);

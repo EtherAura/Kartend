@@ -14,6 +14,7 @@ target_sources(kartend_utils PRIVATE
   lutrislibrary.cpp
   multidisc.cpp
   pathutils.cpp
+  retroarchicons.cpp
   retroarchutils.cpp
   romhasher.cpp
   steamappinfo.cpp
@@ -34,6 +35,7 @@ target_sources(kartend_utils PRIVATE
   lutrislibrary.h
   multidisc.h
   pathutils.h
+  retroarchicons.h
   retroarchutils.h
   romhasher.h
   steamappinfo.h

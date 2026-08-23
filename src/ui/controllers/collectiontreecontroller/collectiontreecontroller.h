@@ -10,9 +10,11 @@
 
 #include "applicationcontext.h"
 #include "collection/collectiontreesettings.h"
+#include "collection/systemicon_settings.h"
 #include "icollectiontreecontroller.h"
 
 class QHBoxLayout;
+class QTimer;
 class QTreeWidget;
 class QTreeWidgetItem;
 class QWidget;
@@ -159,6 +161,16 @@ private:
   /// because the icon prefs are per-collection. rebuildTree() itself ends by
   /// calling this, so build-time and refresh-time styling cannot drift.
   void refreshIcons();
+  /// Right-click menu on a row (user request 2026-08-23: "right click context
+  /// menu for the nav bar that would allow the user to add/remove/set custom
+  /// logo/icon"). Acts on the row under the cursor, NOT the active collection
+  /// — the whole point is to fix a row without navigating to it first.
+  void showRowContextMenu(const QPoint &pos);
+  /// Write @p mutate onto the collection at @p collectionIndex, then persist
+  /// and rebake. The three menu actions differ only in what they set, so the
+  /// save/refresh half is shared rather than repeated per action.
+  void mutateCollectionIcon(int collectionIndex,
+                            const std::function<void(CollectionConfig &)> &mutate);
   void applyStateForCollection(int collectionIndex);
   void highlightCollection(int collectionIndex);
   void onItemActivated(QTreeWidgetItem *item);
@@ -210,6 +222,31 @@ private:
   /// Render the ACTIVE collection's logo in colour even under a
   /// monochrome/tinted style (user request 2026-08-18).
   bool m_colorizeSelected = false;
+  /// The ACTIVE collection's system-glyph settings as the rows were last baked
+  /// against (Kartend-1kkk2). Cached whole rather than field by field so
+  /// applyStateForCollection can spot ANY change — including one added to the
+  /// struct later — and rebake. Without it, editing the glyph's settings left
+  /// the previously-baked pixmap on screen.
+  SystemIconSettings m_systemIcon;
+  /// Drives the marquee for row names too long to fit (user request
+  /// 2026-08-22). Started and stopped by updateLabelScrollTimer() rather than
+  /// left running: the sidebar would otherwise repaint forever on libraries
+  /// whose names all fit, which is most of them.
+  QTimer *m_labelScrollTimer = nullptr;
+  /// Monotonic tick handed to the delegate as a view property. The delegate
+  /// turns it into a per-row offset, so every scrolling row shares one clock
+  /// and they cannot drift apart.
+  int m_labelScrollPhase = 0;
+  /// Consecutive ticks in which no row reported itself clipped. The delegate
+  /// is the only thing that knows a row's true available width, so it reports
+  /// back through a view property and the timer idles itself out.
+  int m_labelScrollIdleTicks = 0;
+  /// Which row the pointer was last over, so hovering a NEW row restarts its
+  /// scroll from the beginning instead of dropping it into the middle of the
+  /// shared phase. Compared by identity only and never dereferenced — it may
+  /// dangle across a rebuild, which is harmless for an equality test.
+  const void *m_lastHoveredItem = nullptr;
+  void updateLabelScrollTimer();
   /// Panel width the current icon pixmaps were baked against (stamped by
   /// refreshIcons). Per-collection treeWidth means a collection switch can
   /// resize the panel; a mismatch here triggers a rebake so wide logos never

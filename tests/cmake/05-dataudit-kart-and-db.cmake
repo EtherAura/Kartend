@@ -124,6 +124,13 @@ kartend_add_test(NAME RetroArchUtils
   LINK kartend_utils
 )
 
+# RetroArchIcons tests (Kartend-1kkk2): icon-pack discovery in a local
+# RetroArch assets tree, plus the collection-name -> system matcher.
+kartend_add_test(NAME RetroArchIcons
+  SOURCES utils/fs/test_retroarchicons.cpp
+  LINK kartend_utils
+)
+
 # Launcher-import discovery utilities (Kartend-wuq2c): the .kartlink stub
 # format plus the three read-only launcher-library readers.
 kartend_add_test(NAME KartLink

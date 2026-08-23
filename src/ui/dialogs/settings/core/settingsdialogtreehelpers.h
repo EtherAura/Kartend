@@ -55,6 +55,23 @@ int applyCategoriesToLists(QList<CollectionConfig> &collections,
                            const QList<int> &targetIndices,
                            ApplySettingsDialog::FieldCategories categories, int sourceIndex);
 
+/// Give each target its OWN RetroArch system, detected from its own name
+/// (Kartend-1kkk2). The companion to the Sidebars category, which propagates
+/// how the glyph LOOKS but deliberately not which machine it names — see
+/// copyAppearanceAndLayoutFields.
+///
+/// Only fills targets that have the glyph enabled and no system yet; a
+/// collection that already names one keeps it, and a name that matches nothing
+/// (or matches two candidates equally) is left blank rather than guessed at.
+/// @p systems is the candidate list from RetroArchIcons::discoverSystems —
+/// empty disables resolution entirely, which is the no-RetroArch case.
+/// Mutates both lists; returns how many targets were CHANGED — which counts
+/// both a row that gained a system and one pointed at its own artwork because
+/// it must not have a system (a shell, a launcher import).
+int resolveSystemIconIdentities(QList<CollectionConfig> &collections,
+                                QList<CollectionConfig> *workingCollections,
+                                const QList<int> &targetIndices, const QStringList &systems);
+
 /// Turn @p child into a subcollection of @p parent (at @p parentIndex):
 /// sets the parent linkage and inherits the parent's grid/layout dimensions,
 /// spacing, font, scrollbar/sidebar modes, view type, alignment and title
