@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **The details pane always has something worth reading.** Three states
+  that used to collapse into bare placeholder text now render the same
+  skeleton a fully-scraped item gets. With nothing selected, the pane
+  presents the collection you are browsing — its artwork (a
+  subcollection's grid tile, or the collection icon), its name, and a card
+  with its type, item count and last scan. Selecting a subcollection tile
+  presents that subcollection the same way. And an item with no scraped
+  metadata keeps the full section list — a dimmed *No description
+  available* with placeholder rows for genre, developer and release date,
+  in the theme's own placeholder colour — above its file information,
+  instead of dropping to a bare file listing. None of the no-selection
+  views show filesystem paths; those stay on the Collection tab.
+
+### Changed
+
+- **The Collection tab follows the selection.** It used to pin to the
+  collection being browsed. It now describes the collection that owns the
+  current selection: browsing an aggregated parent with *Show
+  subcollection items* enabled and selecting a child's item shows that
+  child's details; selecting a subcollection tile shows the subcollection;
+  with nothing selected it describes the collection being viewed, as
+  before.
+
 ## [0.0.19] - 2026-08-22
 
 ### Added
