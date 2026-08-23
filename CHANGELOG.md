@@ -536,6 +536,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **On Windows, scraped SVG artwork could be saved with the wrong extension.**
+  When a download's URL had lost its suffix — through a redirect, or a
+  `cover.php`-style endpoint — Kartend inspects the bytes to decide what the
+  file is. That inspection deferred to Qt's image plugins, and the SVG
+  plugin's detection differs between Qt versions: the one Windows builds
+  against accepts any XML document as a drawing, so a non-SVG response could
+  land on disk as `.svg` and then fail to render. The decision is now made
+  from the payload itself — a document with no `<svg>` element in it is not
+  treated as one — which also makes the result identical on every platform.
+
 - **The window titlebar and the app's own chrome are now exactly the same
   colour.** With the toolbar colour set to follow the titlebar the two were
   close but never equal, leaving a faint seam where the toolbar met the
