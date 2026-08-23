@@ -47,14 +47,20 @@ public:
   /// Append a label / value pair to the metadata grid. Short pairs
   /// share a row (label in col 0, value in col 1); long values or
   /// wrap=true rows span both columns so they get the full sidebar
-  /// width.
-  void appendDetailRow(const QString &label, const QString &value, bool wrap = false);
+  /// width. @p placeholder renders the value dimmed and italic (the
+  /// palette's PlaceholderText colour, so it tracks the theme) — used by
+  /// the unscraped-item skeleton so a stand-in row cannot be mistaken
+  /// for scraped data (Kartend-um69l).
+  void appendDetailRow(const QString &label, const QString &value, bool wrap = false,
+                       bool placeholder = false);
   /// Like appendDetailRow but renders the value inside a fixed-height
   /// scroll area that auto-scrolls vertically when the text overflows.
   /// Used for the description field so long synopses don't push the
   /// rest of the metadata below the scroll fold. Caps the visible
   /// region to ~maxLines of wrapped text at the current font.
-  void appendScrollingDescription(const QString &label, const QString &value, int maxLines);
+  /// @p placeholder dims + italicises the text like appendDetailRow's.
+  void appendScrollingDescription(const QString &label, const QString &value, int maxLines,
+                                  bool placeholder = false);
 
   /// Render extended metadata into the Details section. Hides the
   /// section entirely when @p metadata.isEmpty() so empty rows do not

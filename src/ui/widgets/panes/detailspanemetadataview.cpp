@@ -103,11 +103,28 @@ void DetailsPaneMetadataView::ensureDetailsSection() {
   m_host->m_metadataScroll->setStyleSheet("QScrollArea { background: transparent; border: none; }");
   m_host->m_metadataScroll->setWidget(m_host->m_metadataBackdrop);
   outer->addWidget(m_host->m_metadataScroll, /*stretch=*/1);
+  // A QWidgetItem with no alignment CENTERS a max-constrained child in its
+  // layout cell — the same trap as Kartend-99rcn, one level down. When a
+  // summary render caps the card (capMetadataCardToContent) the leftover
+  // slot height floated the card toward the middle of the pane instead of
+  // keeping it under the description. Pin it; when the cap is lifted the
+  // scroll fills its slot and the alignment is moot.
+  outer->setAlignment(m_host->m_metadataScroll, Qt::AlignTop);
   // Manual button anchored below the scrolling metadata so it doesn't
   // disturb the gallery→description hand-off at the top of the section.
   outer->addWidget(m_host->m_manualButton);
 
-  contentLayout->addWidget(m_host->m_detailsContainer, /*stretch=*/1);
+  // Insert ABOVE the static file-info rows, not at the end of the content
+  // column: the unscraped skeleton (Kartend-um69l) shows Description +
+  // placeholder rows WITH the file-info fallback, and the agreed order is
+  // skeleton first, File Information at the bottom. Scraped items hide the
+  // file rows, so their layout is unchanged by the insert position.
+  const int fileInfoIndex = contentLayout->indexOf(m_host->ui->fileInfoTitle);
+  if (fileInfoIndex >= 0) {
+    contentLayout->insertWidget(fileInfoIndex, m_host->m_detailsContainer, /*stretch=*/1);
+  } else {
+    contentLayout->addWidget(m_host->m_detailsContainer, /*stretch=*/1);
+  }
   m_host->m_detailsContainer->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
   m_host->m_detailsContainer->hide();
 
@@ -179,8 +196,8 @@ void DetailsPaneMetadataView::clearDetailsSection() {
   m_host->m_metadataAutoScrollPause = 16;
 }
 
-void DetailsPaneMetadataView::appendDetailRow(const QString &label, const QString &value,
-                                              bool wrap) {
+void DetailsPaneMetadataView::appendDetailRow(const QString &label, const QString &value, bool wrap,
+                                              bool placeholder) {
   if (!m_host || !m_host->m_detailsLayout || value.trimmed().isEmpty()) {
     return;
   }
@@ -197,8 +214,19 @@ void DetailsPaneMetadataView::appendDetailRow(const QString &label, const QStrin
   // wins. (applyBubbleStyles rebuilds the value rows on appearance
   // change, so this snapshot stays fresh.)
   const QColor accent = m_host->m_detailsContainer->palette().color(QPalette::Highlight);
-  rowLabel->setText(QStringLiteral("<span style=\"color:%1;\"><b>%2:</b></span> %3")
-                        .arg(accent.name(), label.toHtmlEscaped(), value.toHtmlEscaped()));
+  if (placeholder) {
+    // Same concrete-hex reasoning as the accent above: PlaceholderText is
+    // the palette's own dimmed role, so the stand-in row tracks light and
+    // dark schemes without a hardcoded grey.
+    const QColor dim = m_host->m_detailsContainer->palette().color(QPalette::PlaceholderText);
+    rowLabel->setText(
+        QStringLiteral("<span style=\"color:%1;\"><b>%2:</b></span> "
+                       "<span style=\"color:%3;font-style:italic;\">%4</span>")
+            .arg(accent.name(), label.toHtmlEscaped(), dim.name(), value.toHtmlEscaped()));
+  } else {
+    rowLabel->setText(QStringLiteral("<span style=\"color:%1;\"><b>%2:</b></span> %3")
+                          .arg(accent.name(), label.toHtmlEscaped(), value.toHtmlEscaped()));
+  }
   // Color only — DO NOT set `padding: 0px` here. An inline padding
   // declaration on a QLabel that also matches the global
   // `QLabel[sidebarRole="value"]` rule overrides the bubble's padding
@@ -270,7 +298,7 @@ void DetailsPaneMetadataView::appendDetailRow(const QString &label, const QStrin
 }
 
 void DetailsPaneMetadataView::appendScrollingDescription(const QString &label, const QString &value,
-                                                         int maxLines) {
+                                                         int maxLines, bool placeholder) {
   if (!m_host || !m_host->m_detailsLayout || value.trimmed().isEmpty()) {
     return;
   }
@@ -301,7 +329,18 @@ void DetailsPaneMetadataView::appendScrollingDescription(const QString &label, c
   valueWidget->setWordWrap(true);
   valueWidget->setTextInteractionFlags(Qt::TextSelectableByMouse);
   valueWidget->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-  valueWidget->setStyleSheet("color: palette(windowtext); background: transparent;");
+  if (placeholder) {
+    // Dimmed + italic stand-in text (Kartend-um69l). Concrete hex, not a
+    // QSS palette() name: the stylesheet grammar has no placeholder-text
+    // role, so snapshot the palette's dimmed colour the same way
+    // appendDetailRow snapshots the accent.
+    const QColor dim = valueWidget->palette().color(QPalette::PlaceholderText);
+    valueWidget->setStyleSheet(QStringLiteral("color: %1; font-style: italic;"
+                                              " background: transparent;")
+                                   .arg(dim.name()));
+  } else {
+    valueWidget->setStyleSheet("color: palette(windowtext); background: transparent;");
+  }
   scroll->setWidget(valueWidget);
 
   // Cap height to `maxLines` of wrapped text at the current font.
@@ -383,16 +422,26 @@ void DetailsPaneMetadataView::setExtendedMetadata(const ItemMetadataStore::ItemM
   }
 
   if (metadata.isEmpty()) {
+    // Skeleton with placeholders (Kartend-um69l, decided with the user
+    // 2026-08-23): an unscraped item keeps the same section shape as a
+    // scraped one — Description plus the most common field rows, rendered
+    // dimmed and italic — so it reads as the same pane with data pending
+    // rather than a different, poorer view. The file-info rows stay below
+    // the skeleton, same as the old fallback.
+    ensureDetailsSection();
     if (m_host->m_detailsContainer) {
       clearDetailsSection();
-      // Keep the container visible only if a manual button is active;
-      // otherwise hide it so the bottom of the sidebar stays clean.
-      if (!m_host->m_manualButton || !m_host->m_manualButton->isVisible()) {
-        m_host->m_detailsContainer->hide();
-      }
+      const QString dash = QStringLiteral("—");
+      appendScrollingDescription(QObject::tr("Description"),
+                                 QObject::tr("No description available"), /*maxLines=*/5,
+                                 /*placeholder=*/true);
+      appendDetailRow(QObject::tr("Genre"), dash, /*wrap=*/false, /*placeholder=*/true);
+      appendDetailRow(QObject::tr("Developer"), dash, /*wrap=*/false, /*placeholder=*/true);
+      appendDetailRow(QObject::tr("Release date"), dash, /*wrap=*/false, /*placeholder=*/true);
+      m_host->applySidebarFont(m_host->m_activeSidebarFontFamily,
+                               m_host->m_activeSidebarFontPointSize);
+      m_host->m_detailsContainer->show();
     }
-    // Unscraped fallback: surface the static file-info rows so the Item
-    // tab still has something to show instead of an empty sidebar.
     m_host->setFileInfoRowsVisible(true);
     return;
   }

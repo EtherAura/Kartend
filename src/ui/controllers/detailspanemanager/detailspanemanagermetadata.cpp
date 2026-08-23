@@ -256,6 +256,17 @@ void DetailsPaneManager::performSidebarMetadataUpdate(const QString &filePath,
     if (perfTrace) perfSetMetaMs = perfSm.elapsed();
   }
 
+  // The Collection tab follows the SELECTION's owning collection (user
+  // decision 2026-08-23, Kartend-um69l): in an aggregated view a child's
+  // item shows the child's summary, not the viewed parent's. Push after
+  // setMetadata — which resets the selection-scoped summary — and only
+  // when the owner differs from the viewed collection, so the common flat
+  // case keeps the plain fallback path (and its cache semantics).
+  if (owningIndex >= 0 && owningIndex != m_currentCollectionIndex && m_collections &&
+      owningIndex < m_collections->size()) {
+    m_DetailsPane->setSelectionCollectionSummary(buildCollectionSummary(owningIndex));
+  }
+
   // Extended metadata + manual file.
   ItemMetadataStore::ItemMetadata loadedMetadata;
   if (db && !metaUuid.isEmpty()) {

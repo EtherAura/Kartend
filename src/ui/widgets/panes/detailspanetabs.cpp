@@ -83,7 +83,6 @@ void DetailsPane::applyTabVisibility() {
     // extended metadata + usage stats. No filesystem rows.
     ui->titleLabel->setText(tr("Item Information"));
     if (ui->editMetadataButton) ui->editMetadataButton->setVisible(m_hasItemDisplayed);
-    setArtworkSectionVisible(true);
     setFileInfoRowsVisible(false);
     // Hide the gallery + details containers up front; they may still
     // hold data from a prior Collection-tab render (m_detailsContainer
@@ -93,15 +92,20 @@ void DetailsPane::applyTabVisibility() {
     // tab-change re-push, so this avoids a flash of stale rows.
     if (m_galleryView) m_galleryView->hideSection();
     if (m_detailsContainer) m_detailsContainer->hide();
+    if (!m_hasItemDisplayed) {
+      // No item carries the selection — render the collection (or the
+      // selected subcollection) in the same item skeleton instead of the
+      // bare "No item selected" line (Kartend-um69l). The renderer manages
+      // artwork-section visibility itself.
+      renderItemAreaCollectionOverview();
+      break;
+    }
+    setArtworkSectionVisible(true);
     // Prefer the canonical metadata title when one is known; fall back to
     // the raw filename-derived itemName.
     const QString name =
         m_currentMetadataTitle.isEmpty() ? m_currentItemName : m_currentMetadataTitle;
-    if (!m_hasItemDisplayed) {
-      ui->itemNameValue->setText(tr("No item selected"));
-    } else {
-      ui->itemNameValue->setText(name.isEmpty() ? tr("No item selected") : name);
-    }
+    ui->itemNameValue->setText(name.isEmpty() ? tr("No item selected") : name);
     break;
   }
   case DetailsPaneTab::Collection:
@@ -134,6 +138,7 @@ void DetailsPane::applyTabVisibility() {
 }
 
 void DetailsPane::setArtworkSectionVisible(bool visible) {
+  m_artworkSectionVisible = visible;
   // Artwork preview tile + (when hiding) the live video widget.
   // The "Artwork" header label was removed from the .ui to compact the
   // Item tab — visibility now only toggles the tile and the live video

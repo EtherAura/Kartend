@@ -267,6 +267,16 @@ kartend_add_test(NAME DetailsPaneFileInfo
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# Kartend-um69l: the Item area's empty states — item-styled collection
+# overview for no-selection / subcollection selection (with the
+# selection-scoped summary's precedence and clearing rules), the unscraped
+# item's dimmed placeholder skeleton, and the no-filesystem-paths guarantee
+# for the overview. Same headless pattern as DetailsPaneFileInfo.
+kartend_add_test(NAME DetailsPaneEmptyStates
+  SOURCES ui/widgets/test_detailspaneemptystates.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # Kartend-liye: PathStatusGlyph attaches a trailing-action warning glyph to a
 # QLineEdit. Test links kartend_ui (for the helper) + kartend_utils (for
 # PathStatus + pathStatusDescription).

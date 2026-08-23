@@ -190,8 +190,10 @@ void SelectionManager::updateFilePathForSelection(int index,
   // path and break subsequent launch / sidebar metadata.
   const int actualIndex = scrollSearch() ? scrollSearch()->getFilteredIndex(index) : index;
   const int renderedSubCount = scrollData() ? scrollData()->getSubcollectionCount() : 0;
+  int selectedSubIdx = -1;
   if (actualIndex >= 0 && actualIndex < renderedSubCount) {
     m_selectedFilePath.clear();
+    selectedSubIdx = scrollData() ? scrollData()->subcollectionIndexFromActual(actualIndex) : -1;
   } else {
     if (scrollData()) {
       QString path = scrollData()->filePathForVisualIndex(index);
@@ -200,6 +202,13 @@ void SelectionManager::updateFilePathForSelection(int index,
   }
 
   if (detailsPaneMgr()) {
+    if (selectedSubIdx >= 0) {
+      // A subcollection tile carries the selection — describe the child
+      // collection in the pane's Item area instead of leaving the previous
+      // item (or nothing) on display (Kartend-um69l).
+      detailsPaneMgr()->showSubcollectionSummary(selectedSubIdx);
+      return;
+    }
     ItemWidget *safeWidget = nullptr;
     if (scrollData()) {
       const auto &activeWidgets = scrollData()->getActiveWidgets();

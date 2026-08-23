@@ -361,6 +361,9 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
   SetMetadataPhaseTrace trace(filePath);
 
   m_hasItemDisplayed = true;
+  // An item now carries the selection — any subcollection overview is
+  // stale (Kartend-um69l).
+  m_selectionSummary = CollectionSummary{};
   m_currentItemName = itemName;
   // setExtendedMetadata refills this when the metadata is applied; reset
   // here so a stale title from a previous selection doesn't persist on the
@@ -428,6 +431,10 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
 // dispatch happens in applyTabVisibility() rather than here.
 void DetailsPane::clearMetadata() {
   m_hasItemDisplayed = false;
+  // Deselection also ends any subcollection selection — fall back to the
+  // current collection's overview (Kartend-um69l). showSubcollectionSummary
+  // re-pushes a child summary right after this when a tile IS selected.
+  m_selectionSummary = CollectionSummary{};
   m_currentItemName.clear();
   m_currentMetadataTitle.clear();
 

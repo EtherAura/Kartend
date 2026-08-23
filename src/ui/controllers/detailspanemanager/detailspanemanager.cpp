@@ -1,6 +1,7 @@
 // Controls details pane visibility, positioning, and content updates.
 #include "detailspanemanager.h"
 #include "applicationcontext.h"
+#include "artworkutils.h"
 #include "collection/collectionconfig.h"
 #include "collection/enumstringhelpers.h"
 #include "collection/launcherconfig.h"
@@ -323,11 +324,18 @@ void DetailsPaneManager::refreshCollectionSummary() {
     m_DetailsPane->setCollectionSummary({});
     return;
   }
+  m_DetailsPane->setCollectionSummary(buildCollectionSummary(m_currentCollectionIndex));
+}
 
-  const CollectionConfig &collection = (*m_collections)[m_currentCollectionIndex];
+// Builds the summary snapshot for any collection index. Split out of
+// refreshCollectionSummary so the subcollection-selection path
+// (showSubcollectionSummary, Kartend-um69l) can describe a CHILD collection
+// with the same field set the current collection's card uses.
+DetailsPane::CollectionSummary DetailsPaneManager::buildCollectionSummary(int collectionIndex) {
+  const CollectionConfig &collection = (*m_collections)[collectionIndex];
   DetailsPane::CollectionSummary summary;
   summary.name = collection.name;
-  summary.type = CollectionUtils::effectiveCollectionType(m_currentCollectionIndex, *m_collections);
+  summary.type = CollectionUtils::effectiveCollectionType(collectionIndex, *m_collections);
   summary.extensions = collection.extensions;
 
   // Render expanded paths (with %collection% / ~ resolved) so the user sees
@@ -352,7 +360,7 @@ void DetailsPaneManager::refreshCollectionSummary() {
   }
 
   if (auto *db = m_ctx ? m_ctx->databaseManager() : nullptr; db) {
-    summary.itemCount = db->countCollectionRecursive(m_currentCollectionIndex, *m_collections);
+    summary.itemCount = db->countCollectionRecursive(collectionIndex, *m_collections);
     // UUID keying must match how DatabaseManager computes it elsewhere:
     // validateAndExpandPath without a raw fallback. Mismatched casing or
     // a missing-directory empty-string here would make last_scanned silently
@@ -376,7 +384,54 @@ void DetailsPaneManager::refreshCollectionSummary() {
       collection.launcher, gs ? gs->launchers.launcherPresets : QList<LauncherPreset>{},
       collection.name);
 
-  m_DetailsPane->setCollectionSummary(summary);
+  // Representative artwork for the item-styled overview (Kartend-um69l).
+  // Order mirrors what the user already sees elsewhere: a subcollection's
+  // grid tile first (an image named after the CHILD in the PARENT's artwork
+  // directory — the same rule ItemWidgetFactory::createSubcollectionWidget
+  // resolves tiles with), then the collection's own collectionIcon. Empty
+  // when neither resolves; the pane omits the artwork box.
+  if (collection.isSubcollection && collection.parentCollectionIndex >= 0 &&
+      collection.parentCollectionIndex < m_collections->size()) {
+    const CollectionConfig &parent = (*m_collections)[collection.parentCollectionIndex];
+    const QString parentArt =
+        PathUtils::validateAndExpandPath(parent.artworkDirectory, parent.name);
+    if (!parentArt.isEmpty()) {
+      summary.artworkPath = ArtworkUtils::findArtworkForFile(collection.name, parentArt);
+    }
+  }
+  if (summary.artworkPath.isEmpty() && !collection.collectionIcon.trimmed().isEmpty()) {
+    // NOT validateAndExpandPath: that helper validates DIRECTORIES and
+    // returns empty for any file path, which silently dropped every
+    // collectionIcon here. Expand only; the QFileInfo check below is the
+    // existence gate.
+    const QString icon =
+        PathUtils::expandPathWithoutExistenceCheck(collection.collectionIcon, collection.name);
+    if (!icon.isEmpty() && QFileInfo::exists(icon) && QFileInfo(icon).isFile()) {
+      summary.artworkPath = icon;
+    }
+  }
+
+  return summary;
+}
+
+// Kartend-um69l: a subcollection tile carries the selection — describe that
+// CHILD collection in the pane's Item area. The Collection tab is untouched
+// (it keeps the current collection's summary).
+void DetailsPaneManager::showSubcollectionSummary(int collectionIndex) {
+  if (!m_DetailsPane) {
+    return;
+  }
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
+    m_DetailsPane->clearSelectionCollectionSummary();
+    return;
+  }
+  // Tear down any item chrome first (video preview, gallery, details rows)
+  // so moving the selection from an item to a subcollection tile does not
+  // leave the previous item's pane behind — the overview only renders when
+  // no item is displayed. clearMetadata also resets the selection summary,
+  // so push ours after.
+  m_DetailsPane->clearMetadata();
+  m_DetailsPane->setSelectionCollectionSummary(buildCollectionSummary(collectionIndex));
 }
 
 void DetailsPaneManager::positionSidebarOverlay() {

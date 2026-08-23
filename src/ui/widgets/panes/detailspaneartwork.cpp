@@ -118,7 +118,11 @@ void DetailsPaneArtwork::applyPreviewSize() {
   const bool videoPlaying = m_host->m_videoPlayback.videoPreview &&
                             m_host->m_videoPlayback.videoPreview->isVisible() &&
                             !m_host->m_videoPlayback.videoPreview->currentVideoPath().isEmpty();
-  ui->artworkDisplay->setVisible(!videoPlaying);
+  // Also respect the active tab's decision (m_artworkSectionVisible):
+  // this method runs from the ASYNC decode completion, which can land
+  // after a tab render explicitly hid the tile — re-showing it here
+  // buried the Collection tab's summary under a stale cover.
+  ui->artworkDisplay->setVisible(m_host->m_artworkSectionVisible && !videoPlaying);
   QPixmap scaled =
       m_host->m_artworkSource.scaled(width, height, Qt::KeepAspectRatio, Qt::SmoothTransformation);
   QPixmap centered(width, height);

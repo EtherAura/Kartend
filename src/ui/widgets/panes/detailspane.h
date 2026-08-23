@@ -182,6 +182,11 @@ public:
     /// moment the user reinstalls the missing binary and the sidebar
     /// re-renders.
     QStringList launcherPathIssues;
+    /// Resolved absolute path of a representative image for the collection
+    /// — its collectionIcon, or (for a subcollection) the tile art the grid
+    /// itself shows. Empty when nothing resolves; the item-styled overview
+    /// then simply omits the artwork box (Kartend-um69l).
+    QString artworkPath;
     [[nodiscard]] bool isValid() const { return !name.trimmed().isEmpty(); }
   };
   /// Caches the collection summary used when no item is selected. The
@@ -193,6 +198,18 @@ public:
   /// scraping rendered rows.
   [[nodiscard]] const CollectionSummary &collectionSummaryForTesting() const {
     return m_collectionSummary;
+  }
+  /// Summary of the SELECTED subcollection, rendered in the Item area in
+  /// place of the current collection's overview while a subcollection tile
+  /// carries the selection (Kartend-um69l). Distinct from
+  /// setCollectionSummary so the Collection tab keeps describing the
+  /// current collection. Cleared by any item selection (setMetadata), by a
+  /// collection switch (setCollectionSummary), or explicitly.
+  void setSelectionCollectionSummary(const CollectionSummary &summary);
+  void clearSelectionCollectionSummary();
+  /// Test-only readback, mirroring collectionSummaryForTesting.
+  [[nodiscard]] const CollectionSummary &selectionSummaryForTesting() const {
+    return m_selectionSummary;
   }
   void clearMetadata() override;
   void openArtworkExpanded(const QString &path, bool isVideo) override;
@@ -625,7 +642,17 @@ private:
   // an item — refreshes that arrive mid-selection update the cache silently
   // and apply on next deselect.
   CollectionSummary m_collectionSummary;
+  /// Selection-scoped summary — valid only while a subcollection tile is
+  /// selected (see setSelectionCollectionSummary). Takes precedence over
+  /// m_collectionSummary in the Item area's no-item overview.
+  CollectionSummary m_selectionSummary;
   bool m_hasItemDisplayed = false;
+  /// Last state requested through setArtworkSectionVisible — the per-tab
+  /// authority on whether the artwork tile may show. The async artwork
+  /// decode lands whenever it lands; without this it re-showed the tile on
+  /// top of the Collection/File tabs (which hide it), burying their
+  /// content below a stale cover (Kartend-um69l).
+  bool m_artworkSectionVisible = true;
   /// designer-set font baseline per label, captured once. Stored
   /// alongside the QPointer so re-parented or deleted labels are skipped on
   /// re-apply without the manager needing to maintain its own bookkeeping.
@@ -643,6 +670,19 @@ private:
   /// Rebuilds the Collection tab's summary card from m_collectionSummary.
   /// Defined in detailspanesummary.cpp (with setCollectionSummary).
   void renderCollectionSummary();
+  /// Renders the Item area's no-item state as an item-styled collection
+  /// overview (Kartend-um69l): artwork box with the collection's
+  /// representative art, name row, and a details card of Type / Items /
+  /// Last scanned — deliberately NO filesystem paths (those stay on the
+  /// Collection tab; published captures must not show them). Uses
+  /// m_selectionSummary when a subcollection is selected, else
+  /// m_collectionSummary. Defined in detailspanesummary.cpp.
+  void renderItemAreaCollectionOverview();
+  /// Caps m_metadataScroll to the summary card's wrap-aware content height
+  /// so a short card hugs its rows instead of stretching the bubble to the
+  /// full sidebar (shared by both summary renderers; clearDetailsSection
+  /// lifts the cap for the Item tab's per-item path).
+  void capMetadataCardToContent();
 };
 
 #endif

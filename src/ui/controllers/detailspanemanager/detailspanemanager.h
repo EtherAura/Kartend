@@ -2,6 +2,7 @@
 #define DETAILSPANEMANAGER_H
 
 #include "collection/collectionconfig.h"
+#include "detailspane.h"
 #include "idetailspanemanager.h"
 #include "setuputils.h"
 #include <functional>
@@ -130,6 +131,10 @@ public:
   /// item is selected. Cheap; safe to call after collection
   /// switches, scan completions, or settings saves.
   void refreshCollectionSummary();
+  /// Kartend-um69l: describe the CHILD collection whose tile carries the
+  /// selection in the pane's Item area. Out-of-range index clears back to
+  /// the current collection's overview.
+  void showSubcollectionSummary(int collectionIndex) override;
   [[nodiscard]] bool isSidebarVisible() const override;
   [[nodiscard]] IDetailsPane *sidebarWidget() const override;
   void saveSidebarStateForCollection(int collectionIndex, bool visible);
@@ -189,6 +194,12 @@ private:
   /// updateSidebarMetadata used to do inline. Routed through the
   /// debouncer; called directly only by refreshSidebarMetadataImmediate.
   void performSidebarMetadataUpdate(const QString &filePath, const QString &itemName);
+
+  /// Builds the summary snapshot for any collection index — shared by
+  /// refreshCollectionSummary (current collection) and
+  /// showSubcollectionSummary (selected child). Caller guarantees the
+  /// index is in range.
+  [[nodiscard]] DetailsPane::CollectionSummary buildCollectionSummary(int collectionIndex);
 
   DetailsPane *m_DetailsPane;
   QWidget *m_itemsPage;

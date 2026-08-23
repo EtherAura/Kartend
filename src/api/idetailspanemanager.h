@@ -47,6 +47,13 @@ public:
   virtual void applySidebarStateForCollection(int collectionIndex,
                                               bool reloadBackground = true) = 0;
   virtual void updateSidebarLayout(int currentCollectionIndex) = 0;
+  /// A subcollection tile carries the selection: describe that CHILD
+  /// collection in the pane's Item area (item-styled overview,
+  /// Kartend-um69l). Pass an out-of-range index to clear back to the
+  /// current collection's overview. Defaulted no-op rather than pure so
+  /// test doubles that mock this interface for unrelated flows keep
+  /// compiling.
+  virtual void showSubcollectionSummary(int collectionIndex) { (void)collectionIndex; }
   [[nodiscard]] virtual bool isSidebarVisible() const = 0;
   [[nodiscard]] virtual IDetailsPane *sidebarWidget() const = 0;
   [[nodiscard]] virtual const ItemContext &currentItemContext() const = 0;
