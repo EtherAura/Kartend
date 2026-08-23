@@ -65,7 +65,11 @@ void ListHeaderWidget::setupUI() {
   m_layout->addWidget(m_artworkLabel, 0); // Fixed width, rightmost
 
   setLayout(m_layout);
-  setFixedHeight(UIConstants::ListView::DEFAULT_ROW_HEIGHT);
+  // HEADER_HEIGHT, not DEFAULT_ROW_HEIGHT: the layout offsets the first row
+  // by HEADER_HEIGHT (gridlayoutcalculator), and this widget floats over the
+  // viewport with an opaque background — any extra height here occludes the
+  // top of row one, which clipped the selection border (Kartend-ylijk).
+  setFixedHeight(UIConstants::ListView::HEADER_HEIGHT);
 }
 
 void ListHeaderWidget::setSortColumn(ListSortColumn column, bool ascending) {

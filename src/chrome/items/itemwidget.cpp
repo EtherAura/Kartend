@@ -413,9 +413,13 @@ auto ItemWidget::isGlideActive() const -> bool {
 // Computes the selection border rectangle - around artwork in grid mode, full
 // widget in list mode
 auto ItemWidget::computeSelectionBorderRect() const -> QRect {
-  // In list mode, selection covers the entire row
+  // In list mode, selection covers the entire row. The pen
+  // (BORDER_WIDTH_SELECTION = 4) is centered on this rect's outline, so the
+  // inset must be at least half the pen width or the outer stroke is clipped
+  // by the widget's own paint bounds (Kartend-ylijk).
   if (m_isListMode) {
-    return rect().adjusted(1, 1, -1, -1); // Slight inset for clean border
+    const int inset = UIConstants::Widget::BORDER_WIDTH_SELECTION / 2;
+    return rect().adjusted(inset, inset, -inset, -inset);
   }
 
   if (!imageLabel) {
