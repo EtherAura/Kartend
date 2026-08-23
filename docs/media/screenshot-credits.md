@@ -8,7 +8,7 @@ every artwork AND every piece of audio in the demo library is credited
 here — whether or not it appears in a particular capture, so that
 regenerating these files can never drop a credit.
 
-Screenshots: `library-grid.png`, `list-view.png`, `details-pane.png`, `search-filter.png`
+Screenshots: `library-grid.png`, `cover-flow.png`, `list-view.png`, `horizontal-view.png`, `search-filter.png`
 
 Videos: `launch-item.mp4`, `launcher-import.mp4`, `collections-tour.mp4`, `settings-tour.mp4`, `library-tour.mp4`, `theming-parallax.mp4`
 

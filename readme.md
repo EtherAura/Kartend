@@ -41,9 +41,16 @@ else you can hand to a launcher.
 |  |  |
 |---|---|
 | <img src="docs/media/collections-tour-poster.png" alt="A parent collection showing Films, Games and Music as three large subcollection tiles" width="440" /> | **Collections within collections**<br><sub>Nest a library however it makes sense to you — films, games and music under one parent, each with its own artwork, layout and launcher. <kbd>Enter</kbd> opens, <kbd>Esc</kbd> goes back.</sub> |
-| <img src="docs/media/details-pane.png" alt="Details pane open beside the grid, showing cover, media gallery and metadata" width="440" /> | **Details at a glance**<br><sub>Cover, media gallery, metadata and file info — without leaving the grid. <kbd>F9</kbd>.</sub> |
-| <img src="docs/media/list-view.png" alt="List layout showing one row per item with metadata columns" width="440" /> | **Four layouts**<br><sub>Grid, List, Cover Flow and Horizontal — <kbd>Ctrl</kbd>+<kbd>1</kbd>–<kbd>4</kbd>, without leaving the keyboard.</sub> |
 | <img src="docs/media/search-filter.png" alt="Search box filtering the collection down to two matching items" width="440" /> | **Search as you type**<br><sub>Filters thousands of items instantly. Alphabetic jump and a gamepad get you the rest of the way.</sub> |
+
+### Four layouts
+
+<sub><kbd>Ctrl</kbd>+<kbd>1</kbd>–<kbd>4</kbd> switches between them, without leaving the keyboard.</sub>
+
+|  |  |
+|---|---|
+| <img src="docs/media/library-grid.png" alt="Grid layout: five columns of cover art between the collection tree and the details pane" width="440" /><br><sub>**Grid** — covers first, details beside them.</sub> | <img src="docs/media/list-view.png" alt="List layout: one row per item with the first row selected and its details shown in the pane" width="440" /><br><sub>**List** — dense, metadata-first browsing.</sub> |
+| <img src="docs/media/cover-flow.png" alt="Cover Flow layout: one large centred cover with angled neighbours receding on both sides" width="440" /><br><sub>**Cover Flow** — the marquee browsing mode.</sub> | <img src="docs/media/horizontal-view.png" alt="Horizontal layout: three rows of covers spanning the full window width with no side panels" width="440" /><br><sub>**Horizontal** — rows that scroll sideways, chrome-free.</sub> |
 
 ## Watch it
 
