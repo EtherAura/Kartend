@@ -117,12 +117,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **The Collection tab follows the selection.** It used to pin to the
-  collection being browsed. It now describes the collection that owns the
-  current selection: browsing an aggregated parent with *Show
+  collection being browsed. It now answers "where does this live?" for
+  whatever is selected: browsing an aggregated parent with *Show
   subcollection items* enabled and selecting a child's item shows that
-  child's details; selecting a subcollection tile shows the subcollection;
-  with nothing selected it describes the collection being viewed, as
-  before.
+  child's details; selecting a subcollection tile shows the tile's parent
+  — the collection you are browsing — while the tile's own card appears
+  in the Item area; with nothing selected it describes the collection
+  being viewed, as before.
+
+### Fixed
+
+- **List view and search results now start at the top of the view, not
+  part-way down it.** A collection whose content was shorter than the window
+  was being vertically centred — a look that suits a small grid of tiles, but
+  in List view it floated the rows away from their pinned column headers,
+  leaving a blank band under them, and after typing a search it dropped the
+  few matches roughly a row lower than where the unfiltered grid begins.
+  Lists now hug their headers, and narrowed grids — whether narrowed by the
+  search box or by a filter — put their results where your eye already is.
+  Short unfiltered tile grids keep the centred, hub-page look, and the
+  Horizontal layout keeps its centred strip.
+
+- **The selection border in List view is no longer clipped.** Two separate
+  trims conspired against the top row: the column header painted four pixels
+  taller than the space reserved for it, covering the top edge of the first
+  row and whatever selection border was drawn there, and the border's own
+  stroke was drawn so close to the row's edge that its outer pixel fell
+  outside the row on every side. The header now occupies exactly its reserved
+  height, and the stroke sits fully inside the row, so a selected first row
+  shows all four edges.
 
 ## [0.0.19] - 2026-08-22
 
