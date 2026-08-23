@@ -303,14 +303,14 @@ void TestCollectionTreePanel::systemIcon_drawsInNameOnlyModeAtTheConfiguredSize(
   const QString system = QStringLiteral("Nintendo - Game Boy");
   // Deliberately NOT a flat fill. A single-colour mark is a silhouette by the
   // delegate's own test and gets recoloured to the label ink, which would
-  // leave nothing green to scan for — so the probe carries a second colour
-  // across enough of its area to read as coloured art and pass through as-is.
+  // leave nothing to scan for — so the probe carries a second colour across
+  // enough of its area to read as coloured art and pass through as-is.
   // That also exercises the "colour packs keep their colours" branch.
   {
     QImage art(24, 24, QImage::Format_ARGB32);
-    art.fill(QColor(0, 200, 0));
+    art.fill(QColor(255, 0, 255));
     QPainter painter(&art);
-    painter.fillRect(QRect(0, 0, 8, 8), QColor(0, 0, 200));
+    painter.fillRect(QRect(0, 0, 8, 8), QColor(90, 90, 90));
     painter.end();
     QVERIFY(art.save(pngDir + QLatin1Char('/') + system + QStringLiteral(".png")));
     // The -content sibling is what makes this count as a SYSTEM rather than a
@@ -361,7 +361,9 @@ void TestCollectionTreePanel::systemIcon_drawsInNameOnlyModeAtTheConfiguredSize(
   for (int y = 0; y < frame.height(); ++y) {
     for (int x = 0; x < frame.width(); ++x) {
       const QColor c = frame.pixelColor(x, y);
-      if (c.green() > 150 && c.red() < 90 && c.blue() < 90) {
+      // Magenta, and two channels HIGH with one LOW — see the sibling test:
+      // a blue probe collides with Qt's default selection highlight.
+      if (c.red() > 200 && c.blue() > 200 && c.green() < 60) {
         left = qMin(left, x);
         right = qMax(right, x);
         top = qMin(top, y);
@@ -410,8 +412,14 @@ void TestCollectionTreePanel::systemIcon_settingsChangeRebakesTheRow() {
     QVERIFY(art.save(dir + QLatin1Char('/') + system + QStringLiteral(".png")));
     QVERIFY(art.save(dir + QLatin1Char('/') + system + QStringLiteral("-content.png")));
   };
-  writeSet(QStringLiteral("monochrome"), QColor(0, 200, 0)); // curated CONTROLLER set
-  writeSet(QStringLiteral("systematic"), QColor(0, 0, 200)); // curated CONSOLE set
+  // MAGENTA and YELLOW, not green and blue. The probe has to be a colour no
+  // widget chrome can produce, and blue is exactly what Qt's default palette
+  // paints the selection highlight — so on a runner (default palette,
+  // offscreen) the selected row's own pill counted as "the console set's
+  // glyph" and the before-flip assertion saw 22 phantom pixels. It passed
+  // locally only because the developer's colour scheme has no blue in it.
+  writeSet(QStringLiteral("monochrome"), QColor(255, 0, 255)); // curated CONTROLLER set
+  writeSet(QStringLiteral("systematic"), QColor(255, 255, 0)); // curated CONSOLE set
 
   CollectionConfig shell;
   shell.name = QStringLiteral("Shell");
@@ -434,21 +442,25 @@ void TestCollectionTreePanel::systemIcon_settingsChangeRebakesTheRow() {
   controller->onCollectionSwitched(0);
   QTest::qWait(80);
 
-  const auto countPixels = [&tree](bool wantGreen) {
+  // Both predicates require two channels HIGH and one LOW, which no palette
+  // colour in play satisfies: window/base greys are high on all three,
+  // text is low on all three, and the highlight is mid-green with a low red.
+  const auto countPixels = [&tree](bool wantController) {
     const QImage frame = tree->viewport()->grab().toImage();
     int hits = 0;
     for (int y = 0; y < frame.height(); ++y) {
       for (int x = 0; x < frame.width(); ++x) {
         const QColor c = frame.pixelColor(x, y);
-        const bool green = c.green() > 150 && c.red() < 90 && c.blue() < 90;
-        const bool blue = c.blue() > 150 && c.red() < 90 && c.green() < 90;
-        if (wantGreen ? green : blue) ++hits;
+        const bool magenta = c.red() > 200 && c.blue() > 200 && c.green() < 60;
+        const bool yellow = c.red() > 200 && c.green() > 200 && c.blue() < 60;
+        if (wantController ? magenta : yellow) ++hits;
       }
     }
     return hits;
   };
-  QVERIFY2(countPixels(/*wantGreen=*/true) > 0, "the controller set's glyph should be on screen");
-  QCOMPARE(countPixels(/*wantGreen=*/false), 0);
+  QVERIFY2(countPixels(/*wantController=*/true) > 0,
+           "the controller set's glyph should be on screen");
+  QCOMPARE(countPixels(/*wantController=*/false), 0);
 
   // Flip ONLY the subject — nothing in cfg.collectionTree moves. Before the
   // fix, applyStateForCollection's rebake test enumerated only the tree's own
@@ -459,10 +471,10 @@ void TestCollectionTreePanel::systemIcon_settingsChangeRebakesTheRow() {
   controller->onCollectionSwitched(0);
   QTest::qWait(80);
 
-  QVERIFY2(countPixels(/*wantGreen=*/false) > 0,
+  QVERIFY2(countPixels(/*wantController=*/false) > 0,
            "changing the subject must rebake the row — the console set's glyph should now be "
            "on screen");
-  QCOMPARE(countPixels(/*wantGreen=*/true), 0);
+  QCOMPARE(countPixels(/*wantController=*/true), 0);
 }
 
 void TestCollectionTreePanel::focusSectionChord_movesBetweenTreeAndGrid() {
