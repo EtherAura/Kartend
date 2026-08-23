@@ -1652,8 +1652,39 @@ Skipped %3 items that already had artwork.</source>
 <context>
     <name>CollectionTreeController</name>
     <message>
-        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+991"/>
+        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+1551"/>
         <source>Playlists</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+727"/>
+        <source>Set Custom Icon…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <location line="+47"/>
+        <source>Detect System Icon</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-45"/>
+        <source>Remove Icon</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Select Icon for &quot;%1&quot;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Images (*.png *.jpg *.jpeg *.webp *.svg);;All files (*)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+32"/>
+        <source>No system matched &quot;%1&quot;. Pick one under Settings → Appearance → Sidebars.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -2211,7 +2242,7 @@ Kartend will now exit. Restart the application to apply the new configuration.</
 <context>
     <name>CreateCollectionDialog</name>
     <message>
-        <location filename="../src/ui/dialogs/collection/createcollectiondialog.cpp" line="+41"/>
+        <location filename="../src/ui/dialogs/collection/createcollectiondialog.cpp" line="+43"/>
         <source>Auto-detect</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2222,12 +2253,12 @@ Kartend will now exit. Restart the application to apply the new configuration.</
     </message>
     <message>
         <location line="+19"/>
-        <location line="+146"/>
+        <location line="+181"/>
         <source>Display name for the collection. Required.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-145"/>
+        <location line="-180"/>
         <source>Name:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2348,12 +2379,42 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+22"/>
+        <location line="+8"/>
+        <source>What the sidebar glyph shows for this collection.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Controller</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Console</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Cartridge / disc</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>System whose icon appears beside this collection in the navigation sidebar.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Sidebar Icon:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+27"/>
         <source>Display name for the collection. Cannot contain &apos;/&apos;, &apos;\\&apos;, or &apos;..&apos; — these would be substituted into launcher paths as a traversal segment.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+56"/>
+        <location line="+79"/>
         <source>No cores detected</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2363,7 +2424,22 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+56"/>
+        <location line="+33"/>
+        <source>RetroArch not detected</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>No icons for this style</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>None</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+109"/>
         <source>(none)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7548,7 +7624,7 @@ Will change:
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+68"/>
+        <location line="+69"/>
         <source>Presentation profiles — could not load</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8617,7 +8693,7 @@ The app will still load, but please fix these — collections that share an iden
     </message>
     <message>
         <location filename="../src/ui/dialogs/scraper/result/singleitemview.cpp" line="+43"/>
-        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="+396"/>
+        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="+415"/>
         <source>Publisher</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8681,12 +8757,12 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="-335"/>
+        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="-354"/>
         <source>Open Manual</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+328"/>
+        <location line="+347"/>
         <source>Description</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10463,7 +10539,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialogtreemutation.cpp" line="+128"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialogtreemutation.cpp" line="+131"/>
         <source>Create Collection</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10483,7 +10559,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+64"/>
+        <location line="+87"/>
         <location line="+7"/>
         <location line="+21"/>
         <location line="+29"/>
@@ -11414,32 +11490,158 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
     <message>
         <location line="+0"/>
-        <location line="+25"/>
+        <location line="+27"/>
+        <location line="+111"/>
         <source> px</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-23"/>
+        <location line="-136"/>
         <source>Show: normal. Auto-hide: appears only when the pointer comes near the scrollbar edge. Hide: never drawn. The tree always scrolls with the wheel and the arrow keys — this only governs the indicator. Auto-hide needs slim overlay scrollbars (Settings -&gt; General); without them it behaves as Show.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+2"/>
-        <source>Icons only:</source>
+        <source>Rows show:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+3"/>
-        <source>Show only the icon/logo on rows that have one — the name moves to the tooltip. Rows without an icon keep their name.</source>
+        <source>What a row shows when it has an icon or logo. Name only: the artwork is kept but not drawn. Icon and name: a small icon beside the name. Icon only: just the artwork, with the name in the tooltip. Rows without artwork always show their name.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
-        <source>Show icons/logos without names</source>
+        <source>Name only</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Icon and name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Icon only (name in tooltip)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+62"/>
+        <source>System Icon (from RetroArch)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Draw a small console, controller or cartridge icon to the left of this collection&apos;s name in the navigation sidebar. The icons come from your local RetroArch installation.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Show an icon beside this collection&apos;s name</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+3"/>
+        <source>Show:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>What the icon depicts. Controller and Console come from different RetroArch icon sets; Cartridge / disc is the media icon that ships alongside each system.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Controller</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Console</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Cartridge / disc</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>System:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Which system&apos;s icon to show. Type to search.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Guess the system from this collection&apos;s name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Detect</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Icon set:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Which RetroArch icon set to take the icon from. Automatic picks one to match the style above. Sets cover different numbers of systems — one that does not cover this system shows no icon.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>How the icon is coloured. Normal leaves it in its own colours. Monochrome inks it in a fixed dark or light shade. Tinted inks it with the navigation sidebar&apos;s tint colour. Applies to system icons and collection artwork alike, so a manufacturer logo matches the platform icons beneath it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Monochrome (dark)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Monochrome (light)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Position:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Where the icon sits. Before and after the name keep the icon next to the text, so it moves with it. At the panel edge pins every icon to the right-hand edge instead, lining them up in a column whatever the names are.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Before the name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>After the name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>At the panel edge</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+6"/>
+        <source>Height of the icon in pixels. This is the small icon beside the name, not the row artwork above.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-121"/>
         <source>Tree lines:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11455,31 +11657,34 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
     <message>
         <location line="+3"/>
+        <location line="+111"/>
         <source>Icon height:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="-108"/>
         <source>Height of the row icons/logos in pixels. Width follows the panel width, keeping each logo&apos;s aspect ratio.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+7"/>
+        <location line="+82"/>
         <source>Icon style:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="-79"/>
         <source>Normal shows the artwork as-is. Monochrome recolours the logo&apos;s silhouette in a fixed dark or light ink. Tinted recolours it with the tint colour below.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
+        <location line="+82"/>
         <source>Normal</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-81"/>
         <source>Monochrome dark</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11490,11 +11695,12 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
     <message>
         <location line="+1"/>
+        <location line="+82"/>
         <source>Tinted</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="-79"/>
         <source>Active logo:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11510,6 +11716,31 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
     <message>
         <location line="+3"/>
+        <source>Long names:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>When a collection&apos;s name is too long for the panel, scroll it sideways so the whole name can be read. Names that already fit never move.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Scroll names that do not fit</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Scroll a name that does not fit while the pointer is over its row, then put it back when the pointer leaves. Only the row you are pointing at moves.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Scroll the row under the pointer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
         <source>Tint colour:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11521,6 +11752,44 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     <message>
         <location line="+1"/>
         <source>Accent colour (default)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/ui/dialogs/settings/appearance/sidebarslayoutpanel.cpp" line="+130"/>
+        <source>No system matched “%1” — pick one from the list.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+96"/>
+        <source>Automatic (match the style)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <location line="+36"/>
+        <source>%1 (%n system(s))</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>None (no icon)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>This collection&apos;s own artwork</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+32"/>
+        <source>RetroArch was not found. Point Kartend at your install under Settings → Launchers to use its icons.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+28"/>
+        <source>This icon set has no icon for “%1” — pick another set, or another system.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
