@@ -61,6 +61,15 @@ kartend_add_test(NAME ItemMetadata
   LINK kartend_utils
 )
 
+# Kartend-445su: EntityMetadata storage round-trip tests — the entity_metadata
+# table's first producer/reader pair. Covers the upsert key triple, the
+# empty-but-keyed miss shape, and loadForCollection's collection-over-platform
+# preference the details pane's summary card relies on.
+kartend_add_test(NAME EntityMetadata
+  SOURCES utils/db/test_entitymetadata.cpp
+  LINK kartend_utils
+)
+
 # Per-item LRU cache (in-memory; no DB required)
 kartend_add_test(NAME ItemMetadataCache
   SOURCES utils/db/test_itemmetadatacache.cpp

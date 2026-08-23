@@ -310,7 +310,7 @@ private slots:
   // Kartend-ckepd.6/.5: provider-aware entity-scrape launch (startEntityScrape).
   void startEntityScrapePlatformProviderEnqueuesPlatformJobEmptyIdentity();
   void startEntityScrapeCollectionProviderEnqueuesCollectionJobWithUuid();
-  void startEntityScrapeGameOnlyProviderReturnsFalseWithMessage();
+  void startEntityScrapeGameOnlyProviderStillEnqueuesCollectionJob();
   void startEntityScrapeNullProviderReturnsFalseWithMessage();
   void startEntityScrapeWhileServiceActiveReturnsFalseWithMessage();
 
@@ -365,15 +365,22 @@ void TestScrapeResultDialogUnified::scrapeClickTranslatesSelectionIntoServiceQue
   QVERIFY(tmp.isValid());
   QList<CollectionConfig> collections = makeCollections(tmp.path());
   auto provider = std::make_shared<ScriptedProvider>(); // Park: the run stays live for inspection
-  // Game-only provider: this test pins the SELECTION → queue translation; the
-  // entity ride-along (which would prepend a Platform job here) has its own
-  // test below.
+  // Game-only provider: this test pins the SELECTION → queue translation.
+  // Since Kartend-445su a Collection data job ALWAYS rides along (routed to
+  // the collection-data provider); inject the same stub there — its default
+  // Error mode fails the entity synchronously, so the run still parks on the
+  // ITEM lookup and the translation assertions below stay meaningful.
   provider->supportedEntityList = {Scraper::ScrapeEntityType::Game};
 
   ScraperService service;
   ScraperService::Context sctx;
   sctx.collections = &collections;
   sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  // The routed Collection job must hit the stub, not the real
+  // Wikidata/Wikipedia provider — a live request from a test is a bug.
+  sctx.collectionDataProviderBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
     return provider;
   };
   service.setContext(sctx);
@@ -410,7 +417,7 @@ void TestScrapeResultDialogUnified::scrapeClickTranslatesSelectionIntoServiceQue
 
   // The service took the queue and parked on the item's lookup.
   QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
-  QCOMPARE(service.totalItems(), 1);
+  QCOMPARE(service.totalItems(), 2); // riding Collection entity job + the item
   QCOMPARE(service.currentCollectionName(), collections[1].name);
   QCOMPARE(service.currentItemPath(), QStringLiteral("/m/beta-item.mp4"));
   QCOMPARE(service.mediaFilter(),
@@ -422,8 +429,9 @@ void TestScrapeResultDialogUnified::scrapeClickTranslatesSelectionIntoServiceQue
   const QJsonObject root = readPendingRoot();
   QCOMPARE(root.value(QStringLiteral("mode")).toString(), QStringLiteral("interactive"));
   const QJsonArray queue = root.value(QStringLiteral("queue")).toArray();
-  QCOMPARE(queue.size(), 1);
-  const QJsonObject job = queue.first().toObject();
+  QCOMPARE(queue.size(), 2); // [collection entity job, item job]
+  QVERIFY(queue.at(0).toObject().contains(QStringLiteral("entity")));
+  const QJsonObject job = queue.at(1).toObject();
   QCOMPARE(job.value(QStringLiteral("collection_index")).toInt(), 1);
   QCOMPARE(job.value(QStringLiteral("collection_name")).toString(), QStringLiteral("Beta"));
   QCOMPARE(job.value(QStringLiteral("collection_uuid")).toString(), expectedUuid(collections[1]));
@@ -435,8 +443,13 @@ void TestScrapeResultDialogUnified::scrapeClickTranslatesSelectionIntoServiceQue
   // Setup surface swapped for the live view: tree hidden, progress labels
   // showing service-sourced counters, Close button revealed.
   QVERIFY(!tree->isVisibleTo(&dlg));
-  QLabel *timing = labelContaining(dlg, QStringLiteral("Items 0/1"));
+  // The exact done-count depends on whether the riding entity job's
+  // synchronous failure lands before or after the label refresh — the pinned
+  // fact is that the live view shows service-sourced counters over the
+  // TWO-job run.
+  QLabel *timing = labelContaining(dlg, QStringLiteral("Elapsed"));
   QVERIFY(timing);
+  QVERIFY2(timing->text().contains(QStringLiteral("/2")), qPrintable(timing->text()));
   QVERIFY(timing->isVisibleTo(&dlg));
   QLabel *counts = labelContaining(dlg, QStringLiteral("Scraped 0 items"));
   QVERIFY(counts);
@@ -490,7 +503,7 @@ void TestScrapeResultDialogUnified::scrapeClickRidesEntityJobAlongPerScrapedColl
   // The service is parked on the entity job — dispatched FIRST, before the
   // item job, so the collection art lands before the per-item grind.
   QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
-  QCOMPARE(service.totalItems(), 2); // entity job + one game item
+  QCOMPARE(service.totalItems(), 3); // platform + collection entity jobs + one game item
   QCOMPARE(provider->lastEntityTarget.type, Scraper::ScrapeEntityType::Platform);
   QVERIFY(provider->lastEntityTarget.identity.isEmpty()); // override → autodetect
   QCOMPARE(provider->lastEntityTarget.collectionIndex, 1);
@@ -498,7 +511,7 @@ void TestScrapeResultDialogUnified::scrapeClickRidesEntityJobAlongPerScrapedColl
   // Snapshot carries both jobs, entity first, sharing the game job's
   // resolved uuid + artwork dir (the persistence keys resume survives on).
   const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
-  QCOMPARE(queue.size(), 2);
+  QCOMPARE(queue.size(), 3);
   const QJsonObject entityJob = queue.at(0).toObject();
   QCOMPARE(entityJob.value(QStringLiteral("collection_index")).toInt(), 1);
   QCOMPARE(entityJob.value(QStringLiteral("collection_uuid")).toString(),
@@ -509,7 +522,15 @@ void TestScrapeResultDialogUnified::scrapeClickRidesEntityJobAlongPerScrapedColl
   QCOMPARE(entity.value(QStringLiteral("type")).toInt(),
            static_cast<int>(Scraper::ScrapeEntityType::Platform));
   QVERIFY(entity.value(QStringLiteral("identity")).toString().isEmpty());
-  const QJsonObject gameJob = queue.at(1).toObject();
+  // Kartend-445su: the riding Collection data job sits between the platform
+  // job and the game items, carrying the collection uuid as identity.
+  const QJsonObject collectionJob = queue.at(1).toObject();
+  QCOMPARE(collectionJob.value(QStringLiteral("entity"))
+               .toObject()
+               .value(QStringLiteral("type"))
+               .toInt(),
+           static_cast<int>(Scraper::ScrapeEntityType::Collection));
+  const QJsonObject gameJob = queue.at(2).toObject();
   QVERIFY(!gameJob.contains(QStringLiteral("entity")));
   QCOMPARE(gameJob.value(QStringLiteral("remaining")).toArray().first().toString(),
            QStringLiteral("/m/beta-item.mp4"));
@@ -550,14 +571,15 @@ void TestScrapeResultDialogUnified::scrapeClickEntityOnlyRunForCheckedCollection
   scrapeButton->click();
 
   // The run started (no "pick at least one item" refusal) and parked on the
-  // shell's entity job — the whole run is that one job.
+  // shell's platform job; the riding Collection data job queues behind it
+  // (Kartend-445su).
   QCOMPARE(service.state(), ScraperService::State::RunningInteractive);
-  QCOMPARE(service.totalItems(), 1);
+  QCOMPARE(service.totalItems(), 2);
   QCOMPARE(provider->lastEntityTarget.type, Scraper::ScrapeEntityType::Platform);
   QCOMPARE(provider->lastEntityTarget.collectionIndex, 0);
 
   const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
-  QCOMPARE(queue.size(), 1);
+  QCOMPARE(queue.size(), 2);
   const QJsonObject entityJob = queue.first().toObject();
   QCOMPARE(entityJob.value(QStringLiteral("collection_index")).toInt(), 0);
   QVERIFY(entityJob.contains(QStringLiteral("entity")));
@@ -1068,10 +1090,11 @@ void TestScrapeResultDialogUnified::
   QVERIFY(provider->lastEntityTarget.identity.isEmpty());
   QCOMPARE(provider->lastEntityTarget.collectionIndex, 1);
 
-  // The persisted queue snapshot carries exactly that one entity job, uuid +
-  // artwork dir re-resolved from the live config, no per-item "remaining" list.
+  // The persisted queue snapshot carries the platform job plus the riding
+  // Collection data job (Kartend-445su), uuid + artwork dir re-resolved from
+  // the live config, no per-item "remaining" lists.
   const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
-  QCOMPARE(queue.size(), 1);
+  QCOMPARE(queue.size(), 2);
   const QJsonObject job = queue.first().toObject();
   QCOMPARE(job.value(QStringLiteral("collection_uuid")).toString(), expectedUuid(collections[1]));
   QCOMPARE(job.value(QStringLiteral("artwork_dir")).toString(), expectedArtworkDir(collections[1]));
@@ -1114,20 +1137,27 @@ void TestScrapeResultDialogUnified::
   QCOMPARE(queue.size(), 1);
 }
 
-void TestScrapeResultDialogUnified::startEntityScrapeGameOnlyProviderReturnsFalseWithMessage() {
-  // A collection whose provider supports ONLY Game has no entity-level artwork —
-  // startEntityScrape enqueues nothing, shows an info message, and returns false so
-  // the caller (openEntityScraperDialog) skips showing an empty dialog.
+void TestScrapeResultDialogUnified::startEntityScrapeGameOnlyProviderStillEnqueuesCollectionJob() {
+  // Kartend-445su: a collection whose provider supports ONLY Game still gets
+  // a Collection DATA job — the dialog appends it and the coordinator's
+  // capability routing dispatches it to the collection-data provider
+  // (production: Wikidata/Wikipedia; here: an injected stub so no live
+  // request can fire from a test). The old behaviour — refuse with "no
+  // entity-level artwork" — no longer exists by design.
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
   QList<CollectionConfig> collections = makeCollections(tmp.path());
   auto provider = std::make_shared<ScriptedProvider>();
   provider->supportedEntityList = {Scraper::ScrapeEntityType::Game};
+  provider->parkEntityInto(m_parkedCallbacks); // the routed job parks here
 
   ScraperService service;
   ScraperService::Context sctx;
   sctx.collections = &collections;
   sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  sctx.collectionDataProviderBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
     return provider;
   };
   service.setContext(sctx);
@@ -1139,16 +1169,16 @@ void TestScrapeResultDialogUnified::startEntityScrapeGameOnlyProviderReturnsFals
   dlg.setScraperContext(dctx);
   dlg.setScraperService(&service);
 
-  // startEntityScrape shows a modal QMessageBox on the empty-queue branch — the
-  // queue answers it so exec() returns instead of wedging the event loop.
-  KartendTest::ModalAnswerQueue modal({QMessageBox::Ok});
-  QVERIFY(!dlg.startEntityScrape(0));
-  QCOMPARE(modal.texts.size(), 1);
-  QVERIFY2(modal.texts.first().contains(QStringLiteral("no collection- or platform-level artwork")),
-           qPrintable(modal.texts.first()));
-  // No scrape was started and no pending state was written.
-  QCOMPARE(service.state(), ScraperService::State::Idle);
-  QVERIFY(readPendingRoot().isEmpty());
+  QVERIFY(dlg.startEntityScrape(0));
+
+  // The routed job reached the injected collection-data provider with the
+  // Collection target shape (uuid identity).
+  QCOMPARE(provider->lastEntityTarget.type, Scraper::ScrapeEntityType::Collection);
+  QCOMPARE(provider->lastEntityTarget.identity, expectedUuid(collections[0]));
+  const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 1);
+
+  service.cancel(); // unpark cleanly before teardown
 }
 
 void TestScrapeResultDialogUnified::startEntityScrapeNullProviderReturnsFalseWithMessage() {
@@ -1215,11 +1245,12 @@ void TestScrapeResultDialogUnified::startEntityScrapeWhileServiceActiveReturnsFa
   QVERIFY2(modal.texts.first().contains(QStringLiteral("already running")),
            qPrintable(modal.texts.first()));
   // The live run is untouched: still active, still Beta's dispatched target,
-  // and the persisted queue still carries Beta's job (not Alpha's).
+  // and the persisted queue still carries Beta's jobs (platform + the riding
+  // Collection data job, Kartend-445su) — not Alpha's.
   QVERIFY(service.isActive());
   QCOMPARE(provider->lastEntityTarget.collectionIndex, 1);
   const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
-  QCOMPARE(queue.size(), 1);
+  QCOMPARE(queue.size(), 2);
   QCOMPARE(queue.first().toObject().value(QStringLiteral("collection_uuid")).toString(),
            expectedUuid(collections[1]));
 }

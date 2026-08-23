@@ -120,6 +120,10 @@ public:
   /// user-driven editors (e.g. custom fields dialog,). Returns
   /// true on success; logs the structured error and returns false otherwise.
   bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata) override;
+  // Kartend-445su: entity_metadata wrappers (see EntityMetadataStore).
+  bool saveEntityMetadata(const EntityMetadataStore::EntityMetadata &metadata) override;
+  [[nodiscard]] EntityMetadataStore::EntityMetadata
+  loadEntityMetadataForCollection(const QString &collectionUuid) const override;
 
   /// Loads every artwork row stored for (collectionUuid, path) using the
   /// main-thread connection. Returns an empty list when the

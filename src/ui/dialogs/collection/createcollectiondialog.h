@@ -10,6 +10,7 @@
 #include "screenscrapersystems.h"
 
 QT_BEGIN_NAMESPACE
+class QCheckBox;
 class QComboBox;
 class QFormLayout;
 class QHBoxLayout;
@@ -74,6 +75,13 @@ public:
   /// Always -1 unless the media type is a game category — the row is hidden
   /// and the value irrelevant for other types.
   [[nodiscard]] int screenscraperSystemId() const;
+  /// Kartend-445su: whether the "fetch collection info online" box is
+  /// checked. The caller queues the entity scrape (a scraper-module job)
+  /// after the collection lands; this dialog only records the wish.
+  [[nodiscard]] bool fetchCollectionInfo() const;
+  /// Seed the checkbox from the persisted default
+  /// (ScraperOptions::fetchCollectionInfoOnCreate).
+  void setFetchCollectionInfoDefault(bool checked);
 
   /// The navigation sidebar's RetroArch system glyph for the new collection
   /// (Kartend-1kkk2). `enabled` comes back true only when the media type is a
@@ -95,6 +103,7 @@ public:
   void accept() override;
 
 private:
+  QCheckBox *m_fetchInfoCheck = nullptr;
   void buildUi();
   /// Re-point the scraper combo at the default provider for the current
   /// media type. No-op once the user has picked a scraper by hand.

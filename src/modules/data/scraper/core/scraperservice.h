@@ -177,6 +177,14 @@ public:
     /// as the dialog's context — keeps registry construction inside
     /// MainWindow where the live-settings closures already exist.
     std::function<std::shared_ptr<MetadataLookupProvider>(int collectionIndex)> providerBuilder;
+    /// Kartend-445su: builder for the COLLECTION-DATA provider the entity
+    /// coordinator substitutes when a Collection job's primary provider
+    /// does not advertise Collection support, and for the not-found logo
+    /// fallback (Kartend-czna3). Unset (the production default) constructs
+    /// the Wikidata/Wikipedia provider inline; tests inject a stub here so
+    /// no live Wikimedia request can fire from a test run.
+    std::function<std::shared_ptr<MetadataLookupProvider>(int collectionIndex)>
+        collectionDataProviderBuilder;
   };
 
   explicit ScraperService(QObject *parent = nullptr);

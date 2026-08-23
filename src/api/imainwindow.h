@@ -54,6 +54,18 @@ public:
   /// provider supports. InteractionManager's right-click "Scrape collection /
   /// platform artwork" entry routes here (sibling of openScraperDialog).
   virtual void openEntityScraperDialog(int collectionIndex) = 0;
+  /// Kartend-445su: resolve a collection index by exact display name, or -1.
+  /// Name-based rather than index-based so deferred callers (the
+  /// create-collection "fetch info" opt-in fires after the settings dialog
+  /// closes) survive list reordering. Implemented here over collections()
+  /// so every implementer — test doubles included — gets it for free.
+  [[nodiscard]] virtual int collectionIndexByName(const QString &name) const {
+    const QList<CollectionConfig> &list = collections();
+    for (qsizetype i = 0; i < list.size(); ++i) {
+      if (list[i].name == name) return static_cast<int>(i);
+    }
+    return -1;
+  }
 
   // DAT-audit surface — openDatAuditForCollection / datAuditStatusForCollection
   // and the DatAuditStatus struct — is the IDatAuditHost role (inherited above).

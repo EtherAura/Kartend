@@ -7,6 +7,7 @@
 #include "collection/launcherconfig.h"
 #include "collection/typehelpers.h"
 #include "detailspane.h"
+#include "entitymetadata.h"
 #include "errorpresentation.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
@@ -369,6 +370,21 @@ DetailsPane::CollectionSummary DetailsPaneManager::buildCollectionSummary(int co
         PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name);
     const QString uuid = CollectionUtils::computeCollectionUuid(collection.name, uuidMediaDir);
     summary.lastScanned = db->loadCollectionLastScanned(uuid);
+    // Kartend-445su: fold in whatever the entity scraper has stored about
+    // this collection — description, manufacturer, release date — so both
+    // summary surfaces (Collection tab, item-area overview) can render it.
+    const EntityMetadataStore::EntityMetadata entity = db->loadEntityMetadataForCollection(uuid);
+    if (!entity.isEmpty()) {
+      summary.scrapedDescription = entity.description;
+      const auto fields = ItemMetadataStore::parseCustomFields(entity.customFields);
+      for (const auto &pair : fields) {
+        if (pair.first == QLatin1String(EntityMetadataStore::kFieldManufacturer)) {
+          summary.scrapedManufacturer = pair.second;
+        } else if (pair.first == QLatin1String(EntityMetadataStore::kFieldReleaseDate)) {
+          summary.scrapedReleaseDate = pair.second;
+        }
+      }
+    }
   }
 
   // Kartend-ecky: persistent launcher-path-issue surface in the sidebar

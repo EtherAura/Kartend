@@ -65,8 +65,13 @@ public:
   QString displayName() const override { return QStringLiteral("EntityStub"); }
   QStringList categories() const override { return {}; }
   Capabilities capabilities() const override { return Capability::MetadataLookup; }
+  // Collection included since Kartend-445su: the coordinator's capability
+  // routing swaps in the real Wikidata data provider for Collection jobs a
+  // provider does not advertise — a stub that under-advertises would have
+  // its stubbed fetchEntity bypassed in favour of live network code.
   QList<Scraper::ScrapeEntityType> supportedEntities() const override {
-    return {Scraper::ScrapeEntityType::Game, Scraper::ScrapeEntityType::Platform};
+    return {Scraper::ScrapeEntityType::Game, Scraper::ScrapeEntityType::Platform,
+            Scraper::ScrapeEntityType::Collection};
   }
   /// Canned media bytes per URL (Kartend-ckepd.3 download pipeline test).
   QHash<QUrl, QByteArray> mediaBytes;
@@ -119,8 +124,13 @@ public:
   QString displayName() const override { return QStringLiteral("ParkedEntity"); }
   QStringList categories() const override { return {}; }
   Capabilities capabilities() const override { return Capability::MetadataLookup; }
+  // Collection included since Kartend-445su: the coordinator's capability
+  // routing swaps in the real Wikidata data provider for Collection jobs a
+  // provider does not advertise — a stub that under-advertises would have
+  // its stubbed fetchEntity bypassed in favour of live network code.
   QList<Scraper::ScrapeEntityType> supportedEntities() const override {
-    return {Scraper::ScrapeEntityType::Game, Scraper::ScrapeEntityType::Platform};
+    return {Scraper::ScrapeEntityType::Game, Scraper::ScrapeEntityType::Platform,
+            Scraper::ScrapeEntityType::Collection};
   }
   void lookup(const QString &, LookupCallback) override {}
   void fetchDetail(const Scraper::ScrapeCandidate &, DetailCallback) override {}

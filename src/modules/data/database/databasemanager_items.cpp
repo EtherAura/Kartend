@@ -126,6 +126,33 @@ bool DatabaseManager::saveItemMetadata(const ItemMetadataStore::ItemMetadata &me
   return true;
 }
 
+// Kartend-445su: entity-level scrape metadata. No cache layer — one row per
+// collection at most, read on collection switches, not per selection move.
+bool DatabaseManager::saveEntityMetadata(const EntityMetadataStore::EntityMetadata &metadata) {
+  auto result = EntityMetadataStore::save(m_db, metadata);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    emit errorOccurred(result.error());
+    return false;
+  }
+  return true;
+}
+
+EntityMetadataStore::EntityMetadata
+DatabaseManager::loadEntityMetadataForCollection(const QString &collectionUuid) const {
+  // Same const_cast convention as loadItemMetadata above: QSqlDatabase's
+  // API is non-const for reads, the logical constness is ours.
+  auto result =
+      EntityMetadataStore::loadForCollection(const_cast<QSqlDatabase &>(m_db), collectionUuid);
+  if (result.isError()) {
+    ErrorUtils::logError(result.error());
+    EntityMetadataStore::EntityMetadata empty;
+    empty.collectionUuid = collectionUuid;
+    return empty;
+  }
+  return result.value();
+}
+
 // ─── ItemArtworkStore facades ─────────────────────────────────────────────────
 
 QList<ItemArtworkStore::ItemArtwork> DatabaseManager::loadItemArtwork(const QString &collectionUuid,

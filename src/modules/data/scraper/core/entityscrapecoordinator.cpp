@@ -3,6 +3,11 @@
 // moved verbatim; service state is reached through m_svc.
 #include "entityscrapecoordinator.h"
 
+#include "entitymetadata.h"
+#include "idatabasemanager.h"
+#include "itemmetadata.h"
+#include <algorithm>
+
 #include <atomic>
 #include <limits>
 #include <memory>
@@ -26,6 +31,23 @@ namespace Scraper {
 
 namespace {
 Q_LOGGING_CATEGORY(lcEntityScrape, "kartend.scraperservice.entity", QtWarningMsg)
+
+/// The Wikidata/Wikipedia collection-data provider for @p collectionIndex —
+/// via the injected builder when the context carries one (tests), else
+/// constructed inline (production). Takes the context by reference: this
+/// free function is not the service's friend, the coordinator is — call
+/// sites pass m_svc->m_ctx. Kartend-445su.
+std::shared_ptr<MetadataLookupProvider>
+makeCollectionDataProvider(const ScraperService::Context &ctx, int collectionIndex) {
+  if (ctx.collectionDataProviderBuilder) {
+    return ctx.collectionDataProviderBuilder(collectionIndex);
+  }
+  return std::make_shared<WikidataLogoProvider>(
+      [collections = ctx.collections, idx = collectionIndex]() -> const CollectionConfig * {
+        if (!collections || idx < 0 || idx >= collections->size()) return nullptr;
+        return &(*collections)[idx];
+      });
+}
 } // namespace
 
 void EntityScrapeCoordinator::startEntityCollection() {
@@ -35,6 +57,17 @@ void EntityScrapeCoordinator::startEntityCollection() {
                          << "entityType=" << static_cast<int>(job.entity.type);
   auto provider =
       m_svc->m_ctx.providerBuilder ? m_svc->m_ctx.providerBuilder(job.collectionIndex) : nullptr;
+  // Capability routing (Kartend-445su): a Collection-typed job whose primary
+  // provider cannot scrape Collection entities (ScreenScraper is
+  // Platform-only) is dispatched to the Wikidata/Wikipedia data provider
+  // instead of dead-ending in the provider's InvalidArgument branch. This is
+  // what makes collection/group data ride along with EVERY entity launch —
+  // games collections included — rather than only via the not-found
+  // fallback.
+  if (provider && job.entity.type == Scraper::ScrapeEntityType::Collection &&
+      !provider->supportedEntities().contains(Scraper::ScrapeEntityType::Collection)) {
+    provider = makeCollectionDataProvider(m_svc->m_ctx, job.collectionIndex);
+  }
   if (!provider) {
     // No provider resolves for this entity — count it as a single error and
     // advance, mirroring startAutoCollection's no-provider branch.
@@ -134,12 +167,7 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
             }
           }
         }
-        auto fallback = std::make_shared<WikidataLogoProvider>(
-            [collections = m_svc->m_ctx.collections,
-             idx = job.collectionIndex]() -> const CollectionConfig * {
-              if (!collections || idx < 0 || idx >= collections->size()) return nullptr;
-              return &(*collections)[idx];
-            });
+        auto fallback = makeCollectionDataProvider(m_svc->m_ctx, job.collectionIndex);
         Scraper::EntityScrapeTarget wikiTarget;
         wikiTarget.type = Scraper::ScrapeEntityType::Collection;
         wikiTarget.identity = job.collectionUuid;
@@ -181,7 +209,9 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
   m_svc->m_lastScrapedItem = item;
   if (item.media.isEmpty() || !provider) {
     // No art to download (or no provider for the media fetch) — count the
-    // metadata-only success and advance.
+    // metadata-only success and advance. The textual result still lands in
+    // entity_metadata (Kartend-445su).
+    persistEntityMetadata(item, job.entity, job.collectionUuid, /*artPath=*/{});
     ++m_svc->m_summary.scraped;
     emit m_svc->itemCompleted(m_svc->m_itemsCompleted + 1, m_svc->m_totalItemsAtStart, item, {});
     finishEntityItem();
@@ -396,19 +426,23 @@ void EntityScrapeCoordinator::onEntityMediaWriteFinished(const Scraper::ScrapedI
   // an empty writtenPaths otherwise left the collection art unset after e.g.
   // a config reset (Kartend-jjyst.5). Written paths first so a fresh write
   // wins when both report the same type.
-  applyEntityArtToConfig(collectionUuid, collectionIndex, item.media,
-                         res.writtenPaths + res.existingPaths);
+  const QString logoPath = applyEntityArtToConfig(collectionUuid, collectionIndex, item.media,
+                                                  res.writtenPaths + res.existingPaths);
+  // The queue has not advanced yet (finishEntityItem below), so the cursor
+  // still addresses this job — its entity target types the metadata row.
+  persistEntityMetadata(item, m_svc->m_queue[m_svc->m_queueCursor].entity, collectionUuid,
+                        logoPath);
   ++m_svc->m_summary.scraped;
   emit m_svc->itemCompleted(m_svc->m_itemsCompleted + 1, m_svc->m_totalItemsAtStart, item,
                             res.writtenPaths);
   finishEntityItem();
 }
 
-void EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectionUuid,
-                                                     int collectionIndex,
-                                                     const QList<Scraper::MediaAsset> &assets,
-                                                     const QStringList &landedPaths) {
-  if (!m_svc->m_ctx.collections) return;
+QString EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectionUuid,
+                                                        int collectionIndex,
+                                                        const QList<Scraper::MediaAsset> &assets,
+                                                        const QStringList &landedPaths) {
+  if (!m_svc->m_ctx.collections) return {};
   // Defensive re-resolution (Kartend-8zd3q): the index was captured when the
   // job dispatched, but the collections list can change under a live run
   // (settings dialog, playlist resync). Verify the collection at the index
@@ -425,12 +459,12 @@ void EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectionUu
       if (collectionIndex < 0) {
         qCWarning(lcEntityScrape)
             << "Not applying scraped platform art: the target collection no longer resolves";
-        return;
+        return {};
       }
     }
   }
   if (collectionIndex < 0 || collectionIndex >= m_svc->m_ctx.collections->size()) {
-    return;
+    return {};
   }
   // Resolve a landed path (written this run, or kept-existing under the
   // rescrape policy) by the `_shared/<type>/` segment the router placed it
@@ -495,7 +529,7 @@ void EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectionUu
     cfg.background.backgroundImage = background;
     changed = true;
   }
-  if (!changed) return;
+  if (!changed) return logo;
   // Persist through the settings manager so the INI write keeps its atomic
   // sync + 0600 hardening and fires the hot-reload signals (config-write map).
   if (m_svc->m_ctx.ctx) {
@@ -506,6 +540,72 @@ void EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectionUu
                                   << r.error().message;
       }
     }
+  }
+  return logo;
+}
+
+void EntityScrapeCoordinator::persistEntityMetadata(const Scraper::ScrapedItem &item,
+                                                    const Scraper::EntityScrapeTarget &target,
+                                                    const QString &collectionUuid,
+                                                    const QString &artPath) {
+  IDatabaseManager *db = m_svc->m_ctx.ctx ? m_svc->m_ctx.ctx->databaseManager() : nullptr;
+  if (!db) return;
+
+  EntityMetadataStore::EntityMetadata meta;
+  // Enum → wire string: the column is a persistence format, so the mapping
+  // is explicit here rather than trusting enum ordering.
+  switch (target.type) {
+  case Scraper::ScrapeEntityType::Platform:
+    meta.entityType = QLatin1String(EntityMetadataStore::kTypePlatform);
+    break;
+  case Scraper::ScrapeEntityType::Collection:
+    meta.entityType = QLatin1String(EntityMetadataStore::kTypeCollection);
+    break;
+  case Scraper::ScrapeEntityType::Category:
+    meta.entityType = QLatin1String(EntityMetadataStore::kTypeCategory);
+    break;
+  case Scraper::ScrapeEntityType::Game:
+    return; // Game results belong to item_metadata; never write them here.
+  }
+  meta.entityIdentity = target.identity.isEmpty() ? collectionUuid : target.identity;
+  meta.collectionUuid = collectionUuid;
+  meta.title = item.title;
+  meta.description = item.description;
+  meta.artPath = artPath;
+  meta.source = item.sourceProviderId;
+
+  // Fold the provider's loose fields plus the typed ones the entity table
+  // has no columns for into custom_fields, under the store's well-known
+  // keys. Provider-supplied keys win — a provider that explicitly fills
+  // "manufacturer" knows better than the developer/publisher heuristic.
+  ItemMetadataStore::CustomFieldList fields;
+  QStringList keys = item.customFields.keys();
+  keys.sort();
+  for (const QString &key : keys) {
+    fields.append({key, item.customFields.value(key)});
+  }
+  const auto hasKey = [&fields](const QString &key) {
+    return std::any_of(fields.cbegin(), fields.cend(),
+                       [&key](const auto &pair) { return pair.first == key; });
+  };
+  const QString manufacturer = !item.developer.isEmpty() ? item.developer : item.publisher;
+  if (!manufacturer.isEmpty() && !hasKey(QLatin1String(EntityMetadataStore::kFieldManufacturer))) {
+    fields.append({QLatin1String(EntityMetadataStore::kFieldManufacturer), manufacturer});
+  }
+  if (!item.releaseDate.isEmpty() &&
+      !hasKey(QLatin1String(EntityMetadataStore::kFieldReleaseDate))) {
+    fields.append({QLatin1String(EntityMetadataStore::kFieldReleaseDate), item.releaseDate});
+  }
+  meta.customFields = ItemMetadataStore::serializeCustomFields(fields);
+
+  if (meta.isEmpty()) {
+    return; // Nothing textual scraped and no art — don't write noise rows.
+  }
+  // A metadata-write failure is logged by the manager but never errors the
+  // job: the art (the scrape's primary product) already landed.
+  if (!db->saveEntityMetadata(meta)) {
+    qCWarning(lcEntityScrape) << "entity metadata for" << meta.entityIdentity
+                              << "did not persist (see database log)";
   }
 }
 

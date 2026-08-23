@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Collections now get scraped metadata of their own — description,
+  manufacturer, release year — not just artwork.** The scraper's
+  collection/platform pass, which already fetched logos and backgrounds,
+  now also captures what the entity *is*: ScreenScraper contributes each
+  console's manufacturer and production span, and a new Wikipedia/Wikidata
+  source contributes a prose description, the manufacturer, and the release
+  year for any collection whose name matches a real thing — a console, a
+  film franchise, a studio, a label. Every collection scrape fetches it:
+  the entity jobs that ride along with an ordinary scrape now include a
+  collection-data job even when the collection's own scraper (like
+  ScreenScraper) doesn't speak collection-level data — those route to the
+  Wikipedia/Wikidata source automatically. Re-running the scrape refreshes
+  it. What lands is shown in the details pane's collection views: the
+  Collection tab and the no-selection overview both lead with the
+  description, manufacturer and release year. The right-click entry is now
+  called *Scrape collection info & artwork* to match.
+
+- **New collections can fetch their own info at creation.** The
+  create-collection dialog gains a *Fetch collection info & artwork online
+  after creating* checkbox — tick it and the scraper's collection pass runs
+  as soon as you leave Settings, so a freshly-made "Nintendo 64" collection
+  arrives with its logo, description and manufacturer already in place.
+  Off by default; the box remembers your last choice.
+
 - **The details pane always has something worth reading.** Three states
   that used to collapse into bare placeholder text now render the same
   skeleton a fully-scraped item gets. With nothing selected, the pane

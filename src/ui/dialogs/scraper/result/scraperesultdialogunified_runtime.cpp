@@ -533,7 +533,16 @@ ScrapeResultDialogUnified::buildEntityJobs(int collectionIndex, const QString &u
   if (!provider) {
     return jobs;
   }
-  for (Scraper::ScrapeEntityType type : provider->supportedEntities()) {
+  QList<Scraper::ScrapeEntityType> types = provider->supportedEntities();
+  // Kartend-445su: collection/group data rides along with every entity
+  // launch. A provider that cannot scrape Collection entities itself
+  // (ScreenScraper is Platform-only) still gets a Collection job — the
+  // coordinator's capability routing dispatches it to the
+  // Wikidata/Wikipedia data provider.
+  if (!types.contains(Scraper::ScrapeEntityType::Collection)) {
+    types.append(Scraper::ScrapeEntityType::Collection);
+  }
+  for (Scraper::ScrapeEntityType type : types) {
     if (type == Scraper::ScrapeEntityType::Game) continue; // Game is the per-item path
     Scraper::ScraperService::CollectionJob job;
     job.collectionIndex = collectionIndex;
@@ -559,7 +568,7 @@ bool ScrapeResultDialogUnified::startEntityScrape(int collectionIndex) {
   // startScrape would refuse anyway — surface the reason and leave the running
   // scrape's dialog state untouched (same idle guard as rescrapeFailedItems).
   if (m_dlg->m_service->isActive()) {
-    QMessageBox::information(m_dlg, tr("Scrape collection artwork"),
+    QMessageBox::information(m_dlg, tr("Scrape collection info"),
                              tr("A scrape is already running — wait for it to finish."));
     return false;
   }
@@ -576,7 +585,7 @@ bool ScrapeResultDialogUnified::startEntityScrape(int collectionIndex) {
   // collection, Collection for a TMDB (video) collection (Kartend-ckepd.4 / .5).
   if (!m_dlg->m_scraperCtx.providerBuilder ||
       !m_dlg->m_scraperCtx.providerBuilder(collectionIndex)) {
-    QMessageBox::information(m_dlg, tr("Scrape collection artwork"),
+    QMessageBox::information(m_dlg, tr("Scrape collection info"),
                              tr("No scraper is configured for \"%1\".").arg(cfg.name));
     return false;
   }
@@ -584,9 +593,8 @@ bool ScrapeResultDialogUnified::startEntityScrape(int collectionIndex) {
       buildEntityJobs(collectionIndex, uuid, artworkDir);
   if (queue.isEmpty()) {
     QMessageBox::information(
-        m_dlg, tr("Scrape collection artwork"),
-        tr("The scraper for \"%1\" has no collection- or platform-level artwork to fetch.")
-            .arg(cfg.name));
+        m_dlg, tr("Scrape collection info"),
+        tr("No collection- or platform-level info can be fetched for \"%1\".").arg(cfg.name));
     return false;
   }
 

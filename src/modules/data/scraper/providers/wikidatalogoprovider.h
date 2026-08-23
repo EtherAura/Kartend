@@ -4,6 +4,7 @@
 #include <functional>
 
 #include "providerbase.h"
+#include "wikidatalogoparser.h"
 
 #include <QString>
 #include <QStringList>
@@ -48,6 +49,12 @@ public:
   void fetchEntity(const Scraper::EntityScrapeTarget &target, DetailCallback callback) override;
 
 private:
+  /// Kartend-445su: the optional text hops (manufacturer label, Wikipedia
+  /// summary) and the final ScrapedItem composition, split out of
+  /// fetchEntity so the four-hop chain stays readable.
+  void finishEntityWithData(const QString &name, const QString &scopeKey,
+                            const WikidataLogoParser::EntityData &data, DetailCallback callback);
+
   CollectionAccessor m_collectionAccessor;
 };
 

@@ -5,6 +5,8 @@
 // only — hash- and archive-based ID are separate follow-up issues.
 #include "screenscraperprovider.h"
 
+#include "entitymetadata.h"
+
 #include <algorithm>
 #include <atomic>
 #include <limits>
@@ -320,6 +322,29 @@ void ScreenScraperProvider::fetchEntity(const Scraper::EntityScrapeTarget &targe
         Scraper::ScrapedItem item;
         item.sourceProviderId = id();
         item.title = sys->displayName;
+        // Kartend-445su: the catalog rows have carried these text fields
+        // since Kartend-xny9o kept them "for free" — surface them so the
+        // entity-metadata row (and the pane's collection summary) gets the
+        // platform's manufacturer and production span, not just its art.
+        // Explicit well-known keys: the persistence fold treats provider-
+        // supplied keys as authoritative over its developer/publisher
+        // heuristic. SS has no per-system description; the Wikipedia data
+        // fallback fills that gap when it runs.
+        if (!sys->company.isEmpty()) {
+          item.customFields.insert(QLatin1String(EntityMetadataStore::kFieldManufacturer),
+                                   sys->company);
+        }
+        if (!sys->startDate.isEmpty()) {
+          item.customFields.insert(QLatin1String(EntityMetadataStore::kFieldReleaseDate),
+                                   sys->endDate.isEmpty()
+                                       ? sys->startDate
+                                       : sys->startDate + QStringLiteral("–") + sys->endDate);
+        }
+        if (!sys->systemType.isEmpty()) {
+          // SS's own (French) category string — catalog data, stored under a
+          // provider-plain key rather than translated at parse time.
+          item.customFields.insert(QStringLiteral("systemType"), sys->systemType);
+        }
         // User creds count only when BOTH ssid and sspassword are set —
         // matching runLookupAfterHash and the account probes. Gating on the
         // id alone would append `ssid=<id>&sspassword=` for a user with a

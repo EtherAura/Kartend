@@ -113,4 +113,151 @@ ErrorUtils::Result<QString> parseLogoClaim(const QByteArray &json) {
   return QString(); // entity exists but has no usable logo claim — benign
 }
 
+// ── Entity DATA additions (Kartend-445su) ────────────────────────────────
+
+namespace {
+
+/// First claim value walker shared by the entity-data fields. Returns the
+/// raw datavalue.value for the first claim of @p property, or an undefined
+/// QJsonValue when the entity has none.
+QJsonValue firstClaimValue(const QJsonObject &claims, const QString &property) {
+  const QJsonArray arr = claims.value(property).toArray();
+  if (arr.isEmpty()) return {};
+  return arr.first()
+      .toObject()
+      .value(QStringLiteral("mainsnak"))
+      .toObject()
+      .value(QStringLiteral("datavalue"))
+      .toObject()
+      .value(QStringLiteral("value"));
+}
+
+} // namespace
+
+QUrl buildEntityDataUrl(const QString &entityId) {
+  if (entityId.isEmpty()) return {};
+  QUrl url(QString::fromLatin1(WIKIDATA_API));
+  QUrlQuery q;
+  q.addQueryItem(QStringLiteral("action"), QStringLiteral("wbgetentities"));
+  q.addQueryItem(QStringLiteral("ids"), entityId);
+  q.addQueryItem(QStringLiteral("props"), QStringLiteral("claims|sitelinks|descriptions"));
+  q.addQueryItem(QStringLiteral("languages"), QStringLiteral("en"));
+  q.addQueryItem(QStringLiteral("sitefilter"), QStringLiteral("enwiki"));
+  q.addQueryItem(QStringLiteral("format"), QStringLiteral("json"));
+  url.setQuery(q);
+  return url;
+}
+
+QUrl buildLabelUrl(const QString &entityId) {
+  if (entityId.isEmpty()) return {};
+  QUrl url(QString::fromLatin1(WIKIDATA_API));
+  QUrlQuery q;
+  q.addQueryItem(QStringLiteral("action"), QStringLiteral("wbgetentities"));
+  q.addQueryItem(QStringLiteral("ids"), entityId);
+  q.addQueryItem(QStringLiteral("props"), QStringLiteral("labels"));
+  q.addQueryItem(QStringLiteral("languages"), QStringLiteral("en"));
+  q.addQueryItem(QStringLiteral("format"), QStringLiteral("json"));
+  url.setQuery(q);
+  return url;
+}
+
+QUrl buildWikipediaSummaryUrl(const QString &title) {
+  const QString trimmed = title.trimmed();
+  if (trimmed.isEmpty()) return {};
+  // Path-encode the title (spaces → underscores per Wikipedia convention;
+  // QUrl percent-encodes the rest). The REST endpoint answers plain JSON.
+  QString path = trimmed;
+  path.replace(QLatin1Char(' '), QLatin1Char('_'));
+  QUrl url(QStringLiteral("https://en.wikipedia.org/api/rest_v1/page/summary/"));
+  url.setPath(url.path() + path);
+  return url;
+}
+
+ErrorUtils::Result<EntityData> parseEntityData(const QByteArray &json) {
+  auto root = rootObject(json, "WikidataLogoParser::parseEntityData");
+  if (root.isError()) return root.error();
+  const QJsonObject entities = root.value().value(QStringLiteral("entities")).toObject();
+  if (entities.isEmpty()) {
+    return EntityData{}; // no entity in the response — benign sparse result
+  }
+  const QJsonObject entity = entities.begin().value().toObject();
+  const QJsonObject claims = entity.value(QStringLiteral("claims")).toObject();
+
+  EntityData data;
+  // P154 logo — same value shape and the same safety validation as
+  // parseLogoClaim (the filename becomes a URL path segment).
+  {
+    const QJsonValue value = firstClaimValue(claims, QStringLiteral("P154"));
+    QString filename = value.isString() ? value.toString()
+                                        : value.toObject().value(QStringLiteral("id")).toString();
+    filename = filename.trimmed();
+    if (filename.startsWith(QLatin1String("File:"), Qt::CaseInsensitive)) {
+      filename = filename.mid(5).trimmed();
+    }
+    if (isSafeLogoFilename(filename)) data.logoFilename = filename;
+  }
+  // P176 manufacturer — an entity reference; the label needs its own hop.
+  data.manufacturerId = firstClaimValue(claims, QStringLiteral("P176"))
+                            .toObject()
+                            .value(QStringLiteral("id"))
+                            .toString();
+  // P571 inception — a Wikidata time value ("+1988-10-29T00:00:00Z").
+  // Wikidata is inconsistent about precision, so only the year is trusted.
+  {
+    const QString time = firstClaimValue(claims, QStringLiteral("P571"))
+                             .toObject()
+                             .value(QStringLiteral("time"))
+                             .toString();
+    // "+YYYY-…" / "-YYYY-…": take the sign-stripped leading year digits.
+    int i = 0;
+    while (i < time.size() && (time[i] == QLatin1Char('+') || time[i] == QLatin1Char('-'))) ++i;
+    QString year;
+    while (i < time.size() && time[i].isDigit()) year.append(time[i++]);
+    if (year.size() == 4) data.inceptionYear = year;
+  }
+  data.description = entity.value(QStringLiteral("descriptions"))
+                         .toObject()
+                         .value(QStringLiteral("en"))
+                         .toObject()
+                         .value(QStringLiteral("value"))
+                         .toString()
+                         .trimmed();
+  data.enwikiTitle = entity.value(QStringLiteral("sitelinks"))
+                         .toObject()
+                         .value(QStringLiteral("enwiki"))
+                         .toObject()
+                         .value(QStringLiteral("title"))
+                         .toString()
+                         .trimmed();
+  return data;
+}
+
+ErrorUtils::Result<QString> parseEntityLabel(const QByteArray &json) {
+  auto root = rootObject(json, "WikidataLogoParser::parseEntityLabel");
+  if (root.isError()) return root.error();
+  const QJsonObject entities = root.value().value(QStringLiteral("entities")).toObject();
+  if (entities.isEmpty()) return QString();
+  return entities.begin()
+      .value()
+      .toObject()
+      .value(QStringLiteral("labels"))
+      .toObject()
+      .value(QStringLiteral("en"))
+      .toObject()
+      .value(QStringLiteral("value"))
+      .toString()
+      .trimmed();
+}
+
+ErrorUtils::Result<QString> parseWikipediaSummary(const QByteArray &json) {
+  auto root = rootObject(json, "WikidataLogoParser::parseWikipediaSummary");
+  if (root.isError()) return root.error();
+  // A disambiguation page's extract is a list of unrelated meanings — worse
+  // than no description. The REST endpoint types it explicitly.
+  if (root.value().value(QStringLiteral("type")).toString() == QLatin1String("disambiguation")) {
+    return QString();
+  }
+  return root.value().value(QStringLiteral("extract")).toString().trimmed();
+}
+
 } // namespace WikidataLogoParser

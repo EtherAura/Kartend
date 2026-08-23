@@ -236,6 +236,7 @@ inline constexpr auto kSidebarVisible = "sidebarVisible";
 inline constexpr auto kSidebarWidth = "sidebarWidth";
 inline constexpr auto kSidebarWidthLocked = "sidebarWidthLocked";
 inline constexpr auto kSkipRecentScrapeDays = "skipRecentScrapeDays";
+inline constexpr auto kFetchCollectionInfoOnCreate = "fetchCollectionInfoOnCreate";
 inline constexpr auto kSortMode = "sortMode";
 inline constexpr auto kSplitterState = "splitterState";
 inline constexpr auto kStartupCollection = "startupCollection";

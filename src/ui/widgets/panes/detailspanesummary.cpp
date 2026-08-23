@@ -59,6 +59,11 @@ void DetailsPane::renderCollectionSummary() {
   DetailsPaneMetadataView *mv = m_metadataView;
   mv->clearDetailsSection();
 
+  // Scraped collection metadata first (Kartend-445su) — the description
+  // reads as the card's lede, mirroring the Item tab's layout.
+  mv->appendDetailRow(tr("Description"), active.scrapedDescription, /*wrap=*/true);
+  mv->appendDetailRow(tr("Manufacturer"), active.scrapedManufacturer);
+  mv->appendDetailRow(tr("Released"), active.scrapedReleaseDate);
   if (!active.type.trimmed().isEmpty()) {
     mv->appendDetailRow(tr("Type"), active.type);
   }
@@ -203,6 +208,11 @@ void DetailsPane::renderItemAreaCollectionOverview() {
   }
   DetailsPaneMetadataView *mv = m_metadataView;
   mv->clearDetailsSection();
+  // Scraped metadata leads (Kartend-445su): a scraped collection reads
+  // like a scraped item — description, then facts.
+  mv->appendDetailRow(tr("Description"), s.scrapedDescription, /*wrap=*/true);
+  mv->appendDetailRow(tr("Manufacturer"), s.scrapedManufacturer);
+  mv->appendDetailRow(tr("Released"), s.scrapedReleaseDate);
   if (!s.type.trimmed().isEmpty()) {
     mv->appendDetailRow(tr("Type"), s.type);
   }

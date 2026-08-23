@@ -8,6 +8,7 @@
 #include <QStringList>
 
 #include "collection/collectioncontext.h"
+#include "entitymetadata.h"
 #include "errorutils.h"
 #include "historystore.h"
 #include "ifilecollectionlookup.h"
@@ -77,6 +78,22 @@ public:
 
   [[nodiscard]] virtual ItemMetadataStore::ItemMetadata
   loadItemMetadata(const QString &collectionUuid, const QString &path) const = 0;
+  /// Kartend-445su: entity-level (platform/collection/category) scrape
+  /// metadata. Defaulted rather than pure so the many existing test doubles
+  /// that mock this interface for unrelated flows keep compiling; the
+  /// production DatabaseManager overrides both.
+  virtual bool saveEntityMetadata(const EntityMetadataStore::EntityMetadata &metadata) {
+    (void)metadata;
+    return false;
+  }
+  /// Newest entity row describing @p collectionUuid (collection-typed rows
+  /// preferred) — an empty-but-keyed value when none exists.
+  [[nodiscard]] virtual EntityMetadataStore::EntityMetadata
+  loadEntityMetadataForCollection(const QString &collectionUuid) const {
+    EntityMetadataStore::EntityMetadata empty;
+    empty.collectionUuid = collectionUuid;
+    return empty;
+  }
   /// Batch counterpart to loadItemMetadata. Returns a (path -> metadata)
   /// hash covering exactly @p paths. Paths without a row in item_metadata
   /// map to an empty-but-keyed ItemMetadata (mirrors single-load behaviour).

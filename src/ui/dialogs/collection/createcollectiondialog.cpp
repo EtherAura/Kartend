@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QCompleter>
 #include <QDialogButtonBox>
@@ -242,6 +243,17 @@ void CreateCollectionDialog::buildUi() {
   // finds a stock install, exactly as populateCoreCombo above already does.
   m_assetsDirectory = RetroArchUtils::resolveAssetsDirectory(m_retroarchOverride);
   populateSystemIconCombo();
+
+  // Kartend-445su: opt-in entity scrape at creation. Placed as the form's
+  // last row so it reads as "…and then fetch info about it". The default is
+  // seeded from the persisted setting via setFetchCollectionInfoDefault.
+  m_fetchInfoCheck =
+      new QCheckBox(tr("Fetch collection info && artwork online after creating"), this);
+  m_fetchInfoCheck->setToolTip(
+      tr("Runs the scraper's collection/platform pass for the new collection: "
+         "description, manufacturer and dates from ScreenScraper or "
+         "Wikipedia/Wikidata, plus logo and background art."));
+  m_form->addRow(QString(), m_fetchInfoCheck);
 
   root->addLayout(m_form);
 
@@ -597,4 +609,12 @@ int CreateCollectionDialog::screenscraperSystemId() const {
     return -1;
   }
   return m_screenscraperSystemCombo->currentData().toInt();
+}
+
+bool CreateCollectionDialog::fetchCollectionInfo() const {
+  return m_fetchInfoCheck && m_fetchInfoCheck->isChecked();
+}
+
+void CreateCollectionDialog::setFetchCollectionInfoDefault(bool checked) {
+  if (m_fetchInfoCheck) m_fetchInfoCheck->setChecked(checked);
 }

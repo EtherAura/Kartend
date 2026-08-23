@@ -273,11 +273,14 @@ void InteractionManager::showContextMenu(ItemWidget *widget, int visualIndex,
         mw->openScraperDialog(idx, filePath);
       });
 
-      // Kartend-ckepd.6/.5: collection-level companion to "Scraper…" — fetch this
-      // collection's entity artwork (platform art via ScreenScraper for a games
-      // collection, collection art via TMDB for a video collection, per the
-      // collection's provider). Surfaces the reason in the dialog if none applies.
-      QAction *entityArtworkAction = menu.addAction(tr("Scrape collection / platform artwork…"));
+      // Kartend-ckepd.6/.5 + Kartend-445su: collection-level companion to
+      // "Scraper…" — fetch this collection's entity artwork AND info
+      // (platform art + manufacturer/dates via ScreenScraper for a games
+      // collection, franchise art via TMDB for a video collection, and a
+      // Wikipedia/Wikidata description + facts for every collection type).
+      // Re-running it is the RESCRAPE: entity rows upsert, art honours the
+      // rescrape policy. Surfaces the reason in the dialog if none applies.
+      QAction *entityArtworkAction = menu.addAction(tr("Scrape collection info && artwork…"));
       QObject::connect(entityArtworkAction, &QAction::triggered, this, [this, filePath]() {
         auto *mw = dynamic_cast<IMainWindow *>(QApplication::activeWindow());
         if (!mw) {

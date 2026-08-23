@@ -27,6 +27,7 @@ private slots:
   void overviewShowsNoFilesystemPaths();
   void collectionTabFollowsSelectionOwner();
   void collectionTabCardKeepsUsableHeightAfterItemRender();
+  void scrapedCollectionFieldsRenderInBothSummarySurfaces();
 
 private:
   QTemporaryDir m_dir;
@@ -225,6 +226,32 @@ void TestDetailsPaneEmptyStates::collectionTabCardKeepsUsableHeightAfterItemRend
            qPrintable(QStringLiteral("card capped to %1px (row height %2)")
                           .arg(scroll->maximumHeight())
                           .arg(rowH)));
+}
+
+void TestDetailsPaneEmptyStates::scrapedCollectionFieldsRenderInBothSummarySurfaces() {
+  DetailsPane pane;
+  DetailsPane::CollectionSummary s = gamesSummary();
+  s.scrapedDescription = QStringLiteral("A shelf of open-source classics.");
+  s.scrapedManufacturer = QStringLiteral("Various");
+  s.scrapedReleaseDate = QStringLiteral("1991");
+  pane.setCollectionSummary(s);
+
+  const auto textsContain = [&pane](const QString &needle) {
+    const auto labels = pane.findChildren<QLabel *>();
+    return std::any_of(labels.cbegin(), labels.cend(),
+                       [&needle](const QLabel *l) { return l->text().contains(needle); });
+  };
+
+  // Item-area overview (no selection).
+  pane.setActiveTab(DetailsPaneTab::Item);
+  QVERIFY(textsContain(QStringLiteral("open-source classics")));
+  QVERIFY(textsContain(QStringLiteral("Various")));
+  QVERIFY(textsContain(QStringLiteral("1991")));
+
+  // Collection tab.
+  pane.setActiveTab(DetailsPaneTab::Collection);
+  QVERIFY(textsContain(QStringLiteral("open-source classics")));
+  QVERIFY(textsContain(QStringLiteral("Various")));
 }
 
 QTEST_MAIN(TestDetailsPaneEmptyStates)

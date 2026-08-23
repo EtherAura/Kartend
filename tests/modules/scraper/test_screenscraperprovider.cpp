@@ -31,6 +31,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "dbmigrations.h"
+#include "entitymetadata.h"
 #include "filehashcache.h"
 #include "romhasher.h"
 #include "scrapertypes.h"
@@ -70,6 +71,7 @@ private slots:
   void buildSystemeMediaUrl_mapsParamsAndGatesUser();
   void fetchEntity_userCredsRequireBothIdAndPassword();
   void fetchEntity_platformAssetShapeRolesAndScopeKey();
+  void fetchEntity_platformCarriesCatalogTextFields();
   void fetchEntity_catalogSkipsTypesTheSystemDoesNotHave();
   void fetchEntity_catalogHonorsPreferredRegion();
   void fetchEntity_absentIdInNonEmptyCatalogIsNotFound();
@@ -448,6 +450,47 @@ void TestScreenScraperProvider::fetchEntity_userCredsRequireBothIdAndPassword() 
 
   // Tidy the sandboxed cache so later runs re-seed deterministically.
   QVERIFY(QFile::remove(cachePath));
+}
+
+void TestScreenScraperProvider::fetchEntity_platformCarriesCatalogTextFields() {
+  // Kartend-445su: the catalog rows have carried company/type/date text since
+  // Kartend-xny9o — a Platform fetchEntity must surface them as the
+  // well-known entity-metadata keys so the persistence fold (and the pane's
+  // collection summary) sees the manufacturer and production span, not just
+  // art. Provider-supplied keys are authoritative over the coordinator's
+  // developer/publisher heuristic, so THIS is the contract to pin.
+  QStandardPaths::setTestModeEnabled(true);
+  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
+  ScreenScraperSystems::System sys;
+  sys.id = 75;
+  sys.displayName = QStringLiteral("Mega Drive");
+  sys.company = QStringLiteral("SEGA");
+  sys.startDate = QStringLiteral("1988");
+  sys.endDate = QStringLiteral("1997");
+  sys.systemType = QStringLiteral("Console");
+  QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
+
+  GeneralSettings settings;
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 ScreenScraperProvider::CollectionAccessor{});
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform;
+  target.identity = QStringLiteral("75");
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY(result.has_value());
+  QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
+  const Scraper::ScrapedItem &item = result->value();
+  QCOMPARE(item.customFields.value(QLatin1String(EntityMetadataStore::kFieldManufacturer)),
+           QStringLiteral("SEGA"));
+  QCOMPARE(item.customFields.value(QLatin1String(EntityMetadataStore::kFieldReleaseDate)),
+           QStringLiteral("1988\u20131997"));
+  QCOMPARE(item.customFields.value(QStringLiteral("systemType")), QStringLiteral("Console"));
 }
 
 void TestScreenScraperProvider::fetchEntity_platformAssetShapeRolesAndScopeKey() {

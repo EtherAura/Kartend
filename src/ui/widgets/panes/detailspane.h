@@ -187,6 +187,13 @@ public:
     /// itself shows. Empty when nothing resolves; the item-styled overview
     /// then simply omits the artwork box (Kartend-um69l).
     QString artworkPath;
+    /// Kartend-445su: textual metadata the entity scraper stored for this
+    /// collection (entity_metadata, newest row, collection-typed rows
+    /// preferred). Empty when the collection has never been entity-scraped;
+    /// the renderers skip the rows entirely then.
+    QString scrapedDescription;
+    QString scrapedManufacturer;
+    QString scrapedReleaseDate;
     [[nodiscard]] bool isValid() const { return !name.trimmed().isEmpty(); }
   };
   /// Caches the collection summary used when no item is selected. The

@@ -45,6 +45,11 @@ struct ScraperOptions {
   // 1 = strictly serial (the legacy behavior).
   int batchItemConcurrency = 4; // 1..16
   ScraperRescrapeMode rescrapeMode = ScraperRescrapeMode::FillMissing;
+  /// Kartend-445su: default state of the create-collection dialog's "fetch
+  /// collection info online" checkbox. Self-maintaining — toggling the box
+  /// at creation persists the new state as the next default. Off out of
+  /// the box: fetching is the user's opt-in.
+  bool fetchCollectionInfoOnCreate = false;
   // Refresh window (in days) used by the rescrape modes that
   // pre-filter the queue (Skip and FillMissing) to decide whether
   // an already-covered item should be re-scraped this run.
@@ -151,6 +156,7 @@ struct ScraperOptions {
            mediaConcurrency == other.mediaConcurrency && mediaThrottleMs == other.mediaThrottleMs &&
            batchItemConcurrency == other.batchItemConcurrency &&
            rescrapeMode == other.rescrapeMode &&
+           fetchCollectionInfoOnCreate == other.fetchCollectionInfoOnCreate &&
            skipRecentScrapeDays == other.skipRecentScrapeDays &&
            preferJpgOutput == other.preferJpgOutput && scrapeAutoResume == other.scrapeAutoResume &&
            scrapeLogging == other.scrapeLogging &&

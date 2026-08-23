@@ -46,6 +46,45 @@ namespace WikidataLogoParser {
 /// separators or traversal. Exposed for tests.
 [[nodiscard]] bool isSafeLogoFilename(const QString &filename);
 
+// ── Entity DATA additions (Kartend-445su) ────────────────────────────────
+// The logo-only wire shape above stays for compatibility; the data path
+// asks wbgetentities for claims + sitelinks + descriptions in one call,
+// resolves the manufacturer entity's label, and pulls the prose paragraph
+// from Wikipedia's REST summary endpoint via the enwiki sitelink.
+
+/// Everything the data lookup extracts from one wbgetentities response.
+/// All fields optional — absence is normal on sparse entities.
+struct EntityData {
+  QString logoFilename;   ///< P154, validated like parseLogoClaim's result.
+  QString manufacturerId; ///< P176's first value ("Q122741"), needs a label hop.
+  QString inceptionYear;  ///< P571's year ("1988"); Wikidata time values vary.
+  QString description;    ///< The entity's own one-line English description.
+  QString enwikiTitle;    ///< enwiki sitelink title for the summary endpoint.
+};
+
+/// wbgetentities for @p entityId with claims|sitelinks|descriptions, English
+/// only, enwiki sitelink only.
+[[nodiscard]] QUrl buildEntityDataUrl(const QString &entityId);
+
+/// wbgetentities labels-only for @p entityId (the manufacturer hop).
+[[nodiscard]] QUrl buildLabelUrl(const QString &entityId);
+
+/// Wikipedia REST page summary for @p title
+/// (https://en.wikipedia.org/api/rest_v1/page/summary/<title>).
+[[nodiscard]] QUrl buildWikipediaSummaryUrl(const QString &title);
+
+/// Parse a wbgetentities claims|sitelinks|descriptions response. Sparse
+/// fields parse as empty; malformed JSON is an error.
+[[nodiscard]] ErrorUtils::Result<EntityData> parseEntityData(const QByteArray &json);
+
+/// The English label from a labels-only wbgetentities response; empty when
+/// the entity has none.
+[[nodiscard]] ErrorUtils::Result<QString> parseEntityLabel(const QByteArray &json);
+
+/// The plain-text `extract` paragraph from a Wikipedia REST summary
+/// response; empty when the page has none (disambiguation stubs).
+[[nodiscard]] ErrorUtils::Result<QString> parseWikipediaSummary(const QByteArray &json);
+
 } // namespace WikidataLogoParser
 
 #endif // WIKIDATALOGOPARSER_H

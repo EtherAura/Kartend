@@ -63,9 +63,21 @@ private:
   /// verified against the collection at `collectionIndex` (re-resolving by
   /// UUID on mismatch) so a collections list edited mid-run can't receive
   /// another collection's art.
-  void applyEntityArtToConfig(const QString &collectionUuid, int collectionIndex,
-                              const QList<Scraper::MediaAsset> &assets,
-                              const QStringList &landedPaths);
+  /// Returns the absolute path of the Logo-role art it wired (empty when no
+  /// logo landed) so the entity-metadata row can record where the entity's
+  /// representative art lives (Kartend-445su).
+  QString applyEntityArtToConfig(const QString &collectionUuid, int collectionIndex,
+                                 const QList<Scraper::MediaAsset> &assets,
+                                 const QStringList &landedPaths);
+  /// Kartend-445su: persist the TEXTUAL side of a successful entity fetch —
+  /// title, description, provider fields (manufacturer, release date) —
+  /// into the entity_metadata table, which sat scaffolded with no producer
+  /// since v27. Runs for metadata-only successes and after the media write
+  /// settles; a failed save logs but never errors the job (the art already
+  /// landed). @p artPath records the wired logo, empty when none.
+  void persistEntityMetadata(const Scraper::ScrapedItem &item,
+                             const Scraper::EntityScrapeTarget &target,
+                             const QString &collectionUuid, const QString &artPath);
   /// File-I/O phase of an entity scrape: run writeMediaFiles on the global
   /// QThreadPool (mirroring BatchScrapeRunner's media-write phase) so a slow
   /// or wedged mount can't block the GUI thread, guarded by the per-run

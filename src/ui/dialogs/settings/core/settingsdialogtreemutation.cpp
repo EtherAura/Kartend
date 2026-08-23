@@ -19,6 +19,7 @@
 #include "collectiontreewidget.h"
 #include "createcollectiondialog.h"
 #include "errordialog.h"
+#include "imainwindow.h"
 #include "retroarchicons.h"
 #include "retroarchutils.h"
 #include "settingsdialog.h"
@@ -27,16 +28,23 @@
 #include "ui_settingsdialog.h"
 #include "uiconstants/grid.h"
 #include "uiconstants/item.h"
+#include <QTimer>
 
 void SettingsDialog::addCollection() {
   CreateCollectionDialog dialog(this);
   dialog.setRetroarchConfigOverride(m_generalSettings.launchers.retroarchConfigPath);
+  // Kartend-445su: seed the "fetch collection info" box from its persisted
+  // default; the user's choice below becomes the next default (the setting
+  // is self-maintaining — there is no separate settings-panel toggle).
+  dialog.setFetchCollectionInfoDefault(
+      m_generalSettings.scraper.options.fetchCollectionInfoOnCreate);
   if (dialog.exec() != QDialog::Accepted) {
     return;
   }
   // OK is gated on a non-empty name, so an accepted dialog always
   // carries a usable collection name.
   const QString name = dialog.collectionName();
+  m_generalSettings.scraper.options.fetchCollectionInfoOnCreate = dialog.fetchCollectionInfo();
 
   if (currentCollectionIndex >= 0 && currentCollectionIndex < collections.size()) {
     saveCollectionFromUI(currentCollectionIndex);
@@ -106,6 +114,36 @@ void SettingsDialog::addCollection() {
 
   // Persist the new collection immediately to disk
   emit collectionSaved(collections);
+
+  // Kartend-445su: the creation-time "fetch collection info" opt-in queues
+  // the SCRAPER MODULE's entity pass — same pipeline, quotas and rescrape
+  // semantics as the context menu's "Scrape collection info & artwork". The
+  // settings dialog is modal, so defer until it closes: launching the
+  // scraper dialog now would stack an inert window under this one. The name
+  // (not the index) is remembered — the live list can be reordered by the
+  // post-dialog reconciliation. Several adds in one session keep the last
+  // request; the service runs one queue at a time.
+  if (dialog.fetchCollectionInfo()) {
+    m_pendingEntityScrapeName = name;
+    // Plain connection on purpose: Qt::UniqueConnection cannot dedupe
+    // functors, so several adds in one session install several handlers —
+    // harmless, because the first to run consumes the pending name and the
+    // rest no-op on the empty check.
+    connect(this, &QDialog::finished, this, [this](int) {
+      const QString pending = m_pendingEntityScrapeName;
+      m_pendingEntityScrapeName.clear();
+      if (pending.isEmpty()) return;
+      auto *mw = dynamic_cast<IMainWindow *>(parentWidget() ? parentWidget()->window() : nullptr);
+      if (!mw) return;
+      // Post past the exec() unwind so MainWindow's post-dialog
+      // reconciliation (collections write-back, watcher refresh) has
+      // finished before the scrape resolves its collection index.
+      QTimer::singleShot(0, this->parentWidget()->window(), [mw, pending]() {
+        const int idx = mw->collectionIndexByName(pending);
+        if (idx >= 0) mw->openEntityScraperDialog(idx);
+      });
+    });
+  }
 }
 
 // Ensures at least one root collection exists, prompting user to create one if

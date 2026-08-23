@@ -334,6 +334,10 @@ private:
   CollectionConfig originalCollection;
   int currentCollectionIndex;
   QList<CollectionConfig> m_workingCollections;
+  /// Kartend-445su: name of a just-created collection whose "fetch
+  /// collection info" box was checked. Consumed by the QDialog::finished
+  /// handler (the dialog is modal — the scrape launches after close).
+  QString m_pendingEntityScrapeName;
   bool m_collectionSaved;
   QList<int> m_parentCollectionMapping;
   bool m_isLoading;

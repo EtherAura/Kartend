@@ -9,6 +9,7 @@ target_sources(kartend_utils PRIVATE
   filehashcache.cpp
   historystore.cpp
   itemartwork.cpp
+  entitymetadata.cpp
   itemmetadata.cpp
   itemmetadatacache.cpp
   metadataqueue.cpp
@@ -29,6 +30,7 @@ target_sources(kartend_utils PRIVATE
   filehashcache.h
   historystore.h
   itemartwork.h
+  entitymetadata.h
   itemmetadata.h
   itemmetadatacache.h
   metadataqueue.h
