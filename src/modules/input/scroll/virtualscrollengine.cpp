@@ -21,6 +21,7 @@
 #include "scrolleventhandler.h"
 #include "scrollmanager.h"
 #include "searchloadingoverlay.h"
+#include "searchmanager.h"
 #include "selectioncoordinator.h"
 #include "selectiondisplaymanager.h"
 #include "selectionoverlaymanager.h"
@@ -503,6 +504,11 @@ void VirtualScrollEngine::positionVirtualContainer() {
   params.alignment = m_owner->getCurrentAlignment();
   params.isFiltered = isFiltered;
   params.isHorizontal = m_owner->m_metrics.isHorizontal;
+  params.isList = (m_owner->m_context.config.viewType == ViewType::List);
+  // The DB-backed search modes bypass FilterManager (isFiltered stays false)
+  // and reload the view with only the matches — ask SearchManager directly.
+  SearchManager *search = m_owner->m_ctx ? m_owner->m_ctx->searchManager() : nullptr;
+  params.isSearch = (search != nullptr) && search->isSearchActive();
   // Dead width per side of the content block, taken from a REAL materialized
   // cell rather than recomputing the art-size formula here — that formula
   // depends on font metrics (itemwidgetpaint reserves three text lines), and

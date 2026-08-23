@@ -105,6 +105,33 @@ void VirtualContainerManager::positionContainer(const ContainerPositionParams &p
     return;
   }
 
+  // The grid container's height is clamped to totalHeight, and a QWidgetItem
+  // with no alignment CENTERS a max-constrained child in its layout cell.
+  // That centering is the deliberate look for an unfiltered tile view (a
+  // short collection floats mid-viewport, hub-page style) — but it is wrong
+  // in two places, both filed as the "empty band" bugs:
+  //   * list mode, always: the rows float away from the pinned column
+  //     header, leaving a blank band under it (Kartend-99rcn);
+  //   * a SEARCHED or FILTERED grid: typing a query dropped the few matches
+  //     a band lower than the unfiltered first row, which reads as the
+  //     results arriving somewhere random rather than at the top
+  //     (Kartend-d3813). Both flags matter — FilterManager filtering and the
+  //     DB-backed search modes are disjoint mechanisms (see
+  //     ContainerPositionParams::isSearch).
+  // Horizontal mode keeps the centered strip even when narrowed — the whole
+  // view is a vertically-centered band by design. RESET the alignment on
+  // every pass so leaving a pinned state by any path restores centering.
+  if (m_gridContainer) {
+    if (QWidget *host = m_gridContainer->parentWidget()) {
+      if (QLayout *hostLayout = host->layout()) {
+        const bool pinTop =
+            params.isList || ((params.isFiltered || params.isSearch) && !params.isHorizontal);
+        hostLayout->setAlignment(m_gridContainer,
+                                 pinTop ? Qt::Alignment(Qt::AlignTop) : Qt::Alignment());
+      }
+    }
+  }
+
   if (params.isHorizontal) {
     // horizontal layout pins the container to the top-left and
     // sizes the grid container to match the long-axis width so the

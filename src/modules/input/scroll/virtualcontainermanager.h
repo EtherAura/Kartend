@@ -42,6 +42,19 @@ struct ContainerPositionParams {
   /// details pane was resized. The manager substitutes the last known inset
   /// instead.
   int contentInset = -1;
+  /// List mode pins the content block to the top of the viewport. Everywhere
+  /// else a collection shorter than the viewport is centered vertically (the
+  /// container's height is clamped to totalHeight, and the unaligned
+  /// QWidgetItem centers a max-constrained child in its cell) — which reads
+  /// as deliberate for a grid of tiles, but floats a short list away from
+  /// its pinned column header (Kartend-99rcn).
+  bool isList = false;
+  /// True while the toolbar search is narrowing the view. Distinct from
+  /// isFiltered: the DB-backed search modes bypass FilterManager entirely and
+  /// reload the view with just the matching items, so from the layout's
+  /// perspective they look like a legitimately small collection — which
+  /// would be centered. Search results belong at the top (Kartend-d3813).
+  bool isSearch = false;
 };
 
 /**
