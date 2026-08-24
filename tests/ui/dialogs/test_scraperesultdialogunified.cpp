@@ -37,6 +37,7 @@
 #include <QDialog>
 #include <QDir>
 #include <QFile>
+#include <QGroupBox>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -246,6 +247,44 @@ QList<CollectionConfig> makeCollections(const QString &base) {
   return {make(QStringLiteral("Alpha")), make(QStringLiteral("Beta"))};
 }
 
+/// Shell/Child/Plain hierarchy for the info-only tests (Kartend-2mt7v):
+/// "Shell" is a parent other collections name via parentCollectionIndex,
+/// "Child" is its subcollection, "Plain" is an ordinary root collection.
+QList<CollectionConfig> makeShellHierarchy(const QString &base) {
+  auto make = [&base](const QString &name) {
+    CollectionConfig c;
+    c.name = name;
+    c.mediaDirectory = base + QLatin1Char('/') + name + QStringLiteral("/media");
+    c.artworkDirectory = base + QLatin1Char('/') + name + QStringLiteral("/artwork");
+    QDir().mkpath(c.mediaDirectory);
+    QDir().mkpath(c.artworkDirectory);
+    return c;
+  };
+  CollectionConfig shell = make(QStringLiteral("Shell"));
+  CollectionConfig child = make(QStringLiteral("Child"));
+  child.parentCollectionIndex = 0;
+  child.isSubcollection = true;
+  CollectionConfig plain = make(QStringLiteral("Plain"));
+  return {shell, child, plain};
+}
+
+/// The tree row whose text is @p name, or nullptr — recursive because
+/// subcollection rows nest under their parents.
+QTreeWidgetItem *treeRowNamed(QTreeWidget *tree, const QString &name) {
+  std::function<QTreeWidgetItem *(QTreeWidgetItem *)> find =
+      [&](QTreeWidgetItem *item) -> QTreeWidgetItem * {
+    if (item->text(0) == name) return item;
+    for (int i = 0; i < item->childCount(); ++i) {
+      if (auto *hit = find(item->child(i))) return hit;
+    }
+    return nullptr;
+  };
+  for (int i = 0; i < tree->topLevelItemCount(); ++i) {
+    if (auto *hit = find(tree->topLevelItem(i))) return hit;
+  }
+  return nullptr;
+}
+
 ScraperService::CollectionJob makeJob(int index, const QString &name, const QStringList &items) {
   ScraperService::CollectionJob job;
   job.collectionIndex = index;
@@ -311,6 +350,8 @@ private slots:
   void startEntityScrapePlatformProviderEnqueuesPlatformJobEmptyIdentity();
   void startEntityScrapeCollectionProviderEnqueuesCollectionJobWithUuid();
   void startEntityScrapeGameOnlyProviderStillEnqueuesCollectionJob();
+  void infoOnlyToggledPreChecksShellsAndRestores();
+  void infoOnlyScrapeEnqueuesEntityJobsOnlyNoItemJobs();
   void startEntityScrapeNullProviderReturnsFalseWithMessage();
   void startEntityScrapeWhileServiceActiveReturnsFalseWithMessage();
 
@@ -1207,6 +1248,127 @@ void TestScrapeResultDialogUnified::startEntityScrapeNullProviderReturnsFalseWit
   QVERIFY2(modal.texts.first().contains(QStringLiteral("No scraper is configured")),
            qPrintable(modal.texts.first()));
   QCOMPARE(service.state(), ScraperService::State::Idle);
+}
+
+void TestScrapeResultDialogUnified::infoOnlyToggledPreChecksShellsAndRestores() {
+  // Kartend-2mt7v: entering info-only mode pre-checks shell collections
+  // (parents named via parentCollectionIndex) and unchecks everything else;
+  // leaving restores the user's previous check states. The item-media grid
+  // and mode radios disable while the mode is on.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = makeShellHierarchy(tmp.path());
+  auto provider = std::make_shared<ScriptedProvider>();
+
+  ScraperService service;
+  ScraperService::Context sctx;
+  sctx.collections = &collections;
+  sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(sctx);
+
+  ScrapeResultDialog dlg(nullptr, {});
+  ScrapeResultDialog::ScraperContext dctx;
+  dctx.collections = &collections;
+  dctx.providerBuilder = sctx.providerBuilder;
+  dlg.setScraperContext(dctx);
+  dlg.setScraperService(&service);
+  dlg.startUnifiedScrape(-1);
+
+  auto *tree = dlg.findChild<QTreeWidget *>();
+  QVERIFY(tree);
+  QTreeWidgetItem *shellRow = treeRowNamed(tree, QStringLiteral("Shell"));
+  QTreeWidgetItem *childRow = treeRowNamed(tree, QStringLiteral("Child"));
+  QTreeWidgetItem *plainRow = treeRowNamed(tree, QStringLiteral("Plain"));
+  QVERIFY(shellRow && childRow && plainRow);
+  QCOMPARE(childRow->parent(), shellRow); // hierarchy round-tripped
+
+  // The "user" had Plain checked before entering the mode.
+  plainRow->setCheckState(0, Qt::Checked);
+
+  auto *infoOnly =
+      widgetWithText<QCheckBox>(dlg, QStringLiteral("Collection info only — skip items"));
+  QVERIFY(infoOnly);
+  infoOnly->setChecked(true);
+
+  QCOMPARE(shellRow->checkState(0), Qt::Checked);   // pre-checked: it has children
+  QCOMPARE(childRow->checkState(0), Qt::Unchecked); // no cascade into the child
+  QCOMPARE(plainRow->checkState(0), Qt::Unchecked); // ordinary collection dropped
+  QGroupBox *mediaGroup = nullptr;
+  for (QGroupBox *g : dlg.findChildren<QGroupBox *>()) {
+    if (g->title() == QStringLiteral("What to scrape")) mediaGroup = g;
+  }
+  QVERIFY(mediaGroup);
+  QVERIFY(!mediaGroup->isEnabled());
+
+  infoOnly->setChecked(false);
+  QCOMPARE(plainRow->checkState(0), Qt::Checked); // snapshot restored
+  QCOMPARE(shellRow->checkState(0), Qt::Unchecked);
+  QVERIFY(mediaGroup->isEnabled());
+}
+
+void TestScrapeResultDialogUnified::infoOnlyScrapeEnqueuesEntityJobsOnlyNoItemJobs() {
+  // Kartend-2mt7v: with info-only on, Scrape queues entity jobs (platform +
+  // collection data per checked row) and nothing else — a checked populated
+  // collection contributes no item jobs.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = makeShellHierarchy(tmp.path());
+  auto provider = std::make_shared<ScriptedProvider>(); // {Game, Platform}
+  provider->parkEntityInto(m_parkedCallbacks);
+
+  ScraperService service;
+  ScraperService::Context sctx;
+  sctx.collections = &collections;
+  sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  sctx.collectionDataProviderBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(sctx);
+
+  ScrapeResultDialog dlg(nullptr, {});
+  ScrapeResultDialog::ScraperContext dctx;
+  dctx.collections = &collections;
+  dctx.providerBuilder = sctx.providerBuilder;
+  dlg.setScraperContext(dctx);
+  dlg.setScraperService(&service);
+  dlg.startUnifiedScrape(-1);
+
+  auto *tree = dlg.findChild<QTreeWidget *>();
+  QVERIFY(tree);
+  auto *infoOnly =
+      widgetWithText<QCheckBox>(dlg, QStringLiteral("Collection info only — skip items"));
+  QVERIFY(infoOnly);
+  infoOnly->setChecked(true); // pre-checks Shell
+  // The user also pulls in the POPULATED Plain collection by hand.
+  QTreeWidgetItem *plainRow = treeRowNamed(tree, QStringLiteral("Plain"));
+  QVERIFY(plainRow);
+  plainRow->setCheckState(0, Qt::Checked);
+
+  auto *scrapeButton = widgetWithText<QPushButton>(dlg, QStringLiteral("Scrape"));
+  QVERIFY(scrapeButton);
+  scrapeButton->click();
+
+  // Two entity jobs per checked collection (platform + riding collection
+  // data), zero item jobs; info-only always runs AUTO (no per-item
+  // candidates to pick) and parked on Shell's platform fetch.
+  QCOMPARE(service.state(), ScraperService::State::RunningAuto);
+  QCOMPARE(service.totalItems(), 4);
+  QCOMPARE(provider->lastEntityTarget.type, Scraper::ScrapeEntityType::Platform);
+  QCOMPARE(provider->lastEntityTarget.collectionIndex, 0);
+
+  const QJsonArray queue = readPendingRoot().value(QStringLiteral("queue")).toArray();
+  QCOMPARE(queue.size(), 4);
+  for (const QJsonValue &v : queue) {
+    const QJsonObject job = v.toObject();
+    QVERIFY(job.contains(QStringLiteral("entity")));
+    QVERIFY(job.value(QStringLiteral("remaining")).toArray().isEmpty());
+  }
+
+  service.cancel(); // unpark cleanly before teardown
 }
 
 void TestScrapeResultDialogUnified::startEntityScrapeWhileServiceActiveReturnsFalseWithMessage() {

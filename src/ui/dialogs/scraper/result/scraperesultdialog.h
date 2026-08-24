@@ -386,6 +386,11 @@ private:
   /// run, when the live view takes over.
   class QSplitter *m_setupVerticalSplitter = nullptr;
   QWidget *m_modeRowContainer = nullptr;
+  /// Kartend-2mt7v: "Collection info only" switch in the setup view. While
+  /// checked, Scrape enqueues ONLY entity jobs (platform + collection data)
+  /// for the checked collections — no item scraping — and toggling it on
+  /// pre-checks the shell collections item scraping never touches.
+  QCheckBox *m_infoOnlyCheck = nullptr;
   /// Candidate picker row shown only during interactive scraping
   /// while the unified live view is the active page. Holds a label
   /// + QComboBox listing candidates for the current item; selecting

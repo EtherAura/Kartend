@@ -70,6 +70,14 @@ public:
   // keeps the slot declaration (Qt's connect() requires a QObject-derived
   // receiver) and forwards to these.
   void onScrapeClicked();
+  /// Kartend-2mt7v: enter/leave "collection info only" mode. Entering
+  /// snapshots the tree's check states and pre-checks shell collections
+  /// (parents other collections name via parentCollectionIndex — the rows
+  /// item scraping never forms owner groups for); leaving restores the
+  /// snapshot. The item-media grid and mode radios disable while active:
+  /// entity jobs fetch metadata + logo + background regardless and always
+  /// run auto.
+  void onInfoOnlyToggled(bool checked);
   void showScrapeErrorDetails();
   /// Re-queue exactly the items that errored this run (grouped by owning
   /// collection), reusing the run's mode + media options (Kartend-jjjo5).
@@ -178,6 +186,19 @@ private:
   /// applies. A single-element list — the service emits one pickerNeeded
   /// per item, so this is just "the item on screen right now".
   QStringList m_interactiveItems;
+  /// Kartend-2mt7v: collection-index → check state snapshot taken when
+  /// info-only mode is entered, restored on leave. Keyed by index (not by
+  /// QTreeWidgetItem*) so a tree repopulation between toggles can never
+  /// leave dangling row pointers — stale indices just miss on restore.
+  QHash<int, Qt::CheckState> m_preInfoOnlyChecks;
+  /// True when @p index is a shell: some other collection names it as
+  /// parent. Config-derived (synchronous) on purpose — the per-collection
+  /// item lists load async from the DB, and the pre-check must happen at
+  /// toggle time.
+  [[nodiscard]] bool isShellCollection(int index) const;
+  /// The collection tree's rows in display order (parents before their
+  /// subcollection rows) — the same order onScrapeClicked queues jobs in.
+  [[nodiscard]] QList<QTreeWidgetItem *> treeRowsInDisplayOrder() const;
 
   /// Collection name currently shown in the host's m_unifiedCurrentLabel.
   /// Tracked so the itemBegan handler can refresh the label whenever the

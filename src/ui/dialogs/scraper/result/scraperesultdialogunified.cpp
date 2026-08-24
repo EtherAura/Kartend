@@ -171,6 +171,17 @@ void ScrapeResultDialogUnified::buildUnifiedPanel() {
   controlsCol->setContentsMargins(0, 0, 0, 0);
   controlsCol->setSpacing(UIConstants::ScrapeResultDialog::ROOT_LAYOUT_SPACING);
   controlsCol->addWidget(mediaTypesGroup);
+  // Kartend-2mt7v: bulk collection-info mode. Sits between the item-media
+  // grid and the mode radios — the two rows it disables while active.
+  m_dlg->m_infoOnlyCheck = new QCheckBox(tr("Collection info only — skip items"), controls);
+  m_dlg->m_infoOnlyCheck->setToolTip(
+      tr("Scrape description, manufacturer, dates and logo art for every "
+         "checked collection without scraping any items. Turning this on "
+         "pre-checks your shell collections (parents whose items live in "
+         "subcollections); adjust the checks freely."));
+  connect(m_dlg->m_infoOnlyCheck, &QCheckBox::toggled, this,
+          &ScrapeResultDialogUnified::onInfoOnlyToggled);
+  controlsCol->addWidget(m_dlg->m_infoOnlyCheck);
   controlsCol->addWidget(modeRowContainer);
   controlsCol->addWidget(buildScrapeOptionsGroup());
   // No scroll area: the default window size (below) is tall enough to show every
@@ -849,6 +860,10 @@ void ScrapeResultDialogUnified::populateCustomFields(const QHash<QString, QStrin
 
 void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
                                                    const QString &preItemPath) {
+  // A fresh open always starts in ordinary item-scrape mode; unchecking
+  // restores the previous session's check snapshot against the OLD tree,
+  // before any repopulation below.
+  if (m_dlg->m_infoOnlyCheck) m_dlg->m_infoOnlyCheck->setChecked(false);
   m_dlg->m_mode = ScrapeResultDialog::Mode::Unified;
   m_dlg->m_unifiedPhase = ScrapeResultDialog::UnifiedPhase::Setup;
   m_dlg->m_modeStack->setCurrentWidget(m_dlg->m_unifiedPage);
@@ -934,6 +949,59 @@ void ScrapeResultDialogUnified::startUnifiedScrape(int preCollectionIndex,
     MediaTypeCheckboxBuilder::applyProviderDefaults(
         m_dlg->m_mediaTypeChecks, MetadataProviderRegistry::defaultMediaTypesForCollection(cfg));
   }
+}
+
+bool ScrapeResultDialogUnified::isShellCollection(int index) const {
+  const QList<CollectionConfig> *cols = m_dlg->m_scraperCtx.collections;
+  if (!cols || index < 0 || index >= cols->size()) return false;
+  for (const CollectionConfig &c : *cols) {
+    if (c.parentCollectionIndex == index) return true;
+  }
+  return false;
+}
+
+QList<QTreeWidgetItem *> ScrapeResultDialogUnified::treeRowsInDisplayOrder() const {
+  QList<QTreeWidgetItem *> rows;
+  if (!m_dlg->m_collectionTree) return rows;
+  std::function<void(QTreeWidgetItem *)> walk = [&](QTreeWidgetItem *item) {
+    if (!item) return;
+    rows.append(item);
+    for (int i = 0; i < item->childCount(); ++i) walk(item->child(i));
+  };
+  for (int i = 0; i < m_dlg->m_collectionTree->topLevelItemCount(); ++i) {
+    walk(m_dlg->m_collectionTree->topLevelItem(i));
+  }
+  return rows;
+}
+
+void ScrapeResultDialogUnified::onInfoOnlyToggled(bool checked) {
+  // Set the row states with the tree's signals blocked: the model's
+  // check-cascade (parent check pulls children in) and its item-inclusion
+  // upkeep are ITEM-scrape concerns, and info-only mode wants exactly the
+  // rows we set — a pre-checked shell must not cascade into its children.
+  // The snapshot restore puts back the exact pre-toggle states, so the
+  // model's maps stay consistent with the tree across an on/off cycle.
+  const QList<QTreeWidgetItem *> rows = treeRowsInDisplayOrder();
+  QSignalBlocker blocker(m_dlg->m_collectionTree);
+  if (checked) {
+    m_preInfoOnlyChecks.clear();
+    for (QTreeWidgetItem *row : rows) {
+      const int idx = m_dlg->m_selectionModel->collectionIndexForRow(row);
+      m_preInfoOnlyChecks.insert(idx, row->checkState(0));
+      row->setCheckState(0, isShellCollection(idx) ? Qt::Checked : Qt::Unchecked);
+    }
+  } else {
+    for (QTreeWidgetItem *row : rows) {
+      const int idx = m_dlg->m_selectionModel->collectionIndexForRow(row);
+      row->setCheckState(0, m_preInfoOnlyChecks.value(idx, Qt::Unchecked));
+    }
+    m_preInfoOnlyChecks.clear();
+  }
+  // Entity jobs fetch metadata + logo + background regardless of the item
+  // media grid, and they have no per-item candidates to pick — both rows
+  // are inert while the mode is on.
+  if (m_dlg->m_mediaTypesGroup) m_dlg->m_mediaTypesGroup->setEnabled(!checked);
+  if (m_dlg->m_modeRowContainer) m_dlg->m_modeRowContainer->setEnabled(!checked);
 }
 
 void ScrapeResultDialogUnified::setUnifiedSetupEnabled(bool enabled) {

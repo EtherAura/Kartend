@@ -637,17 +637,11 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
   if (!m_dlg->m_scraperCtx.collections) return;
   // Walk the tree in display order (including subcollections under
   // their parents) so the user sees a predictable collection
-  // sequence in the progress label. Recursive walk because the tree
-  // is now hierarchical (top-level + subcollection rows).
-  QList<QTreeWidgetItem *> rowsInOrder;
-  std::function<void(QTreeWidgetItem *)> walk = [&](QTreeWidgetItem *item) {
-    if (!item) return;
-    rowsInOrder.append(item);
-    for (int i = 0; i < item->childCount(); ++i) walk(item->child(i));
-  };
-  for (int i = 0; i < m_dlg->m_collectionTree->topLevelItemCount(); ++i) {
-    walk(m_dlg->m_collectionTree->topLevelItem(i));
-  }
+  // sequence in the progress label.
+  const QList<QTreeWidgetItem *> rowsInOrder = treeRowsInDisplayOrder();
+  // Kartend-2mt7v: info-only mode queues entity jobs for the checked rows
+  // and nothing else — no owner grouping, no item jobs, no per-item media.
+  const bool infoOnly = m_dlg->m_infoOnlyCheck && m_dlg->m_infoOnlyCheck->isChecked();
   // Translate checked rows into ScraperService::CollectionJob entries.
   // Each job carries the collection uuid + artwork dir resolved here
   // (the service's persistence layer keys jobs by these so resume
@@ -700,8 +694,32 @@ void ScrapeResultDialogUnified::onScrapeClicked() {
   for (int checkedIndex : checkedOrder) {
     appendEntityJobsOnce(checkedIndex);
   }
-  for (const auto &group : ownerGroups) {
-    appendEntityJobsOnce(group.first);
+  // Owner groups derive from the ITEM selection maps, which info-only mode
+  // deliberately leaves untouched (its check states are set with the tree's
+  // signals blocked) — entity jobs there come from the checked rows alone.
+  if (!infoOnly) {
+    for (const auto &group : ownerGroups) {
+      appendEntityJobsOnce(group.first);
+    }
+  }
+  if (infoOnly) {
+    if (serviceQueue.isEmpty()) {
+      QMessageBox::information(m_dlg, tr("Scraper"),
+                               tr("Check at least one collection before scraping."));
+      return;
+    }
+    // Entity jobs carry their own media (logo + background + metadata) and
+    // have no candidate picker — mirror the per-collection entity launch:
+    // auto mode, empty item-media filter, metadata writes on.
+    qCInfo(lcScrapeTimings) << "DIALOG onScrapeClicked: info-only path, queue size="
+                            << serviceQueue.size();
+    setUnifiedSetupEnabled(false);
+    if (m_dlg->m_closeButton) m_dlg->m_closeButton->show();
+    if (!m_dlg->m_service->startScrape(serviceQueue, Scraper::ScraperService::Mode::Auto,
+                                       /*mediaFilter=*/{}, /*writeMetadata=*/true)) {
+      setUnifiedSetupEnabled(true);
+    }
+    return;
   }
 
   for (const auto &group : ownerGroups) {
