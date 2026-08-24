@@ -4,6 +4,7 @@
 #include "artworkutils.h"
 #include "collection/collectionconfig.h"
 #include "collection/enumstringhelpers.h"
+#include "collection/hierarchyhelpers.h"
 #include "collection/launcherconfig.h"
 #include "collection/typehelpers.h"
 #include "detailspane.h"
@@ -23,10 +24,13 @@
 #include "videoutils.h"
 #include <algorithm>
 #include <QApplication>
+#include <QDir>
 #include <QFileInfo>
 #include <QHash>
 #include <QHBoxLayout>
 #include <QList>
+#include <QLocale>
+#include <QRegularExpression>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSet>
@@ -362,6 +366,7 @@ DetailsPane::CollectionSummary DetailsPaneManager::buildCollectionSummary(int co
 
   if (auto *db = m_ctx ? m_ctx->databaseManager() : nullptr; db) {
     summary.itemCount = db->countCollectionRecursive(collectionIndex, *m_collections);
+    summary.totalSizeBytes = db->sumCollectionFileSizesRecursive(collectionIndex, *m_collections);
     // UUID keying must match how DatabaseManager computes it elsewhere:
     // validateAndExpandPath without a raw fallback. Mismatched casing or
     // a missing-directory empty-string here would make last_scanned silently
@@ -376,12 +381,96 @@ DetailsPane::CollectionSummary DetailsPaneManager::buildCollectionSummary(int co
     const EntityMetadataStore::EntityMetadata entity = db->loadEntityMetadataForCollection(uuid);
     if (!entity.isEmpty()) {
       summary.scrapedDescription = entity.description;
+      QHash<QString, QString> byKey;
       const auto fields = ItemMetadataStore::parseCustomFields(entity.customFields);
       for (const auto &pair : fields) {
+        byKey.insert(pair.first, pair.second);
         if (pair.first == QLatin1String(EntityMetadataStore::kFieldManufacturer)) {
           summary.scrapedManufacturer = pair.second;
         } else if (pair.first == QLatin1String(EntityMetadataStore::kFieldReleaseDate)) {
           summary.scrapedReleaseDate = pair.second;
+        } else if (pair.first == QLatin1String(EntityMetadataStore::kFieldCountry)) {
+          summary.scrapedCountry = pair.second;
+        } else if (pair.first == QLatin1String(EntityMetadataStore::kFieldDeveloper)) {
+          summary.scrapedDeveloper = pair.second;
+        } else if (pair.first == QLatin1String(EntityMetadataStore::kFieldPublisher)) {
+          summary.scrapedPublisher = pair.second;
+        } else if (pair.first == QLatin1String(EntityMetadataStore::kFieldGenre)) {
+          summary.scrapedGenre = pair.second;
+        } else if (pair.first == QLatin1String(EntityMetadataStore::kFieldWebsite)) {
+          summary.scrapedWebsite = pair.second;
+        }
+      }
+      // Kartend-5b5r1: the per-media-type spec registry. Ordered here (the
+      // display order), keys from EntityMetadataStore; other media types
+      // add their own rows without touching the summary struct or the
+      // renderers. Unknown/blank types get the games sheet too — inherited
+      // types are usually blank on subcollections.
+      struct SpecField {
+        const char *key;
+        QString label;
+        bool number; // format via locale (units sold)
+      };
+      const QString mediaType = summary.type.toLower();
+      QList<SpecField> registry;
+      if (mediaType.isEmpty() || mediaType.contains(QLatin1String("game"))) {
+        registry = {{EntityMetadataStore::kFieldCpu, tr("CPU"), false},
+                    {EntityMetadataStore::kFieldGpu, tr("GPU"), false},
+                    {EntityMetadataStore::kFieldGeneration, tr("Generation"), false},
+                    {EntityMetadataStore::kFieldUnitsSold, tr("Units sold"), true},
+                    {EntityMetadataStore::kFieldPredecessor, tr("Predecessor"), false},
+                    {EntityMetadataStore::kFieldSuccessor, tr("Successor"), false}};
+      }
+      for (const SpecField &field : registry) {
+        QString value = byKey.value(QLatin1String(field.key));
+        if (value.isEmpty()) continue;
+        if (field.number) {
+          bool ok = false;
+          const qlonglong n = value.toLongLong(&ok);
+          if (ok) value = QLocale().toString(n);
+        }
+        summary.scrapedSpecs.append({field.label, value});
+      }
+    }
+
+    // Kartend-5b5r1: gather every scraped system image from the shared art
+    // tree (_shared/<type>/<prefix><scopeKey>.<ext>) into the gallery.
+    // Ownership filter: shared dirs are often inherited from a parent, so
+    // sibling platforms' art lives alongside ours — match only OUR scope
+    // keys: the collection uuid, the configured systemeid override, and any
+    // platform id already wired into this collection's art slots.
+    {
+      const QString resolvedArtDir = PathUtils::validateAndExpandPath(
+          CollectionUtils::resolveArtworkDirectory(collectionIndex, *m_collections),
+          collection.name);
+      if (!resolvedArtDir.isEmpty()) {
+        QStringList prefixes{QStringLiteral("collection_") + uuid};
+        if (collection.scraperOverrides.screenscraperSystemId >= 0) {
+          prefixes.append(QStringLiteral("platform_") +
+                          QString::number(collection.scraperOverrides.screenscraperSystemId));
+        }
+        static const QRegularExpression wiredId(QStringLiteral("platform_(\\d+)"));
+        for (const QString &wired :
+             {collection.collectionIcon, collection.background.headerLogoImage,
+              collection.background.backgroundImage}) {
+          const auto m = wiredId.match(wired);
+          if (m.hasMatch()) {
+            const QString p = QStringLiteral("platform_") + m.captured(1);
+            if (!prefixes.contains(p)) prefixes.append(p);
+          }
+        }
+        const QDir sharedRoot(resolvedArtDir + QStringLiteral("/_shared"));
+        const QStringList typeDirs =
+            sharedRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        for (const QString &typeName : typeDirs) {
+          const QDir typeDir(sharedRoot.filePath(typeName));
+          for (const QString &prefix : prefixes) {
+            const QStringList files =
+                typeDir.entryList({prefix + QStringLiteral(".*")}, QDir::Files, QDir::Name);
+            for (const QString &file : files) {
+              summary.galleryEntries.append({typeName, typeDir.filePath(file), /*isVideo=*/false});
+            }
+          }
         }
       }
     }
@@ -446,6 +535,21 @@ void DetailsPaneManager::showSubcollectionSummary(int collectionIndex) {
   // leave the previous item's pane behind — the overview only renders when
   // no item is displayed. clearMetadata also resets the selection summary,
   // so push ours after.
+  //
+  // Drop the manager's OWN item context too (Kartend-6i10t user report): the
+  // tab-switch handler re-pushes m_currentItemFilePath when non-empty, so a
+  // stale path here resurrected the previously-selected item on
+  // Item→Collection→Item — clobbering this overview with dead item rows. A
+  // still-pending debounced update would do the same at trailing edge;
+  // cancel it.
+  if (m_metadataDebouncer) {
+    m_metadataDebouncer->cancel();
+  }
+  m_pendingMetadataFilePath.clear();
+  m_pendingMetadataItemName.clear();
+  m_currentItemFilePath.clear();
+  m_currentItemName.clear();
+  m_currentItemContext = {};
   m_DetailsPane->clearMetadata();
   m_DetailsPane->setSelectionCollectionSummary(buildCollectionSummary(collectionIndex));
 }

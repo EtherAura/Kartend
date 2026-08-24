@@ -60,7 +60,21 @@ void FileMapCache::mergeRangeLoaded(const QHash<QString, QString> &fileToArtwork
 
 int FileMapCache::collectionIndexForFile(const QString &filePath) const {
   QMutexLocker locker(&m_mutex);
-  return m_fileToCollectionIndex.value(filePath, -1);
+  if (m_fileToCollectionIndex.contains(filePath)) {
+    return m_fileToCollectionIndex.value(filePath);
+  }
+  // Same fallback ladder as artworkDirForFile (Kartend-6i10t): an exact-only
+  // lookup silently returned -1 whenever the caller's path spelling differed
+  // from the stored key (symlinked mounts, relative entries), which made the
+  // sidebar's Collection tab fall back to the viewed shell instead of the
+  // item's owning collection — while artwork, with these fallbacks, resolved
+  // fine on the same items.
+  const QString fileName = QFileInfo(filePath).fileName();
+  if (m_fileToCollectionIndex.contains(fileName)) {
+    return m_fileToCollectionIndex.value(fileName);
+  }
+  const QString baseName = QFileInfo(filePath).completeBaseName();
+  return m_fileToCollectionIndex.value(baseName, -1);
 }
 
 QString FileMapCache::artworkDirForFile(const QString &filePath) const {

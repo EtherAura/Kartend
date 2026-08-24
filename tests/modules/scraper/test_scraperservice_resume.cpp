@@ -159,6 +159,7 @@ private slots:
   void entityScrapeNotFoundCountedSeparately();
   void entityScrapeDownloadsArtToSharedAndConfig();
   void entityScrapeCollectionArtToSharedAndConfig();
+  void entityScrapeCollectionLogoDoesNotStealPlatformWiredIcon();
   void entityScrapeFillMissingWiresExistingArtIntoConfig();
   void entityJobLoadsFromPendingState();
   void interactiveEntityJobResumedNotSkipped();
@@ -783,13 +784,71 @@ void TestScraperServiceResume::entityScrapeCollectionArtToSharedAndConfig() {
   QCOMPARE(collections[0].background.backgroundImage, expectedBg);
 }
 
+void TestScraperServiceResume::entityScrapeCollectionLogoDoesNotStealPlatformWiredIcon() {
+  // Kartend-5b5r1 field report: the collection-data job runs AFTER the
+  // platform job in every entity queue, and its Wikidata logo overwrote the
+  // ScreenScraper wheel as the SNES icon (a degenerate SVG, at that). A
+  // collection_-scoped asset must NOT replace platform_-scoped art; it may
+  // only fill empty or same-scope slots.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString uuid = QStringLiteral("e5f6a7b8");
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Fallback Logo");
+  Scraper::MediaAsset logo;
+  logo.type = QStringLiteral("logo-svg");
+  logo.scope = Scraper::MediaScope::Collection;
+  logo.scopeKey = uuid;
+  logo.url = QUrl(QStringLiteral("https://example.test/logo.svg"));
+  logo.entityRole = Scraper::EntityArtRole::Logo;
+  item.media.append(logo);
+  provider->entityResult = item;
+  provider->mediaBytes.insert(logo.url, QByteArray("<svg xmlns=\"http://www.w3.org/2000/svg\"/>"));
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  CollectionConfig cfg;
+  // The platform job already wired the SS wheel on this run (or an earlier
+  // one) — scrape-owned, platform_-scoped.
+  const QString wheel = QDir(tmp.path()).filePath(QStringLiteral("_shared/wheel/platform_4.png"));
+  cfg.collectionIcon = wheel;
+  cfg.background.headerLogoImage = wheel;
+  collections.append(cfg);
+  ctx.collections = &collections;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("Super Famicom");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Collection;
+  job.entity.identity = uuid;
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  // The Wikidata file still lands on disk (the gallery shows it)…
+  const QString landed =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/logo-svg/collection_e5f6a7b8.svg"));
+  QVERIFY2(QFile::exists(landed), qPrintable(landed));
+  // …but the platform-wired slots are untouched.
+  QCOMPARE(collections[0].collectionIcon, wheel);
+  QCOMPARE(collections[0].background.headerLogoImage, wheel);
+}
+
 void TestScraperServiceResume::entityScrapeFillMissingWiresExistingArtIntoConfig() {
-  // Kartend-jjyst.5: a FillMissing re-run whose platform art already sits on
-  // disk skips the file writes — but the kept files must still be wired into
-  // the collection config (headerLogoImage / collectionIcon / backgroundImage).
-  // applyEntityArtToConfig used to read only writtenPaths, which skip-because-
-  // present leaves empty, so re-scraping after a config reset silently no-oped
-  // while reporting success.
+  // Kartend-jjyst.5 established that a FillMissing re-run wires kept files
+  // into the config. Kartend-5b5r1 sharpened the entity-art contract: the
+  // files are region-less (platform_<id>.png), so FillMissing upgrades to
+  // UpdateChanged here — DIFFERENT bytes (a changed region preference: the
+  // Dreamcast stuck on the blue PAL wheel after switching to us) replace
+  // the stale file, and the refreshed paths are wired into the config.
   QTemporaryDir tmp;
   QVERIFY(tmp.isValid());
   const QString existingLogo =
@@ -853,16 +912,18 @@ void TestScraperServiceResume::entityScrapeFillMissingWiresExistingArtIntoConfig
                       /*writeMetadata=*/true);
 
   QTRY_COMPARE(service.summary().scraped, 1);
-  // Nothing rewritten — both destinations were already present.
-  QCOMPARE(service.summary().mediaWritten, 0);
-  // The kept files are wired into the config anyway (Kartend-jjyst.5).
+  // Both destinations held STALE bytes — the UpdateChanged upgrade replaces
+  // them so a changed region preference actually lands (Kartend-5b5r1).
+  QCOMPARE(service.summary().mediaWritten, 2);
+  {
+    QFile f(existingLogo);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QCOMPARE(f.readAll(), QByteArray("NEW_LOGO_BYTES"));
+  }
+  // The refreshed files are wired into the config (Kartend-jjyst.5).
   QCOMPARE(collections[0].background.headerLogoImage, existingLogo);
   QCOMPARE(collections[0].collectionIcon, existingLogo);
   QCOMPARE(collections[0].background.backgroundImage, existingBg);
-  // FillMissing kept the original bytes on disk.
-  QFile after(existingLogo);
-  QVERIFY(after.open(QIODevice::ReadOnly));
-  QCOMPARE(after.readAll(), QByteArray("OLD_LOGO"));
 }
 
 void TestScraperServiceResume::entityJobLoadsFromPendingState() {

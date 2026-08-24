@@ -18,6 +18,18 @@ private slots:
   void detailsPaneManager_toggleSidebar_flipsVisibilityAndEmits();
   void detailsPaneManager_toggleSidebar_doubleToggleRestoresInitialState();
 
+  // Kartend-6i10t user report: after a subcollection tile takes the
+  // selection, an Item→Collection→Item tab round trip resurrected the
+  // PREVIOUSLY selected item (the tab-switch re-push read a stale
+  // m_currentItemFilePath). showSubcollectionSummary must drop the item
+  // context so the overview survives the round trip.
+  void detailsPaneManager_subcollectionSelection_survivesTabRoundTrip();
+
+  // Kartend-6i10t user report: with an item selected in an aggregated view,
+  // the Collection tab must show the item's OWNING (parent) collection, not
+  // the viewed shell.
+  void detailsPaneManager_collectionTab_showsSelectedItemsOwner();
+
   // DetailsPaneManager: setExternallyHidden suppresses visibility while
   // active and restores it when cleared, without mutating the persisted
   // m_sidebarVisible flag (verified by clearing the override and observing

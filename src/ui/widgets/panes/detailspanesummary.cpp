@@ -6,6 +6,8 @@
 // referenced here still lives on DetailsPane.
 
 #include "detailsformat.h"
+#include <QLocale>
+
 #include "detailspane.h"
 #include "detailspanegalleryview.h"
 #include "detailspanemetadataview.h"
@@ -19,8 +21,10 @@ void DetailsPane::setCollectionSummary(const CollectionSummary &summary) {
   m_collectionSummary = summary;
   // A new collection context invalidates any selection-scoped subcollection
   // summary — without this, switching collections while a subcollection
-  // tile was selected would leave the old child's overview on screen.
+  // tile was selected would leave the old child's overview on screen. The
+  // owner summary is selection-scoped too (Kartend-6i10t).
   m_selectionSummary = CollectionSummary{};
+  m_ownerSummary = CollectionSummary{};
   // Re-render right away when the user is currently viewing the
   // Collection tab (so live edits in settings or fresh scan results land
   // immediately), or when the Item area is showing the no-item overview
@@ -34,17 +38,26 @@ void DetailsPane::setCollectionSummary(const CollectionSummary &summary) {
 }
 
 void DetailsPane::renderCollectionSummary() {
-  // The Collection tab follows the SELECTION's owning collection when one
-  // is pushed (an aggregated view's child item, or a selected subcollection
-  // tile); otherwise it describes the viewed collection (Kartend-um69l,
-  // user decision 2026-08-23).
-  const CollectionSummary &active =
-      m_selectionSummary.isValid() ? m_selectionSummary : m_collectionSummary;
-  setArtworkSectionVisible(false);
-  setFileInfoRowsVisible(false);
-  if (m_galleryView) {
-    m_galleryView->hideSection();
+  // The Collection tab describes the PARENT of whatever is selected
+  // (Kartend-6i10t, user decision 2026-08-23): a displayed item's owning
+  // collection when the manager pushed one, else the viewed collection —
+  // which is also a selected subcollection TILE's parent in context, so a
+  // tile deliberately does NOT surface here (its own info lives in the
+  // Item area's overview).
+  const CollectionSummary &active = m_ownerSummary.isValid() ? m_ownerSummary : m_collectionSummary;
+  // Kartend-5b5r1: the Collection tab shows the collection's artwork and
+  // scraped-image gallery too — same item-styled look as the overview.
+  if (!active.artworkPath.isEmpty()) {
+    m_artworkSource = QPixmap(active.artworkPath);
+    m_primaryArtworkPath = active.artworkPath;
+  } else {
+    m_artworkSource = QPixmap();
+    m_primaryArtworkPath.clear();
   }
+  applyPreviewSize();
+  setArtworkSectionVisible(!m_artworkSource.isNull());
+  setFileInfoRowsVisible(false);
+  setArtworkGallery(active.galleryEntries);
   ui->titleLabel->setText(tr("Collection Information"));
   ui->itemNameValue->setText(active.name);
 
@@ -63,7 +76,16 @@ void DetailsPane::renderCollectionSummary() {
   // reads as the card's lede, mirroring the Item tab's layout.
   mv->appendDetailRow(tr("Description"), active.scrapedDescription, /*wrap=*/true);
   mv->appendDetailRow(tr("Manufacturer"), active.scrapedManufacturer);
+  mv->appendDetailRow(tr("Developer"), active.scrapedDeveloper);
+  mv->appendDetailRow(tr("Publisher"), active.scrapedPublisher);
+  mv->appendDetailRow(tr("Genre"), active.scrapedGenre);
+  mv->appendDetailRow(tr("Country"), active.scrapedCountry);
   mv->appendDetailRow(tr("Released"), active.scrapedReleaseDate);
+  mv->appendDetailRow(tr("Website"), active.scrapedWebsite, /*wrap=*/true,
+                      /*placeholder=*/false, /*linkify=*/true);
+  for (const auto &spec : active.scrapedSpecs) {
+    mv->appendDetailRow(spec.first, spec.second);
+  }
   if (!active.type.trimmed().isEmpty()) {
     mv->appendDetailRow(tr("Type"), active.type);
   }
@@ -94,65 +116,18 @@ void DetailsPane::renderCollectionSummary() {
   // than the per-item view.
   applySidebarFont(m_activeSidebarFontFamily, m_activeSidebarFontPointSize);
 
-  capMetadataCardToContent();
-
   m_detailsContainer->show();
-}
-
-// Collection summaries are short and static — there is no marquee and
-// the metadata card is the only content. Left uncapped, m_metadataScroll's
-// Expanding policy stretches the styled backdrop bubble to the full sidebar
-// height; on a sparse summary (a not-yet-scraped subcollection shows just
-// Items + Last scanned) that reads as an oversized empty card. Cap the
-// scroll area to the rows' real, wrap-aware height so the bubble hugs the
-// summary and matches a scraped collection's tighter card.
-// clearDetailsSection lifts the cap again for the Item tab's per-item path.
-void DetailsPane::capMetadataCardToContent() {
-  // Measure on the NEXT event-loop tick, not inline: the rows were
-  // appended in this very call stack, and their rich-text size hints only
-  // resolve once the layout has polished the new labels. An inline
-  // measurement reads the PREVIOUS render's geometry — 8px when that was
-  // a cleared card, which is exactly the collapsed sliver the guest
-  // showed on the Collection tab after an item render (Kartend-um69l).
-  QTimer::singleShot(0, this, [this]() {
-    if (!m_metadataScroll || !m_metadataBackdrop) {
-      return;
-    }
-    // Only cap while a summary is still what's on display; the Item tab's
-    // per-item path may have taken over during the tick (its
-    // clearDetailsSection lifts the cap, and re-capping would shrink the
-    // full-height metadata card).
-    const bool summaryShowing = (m_activeTab == DetailsPaneTab::Collection) ||
-                                (m_activeTab == DetailsPaneTab::Item && !m_hasItemDisplayed);
-    if (!summaryShowing) {
-      return;
-    }
-    if (QLayout *inner = m_metadataBackdrop->layout()) {
-      inner->activate();
-    }
-    const int width = m_metadataScroll->viewport() ? m_metadataScroll->viewport()->width() : 0;
-    if (width > 0) {
-      // heightForWidth resolves the wrapped path rows; sizeHint suffices
-      // when no row wraps. Width unknown (pane not yet shown) → leave the
-      // card uncapped rather than risk clipping a row.
-      const int contentHeight = m_metadataBackdrop->hasHeightForWidth()
-                                    ? m_metadataBackdrop->heightForWidth(width)
-                                    : m_metadataBackdrop->sizeHint().height();
-      m_metadataScroll->setMaximumHeight(contentHeight);
-    }
-  });
 }
 
 void DetailsPane::setSelectionCollectionSummary(const CollectionSummary &summary) {
   m_selectionSummary = summary;
-  // Re-render whichever surface is showing selection-scoped collection
-  // info right now: the Item area's overview (subcollection tile, no item)
-  // or the Collection tab, which follows the selection's owning collection
-  // (user decision 2026-08-23).
-  if (m_activeTab == DetailsPaneTab::Item && !m_hasItemDisplayed) {
+  // Re-render whichever no-item surface shows the selected subcollection
+  // right now: the Item area's overview or the File tab's on-disk story.
+  // The Collection tab is deliberately NOT driven from here (Kartend-6i10t)
+  // — it describes the selection's PARENT via the owner channel.
+  if ((m_activeTab == DetailsPaneTab::Item || m_activeTab == DetailsPaneTab::File) &&
+      !m_hasItemDisplayed) {
     applyTabVisibility();
-  } else if (m_activeTab == DetailsPaneTab::Collection) {
-    renderCollectionSummary();
   }
 }
 
@@ -161,9 +136,25 @@ void DetailsPane::clearSelectionCollectionSummary() {
     return;
   }
   m_selectionSummary = CollectionSummary{};
-  if (m_activeTab == DetailsPaneTab::Item && !m_hasItemDisplayed) {
+  if ((m_activeTab == DetailsPaneTab::Item || m_activeTab == DetailsPaneTab::File) &&
+      !m_hasItemDisplayed) {
     applyTabVisibility();
-  } else if (m_activeTab == DetailsPaneTab::Collection) {
+  }
+}
+
+void DetailsPane::setOwnerCollectionSummary(const CollectionSummary &summary) {
+  m_ownerSummary = summary;
+  if (m_activeTab == DetailsPaneTab::Collection) {
+    renderCollectionSummary();
+  }
+}
+
+void DetailsPane::clearOwnerCollectionSummary() {
+  if (!m_ownerSummary.isValid()) {
+    return;
+  }
+  m_ownerSummary = CollectionSummary{};
+  if (m_activeTab == DetailsPaneTab::Collection) {
     renderCollectionSummary();
   }
 }
@@ -173,6 +164,49 @@ void DetailsPane::clearSelectionCollectionSummary() {
 // artwork box, name row, details card. Deliberately shows NO filesystem
 // paths; those belong to the Collection tab, and published captures must
 // not carry them.
+// Kartend-6i10t: the File tab's collection story — where the collection
+// lives on disk and how much of it there is. Same item-styled card as the
+// other collection surfaces; no scraped text (that is the other tabs' job).
+void DetailsPane::renderCollectionFileOverview() {
+  const CollectionSummary &s =
+      m_selectionSummary.isValid() ? m_selectionSummary : m_collectionSummary;
+  setArtworkSectionVisible(false);
+  setFileInfoRowsVisible(false);
+  if (m_galleryView) {
+    m_galleryView->hideSection();
+  }
+  ui->titleLabel->setText(tr("File Information"));
+  ui->itemNameValue->setText(s.name);
+
+  if (m_metadataView) m_metadataView->ensureDetailsSection();
+  if (!m_detailsContainer) {
+    return;
+  }
+  DetailsPaneMetadataView *mv = m_metadataView;
+  mv->clearDetailsSection();
+  mv->appendDetailRow(tr("Media"), s.mediaDirectory, /*wrap=*/true);
+  mv->appendDetailRow(tr("Artwork"), s.artworkDirectory, /*wrap=*/true);
+  mv->appendDetailRow(tr("Video"), s.videoDirectory, /*wrap=*/true);
+  mv->appendDetailRow(tr("Manuals"), s.manualDirectory, /*wrap=*/true);
+  if (s.itemCount >= 0) {
+    mv->appendDetailRow(tr("Items"), QString::number(s.itemCount));
+  }
+  // Only with a real sum: 0 with thousands of items just means the scan
+  // has not stored sizes yet (file_size defaults to 0) — "0 bytes" there
+  // reads as breakage, not as fact (Kartend-6i10t user report).
+  if (s.totalSizeBytes > 0) {
+    mv->appendDetailRow(tr("Size on disk"), QLocale().formattedDataSize(s.totalSizeBytes));
+  }
+  mv->appendDetailRow(tr("Last scanned"), DetailsFormat::formatLastScanned(s.lastScanned));
+  if (!s.extensions.isEmpty()) {
+    mv->appendDetailRow(tr("Extensions"), s.extensions.join(QStringLiteral(", ")),
+                        /*wrap=*/true);
+  }
+
+  applySidebarFont(m_activeSidebarFontFamily, m_activeSidebarFontPointSize);
+  m_detailsContainer->show();
+}
+
 void DetailsPane::renderItemAreaCollectionOverview() {
   const CollectionSummary &s =
       m_selectionSummary.isValid() ? m_selectionSummary : m_collectionSummary;
@@ -202,6 +236,10 @@ void DetailsPane::renderItemAreaCollectionOverview() {
   applyPreviewSize();
   setArtworkSectionVisible(!m_artworkSource.isNull());
 
+  // Kartend-5b5r1: every scraped system image rides the same gallery strip
+  // items get; clicking a thumb swaps the big preview above.
+  setArtworkGallery(s.galleryEntries);
+
   if (m_metadataView) m_metadataView->ensureDetailsSection();
   if (!m_detailsContainer) {
     return;
@@ -212,7 +250,16 @@ void DetailsPane::renderItemAreaCollectionOverview() {
   // like a scraped item — description, then facts.
   mv->appendDetailRow(tr("Description"), s.scrapedDescription, /*wrap=*/true);
   mv->appendDetailRow(tr("Manufacturer"), s.scrapedManufacturer);
+  mv->appendDetailRow(tr("Developer"), s.scrapedDeveloper);
+  mv->appendDetailRow(tr("Publisher"), s.scrapedPublisher);
+  mv->appendDetailRow(tr("Genre"), s.scrapedGenre);
+  mv->appendDetailRow(tr("Country"), s.scrapedCountry);
   mv->appendDetailRow(tr("Released"), s.scrapedReleaseDate);
+  mv->appendDetailRow(tr("Website"), s.scrapedWebsite, /*wrap=*/true,
+                      /*placeholder=*/false, /*linkify=*/true);
+  for (const auto &spec : s.scrapedSpecs) {
+    mv->appendDetailRow(spec.first, spec.second);
+  }
   if (!s.type.trimmed().isEmpty()) {
     mv->appendDetailRow(tr("Type"), s.type);
   }
@@ -225,6 +272,5 @@ void DetailsPane::renderItemAreaCollectionOverview() {
   }
 
   applySidebarFont(m_activeSidebarFontFamily, m_activeSidebarFontPointSize);
-  capMetadataCardToContent();
   m_detailsContainer->show();
 }

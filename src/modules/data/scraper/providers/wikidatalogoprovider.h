@@ -31,7 +31,13 @@ public:
   /// CollectionAccessor: the caller owns index validity.
   using CollectionAccessor = std::function<const CollectionConfig *()>;
 
-  explicit WikidataLogoProvider(CollectionAccessor collectionAccessor);
+  /// @p isShellAccessor (optional): true when the collection is a SHELL —
+  /// other collections name it as parent. Shells are named after
+  /// companies/brands, so entity resolution prefers company vocabulary
+  /// (Kartend-5b5r1 follow-up: the "Sony" shell must resolve to Sony
+  /// Group, not a PlayStation, not the given name).
+  explicit WikidataLogoProvider(CollectionAccessor collectionAccessor,
+                                std::function<bool()> isShellAccessor = {});
 
   [[nodiscard]] QString id() const override { return QStringLiteral("wikidata"); }
   [[nodiscard]] QString displayName() const override { return QStringLiteral("Wikidata"); }
@@ -52,10 +58,18 @@ private:
   /// Kartend-445su: the optional text hops (manufacturer label, Wikipedia
   /// summary) and the final ScrapedItem composition, split out of
   /// fetchEntity so the four-hop chain stays readable.
+  /// Kartend-6i10t: walk the search-query ladder (full name, then compound
+  /// fragments) until pickEntityForCollection accepts a hit; falls back to
+  /// the first raw hit of the first non-empty search, and reports an empty
+  /// id when every query comes back dry. Errors forward through @p done.
+  void resolveEntityId(const QStringList &queries, int index, const QString &fallbackId,
+                       const QString &collectionType, bool preferCompany,
+                       std::function<void(ErrorUtils::Result<QString>)> done);
   void finishEntityWithData(const QString &name, const QString &scopeKey,
                             const WikidataLogoParser::EntityData &data, DetailCallback callback);
 
   CollectionAccessor m_collectionAccessor;
+  std::function<bool()> m_isShellAccessor;
 };
 
 #endif // WIKIDATALOGOPROVIDER_H

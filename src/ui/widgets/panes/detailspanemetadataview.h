@@ -52,7 +52,7 @@ public:
   /// the unscraped-item skeleton so a stand-in row cannot be mistaken
   /// for scraped data (Kartend-um69l).
   void appendDetailRow(const QString &label, const QString &value, bool wrap = false,
-                       bool placeholder = false);
+                       bool placeholder = false, bool linkify = false);
   /// Like appendDetailRow but renders the value inside a fixed-height
   /// scroll area that auto-scrolls vertically when the text overflows.
   /// Used for the description field so long synopses don't push the

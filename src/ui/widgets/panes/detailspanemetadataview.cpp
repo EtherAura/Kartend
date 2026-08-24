@@ -11,6 +11,7 @@
 #include "ui_detailspane.h"
 #include "usagestatsstore.h"
 
+#include <cmath>
 #include <QColor>
 #include <QDesktopServices>
 #include <QFont>
@@ -24,6 +25,7 @@
 #include <QSizePolicy>
 #include <QTimer>
 #include <QUrl>
+
 #include <QVBoxLayout>
 
 DetailsPaneMetadataView::DetailsPaneMetadataView(QObject *parent) : QObject(parent) {}
@@ -103,13 +105,12 @@ void DetailsPaneMetadataView::ensureDetailsSection() {
   m_host->m_metadataScroll->setStyleSheet("QScrollArea { background: transparent; border: none; }");
   m_host->m_metadataScroll->setWidget(m_host->m_metadataBackdrop);
   outer->addWidget(m_host->m_metadataScroll, /*stretch=*/1);
-  // A QWidgetItem with no alignment CENTERS a max-constrained child in its
-  // layout cell — the same trap as Kartend-99rcn, one level down. When a
-  // summary render caps the card (capMetadataCardToContent) the leftover
-  // slot height floated the card toward the middle of the pane instead of
-  // keeping it under the description. Pin it; when the cap is lifted the
-  // scroll fills its slot and the alignment is moot.
-  outer->setAlignment(m_host->m_metadataScroll, Qt::AlignTop);
+  // No alignment on purpose (Kartend-6i10t): summary cards fill the whole
+  // slot now (the hug-to-content cap is gone per user decision), and an
+  // ALIGNED layout item stops stretching — the old AlignTop pin, needed
+  // when the cap left slack in the cell, would itself shrink the card to
+  // its size hint. Rows stay top-aligned via the backdrop's trailing
+  // stretch instead.
   // Manual button anchored below the scrolling metadata so it doesn't
   // disturb the gallery→description hand-off at the top of the section.
   outer->addWidget(m_host->m_manualButton);
@@ -197,7 +198,7 @@ void DetailsPaneMetadataView::clearDetailsSection() {
 }
 
 void DetailsPaneMetadataView::appendDetailRow(const QString &label, const QString &value, bool wrap,
-                                              bool placeholder) {
+                                              bool placeholder, bool linkify) {
   if (!m_host || !m_host->m_detailsLayout || value.trimmed().isEmpty()) {
     return;
   }
@@ -213,7 +214,19 @@ void DetailsPaneMetadataView::appendDetailRow(const QString &label, const QStrin
   // detail container's palette so the per-collection accent override
   // wins. (applyBubbleStyles rebuilds the value rows on appearance
   // change, so this snapshot stays fresh.)
-  const QColor accent = m_host->m_detailsContainer->palette().color(QPalette::Highlight);
+  QColor accent = m_host->m_detailsContainer->palette().color(QPalette::Highlight);
+  // Contrast guard (Kartend-6i10t): a per-collection accent close in luma to
+  // the value-pill background made the bold key prefix nearly invisible
+  // (dark-red accent on a dark-red theme's pill). Fall back to the plain
+  // text colour when the pair can't carry a bold label.
+  if (m_host->m_sectionBubbleColor.isValid()) {
+    const auto luma = [](const QColor &c) {
+      return 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue();
+    };
+    if (std::abs(luma(accent) - luma(m_host->m_sectionBubbleColor)) < 60.0) {
+      accent = m_host->m_detailsContainer->palette().color(QPalette::WindowText);
+    }
+  }
   if (placeholder) {
     // Same concrete-hex reasoning as the accent above: PlaceholderText is
     // the palette's own dimmed role, so the stand-in row tracks light and
@@ -223,6 +236,14 @@ void DetailsPaneMetadataView::appendDetailRow(const QString &label, const QStrin
         QStringLiteral("<span style=\"color:%1;\"><b>%2:</b></span> "
                        "<span style=\"color:%3;font-style:italic;\">%4</span>")
             .arg(accent.name(), label.toHtmlEscaped(), dim.name(), value.toHtmlEscaped()));
+  } else if (linkify) {
+    // Website row: the value is an http(s) URL (the parser refuses other
+    // schemes). Anchor colour follows the accent so the link reads as part
+    // of the card, not browser-default blue on every theme.
+    rowLabel->setText(QStringLiteral("<span style=\"color:%1;\"><b>%2:</b></span> "
+                                     "<a href=\"%3\" style=\"color:%1;\">%3</a>")
+                          .arg(accent.name(), label.toHtmlEscaped(), value.toHtmlEscaped()));
+    rowLabel->setOpenExternalLinks(true);
   } else {
     rowLabel->setText(QStringLiteral("<span style=\"color:%1;\"><b>%2:</b></span> %3")
                           .arg(accent.name(), label.toHtmlEscaped(), value.toHtmlEscaped()));

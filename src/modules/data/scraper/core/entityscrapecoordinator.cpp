@@ -46,6 +46,16 @@ makeCollectionDataProvider(const ScraperService::Context &ctx, int collectionInd
       [collections = ctx.collections, idx = collectionIndex]() -> const CollectionConfig * {
         if (!collections || idx < 0 || idx >= collections->size()) return nullptr;
         return &(*collections)[idx];
+      },
+      // Shell = some other collection names this one as parent. Shells are
+      // named after companies, and the picker prefers company vocabulary
+      // for them (Kartend-5b5r1 follow-up).
+      [collections = ctx.collections, idx = collectionIndex]() -> bool {
+        if (!collections) return false;
+        for (const CollectionConfig &c : *collections) {
+          if (c.parentCollectionIndex == idx) return true;
+        }
+        return false;
       });
 }
 } // namespace
@@ -221,10 +231,22 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
   // _shared art dir (MediaScope::Platform routing), then wire it into the
   // collection's config. Async fan-out mirrors BatchScrapeRunner's media
   // aggregator; the generation token rejects callbacks from a cancelled run.
-  const Scraper::RescrapeMode rescrapeMode =
+  Scraper::RescrapeMode rescrapeMode =
       m_svc->m_ctx.generalSettings ? static_cast<Scraper::RescrapeMode>(
                                          m_svc->m_ctx.generalSettings->scraper.options.rescrapeMode)
                                    : Scraper::RescrapeMode::Overwrite;
+  // Kartend-5b5r1 field report: entity art files are region-less
+  // (platform_<id>.png), so under FillMissing a changed region preference
+  // could never take effect — the stale variant was "present" and kept
+  // forever (a Dreamcast stuck on the blue PAL wheel after switching to
+  // us). Entity art therefore upgrades FillMissing to UpdateChanged: the
+  // bytes are already fetched by this point, the byte-compare writes only
+  // when the variant actually differs, and it is a handful of files per
+  // system — the per-game grind where FillMissing's skip saves real quota
+  // is untouched.
+  if (rescrapeMode == Scraper::RescrapeMode::FillMissing) {
+    rescrapeMode = Scraper::RescrapeMode::UpdateChanged;
+  }
   const QString artworkDir = job.artworkDir;
   const int collectionIndex = job.collectionIndex;
   // writeMediaFiles short-circuits on an empty baseName; platform assets are
@@ -514,18 +536,35 @@ QString EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectio
   const auto scrapeOwned = [](const QString &current) {
     return current.isEmpty() || current.contains(QStringLiteral("/_shared/"));
   };
+  // Scope precedence (Kartend-5b5r1 field report: the collection-data job
+  // runs AFTER the platform job and its Wikidata logo overwrote the SS
+  // wheel as the SNES icon). platform_-scoped art comes from the curated
+  // per-system catalog; collection_-scoped art from a name search — the
+  // fallback must not replace the better source, while a platform asset may
+  // upgrade a previously collection-wired slot, and same-scope rescrapes
+  // refresh freely.
+  const auto scopeRank = [](const QString &path) {
+    if (!path.contains(QStringLiteral("/_shared/"))) return 0; // empty / user art
+    const QString file = QFileInfo(path).fileName();
+    if (file.startsWith(QStringLiteral("platform_"))) return 2;
+    if (file.startsWith(QStringLiteral("collection_"))) return 1;
+    return 1;
+  };
+  const auto writable = [&](const QString &current, const QString &incoming) {
+    return scrapeOwned(current) && scopeRank(incoming) >= scopeRank(current);
+  };
   bool changed = false;
   if (!logo.isEmpty()) {
-    if (scrapeOwned(cfg.background.headerLogoImage)) {
+    if (writable(cfg.background.headerLogoImage, logo)) {
       cfg.background.headerLogoImage = logo;
       changed = true;
     }
-    if (scrapeOwned(cfg.collectionIcon)) {
+    if (writable(cfg.collectionIcon, logo)) {
       cfg.collectionIcon = logo;
       changed = true;
     }
   }
-  if (!background.isEmpty() && scrapeOwned(cfg.background.backgroundImage)) {
+  if (!background.isEmpty() && writable(cfg.background.backgroundImage, background)) {
     cfg.background.backgroundImage = background;
     changed = true;
   }

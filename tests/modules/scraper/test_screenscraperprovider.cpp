@@ -73,7 +73,9 @@ private slots:
   void fetchEntity_platformAssetShapeRolesAndScopeKey();
   void fetchEntity_platformCarriesCatalogTextFields();
   void fetchEntity_catalogSkipsTypesTheSystemDoesNotHave();
+  void fetchEntity_catalogEmitsEveryStillImageTypeRoleNone();
   void fetchEntity_catalogHonorsPreferredRegion();
+  void fetchEntity_worldPreferenceDefersToMachineLocale();
   void fetchEntity_absentIdInNonEmptyCatalogIsNotFound();
   void fetchEntity_nonPlatformTypeIsInvalidArgument();
   // Kartend-ckepd.6: empty-identity autodetect via the collection accessor.
@@ -491,6 +493,108 @@ void TestScreenScraperProvider::fetchEntity_platformCarriesCatalogTextFields() {
   QCOMPARE(item.customFields.value(QLatin1String(EntityMetadataStore::kFieldReleaseDate)),
            QStringLiteral("1988\u20131997"));
   QCOMPARE(item.customFields.value(QStringLiteral("systemType")), QStringLiteral("Console"));
+}
+
+void TestScreenScraperProvider::fetchEntity_catalogEmitsEveryStillImageTypeRoleNone() {
+  // Kartend-5b5r1 (user decision): a platform scrape pulls EVERY still image
+  // the catalog advertises. Types beyond the config-wired table ride along
+  // with role None; video rows and path-unsafe type tokens are skipped.
+  QStandardPaths::setTestModeEnabled(true);
+  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
+  ScreenScraperSystems::System sys;
+  sys.id = 42;
+  sys.displayName = QStringLiteral("Test Platform");
+  const auto media = [](const char *type, const char *token, bool video = false) {
+    ScreenScraperSystems::Media m;
+    m.type = QLatin1String(type);
+    m.token = QLatin1String(token);
+    m.region = QStringLiteral("wor");
+    m.video = video;
+    return m;
+  };
+  sys.media = {media("wheel", "wheel(wor)"), media("icon", "icon(wor)"),
+               media("bezel-16-9", "bezel-16-9(wor)"), media("video", "video", /*video=*/true),
+               media("Bad_Type!", "bad(wor)")};
+  QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
+
+  GeneralSettings settings;
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 ScreenScraperProvider::CollectionAccessor{});
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform;
+  target.identity = QStringLiteral("42");
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY(result.has_value());
+  QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
+  QStringList types;
+  for (const auto &asset : result->value().media) types.append(asset.type);
+  QVERIFY(types.contains(QStringLiteral("wheel"))); // config-wired table entry
+  QVERIFY(types.contains(QStringLiteral("icon")));
+  QVERIFY(types.contains(QStringLiteral("bezel-16-9")));
+  QVERIFY(!types.contains(QStringLiteral("video")));
+  QVERIFY(!types.contains(QStringLiteral("Bad_Type!")));
+  for (const auto &asset : result->value().media) {
+    if (asset.type == QLatin1String("icon") || asset.type == QLatin1String("bezel-16-9")) {
+      QCOMPARE(asset.entityRole, Scraper::EntityArtRole::None);
+      QCOMPARE(asset.scopeKey, QStringLiteral("42"));
+    }
+  }
+  QVERIFY(QFile::remove(cachePath));
+}
+
+void TestScreenScraperProvider::fetchEntity_worldPreferenceDefersToMachineLocale() {
+  // Kartend-5b5r1 field report: with the generic "World" region default the
+  // Dreamcast wheel resolved to the blue PAL "wor" variant on a US machine.
+  // A preference of "wor" (or none) now defers to the machine locale before
+  // the world tag; an EXPLICIT region still wins outright.
+  const QLocale before;
+  QLocale::setDefault(QLocale(QLocale::English, QLocale::UnitedStates));
+  QStandardPaths::setTestModeEnabled(true);
+  const QString cachePath = ScreenScraperSystemCache::defaultCachePath();
+  ScreenScraperSystems::System sys;
+  sys.id = 23;
+  sys.displayName = QStringLiteral("Dreamcast");
+  const auto media = [](const char *type, const char *token, const char *region) {
+    ScreenScraperSystems::Media m;
+    m.type = QLatin1String(type);
+    m.token = QLatin1String(token);
+    m.region = QLatin1String(region);
+    return m;
+  };
+  sys.media = {media("wheel", "wheel(wor)", "wor"), media("wheel", "wheel(us)", "us")};
+  QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
+
+  GeneralSettings settings;
+  settings.scraper.options.preferredScraperRegion = QStringLiteral("wor");
+  auto &blob = settings.scraper.credentials[QStringLiteral("screenscraper")];
+  blob.insert(QStringLiteral("dev_id"), QStringLiteral("dev123"));
+  blob.insert(QStringLiteral("dev_password"), QStringLiteral("devpw"));
+  ScreenScraperProvider provider([&settings]() { return &settings; },
+                                 ScreenScraperProvider::CollectionAccessor{});
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Platform;
+  target.identity = QStringLiteral("23");
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QLocale::setDefault(before);
+  QVERIFY(result.has_value());
+  QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
+  QString wheelUrl;
+  for (const auto &asset : result->value().media) {
+    if (asset.type == QLatin1String("wheel")) wheelUrl = asset.url.toString();
+  }
+  QVERIFY2(wheelUrl.contains(QStringLiteral("wheel(us)")) ||
+               wheelUrl.contains(QStringLiteral("wheel%28us%29")),
+           qPrintable(QStringLiteral("expected the us wheel, got %1").arg(wheelUrl)));
+  QVERIFY(QFile::remove(cachePath));
 }
 
 void TestScreenScraperProvider::fetchEntity_platformAssetShapeRolesAndScopeKey() {

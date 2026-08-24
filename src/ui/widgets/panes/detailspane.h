@@ -187,6 +187,9 @@ public:
     /// itself shows. Empty when nothing resolves; the item-styled overview
     /// then simply omits the artwork box (Kartend-um69l).
     QString artworkPath;
+    /// Kartend-6i10t: recursive on-disk byte total (same traversal as
+    /// itemCount); -1 = unknown (DB absent or fake), row hidden then.
+    qint64 totalSizeBytes = -1;
     /// Kartend-445su: textual metadata the entity scraper stored for this
     /// collection (entity_metadata, newest row, collection-typed rows
     /// preferred). Empty when the collection has never been entity-scraped;
@@ -194,6 +197,22 @@ public:
     QString scrapedDescription;
     QString scrapedManufacturer;
     QString scrapedReleaseDate;
+    // Kartend-6i10t: the wider fact set the Wikidata data hop resolves.
+    QString scrapedCountry;
+    QString scrapedDeveloper;
+    QString scrapedPublisher;
+    QString scrapedGenre;
+    QString scrapedWebsite; ///< http(s) URL — rendered as a clickable link.
+    /// Kartend-5b5r1: the media-type spec sheet (label → value, in display
+    /// order), built by the manager from entity_metadata custom fields via
+    /// its per-media-type registry — games platforms get CPU/GPU/units
+    /// sold/generation/predecessor/successor. Extensible per type without
+    /// touching this struct again.
+    QList<QPair<QString, QString>> scrapedSpecs;
+    /// Kartend-5b5r1: every scraped system/collection image found in the
+    /// collection's shared art (label = the _shared/<type> directory name).
+    /// Feeds the same gallery strip items get; empty hides it.
+    QList<DetailsPaneGalleryEntry> galleryEntries;
     [[nodiscard]] bool isValid() const { return !name.trimmed().isEmpty(); }
   };
   /// Caches the collection summary used when no item is selected. The
@@ -213,6 +232,11 @@ public:
   /// current collection. Cleared by any item selection (setMetadata), by a
   /// collection switch (setCollectionSummary), or explicitly.
   void setSelectionCollectionSummary(const CollectionSummary &summary);
+  /// Kartend-6i10t: push / clear the Collection tab's owner summary (the
+  /// selected ITEM's owning collection). Independent of the Item area's
+  /// subcollection summary above.
+  void setOwnerCollectionSummary(const CollectionSummary &summary);
+  void clearOwnerCollectionSummary();
   void clearSelectionCollectionSummary();
   /// Test-only readback, mirroring collectionSummaryForTesting.
   [[nodiscard]] const CollectionSummary &selectionSummaryForTesting() const {
@@ -485,6 +509,11 @@ private:
   /// paintEvent doesn't need to reach back into the manager / model layer.
   DetailsPaneBackgroundType m_bgType = DetailsPaneBackgroundType::Color;
   QColor m_bgColor;
+  /// Kartend-6i10t: the resolved section-bubble colour applyAppearance last
+  /// applied — appendDetailRow checks the label accent against it and falls
+  /// back to windowtext when the two are too close to read (same-hue themes
+  /// made "Description:" nearly invisible). Invalid = bubble disabled.
+  QColor m_sectionBubbleColor;
   QPixmap m_bgImage;
   // Supersedes in-flight async sidebar-background decodes so a rapid
   // collection switch's slow decode can't overwrite the current one.
@@ -653,6 +682,13 @@ private:
   /// selected (see setSelectionCollectionSummary). Takes precedence over
   /// m_collectionSummary in the Item area's no-item overview.
   CollectionSummary m_selectionSummary;
+  /// Kartend-6i10t (user decision 2026-08-23): the Collection tab's OWN
+  /// selection channel — the owning collection of the currently displayed
+  /// ITEM, pushed by the manager's owner resolution. Kept apart from
+  /// m_selectionSummary so a selected subcollection tile can show ITSELF in
+  /// the Item area while the Collection tab shows the tile's PARENT (the
+  /// viewed collection, via the plain fallback). Invalid = fall back.
+  CollectionSummary m_ownerSummary;
   bool m_hasItemDisplayed = false;
   /// Last state requested through setArtworkSectionVisible — the per-tab
   /// authority on whether the artwork tile may show. The async artwork
@@ -685,11 +721,9 @@ private:
   /// m_selectionSummary when a subcollection is selected, else
   /// m_collectionSummary. Defined in detailspanesummary.cpp.
   void renderItemAreaCollectionOverview();
-  /// Caps m_metadataScroll to the summary card's wrap-aware content height
-  /// so a short card hugs its rows instead of stretching the bubble to the
-  /// full sidebar (shared by both summary renderers; clearDetailsSection
-  /// lifts the cap for the Item tab's per-item path).
-  void capMetadataCardToContent();
+  /// Kartend-6i10t: File-tab surface while a collection (not an item) is
+  /// what's selected — directories, item count, size on disk, last scan.
+  void renderCollectionFileOverview();
 };
 
 #endif

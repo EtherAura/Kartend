@@ -20,6 +20,7 @@ private slots:
   void roundedCornersAreTransparent();
   void squareCornersAreOpaque();
   void letterboxUsesBackgroundColor();
+  void wideWordmarkArtGetsSideMargins();
 };
 
 void TestArtworkCompose::cardHasPhysicalTargetSizeAndDpr() {
@@ -77,6 +78,39 @@ void TestArtworkCompose::letterboxUsesBackgroundColor() {
   // A pixel in the top letterbox band is the background; the center is artwork.
   QCOMPARE(card.pixelColor(25, 2), QColor(Qt::blue));
   QCOMPARE(card.pixelColor(25, 25), QColor(Qt::red));
+}
+
+void TestArtworkCompose::wideWordmarkArtGetsSideMargins() {
+  // Kartend-5b5r1 user report ("SNES grid icon too wide"): art wider than
+  // 2.5:1 — scraped platform wheels — fits into a narrower box so the
+  // wordmark gets side margins instead of spanning edge-to-edge. Ordinary
+  // aspect art keeps the full-width fit.
+  QImage wordmark(600, 100, QImage::Format_ARGB32); // 6:1
+  wordmark.fill(Qt::red);
+  const QImage card = ArtworkUtils::composeArtworkCard(wordmark, 300, 400, 1.0, 0, Qt::black);
+  QCOMPARE(card.size(), QSize(300, 400));
+  // The red band must be inset: leftmost column at mid-height stays
+  // background-black, and the band is at most 72% of the card wide.
+  const int midY = 200;
+  QCOMPARE(card.pixelColor(2, midY), QColor(Qt::black));
+  int bandLeft = -1;
+  int bandRight = -1;
+  for (int x = 0; x < card.width(); ++x) {
+    if (card.pixelColor(x, midY) == QColor(Qt::red)) {
+      if (bandLeft < 0) bandLeft = x;
+      bandRight = x;
+    }
+  }
+  QVERIFY(bandLeft > 0);
+  QVERIFY2(bandRight - bandLeft + 1 <= 300 * 0.72 + 2,
+           qPrintable(QStringLiteral("band %1..%2").arg(bandLeft).arg(bandRight)));
+
+  // A box cover (0.7:1) still fills the full width.
+  QImage cover(280, 400, QImage::Format_ARGB32);
+  cover.fill(Qt::green);
+  const QImage coverCard = ArtworkUtils::composeArtworkCard(cover, 300, 400, 1.0, 0, Qt::black);
+  bool touchesNearEdges = coverCard.pixelColor(15, 200) == QColor(Qt::green);
+  QVERIFY(touchesNearEdges);
 }
 
 QTEST_MAIN(TestArtworkCompose)

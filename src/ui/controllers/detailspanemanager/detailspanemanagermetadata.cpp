@@ -180,6 +180,26 @@ void DetailsPaneManager::performSidebarMetadataUpdate(const QString &filePath,
     QElapsedTimer perfOwner;
     if (perfTrace) perfOwner.start();
     owningIndex = db->getCollectionIndexForFile(filePath);
+    if (owningIndex < 0 && m_collections) {
+      // Config-derived fallback (Kartend-6i10t user report): when the file
+      // map cannot place the path, derive the owner from which collection's
+      // expanded media directory contains it. Longest prefix wins so a
+      // subcollection's directory beats an enclosing parent's — this is
+      // what keeps the Collection tab on the item's PARENT collection
+      // rather than the viewed shell.
+      int bestLen = -1;
+      for (int i = 0; i < m_collections->size(); ++i) {
+        const CollectionConfig &c = (*m_collections)[i];
+        const QString mediaDir = PathUtils::validateAndExpandPath(c.mediaDirectory, c.name);
+        if (mediaDir.isEmpty()) continue;
+        const QString prefix =
+            mediaDir.endsWith(QLatin1Char('/')) ? mediaDir : mediaDir + QLatin1Char('/');
+        if (filePath.startsWith(prefix) && prefix.size() > bestLen) {
+          bestLen = static_cast<int>(prefix.size());
+          owningIndex = i;
+        }
+      }
+    }
     if (perfTrace) perfOwnerMs = perfOwner.elapsed();
     if (owningIndex >= 0 && m_collections && owningIndex < m_collections->size()) {
       const CollectionConfig &owning = (*m_collections)[owningIndex];
@@ -264,7 +284,7 @@ void DetailsPaneManager::performSidebarMetadataUpdate(const QString &filePath,
   // case keeps the plain fallback path (and its cache semantics).
   if (owningIndex >= 0 && owningIndex != m_currentCollectionIndex && m_collections &&
       owningIndex < m_collections->size()) {
-    m_DetailsPane->setSelectionCollectionSummary(buildCollectionSummary(owningIndex));
+    m_DetailsPane->setOwnerCollectionSummary(buildCollectionSummary(owningIndex));
   }
 
   // Extended metadata + manual file.

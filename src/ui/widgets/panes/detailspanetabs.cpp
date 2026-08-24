@@ -118,12 +118,24 @@ void DetailsPane::applyTabVisibility() {
   case DetailsPaneTab::File:
     // Pure filesystem view — name + path/size/modified/extension.
     // No artwork, no video, no gallery, no extended metadata.
-    ui->titleLabel->setText(tr("File Information"));
     if (ui->editMetadataButton) ui->editMetadataButton->setVisible(false);
+    // Kartend-6i10t: with no item on display the tab tells the COLLECTION's
+    // on-disk story (directories, counts, size) instead of a bare
+    // "No item selected" — mirroring the other tabs' collection surfaces.
+    if (!m_hasItemDisplayed && (m_selectionSummary.isValid() || m_collectionSummary.isValid())) {
+      renderCollectionFileOverview();
+      break;
+    }
+    ui->titleLabel->setText(tr("File Information"));
     ui->itemNameValue->setText(m_currentItemName.isEmpty() ? tr("No item selected")
                                                            : m_currentItemName);
     setArtworkSectionVisible(false);
     setFileInfoRowsVisible(true);
+    // The tab title above already reads "File Information" — the section
+    // header is a duplicate here. It stays for the Item tab's skeleton,
+    // where it separates the file rows from the metadata card
+    // (Kartend-6i10t user report).
+    ui->fileInfoTitle->setVisible(false);
     // Re-apply the cached async stat result: if the worker resolved while this
     // tab was hidden, the size/modified labels would otherwise be stuck on the
     // '…' placeholder until the next selection (Kartend-kujy5).

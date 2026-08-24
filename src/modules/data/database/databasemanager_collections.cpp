@@ -54,6 +54,43 @@ QString DatabaseManager::resolveRelativeFilePath(const QString &rawFileName,
 
 // ─── Counts ───────────────────────────────────────────────────────────────────
 
+qint64 DatabaseManager::sumFileSizesByUuid(const QString &collectionUuid) const {
+  if (!m_db.isOpen()) {
+    return 0;
+  }
+  QSqlQuery sizeQuery(m_db);
+  sizeQuery.prepare("SELECT COALESCE(SUM(file_size),0) FROM items WHERE collection_uuid=?");
+  sizeQuery.addBindValue(collectionUuid);
+  if (!sizeQuery.exec() || !sizeQuery.next()) {
+    return 0;
+  }
+  return sizeQuery.value(0).toLongLong();
+}
+
+qint64 DatabaseManager::sumCollectionFileSizesRecursive(
+    int collectionIndex, const QList<CollectionConfig> &allCollections) const {
+  // Mirrors countCollectionRecursive's traversal exactly so the Items and
+  // Size rows in the sidebar describe the same set of files (Kartend-6i10t).
+  if (!CollectionUtils::isValidIndex(collectionIndex, &allCollections)) {
+    return 0;
+  }
+  const QString expandedMediaDir = PathUtils::validateAndExpandPath(
+      allCollections[collectionIndex].mediaDirectory, allCollections[collectionIndex].name);
+  const QString uuid = CollectionUtils::computeCollectionUuid(allCollections[collectionIndex].name,
+                                                              expandedMediaDir);
+  qint64 total = sumFileSizesByUuid(uuid);
+  const QList<int> descendants =
+      CollectionUtils::collectDescendantIndices(collectionIndex, allCollections);
+  for (int descendantIndex : descendants) {
+    const QString descExpandedMediaDir = PathUtils::validateAndExpandPath(
+        allCollections[descendantIndex].mediaDirectory, allCollections[descendantIndex].name);
+    const QString descendantUuid = CollectionUtils::computeCollectionUuid(
+        allCollections[descendantIndex].name, descExpandedMediaDir);
+    total += sumFileSizesByUuid(descendantUuid);
+  }
+  return total;
+}
+
 qint64 DatabaseManager::countCollectionByUuid(const QString &collectionUuid) const {
   if (!m_db.isOpen()) {
     return 0;

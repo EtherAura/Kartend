@@ -72,6 +72,17 @@ public:
   [[nodiscard]] virtual qint64
   countCollectionRecursive(int collectionIndex,
                            const QList<CollectionConfig> &allCollections) const = 0;
+  /// Kartend-6i10t: total bytes of the collection's items (recursive over
+  /// subcollections, same traversal as countCollectionRecursive). Defaulted
+  /// to -1 (= unknown) so widget-only test fakes need not stub it; the
+  /// sidebar hides its Size row on -1.
+  [[nodiscard]] virtual qint64
+  sumCollectionFileSizesRecursive(int collectionIndex,
+                                  const QList<CollectionConfig> &allCollections) const {
+    (void)collectionIndex;
+    (void)allCollections;
+    return -1;
+  }
 
   [[nodiscard]] virtual QDateTime
   loadCollectionLastScanned(const QString &collectionUuid) const = 0;

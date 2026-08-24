@@ -71,6 +71,9 @@ private slots:
   void testRecordItemLaunch_survivesWriteLockOutlastingInlineLadder();
   void testRecordItemLaunch_deferredWriteKeepsItsLaunchTimeOrder();
 
+  // Sidebar size aggregate (Kartend-6i10t) ----------------------------------
+  void testSumCollectionFileSizesRecursive_addsDescendants();
+
   // Manual artwork links write through to items.artwork_path (Kartend-jkty9) --
   void testSaveItemArtwork_writesCoverPathThroughImmediately();
   void testSaveItemArtwork_staleLinkLeavesArtworkPathUntouched();
@@ -341,6 +344,50 @@ void TestDatabaseManager::testMainConnectionUsesWalAndNormalSync() {
   QSqlQuery sync(main);
   QVERIFY(sync.exec(QStringLiteral("PRAGMA synchronous")) && sync.next());
   QCOMPARE(sync.value(0).toInt(), 1); // 1 == NORMAL
+}
+
+void TestDatabaseManager::testSumCollectionFileSizesRecursive_addsDescendants() {
+  // Parent + subcollection each own items; the recursive sum mirrors
+  // countCollectionRecursive's traversal, so a shell's Size row describes
+  // the same file set as its Items row.
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections;
+  CollectionConfig parent;
+  parent.name = QStringLiteral("Shelf");
+  parent.mediaDirectory = tmp.path() + QStringLiteral("/shelf");
+  QVERIFY(QDir().mkpath(parent.mediaDirectory));
+  CollectionConfig child;
+  child.name = QStringLiteral("Corner");
+  child.mediaDirectory = tmp.path() + QStringLiteral("/corner");
+  QVERIFY(QDir().mkpath(child.mediaDirectory));
+  child.parentCollectionIndex = 0;
+  child.isSubcollection = true;
+  collections = {parent, child};
+
+  const QString parentUuid =
+      CollectionUtils::computeCollectionUuid(parent.name, parent.mediaDirectory);
+  const QString childUuid =
+      CollectionUtils::computeCollectionUuid(child.name, child.mediaDirectory);
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QVERIFY(runSql(insp, "DELETE FROM items"));
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO items (collection_id, path, name, "
+                                      "last_modified, file_size, collection_uuid) VALUES "
+                                      "(1, '/m/a.bin', 'a', 'x', 1000, '%1'), "
+                                      "(1, '/m/b.bin', 'b', 'x', 250, '%1'), "
+                                      "(2, '/m/c.bin', 'c', 'x', 4096, '%2')")
+                           .arg(parentUuid, childUuid)));
+
+  QCOMPARE(db.sumCollectionFileSizesRecursive(0, collections), qint64(1000 + 250 + 4096));
+  QCOMPARE(db.sumCollectionFileSizesRecursive(1, collections), qint64(4096));
+  QCOMPARE(db.sumCollectionFileSizesRecursive(7, collections), qint64(0)); // out of range
 }
 
 void TestDatabaseManager::testMigrateCollectionUuid_movesItemAndCollectionRows() {

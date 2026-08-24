@@ -25,6 +25,23 @@ namespace EntityMetadataStore {
 /// `customFields`, same serialization helpers as ItemMetadataStore's.
 inline constexpr char kFieldManufacturer[] = "manufacturer";
 inline constexpr char kFieldReleaseDate[] = "releaseDate";
+// Kartend-6i10t: the wider fact set the Wikidata data hop resolves for
+// collections. All optional; providers set what the entity actually has.
+inline constexpr char kFieldCountry[] = "country";
+inline constexpr char kFieldWebsite[] = "website";
+inline constexpr char kFieldDeveloper[] = "developer";
+inline constexpr char kFieldPublisher[] = "publisher";
+inline constexpr char kFieldGenre[] = "genre";
+// Kartend-5b5r1: the game-platform spec sheet (Wikidata property ids
+// verified live 2026-08-23: P880/P2560/P2664/P361/P155/P156). Memory and
+// display resolution are NOT structured claims on console entities — the
+// registry leaves room if another source appears.
+inline constexpr char kFieldCpu[] = "cpu";
+inline constexpr char kFieldGpu[] = "gpu";
+inline constexpr char kFieldUnitsSold[] = "unitsSold";
+inline constexpr char kFieldGeneration[] = "generation";
+inline constexpr char kFieldPredecessor[] = "predecessor";
+inline constexpr char kFieldSuccessor[] = "successor";
 
 /// Canonical entity_type column values. Lowercase on purpose — the column
 /// is a wire format (rows survive app upgrades), so the scraper maps its

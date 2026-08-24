@@ -211,6 +211,9 @@ void DetailsPane::applyAppearance(const CollectionConfig &collection, bool reloa
                                       collection.sidebar.sidebarHeaderBgOpacity, headerFallback);
   const QColor section = composeBubble(collection.sidebar.sidebarSectionBgColor,
                                        collection.sidebar.sidebarSectionBgOpacity, sectionFallback);
+  // Remember the pill colour for appendDetailRow's accent-contrast guard
+  // (invalid = bubble disabled, guard inert). Kartend-6i10t.
+  m_sectionBubbleColor = section.alpha() == 0 ? QColor() : section;
   applyBubbleStyles(header.alpha() == 0 ? QString() : header.name(QColor::HexArgb),
                     section.alpha() == 0 ? QString() : section.name(QColor::HexArgb));
 

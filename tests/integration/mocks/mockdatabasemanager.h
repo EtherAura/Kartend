@@ -40,7 +40,12 @@ public:
 
   void invalidateCollectionCache(const QString &) override {}
 
-  [[nodiscard]] int getCollectionIndexForFile(const QString &) const override { return -1; }
+  /// Kartend-6i10t: settable so aggregated-view tests can model an item
+  /// owned by a child collection (the real impl resolves via the file map).
+  int collectionIndexForFileResult = -1;
+  [[nodiscard]] int getCollectionIndexForFile(const QString &) const override {
+    return collectionIndexForFileResult;
+  }
   [[nodiscard]] QString findArtworkDirectoryForFile(const QString &) const override { return {}; }
 
   [[nodiscard]] QString resolveFilePath(const QString &rawEntry,

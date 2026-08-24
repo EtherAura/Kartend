@@ -31,8 +31,19 @@ QImage composeArtworkCard(const QImage &source, int targetWidthLogical, int targ
   // targets the physical card size directly.
   QImage sourceNoDpr = source;
   sourceNoDpr.setDevicePixelRatio(1.0);
+  // Wordmark-shaped art (very wide aspect — scraped platform wheels like
+  // the SNES logo run past 5:1) reads as oversized when it spans the card
+  // edge-to-edge; give it side margins by fitting into a narrower box.
+  // Box covers (~0.7:1), screenshots (16:9 = 1.78) and photos never trip
+  // the threshold, so ordinary item art is untouched (Kartend-5b5r1 user
+  // report: "SNES grid icon too wide").
+  int fitW = physicalW;
+  if (sourceNoDpr.height() > 0 &&
+      static_cast<qreal>(sourceNoDpr.width()) / sourceNoDpr.height() > 2.5) {
+    fitW = qRound(physicalW * 0.72);
+  }
   const QImage scaledArtwork =
-      sourceNoDpr.scaled(physicalW, physicalH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+      sourceNoDpr.scaled(fitW, physicalH, Qt::KeepAspectRatio, Qt::SmoothTransformation);
 
   // Logo-like art that would vanish against the card colour gets a hairline
   // outline first (no-op for photos/covers — see the header contract).

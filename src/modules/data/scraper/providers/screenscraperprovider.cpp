@@ -4,6 +4,8 @@
 // manual override is set. Stage 1: filename-based ROM identification
 // only — hash- and archive-based ID are separate follow-up issues.
 #include "screenscraperprovider.h"
+#include <QRegularExpression>
+#include <QSet>
 
 #include "entitymetadata.h"
 
@@ -107,16 +109,54 @@ constexpr PlatformMediaType kPlatformMediaTypes[] = {
     {"background", "background", "Console background", Scraper::EntityArtRole::Background, 2},
 };
 
+/// The machine locale's ScreenScraper region token, or empty when the
+/// territory maps to nothing specific. Used as the platform-art tiebreak
+/// when the user's configured region is the generic "World" default
+/// (Kartend-5b5r1 field report: the Dreamcast "wor" wheel is the blue PAL
+/// swirl — an en_US machine expects the orange US/JP branding).
+QString localePlatformRegion() {
+  switch (QLocale().territory()) {
+  case QLocale::UnitedStates:
+  case QLocale::Canada:
+    return QStringLiteral("us");
+  case QLocale::Japan:
+    return QStringLiteral("jp");
+  case QLocale::UnitedKingdom:
+    return QStringLiteral("uk");
+  case QLocale::France:
+    return QStringLiteral("fr");
+  case QLocale::Germany:
+    return QStringLiteral("de");
+  case QLocale::Italy:
+    return QStringLiteral("it");
+  case QLocale::Spain:
+    return QStringLiteral("es");
+  case QLocale::Australia:
+  case QLocale::NewZealand:
+    return QStringLiteral("au");
+  default:
+    // Everyone else (Europe included) falls through to the "wor" tag,
+    // which carries the PAL branding on ScreenScraper — the right default
+    // there anyway.
+    break;
+  }
+  return {};
+}
+
 /// Region ranking for PLATFORM art. Deliberately much simpler than the
 /// parser's per-ROM chain (buildRegionPreferences): a platform is not a ROM, so
-/// there is no item region or filename marker to honour — it collapses to "the
-/// user's configured region, then SS's world tag, then whatever exists". Lower
+/// there is no item region or filename marker to honour. The chain: an
+/// EXPLICIT user region (anything but the generic "wor" default) first, the
+/// machine locale's region next, SS's world tag, then whatever exists. Lower
 /// is better; kNoRegionMatch keeps unmatched variants selectable but last.
 constexpr int kNoRegionMatch = 100;
-int platformRegionRank(const QString &region, const QString &preferredRegion) {
+int platformRegionRank(const QString &region, const QString &preferredRegion,
+                       const QString &localeRegion) {
   const QString r = region.trimmed().toLower();
-  if (!preferredRegion.isEmpty() && r == preferredRegion.trimmed().toLower()) return 0;
-  if (r == QLatin1String("wor")) return 1;
+  const QString preferred = preferredRegion.trimmed().toLower();
+  if (!preferred.isEmpty() && preferred != QLatin1String("wor") && r == preferred) return 0;
+  if (!localeRegion.isEmpty() && r == localeRegion) return 1;
+  if (r == QLatin1String("wor")) return 2;
   return kNoRegionMatch;
 }
 
@@ -127,7 +167,8 @@ int platformRegionRank(const QString &region, const QString &preferredRegion) {
 /// requests a full-library platform scrape used to fire.
 const ScreenScraperSystems::Media *bestCatalogMedia(const ScreenScraperSystems::System &sys,
                                                     const QString &type,
-                                                    const QString &preferredRegion) {
+                                                    const QString &preferredRegion,
+                                                    const QString &localeRegion) {
   const ScreenScraperSystems::Media *best = nullptr;
   int bestRank = std::numeric_limits<int>::max();
   for (const auto &m : sys.media) {
@@ -135,7 +176,7 @@ const ScreenScraperSystems::Media *bestCatalogMedia(const ScreenScraperSystems::
     // Every type in kPlatformMediaTypes is a still image; a video-endpoint row
     // would need mediaVideoSysteme.php, which this URL builder does not speak.
     if (m.video || m.token.isEmpty()) continue;
-    const int rank = platformRegionRank(m.region, preferredRegion);
+    const int rank = platformRegionRank(m.region, preferredRegion, localeRegion);
     if (rank < bestRank) {
       best = &m;
       bestRank = rank;
@@ -363,11 +404,12 @@ void ScreenScraperProvider::fetchEntity(const Scraper::EntityScrapeTarget &targe
             m_settingsAccessor && m_settingsAccessor()
                 ? m_settingsAccessor()->scraper.options.preferredScraperRegion
                 : QString();
+        const QString localeRegion = localePlatformRegion();
         for (const auto &mt : kPlatformMediaTypes) {
           const QString apiToken = QString::fromLatin1(mt.apiToken);
           QString mediaToken;
           if (haveCatalog) {
-            const auto *entry = bestCatalogMedia(*sys, apiToken, preferredRegion);
+            const auto *entry = bestCatalogMedia(*sys, apiToken, preferredRegion, localeRegion);
             if (!entry) continue; // this system has no such art — don't spend a request
             mediaToken = entry->token;
           } else {
@@ -387,6 +429,39 @@ void ScreenScraperProvider::fetchEntity(const Scraper::EntityScrapeTarget &targe
           asset.scope = Scraper::MediaScope::Platform;
           asset.scopeKey = QString::number(systemeid);
           item.media.append(asset);
+        }
+        // Kartend-5b5r1 (user decision 2026-08-23): pull EVERY still image
+        // the system's catalog advertises, not just the config-wired roles.
+        // Derived from the catalog rather than a hardcoded table so new SS
+        // media types arrive for free; role None routes them to
+        // _shared/<type>/ with no config slot. Catalog-gated, so each asset
+        // is one media-host request for art that is known to exist. The
+        // type token becomes a path component — allowlist it.
+        if (haveCatalog) {
+          static const QRegularExpression safeToken(QStringLiteral("^[a-z0-9-]+$"));
+          QSet<QString> covered;
+          for (const auto &mt : kPlatformMediaTypes) {
+            covered.insert(QString::fromLatin1(mt.apiToken));
+          }
+          QSet<QString> emitted;
+          for (const auto &m : sys->media) {
+            if (m.video || m.token.isEmpty()) continue;
+            if (covered.contains(m.type) || emitted.contains(m.type)) continue;
+            if (!safeToken.match(m.type).hasMatch()) continue;
+            const auto *entry = bestCatalogMedia(*sys, m.type, preferredRegion, localeRegion);
+            if (!entry) continue;
+            emitted.insert(m.type);
+            Scraper::MediaAsset extra;
+            extra.type = m.type;
+            extra.label = m.type;
+            extra.entityRole = Scraper::EntityArtRole::None;
+            extra.entityRolePriority = 0;
+            extra.url =
+                ScreenScraperUrls::buildSystemeMediaUrl(creds, systemeid, entry->token, hasUser);
+            extra.scope = Scraper::MediaScope::Platform;
+            extra.scopeKey = QString::number(systemeid);
+            item.media.append(extra);
+          }
         }
         if (callback) callback(item);
       });

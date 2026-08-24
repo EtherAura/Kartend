@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **System scrapes now bring home the whole press kit.** A platform scrape
+  pulls every still image its ScreenScraper catalog advertises — wheels,
+  icons, bezels, photos, whatever exists — plus the console photograph
+  from Wikimedia Commons, all landing in the collection's shared art
+  (config-wired icon/logo/background picks are unchanged). The details
+  pane shows them: the collection views grow the same thumbnail gallery
+  items have, on both the overview and the Collection tab, with clicks
+  swapping the big preview. Game platforms also gain a scraped spec
+  sheet — CPU, GPU, console generation, units sold, predecessor and
+  successor — resolved from Wikidata in the same batched lookup and
+  rendered as rows under the description; the field registry is
+  per-media-type, so film and music collections can grow their own
+  sheets later. Very wide wordmark art — scraped platform wheels like the
+  SNES logo — now sits inside side margins on grid tiles instead of
+  spanning the card edge-to-edge; box covers and screenshots are
+  untouched. Art wiring also learned scope precedence: the per-system
+  catalog's platform art can no longer be displaced in the collection
+  icon/logo slots by the Wikipedia/Wikidata name-search fallback (whose
+  logo, running later in the same queue, used to steal the slot — and on
+  some entities is a degenerate SVG that renders as a zoomed crop).
+  Platform art also picks its region variant more sensibly: an explicit
+  region choice wins as before, but the generic "World" default now defers
+  to the machine's locale before ScreenScraper's world tag — a US machine
+  gets the orange Dreamcast swirl instead of the blue PAL one, while
+  European machines keep the PAL branding. And because platform art files
+  carry no region in their names, entity art under the "Fill missing"
+  re-scrape policy now byte-compares instead of blindly keeping the
+  existing file — a changed region preference actually replaces the old
+  variant on the next scrape, while unchanged art still isn't rewritten.
+
 - **Collections now get scraped metadata of their own — description,
   manufacturer, release year — not just artwork.** The scraper's
   collection/platform pass, which already fetched logos and backgrounds,
@@ -32,6 +62,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as soon as you leave Settings, so a freshly-made "Nintendo 64" collection
   arrives with its logo, description and manufacturer already in place.
   Off by default; the box remembers your last choice.
+
+- **Collections now carry a fuller fact sheet — and every sidebar tab has a
+  collection story.** The Wikipedia/Wikidata source additionally resolves a
+  collection's country of origin, developer, publisher, genre and official
+  website (one batched lookup, not five), and the details pane shows them
+  on the Collection tab and the no-selection overview — the website as a
+  clickable link. The File tab joins in: with a collection selected it now
+  tells the on-disk story — media and artwork folders, item count, total
+  size on disk, last scan — instead of "No item selected". Several fixes
+  ride along: the bold field labels automatically fall back to the plain
+  text colour when a collection's accent is too close to the card colour
+  to read, the summary cards now fill the sidebar's full height like item
+  details do (no more short cards hugging a few rows, no clipped last
+  rows, no mid-pane float), the size row stays hidden until the scan has
+  actually recorded file sizes rather than reporting "0 bytes", and
+  switching Item → Collection → Item with a subcollection selected no
+  longer resurrects the previously selected item over the subcollection's
+  card. The Collection tab also reliably shows the SELECTED ITEM's owning
+  collection in aggregated views now: the owner lookup gained the same
+  filename fallbacks artwork resolution already had, plus a media-directory
+  fallback (longest prefix wins, so a subcollection beats its parent) for
+  libraries whose database rows spell paths differently than the browser
+  does — previously those quietly fell back to the viewed shell. A selected
+  subcollection tile keeps its own card in the Item area while the
+  Collection tab now describes the tile's parent — the collection you are
+  browsing — so the tab consistently answers "where does this live?" for
+  every kind of selection. The File page is tighter too: the duplicate
+  "File Information" header is gone and the path/size/modified rows sit
+  compactly at the top instead of drifting apart across the pane.
+
+- **Scrape info for your whole library in one go.** The scraper dialog
+  gains a *Collection info only — skip items* switch: turning it on
+  pre-checks your shell collections (the parents whose items live in
+  subcollections — exactly the ones item scraping never touches) and the
+  Scrape button then fetches description, manufacturer, dates and logo
+  art for every checked collection without scraping a single item. Check
+  or uncheck collections freely while the mode is on; turning it off
+  restores your previous selection.
 
 - **The details pane always has something worth reading.** Three states
   that used to collapse into bare placeholder text now render the same

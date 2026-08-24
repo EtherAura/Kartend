@@ -255,11 +255,13 @@ void DetailsPaneGalleryView::applyVisibility(DetailsPaneTab activeTab) {
   if (m_thumbsHost) {
     m_thumbsHost->setVisible(hasThumbs);
   }
-  // Gallery is item-only chrome — hide it on File / Collection regardless
-  // of contents. Keep the section visible when the user can still edit
+  // The File tab stays gallery-free (pure filesystem view). Item AND
+  // Collection tabs show it: collection surfaces feed scraped system
+  // images through the same strip since Kartend-5b5r1 (user decision
+  // 2026-08-23). Keep the section visible when the user can still edit
   // links so the "Edit" button stays available for items with no current
   // artwork — that's the exact case where adding a manual link matters.
-  if (activeTab != DetailsPaneTab::Item) {
+  if (activeTab == DetailsPaneTab::File) {
     m_container->hide();
     return;
   }

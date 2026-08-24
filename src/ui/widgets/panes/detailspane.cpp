@@ -114,6 +114,16 @@ Q_LOGGING_CATEGORY(lcDetailsPane, "kartend.detailspane")
 // information and artwork
 DetailsPane::DetailsPane(QWidget *parent) : QWidget(parent), ui(new Ui::DetailsPane) {
   ui->setupUi(this);
+  // Trailing zero-stretch expanding spacer (Kartend-6i10t user report "File
+  // page can be tightened up"): with the details container hidden (File tab,
+  // item view) nothing in the content column claimed the leftover height, so
+  // Qt spread it BETWEEN the file-info rows — path/size/modified drifted
+  // apart across the whole pane. Zero stretch keeps it inert whenever the
+  // details container (stretch 1) is visible; when that hides, this spacer
+  // is the only expanding item and the rows compact at the top.
+  if (auto *contentCol = qobject_cast<QVBoxLayout *>(ui->contentWidget->layout())) {
+    contentCol->addSpacerItem(new QSpacerItem(0, 0, QSizePolicy::Minimum, QSizePolicy::Expanding));
+  }
   setAutoFillBackground(true);
   // bug #6: stop mouse events on the sidebar from propagating up
   // to ancestors. The previous Overlay-mode implementation relied on Qt's
@@ -362,8 +372,11 @@ void DetailsPane::setMetadata(const QString &filePath, const QString &itemName,
 
   m_hasItemDisplayed = true;
   // An item now carries the selection — any subcollection overview is
-  // stale (Kartend-um69l).
+  // stale (Kartend-um69l), and so is the previous item's owner summary
+  // (the manager re-pushes the new owner right after when it differs
+  // from the viewed collection, Kartend-6i10t).
   m_selectionSummary = CollectionSummary{};
+  m_ownerSummary = CollectionSummary{};
   m_currentItemName = itemName;
   // setExtendedMetadata refills this when the metadata is applied; reset
   // here so a stale title from a previous selection doesn't persist on the
@@ -434,7 +447,9 @@ void DetailsPane::clearMetadata() {
   // Deselection also ends any subcollection selection — fall back to the
   // current collection's overview (Kartend-um69l). showSubcollectionSummary
   // re-pushes a child summary right after this when a tile IS selected.
+  // The owner summary dies with the item it described (Kartend-6i10t).
   m_selectionSummary = CollectionSummary{};
+  m_ownerSummary = CollectionSummary{};
   m_currentItemName.clear();
   m_currentMetadataTitle.clear();
 

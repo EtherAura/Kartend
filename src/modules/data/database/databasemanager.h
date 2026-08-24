@@ -95,6 +95,9 @@ public:
   [[nodiscard]] qint64
   countCollectionRecursive(int collectionIndex,
                            const QList<CollectionConfig> &allCollections) const override;
+  [[nodiscard]] qint64
+  sumCollectionFileSizesRecursive(int collectionIndex,
+                                  const QList<CollectionConfig> &allCollections) const override;
 
   /// Reads `collections.last_scanned` for the given UUID via the main-thread
   /// connection. Returns an invalid QDateTime when the row is
@@ -270,6 +273,7 @@ private slots:
 
 private:
   [[nodiscard]] qint64 countCollectionByUuid(const QString &collectionUuid) const;
+  [[nodiscard]] qint64 sumFileSizesByUuid(const QString &collectionUuid) const;
   void clearCollectionFromDatabaseByUuid(const QString &collectionUuid);
 
   /// The cover the item's MANUAL links currently resolve to, or empty when it
