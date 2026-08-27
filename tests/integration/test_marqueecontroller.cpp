@@ -8,7 +8,9 @@
 #include <QApplication>
 #include <QCoreApplication>
 #include <QEvent>
+#include <QGuiApplication>
 #include <QList>
+#include <QScreen>
 #include <QTest>
 
 namespace {
@@ -109,4 +111,61 @@ void TestMarqueeController::updateMarqueeArtwork_invalidCollectionIndexLeavesWin
   h.controller.applyMarqueeSettings();
   flushDeferredDeletes();
   QVERIFY(marqueeWindows().isEmpty());
+}
+
+// Kartend-599xq: resolveMarqueeScreen was reached ONLY from
+// applyMarqueeSettings — startup and Settings-save — so unplugging the marquee
+// monitor mid-session left the window pinned to a screen that no longer
+// existed until the next save or restart.
+//
+// QGuiApplication's screen signals cannot be emitted from outside Qt, so the
+// wiring and the reaction are checked separately: this case proves the
+// connections exist, and the two below drive the handler directly through the
+// meta-object. The physical unplug itself stays a manual check.
+void TestMarqueeController::screenChanges_areWiredAtConstruction() {
+  MarqueeHarness h;
+  // disconnect() returns true only if a matching connection was there to
+  // remove, which is the assertion — the teardown is incidental.
+  QVERIFY2(QObject::disconnect(qApp, &QGuiApplication::screenRemoved, &h.controller, nullptr),
+           "screenRemoved must be wired, or an unplugged marquee monitor goes unnoticed");
+  QVERIFY2(QObject::disconnect(qApp, &QGuiApplication::screenAdded, &h.controller, nullptr),
+           "screenAdded must be wired, or replugging the monitor never brings the marquee home");
+}
+
+void TestMarqueeController::screenChange_repinsWithoutDuplicatingTheWindow() {
+  MarqueeHarness h;
+  h.settings.marquee.marqueeEnabled = true;
+  h.controller.applyMarqueeSettings();
+  QCOMPARE(marqueeWindows().size(), 1);
+
+  // A dock or undock emits several of these at once; they must collapse into
+  // one re-pin and must reuse the existing window rather than stacking toppers.
+  for (int i = 0; i < 3; ++i) {
+    QVERIFY(QMetaObject::invokeMethod(&h.controller, "handleScreenConfigurationChanged",
+                                      Qt::DirectConnection, Q_ARG(QScreen *, nullptr)));
+  }
+  // The re-pin is deferred one event-loop turn on purpose (the removed QScreen
+  // is still listed at signal time), so let that turn run.
+  QTest::qWait(20);
+
+  const auto windows = marqueeWindows();
+  QCOMPARE(windows.size(), 1);
+  QVERIFY2(windows.first()->isVisible(), "the marquee must still be shown after a re-pin");
+
+  h.settings.marquee.marqueeEnabled = false;
+  h.controller.applyMarqueeSettings();
+  flushDeferredDeletes();
+  QVERIFY(marqueeWindows().isEmpty());
+}
+
+void TestMarqueeController::screenChange_isInertWhileTheMarqueeIsDisabled() {
+  MarqueeHarness h;
+  h.settings.marquee.marqueeEnabled = false;
+
+  QVERIFY(QMetaObject::invokeMethod(&h.controller, "handleScreenConfigurationChanged",
+                                    Qt::DirectConnection, Q_ARG(QScreen *, nullptr)));
+  QTest::qWait(20);
+  flushDeferredDeletes();
+  QVERIFY2(marqueeWindows().isEmpty(),
+           "a screen change must not conjure a topper the user has turned off");
 }

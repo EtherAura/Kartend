@@ -20,6 +20,7 @@ private slots:
   void libraryFoldersIncludesSecondaryDrives();
   void installedGamesAcrossLibraries();
   void artworkBothLayouts();
+  void traversingAppIdYieldsNoArtwork();
   void playedAppIdsReadsPlayRecords();
   void playedAppIdsMergesAccountsAndToleratesCasing();
   void playedAppIdsEmptyWithoutUserdata();
@@ -152,6 +153,29 @@ void TestSteamLibrary::artworkBothLayouts() {
 
   const SteamLibrary::Artwork none = SteamLibrary::artworkFor(steamRoot(), "999");
   QVERIFY(none.cover.isEmpty());
+}
+
+// Kartend-9guwj: appId is read from the .acf VDF and interpolated BOTH as a
+// directory component and as a filename prefix, so a traversing value reached
+// outside appcache/librarycache/ entirely and surfaced an arbitrary image as a
+// game's cover.
+void TestSteamLibrary::traversingAppIdYieldsNoArtwork() {
+  // A real .jpg one level above the cache dir, matching the flat-layout naming
+  // the hostile id aims at.
+  writeFile(steamRoot() + QStringLiteral("/appcache/private_library_600x900.jpg"), "secret");
+  // Premise: the traversal genuinely names it, so passing would be a real read.
+  QVERIFY(QFileInfo::exists(steamRoot() + QStringLiteral("/appcache/librarycache/") +
+                            QStringLiteral("../private") + QStringLiteral("_library_600x900.jpg")));
+
+  for (const QString &hostile :
+       {QStringLiteral("../private"), QStringLiteral("../../etc/hostname"),
+        QStringLiteral("/etc/hostname"), QStringLiteral(".."), QString()}) {
+    const SteamLibrary::Artwork art = SteamLibrary::artworkFor(steamRoot(), hostile);
+    QVERIFY2(art.cover.isEmpty(),
+             qPrintable(QStringLiteral("appId '%1' produced cover '%2'").arg(hostile, art.cover)));
+    QVERIFY(art.logo.isEmpty());
+    QVERIFY(art.hero.isEmpty());
+  }
 }
 
 // Playtime is the local proof of ownership the wide import tiers key off, so

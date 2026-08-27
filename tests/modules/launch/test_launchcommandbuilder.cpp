@@ -14,6 +14,7 @@
 #include "kartlink.h"
 #include "launchcommandbuilder.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QString>
 #include <QStringList>
@@ -30,6 +31,21 @@ LauncherConfig plainLauncher(const QString &parameters, const QString &corePath 
   lc.corePath = corePath;
   lc.launchParameters = parameters;
   return lc;
+}
+
+/// Writes a stub UNDER KartLink::managedStubRoot() — the location that makes
+/// its `args` trusted (Kartend-1o1a1). Mirrors the real layout
+/// LauncherImportService produces (<root>/<source>/games/<name>.kartlink).
+/// Each test binary gets its own HOME (tests/CMakeLists.txt, Kartend-kkeur),
+/// so the managed root resolves to a per-test directory and these never touch
+/// the developer's real profile.
+QString writeManagedStub(const QString &fileName, const KartLink::LinkData &data) {
+  const QString dir = KartLink::managedStubRoot() + QStringLiteral("/bottles/games");
+  if (!QDir().mkpath(dir)) {
+    return {};
+  }
+  const QString path = dir + QLatin1Char('/') + fileName;
+  return KartLink::write(path, data) ? path : QString();
 }
 } // namespace
 
@@ -52,6 +68,9 @@ private slots:
   void testCorePlaceholder_data();
   void testCorePlaceholder();
   void testLibretroTripleKeepsParametersAhead();
+  void testLibretroTemplateWithBothPlaceholdersIsNotDuplicated();
+  void testLibretroTemplateWithCorePlaceholderOnlyAppendsMedia();
+  void testLibretroTemplateWithFilePlaceholderOnlyAppendsCore();
 
   // %collection% expansion
   void testCollectionExpansion();
@@ -79,6 +98,9 @@ private slots:
   // Stub-carried launcher arguments (Kartend-4cff2) — the Bottles shape.
   void testKartLinkStubArgumentsFollowTheTemplate();
   void testKartLinkStubArgumentsAreSecurityChecked();
+  // Kartend-1o1a1: location is the credential for a stub's argv contribution.
+  void testKartLinkStubArgumentsIgnoredOutsideTheManagedRoot();
+  void testManagedRootContainmentResistsTraversal();
 };
 
 void TestLaunchCommandBuilder::testFilePlaceholder_data() {
@@ -266,6 +288,55 @@ void TestLaunchCommandBuilder::testLibretroTripleKeepsParametersAhead() {
            (QStringList{"--fullscreen", "-L", "/tmp/cores/engine.so", file}));
 }
 
+void TestLaunchCommandBuilder::testLibretroTemplateWithBothPlaceholdersIsNotDuplicated() {
+  // Kartend-li94g: this is the probe's own RetroArch default
+  // (launcherprobe.cpp seeds `-L %core "%1"`), so it is the template the
+  // wizard hands almost every real libretro collection. The template already
+  // positions BOTH halves of the triple; appending a second `-L <core>
+  // <media>` on top produced `-L core rom -L core rom` in the launched argv.
+  LauncherConfig lc;
+  lc.launcherPath = QStringLiteral("/usr/bin/retroarch");
+  lc.corePath = QStringLiteral("/tmp/cores/engine.so");
+  lc.launchParameters = QStringLiteral("-L %core \"%1\"");
+
+  const QString file = QStringLiteral("/tmp/media/episode.mkv");
+  const auto result = LaunchCommandBuilder::buildLaunchCommand(lc, QStringLiteral("Video"), file);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().arguments, (QStringList{"-L", "/tmp/cores/engine.so", file}));
+}
+
+void TestLaunchCommandBuilder::testLibretroTemplateWithCorePlaceholderOnlyAppendsMedia() {
+  // Template positions the core but not the media: the core half must not be
+  // re-appended, while the media half still falls back to the end.
+  LauncherConfig lc;
+  lc.launcherPath = QStringLiteral("/usr/bin/retroarch");
+  lc.corePath = QStringLiteral("/tmp/cores/engine.so");
+  lc.launchParameters = QStringLiteral("-L %core --fullscreen");
+
+  const QString file = QStringLiteral("/tmp/media/episode.mkv");
+  const auto result = LaunchCommandBuilder::buildLaunchCommand(lc, QStringLiteral("Video"), file);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().arguments,
+           (QStringList{"-L", "/tmp/cores/engine.so", "--fullscreen", file}));
+}
+
+void TestLaunchCommandBuilder::testLibretroTemplateWithFilePlaceholderOnlyAppendsCore() {
+  // Mirror image: the template placed the media, so only `-L <core>` is owed.
+  // It lands after the template's own tokens rather than being spliced in
+  // front — RetroArch permutes options around the content operand, and
+  // reordering the author's template would be the more surprising choice.
+  LauncherConfig lc;
+  lc.launcherPath = QStringLiteral("/usr/bin/retroarch");
+  lc.corePath = QStringLiteral("/tmp/cores/engine.so");
+  lc.launchParameters = QStringLiteral("--appendconfig /tmp/extra.cfg \"%1\"");
+
+  const QString file = QStringLiteral("/tmp/media/episode.mkv");
+  const auto result = LaunchCommandBuilder::buildLaunchCommand(lc, QStringLiteral("Video"), file);
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  QCOMPARE(result.value().arguments,
+           (QStringList{"--appendconfig", "/tmp/extra.cfg", file, "-L", "/tmp/cores/engine.so"}));
+}
+
 void TestLaunchCommandBuilder::testCollectionExpansion() {
   // %collection% (case-insensitive) expands in the program path and inside
   // each already-split parameter token.
@@ -447,8 +518,11 @@ void TestLaunchCommandBuilder::testKartLinkStubArgumentsFollowTheTemplate() {
   data.source = QStringLiteral("bottles");
   data.target = QStringLiteral("The Game");
   data.args = {QStringLiteral("-b"), QStringLiteral("My Bottle"), QStringLiteral("--")};
-  const QString stub = dir.filePath(QStringLiteral("The Game.kartlink"));
-  QVERIFY(KartLink::write(stub, data));
+  // Written to the MANAGED root: since Kartend-1o1a1 that is what entitles a
+  // stub's args to reach the launcher at all. This is the real importer's
+  // case — LauncherImportService writes every stub it owns beneath that root.
+  const QString stub = writeManagedStub(QStringLiteral("The Game.kartlink"), data);
+  QVERIFY(!stub.isEmpty());
 
   // `bottles-cli run -p "The Game" -b "My Bottle" --`: the template places the
   // target, the stub's args close the invocation. Each arg is one argv slot,
@@ -475,19 +549,55 @@ void TestLaunchCommandBuilder::testKartLinkStubArgumentsFollowTheTemplate() {
 }
 
 void TestLaunchCommandBuilder::testKartLinkStubArgumentsAreSecurityChecked() {
-  QTemporaryDir dir;
   KartLink::LinkData data;
   data.source = QStringLiteral("bottles");
   data.target = QStringLiteral("The Game");
   data.args = {QStringLiteral("-b"), QStringLiteral("Bottle; rm -rf /")};
-  const QString stub = dir.filePath(QStringLiteral("evil-args.kartlink"));
-  QVERIFY(KartLink::write(stub, data));
+  // MANAGED, so the args are actually reached — this pins the character-level
+  // gate itself rather than the location gate. Trusted provenance is not a
+  // pass for metacharacters: both checks apply.
+  const QString stub = writeManagedStub(QStringLiteral("evil-args.kartlink"), data);
+  QVERIFY(!stub.isEmpty());
 
-  // Same gate as the target: a hand-edited stub can't smuggle metacharacters
-  // in through the argument list either.
   const auto cmd = LaunchCommandBuilder::buildLaunchCommand(
       plainLauncher(QStringLiteral("run -p %1")), QStringLiteral("Bottles"), stub);
   QVERIFY(cmd.isError());
+}
+
+void TestLaunchCommandBuilder::testKartLinkStubArgumentsIgnoredOutsideTheManagedRoot() {
+  // Kartend-1o1a1: the attack. A stub dropped into a SCANNED media directory —
+  // somewhere an attacker who can write a file already reaches — carries flags
+  // that would otherwise land verbatim in the launcher's argv. Character-level
+  // validation cannot police them, because an option flag is a legitimate
+  // value here, so provenance decides: unmanaged location, no args.
+  QTemporaryDir scanned;
+  KartLink::LinkData hostile;
+  hostile.source = QStringLiteral("bottles");
+  hostile.target = QStringLiteral("steam://rungameid/400");
+  hostile.args = {QStringLiteral("--rogue-flag"), QStringLiteral("-e")};
+  const QString stub = scanned.filePath(QStringLiteral("Dropped In.kartlink"));
+  QVERIFY(KartLink::write(stub, hostile));
+
+  const auto cmd = LaunchCommandBuilder::buildLaunchCommand(
+      plainLauncher(QStringLiteral("%1")), QStringLiteral("Steam"), stub);
+  // The TARGET is still honoured — it is separately validated and dash-guarded
+  // — so a hand-placed stub keeps launching. It just contributes no flags.
+  QVERIFY(!cmd.isError());
+  QCOMPARE(cmd.value().arguments, QStringList{QStringLiteral("steam://rungameid/400")});
+}
+
+void TestLaunchCommandBuilder::testManagedRootContainmentResistsTraversal() {
+  // The containment test must collapse ../ BEFORE comparing, or a path that
+  // merely starts with the managed root while escaping it would be trusted.
+  const QString root = KartLink::managedStubRoot();
+  QVERIFY(!root.isEmpty());
+  QVERIFY(KartLink::isManagedStubPath(root + QStringLiteral("/steam/games/A.kartlink")));
+  QVERIFY(!KartLink::isManagedStubPath(root + QStringLiteral("/steam/../../evil/A.kartlink")));
+  QVERIFY(!KartLink::isManagedStubPath(QStringLiteral("/tmp/A.kartlink")));
+  QVERIFY(!KartLink::isManagedStubPath(QString()));
+  // A sibling directory sharing the root's NAME PREFIX is not inside it —
+  // the check appends a separator rather than comparing bare prefixes.
+  QVERIFY(!KartLink::isManagedStubPath(root + QStringLiteral("-evil/A.kartlink")));
 }
 
 void TestLaunchCommandBuilder::testKartLinkBrokenStubFailsToBuild() {

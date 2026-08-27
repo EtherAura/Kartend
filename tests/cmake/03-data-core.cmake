@@ -89,6 +89,18 @@ kartend_add_test(NAME MultiDiscCollapse
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Scan-side metadata sidecar hydration (Kartend-zur26): the per-item JSON a
+# scrape writes next to the artwork was never read back, so item_metadata was
+# the sole store of scraped text and losing media.db meant re-scraping a
+# library whose answers were sitting on disk. Real migrated SQLite and real
+# sidecar files — the pass IS a filesystem-to-database bridge, so mocking
+# either half would test nothing. Covers the precedence rule too: an item that
+# already has a row is never touched.
+kartend_add_test(NAME ScanMetadata
+  SOURCES modules/query/test_scanmetadata.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # Scan-side artwork resolution (Kartend-guyc5): items.artwork_path — the column
 # behind every DB-side artwork predicate — was never written by either persist
 # pipeline, so smart playlists, the has:/missing:artwork tokens, Collection

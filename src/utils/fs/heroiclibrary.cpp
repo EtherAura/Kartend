@@ -1,4 +1,5 @@
 #include "heroiclibrary.h"
+#include "pathutils.h"
 
 #include <algorithm>
 
@@ -52,10 +53,31 @@ QJsonArray readGameArray(const QString &filePath, const char *arrayKey) {
 QString localIcon(const QString &configDir, const QString &appName, const QString &runner,
                   const QString &installPath) {
   if (runner == QLatin1String("gog") && !installPath.isEmpty()) {
-    const QString nativeIcon = installPath + QStringLiteral("/support/icon.png");
-    if (QFileInfo::exists(nativeIcon)) {
-      return nativeIcon;
+    // Kartend-9guwj: installPath is an ABSOLUTE path straight out of Heroic's
+    // JSON, so isSafePathComponent does not apply — Heroic legitimately installs
+    // games anywhere. What is refused is a ".." segment, which is the only way a
+    // crafted value resolves somewhere other than where it reads like it points.
+    // This does NOT (and cannot) stop a JSON that simply names a different real
+    // directory: that value is the trust boundary of "Heroic's own config
+    // describes Heroic's own installs", and the probe still only reads a file
+    // named exactly support/icon.png beneath it.
+    const QStringList segments = QString(installPath)
+                                     .replace(QLatin1Char('\\'), QLatin1Char('/'))
+                                     .split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    if (!segments.contains(QLatin1String(".."))) {
+      const QString nativeIcon = installPath + QStringLiteral("/support/icon.png");
+      if (QFileInfo::exists(nativeIcon)) {
+        return nativeIcon;
+      }
     }
+  }
+  // Kartend-9guwj: appName comes from Heroic's JSON and is interpolated as a
+  // single path COMPONENT, so a value like "../../../../home/user/Pictures/x"
+  // would have made this probe read (and the importer then copy in as cover art)
+  // a file the user never chose to share. Same treatment steamappinfo.cpp
+  // already gives its library_assets_full relative paths.
+  if (!PathUtils::isSafePathComponent(appName)) {
+    return {};
   }
   // Heroic writes .jpg for the default (art_square) icon and .png when it
   // found a transparent one.

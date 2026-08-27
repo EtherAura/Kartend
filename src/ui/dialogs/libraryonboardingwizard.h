@@ -16,11 +16,15 @@ QT_END_NAMESPACE
 /// Pages:
 ///   1. Welcome — short pitch, sets expectations.
 ///   2. Name + media directory — validated (non-empty + exists) before Next.
-///   3. Media type + artwork directory — type picker (Video / Audio / Image
-///      / Reference / Other), optional artwork dir override.
+///   3. Media type + artwork directory — type picker seeded from
+///      CollectionUtils::standardCollectionTypes() so it cannot drift from
+///      the settings dialog's Media Type combo (Kartend-0ydo7); the combo
+///      stays editable, so custom types are still typeable. Optional
+///      artwork dir override.
 ///   4. Launcher detection — multi-select list of installed launchers from
 ///      LauncherProbe; the first checked entry becomes the primary launcher.
-///   5. Summary — confirm before Finish.
+///   5. Summary — confirm before Finish. Echoes every step, naming the ones
+///      left unset rather than dropping their row (Kartend-8cxjy).
 ///
 /// Returns a populated CollectionConfig via `result()` after `exec()`
 /// returns Accepted; the caller persists the new config via

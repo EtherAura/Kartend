@@ -177,7 +177,9 @@ public:
   /// stick moves between sections; once a section owns focus the stick
   /// drives THAT section's list — tree rows and pane scroll on the
   /// vertical axis, toolbar buttons on the horizontal one, with the other
-  /// axis left to section movement so there is always a way out. Returns
+  /// axis left to section movement so there is always a way out. Up from
+  /// the grid focuses the toolbar and down from the toolbar returns (user
+  /// request 2026-08-24), unless the pane ring is mid-walk. Returns
   /// true when the input was consumed by a section. Public for the tests.
   bool routeSectionInput(int dx, int dy);
   /// The fullscreen artwork overlay, when one is up (either the grid's or
@@ -494,9 +496,10 @@ private:
   /// Shared pulsing ring: the pane's selected region normally, the focused
   /// section while the modifier is held.
   QPointer<SelectionIndicator> m_selectionIndicator;
-  /// True while the section modifier (Select) is held — the ONLY state in
-  /// which the right stick switches sections vertically (user decision
-  /// 2026-08-18); unheld, vertical belongs to the details pane.
+  /// True while the section modifier (Select) is held — the stick is then
+  /// purely a section switcher. Unheld, vertical belongs to the details
+  /// pane except for the grid↔toolbar hop (user request 2026-08-24:
+  /// up from the grid focuses the toolbar, down returns).
   bool m_focusModifierHeld = false;
   /// Returns the right stick's focus to the grid when the user stops
   /// driving the pane (user request 2026-08-18: one second of no input).

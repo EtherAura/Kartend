@@ -72,6 +72,92 @@ void TestToolbarController::setupViewModeButton_syncChecksExactlyActiveEntry() {
                           .arg(button->toolTip(), QString::fromLatin1(tooltipFragment))));
 }
 
+// Kartend-lp7j9: opening the layout popup must reflect the ACTIVE collection's
+// persisted viewType. setupViewModeButton() runs during MainWindow setup, which
+// is before the deferred startup timer picks a collection, so at construction
+// there is no view type to tick — and nothing came back to tick one later. The
+// menu therefore opened with all four entries unchecked until the user's first
+// explicit pick, i.e. it was blank exactly when consulted to answer "which view
+// am I in?". The aboutToShow sync is what closes that.
+void TestToolbarController::viewModePopup_aboutToShowSyncsFromActiveCollection() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+
+  CollectionConfig films;
+  films.name = QStringLiteral("Films");
+  films.viewType = ViewType::CoverFlow; // persisted, and NOT the Grid default
+  win->m_collections = {films};
+  win->m_currentCollectionIndex = 0;
+
+  QWidget host;
+  auto *button = new QToolButton(&host);
+  ToolbarController controller;
+  ToolbarController::Setup setup;
+  setup.mainWindow = win;
+  setup.viewModeButton = button;
+  controller.initialize(setup);
+  controller.setupViewModeButton();
+
+  QMenu *menu = button->menu();
+  QVERIFY(menu);
+  const auto actions = menu->actions();
+  QCOMPARE(actions.size(), 4);
+
+  // Premise: straight after construction nothing is checked. This IS the
+  // startup state the bug report describes, reproduced here.
+  for (QAction *action : actions) {
+    QVERIFY2(!action->isChecked(), "premise: the picker starts with no entry checked");
+  }
+
+  // Opening the popup is the only thing that happens — no explicit
+  // syncViewModeButton call, which is what the old code depended on.
+  QMetaObject::invokeMethod(menu, "aboutToShow");
+
+  for (QAction *action : actions) {
+    QCOMPARE(action->isChecked(), action->text() == QStringLiteral("&Cover Flow"));
+  }
+  QVERIFY(button->toolTip().contains(QStringLiteral("Cover Flow")));
+}
+
+// Root/home view has no per-collection layout, so the sync must leave whatever
+// was last checked alone rather than inventing a value (which would silently
+// claim "Grid" for a view that isn't one).
+void TestToolbarController::viewModePopup_aboutToShowLeavesStateAloneWithoutACollection() {
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+
+  CollectionConfig films;
+  films.name = QStringLiteral("Films");
+  films.viewType = ViewType::List;
+  win->m_collections = {films};
+  win->m_currentCollectionIndex = -1; // root view
+
+  QWidget host;
+  auto *button = new QToolButton(&host);
+  ToolbarController controller;
+  ToolbarController::Setup setup;
+  setup.mainWindow = win;
+  setup.viewModeButton = button;
+  controller.initialize(setup);
+  controller.setupViewModeButton();
+
+  // Seed a known checked entry, then open the popup with no active collection.
+  controller.syncViewModeButton(ViewType::Horizontal);
+  QMetaObject::invokeMethod(button->menu(), "aboutToShow");
+
+  const auto actions = button->menu()->actions();
+  for (QAction *action : actions) {
+    QCOMPARE(action->isChecked(), action->text() == QStringLiteral("&Horizontal"));
+  }
+
+  // Same for an index past the end of the list.
+  win->m_currentCollectionIndex = 7;
+  QMetaObject::invokeMethod(button->menu(), "aboutToShow");
+  for (QAction *action : actions) {
+    QCOMPARE(action->isChecked(), action->text() == QStringLiteral("&Horizontal"));
+  }
+}
+
 void TestToolbarController::setupSearchModeAction_installsLeadingSearchAction() {
   QWidget host;
   auto *searchBar = new QLineEdit(&host);

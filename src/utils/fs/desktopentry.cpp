@@ -10,11 +10,24 @@
 
 namespace DesktopEntryFile {
 
+namespace {
+/// Ceiling on a .desktop file (Kartend-v3u04). These are local files written
+/// by package managers and desktop environments, so this is hygiene rather
+/// than an attack path — but the reader walks whatever carries the extension
+/// in a scanned directory, and readLine() on a file with no newlines pins the
+/// whole thing in one QString. A real entry is a couple of KB; the freedesktop
+/// spec sets no limit, so pick one far above any genuine file.
+constexpr qint64 kMaxDesktopEntryBytes = 1LL * 1024 * 1024;
+} // namespace
+
 auto parse(const QString &filePath) -> Entry {
   Entry entry;
   QFile file(filePath);
   if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
     return entry;
+  }
+  if (file.size() > kMaxDesktopEntryBytes) {
+    return entry; // parse() reports absence by returning a blank Entry
   }
   QTextStream in(&file);
   bool inDesktopEntry = false;

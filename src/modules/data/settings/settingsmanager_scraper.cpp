@@ -130,6 +130,17 @@ bool syncDeleteKeychain(const QString &key) {
 #endif // KARTEND_HAVE_QTKEYCHAIN
 } // namespace
 
+// Outside the anonymous namespace AND outside every #ifdef: this is the one
+// place that answers "was a keychain backend compiled in?", and it has to
+// compile — and give the right answer — in both configurations.
+bool SettingsManager::keychainBackendCompiledIn() {
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+  return true;
+#else
+  return false;
+#endif
+}
+
 void SettingsManager::loadScraperSection(QSettings &s, GeneralSettings &settings) {
   // Scraper credentials live in their own [Scrapers] group with nested keys of
   // the shape <provider>/<field>=<value> (QSettings' built-in key hierarchy
@@ -267,20 +278,25 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
         }
       }
 #else
+      // No keychain support compiled in: this is plaintext, unconditionally
+      // and for every credential. Flag it the same way a runtime failure is
+      // flagged — this arm used to set nothing, which meant the demotion
+      // marker stayed empty and the banner took its hide() branch forever. The
+      // configuration with the weakest storage (100% plaintext, 100% of the
+      // time) was the ONLY one that never warned, while showing the same
+      // reassuring masked password field as a keychain build (Kartend-4ahok).
       s.setValue(fullKey, fIt.value());
+      newDemotionReason = QLatin1String(keys::kCredentialDemotionNoKeychainBuild);
 #endif
     }
   }
-#ifdef KARTEND_HAVE_QTKEYCHAIN
   // Persist the demotion marker inside [Scrapers] (the group wipe above
   // removed any previous copy, so omitting the write doubles as the clear).
+  // NOT under the ifdef: the non-keychain build needs its marker written too,
+  // which is the whole point of the fix above.
   if (!newDemotionReason.isEmpty()) {
     s.setValue(keys::kCredentialDemotionReason, newDemotionReason);
   }
-#endif
-  // Outside the ifdef: a build without keychain support stores plaintext by
-  // design, so any demotion marker inherited from a keychain-enabled build is
-  // cleared by the group wipe and the member follows suit here.
   m_credentialDemotionReason = newDemotionReason;
   s.endGroup();
 #ifdef KARTEND_HAVE_QTKEYCHAIN

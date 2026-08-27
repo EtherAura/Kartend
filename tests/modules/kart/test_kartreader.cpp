@@ -6,6 +6,9 @@
 #include <QTemporaryDir>
 #include <QTemporaryFile>
 #include <QTest>
+#include <QtEndian>
+
+#include <limits>
 
 #include "kartcompression.h"
 #include "kartformat.h"
@@ -122,6 +125,7 @@ private slots:
   void testExtractToDetectsTamperedShaOnMultiChunkEntry();
   void testExtractToHandlesZstdEntries();
   void testExtractToHandlesZlibEntries();
+  void testZlibRejectsALyingSizePrefixBeforeAllocating();
   void testExtractToRefusesPathTraversal();
   void testExtractToRefusesAbsolutePaths();
   void testExtractToRefusesWindowsUnsafeSegments_data();
@@ -731,6 +735,45 @@ void TestKartReader::testCountEntriesRejectsTruncatedContainer() {
   auto count = KartReader::countEntries(f.fileName());
   QVERIFY(count.isError());
   QVERIFY(count.hasErrorCode(ErrorUtils::ErrorCode::KartFormatInvalid));
+}
+
+void TestKartReader::testZlibRejectsALyingSizePrefixBeforeAllocating() {
+  // qCompress emits [4-byte big-endian original size][zlib stream], and
+  // qUncompress sizes its output allocation from that prefix. The prefix lives
+  // in the COMPRESSED bytes, so it is attacker-controlled and wholly
+  // independent of the entry header's origSize that MAX_ENTRY_SIZE was checked
+  // against — a tiny payload could therefore claim gigabytes and get them
+  // allocated before any of our caps ran (Kartend-ohqfs).
+  const QByteArray raw("kartend zlib payload");
+  const QByteArray pristine = qCompress(raw);
+  QVERIFY(pristine.size() >= 4);
+
+  // Untampered, it still round-trips — the guard must not cost the happy path.
+  {
+    const auto ok = KartCompression::decompress(pristine, KartFormat::Compression_Zlib, raw.size());
+    QVERIFY(!ok.isError());
+    QCOMPARE(ok.value(), raw);
+  }
+
+  // Now the attack: a ~30-byte payload whose prefix claims ~4 GiB. Refused on
+  // the prefix, so qUncompress is never handed the bytes.
+  QByteArray lying = pristine;
+  qToBigEndian(std::numeric_limits<quint32>::max(), reinterpret_cast<uchar *>(lying.data()));
+  QVERIFY(lying.size() < 200); // the whole point: tiny input, enormous claim
+  const auto result = KartCompression::decompress(lying, KartFormat::Compression_Zlib, raw.size());
+  QVERIFY2(result.isError(), "A zlib size prefix disagreeing with the entry header must be refused");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::KartCompressionFailed);
+
+  // A prefix that UNDERSTATES is equally a disagreement — the check is
+  // equality against the header, not a ceiling.
+  QByteArray understated = pristine;
+  qToBigEndian(quint32{1}, reinterpret_cast<uchar *>(understated.data()));
+  QVERIFY(KartCompression::decompress(understated, KartFormat::Compression_Zlib, raw.size())
+              .isError());
+
+  // Too short to even carry a prefix.
+  QVERIFY(KartCompression::decompress(QByteArray("ab"), KartFormat::Compression_Zlib, raw.size())
+              .isError());
 }
 
 QTEST_MAIN(TestKartReader)

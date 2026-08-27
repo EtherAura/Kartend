@@ -10,6 +10,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QSqlRecord>
+#include <QUrl>
 
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
@@ -162,7 +163,13 @@ auto installedGames(const QString &configDir) -> ErrorUtils::Result<QList<Game>>
 }
 
 auto launchUri(const Game &game) -> QString {
-  return QStringLiteral("itch://caves/") + game.caveId + QStringLiteral("/launch");
+  // Kartend-9guwj: caveId comes raw from butler.db, so it is percent-encoded
+  // before interpolation — a value containing '?', '#' or '/' would otherwise
+  // reshape the URI into a different path, query or fragment. The sibling
+  // HeroicLibrary::launchUri already encoded its interpolated values; these two
+  // adjacent functions simply disagreed.
+  return QStringLiteral("itch://caves/") +
+         QString::fromLatin1(QUrl::toPercentEncoding(game.caveId)) + QStringLiteral("/launch");
 }
 
 } // namespace ItchLibrary

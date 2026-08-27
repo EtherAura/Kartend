@@ -90,10 +90,45 @@ void ToolbarController::setupViewModeButton() {
   m_viewActionCoverFlow = addEntry(tr("&Cover Flow"), ViewType::CoverFlow);
   m_viewActionHorizontal = addEntry(tr("&Horizontal"), ViewType::Horizontal);
 
+  // Kartend-lp7j9: re-sync the checked entry every time the popup opens.
+  //
+  // This function runs during MainWindow setup, which is BEFORE the deferred
+  // startup timer picks a collection (setupInitialTimersWithCollections in
+  // mainwindow_timers.cpp defers via singleShot(0) so Qt can finish layout).
+  // So there is no view type to tick at construction time, and nothing ever
+  // came back to tick one: syncViewModeButton is only reached from
+  // setViewTypeFromToolbar (an explicit pick) and
+  // updateWindowTitleForCollection (only called by the settings dialog).
+  // The menu came up with all four entries unchecked, and the user's first
+  // explicit pick was what first synced it — actively misleading on exactly
+  // the question the menu is opened to answer.
+  //
+  // The menu bar's Layout submenu never had this bug because
+  // MenuController::setupLayoutActions ends with its own initial
+  // syncLayoutActions(); the toolbar popup simply had no equivalent.
+  //
+  // Syncing on aboutToShow rather than adding a one-shot initial sync: it
+  // costs the same, cannot be defeated by init ordering, and additionally
+  // repairs any later desync. It is also the pattern already used here for
+  // the Recent menu (MenuController::setupRecentMenu).
+  QObject::connect(menu, &QMenu::aboutToShow, this,
+                   [this]() { syncViewModeButtonFromCurrentCollection(); });
+
   m_viewModeButton->setMenu(menu);
   m_viewModeButton->setIcon(
       UIConstants::Icons::fromTheme({UIConstants::Icons::VIEW_PICKER, "view-list-icons"}));
   m_viewModeButton->setIconSize(QSize(18, 18));
+}
+
+void ToolbarController::syncViewModeButtonFromCurrentCollection() {
+  if (!m_mainWindow) {
+    return;
+  }
+  const int idx = m_mainWindow->m_currentCollectionIndex;
+  if (idx < 0 || idx >= m_mainWindow->m_collections.size()) {
+    return; // root/home view — no per-collection layout to reflect
+  }
+  syncViewModeButton(m_mainWindow->m_collections[idx].viewType);
 }
 
 void ToolbarController::syncViewModeButton(ViewType viewType) {

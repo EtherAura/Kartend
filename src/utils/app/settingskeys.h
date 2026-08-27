@@ -81,6 +81,16 @@ inline constexpr auto kCornerRadius = "cornerRadius";
 // human-readable failure reason surfaced by the settings-dialog banner.
 // Cleared by the next save whose keychain writes all succeed.
 inline constexpr auto kCredentialDemotionReason = "credentialDemotionReason";
+
+// Sentinel value for kCredentialDemotionReason meaning "this BUILD has no
+// keychain support at all", as opposed to a runtime keychain failure whose
+// value is the human-readable error. The two need different banner wording,
+// not one string with a reason interpolated: a runtime failure can recover
+// ("they will move back once the keychain is available"), a build without
+// QtKeychain never will, and promising recovery there would be a lie
+// (Kartend-4ahok). Recognised by ScraperCredentialsPanel; kept beside the key
+// it is a value for so the two cannot drift apart in separate headers.
+inline constexpr auto kCredentialDemotionNoKeychainBuild = "@no-keychain-build";
 inline constexpr auto kCustomArtworkTypes = "customArtworkTypes";
 inline constexpr auto kCustomFontFamily = "customFontFamily";
 inline constexpr auto kDatFilePath = "datFilePath";

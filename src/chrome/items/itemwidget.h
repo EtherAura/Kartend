@@ -58,6 +58,11 @@ public:
   /// stale-size card as "needs re-delivery" even though the widget is still
   /// in the loaded registry.
   [[nodiscard]] bool hasStaleComposedArtwork() const;
+  /// True when the widget is actually holding artwork to display.
+  /// resetForReuse() drops storedPixmap, so a pooled-and-recycled widget
+  /// answers false here while the artwork registry may still list it as
+  /// loaded — ArtworkManager consults this before honouring that claim.
+  [[nodiscard]] bool hasStoredArtwork() const { return !storedPixmap.isNull(); }
   explicit ItemWidget(QWidget *parent = nullptr);
   ~ItemWidget() override;
 
@@ -118,6 +123,16 @@ public:
                           bool hideTitle = false);
   [[nodiscard]] bool isSubcollection() const { return m_isSubcollection; }
   [[nodiscard]] bool isVirtualFolder() const { return m_isVirtualFolder; }
+  /// Single answer to "does this widget's name get drawn?", shared by
+  /// setItemName (which populates the label) and paintEvent (which draws the
+  /// text) — the two used to carry hand-copied branch trees and had already
+  /// drifted apart: the regular-item arm grew a list-mode escape and the two
+  /// folder arms did not, so a subcollection row in List layout rendered its
+  /// folder icon and nothing else (Kartend-dsjco). Every hide-titles setting
+  /// is a GRID-mode concern — a grid tile that drops its title still shows its
+  /// artwork, whereas in list mode the row IS the title, and for a folder row
+  /// the bare icon left behind names nothing at all.
+  [[nodiscard]] bool shouldPaintTitle() const;
   [[nodiscard]] const QString &virtualFolderPath() const { return m_virtualFolderPath; }
   void applyTitleTint();
   /// Colour for item TITLE TEXT: the palette text colour unless the

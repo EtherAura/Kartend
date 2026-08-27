@@ -4,13 +4,17 @@
 // on ScrollManager as the public/private API surface, but each one is now a
 // thin forwarder to the engine. The engine accesses ScrollManager state via
 // friendship; canonical state ownership stays here.
+#include "artworkutils.h"
 #include "coverflowcontroller.h"
 #include "scrollmanager.h"
+#include "uiconstants/scroll.h"
 #include "virtualscrollengine.h"
 #include <QApplication>
 #include <QEvent>
+#include <QPointer>
 #include <QScopedValueRollback>
 #include <QScrollArea>
+#include <QThreadPool>
 #include <QTimer>
 
 void ScrollManager::updateVirtualView() {
@@ -140,6 +144,48 @@ void ScrollManager::reconfigureArtworkForActiveWidgets() {
   // completion, which is itself debounced upstream) so those cards pick up
   // their artwork, mirroring what this slot already does for grid widgets.
   m_coverFlow->rebuildCardsIfActive();
+}
+
+void ScrollManager::schedulePrewarmAndReconfigure(const QString &artworkDir) {
+  if (artworkDir.isEmpty() || m_destroying || QApplication::closingDown()) {
+    return;
+  }
+  m_prewarmRequestDirs.insert(artworkDir);
+  if (!m_prewarmRequestTimer) {
+    m_prewarmRequestTimer = new QTimer(this);
+    m_prewarmRequestTimer->setSingleShot(true);
+    // Trailing edge: a grid rebuild emits once per tile within the same event
+    // loop turn, so let the burst settle and start ONE scan for the set.
+    m_prewarmRequestTimer->setInterval(UIConstants::Scroll::ARTWORK_PREWARM_DEBOUNCE_MS);
+    connect(m_prewarmRequestTimer, &QTimer::timeout, this, [this]() {
+      const QStringList dirs(m_prewarmRequestDirs.cbegin(), m_prewarmRequestDirs.cend());
+      m_prewarmRequestDirs.clear();
+      if (dirs.isEmpty()) {
+        return;
+      }
+      QPointer<ScrollManager> self = this;
+      QThreadPool::globalInstance()->start([dirs, self]() {
+        auto &cache = ArtworkUtils::DirectoryCache::instance();
+        cache.prewarmDirectories(dirs);
+        cache.processQueuedDirectories();
+        // Kartend-t4e00: resolve the QPointer on the GUI thread inside the qApp
+        // hop — reading it here would race ScrollManager's destruction.
+        if (QCoreApplication *app = QCoreApplication::instance()) {
+          QMetaObject::invokeMethod(
+              app,
+              [self]() {
+                if (self) {
+                  self->reconfigureArtworkForActiveWidgets();
+                }
+              },
+              Qt::QueuedConnection);
+        }
+      });
+    });
+  }
+  if (!m_prewarmRequestTimer->isActive()) {
+    m_prewarmRequestTimer->start();
+  }
 }
 
 auto ScrollManager::virtualFolderPathForVisualIndex(int visualIndex) const -> QString {

@@ -4,6 +4,7 @@
 // extraction root, where the post-extraction NoSymLinks walks never look.
 
 #include <filesystem>
+#include <utility>
 
 #include <QDir>
 #include <QFile>
@@ -38,6 +39,8 @@ private slots:
   void isSecurityRejectionSeparatesUnsafeFromToolFailure();
   void missingArchiveFailsClosed();
   void zeroParsedEntriesFailsClosedWithoutSecurityVerdict();
+  void sevenZipLinkVocabularyGuardAcceptsEverySupportedFormat();
+  void sevenZipMissingLinkVocabularyFailsClosedWithoutSecurityVerdict();
 
 private:
   // Builds a tar at `tarPath` from the contents of `srcDir` using bsdtar.
@@ -286,6 +289,166 @@ void TestArchiveSafety::missingArchiveFailsClosed() {
   }
   const auto scan = ArchiveSafety::scanArchiveEntries(QStringLiteral("/nonexistent/archive.tar"));
   QVERIFY2(scan.isError(), "an unlistable archive must fail closed");
+}
+
+// Kartend-mm5sp: scanWith7z now requires that the field carrying THIS codec's
+// link verdict actually appeared before it reports safe. The vocabulary differs
+// per codec (measured: tar emits "Symbolic Link ="/"Hard Link =" and no
+// Attributes; zip and 7z emit "Attributes =" and no link keys; gzip/bzip2/xz
+// wrap one stream and emit neither), so the guard is the obvious way to
+// introduce a FALSE POSITIVE that refuses real archives on a 7z-only host.
+// This pins every container format ExtensionUtils::archiveBaseExtensions
+// admits and that can be built here.
+void TestArchiveSafety::sevenZipLinkVocabularyGuardAcceptsEverySupportedFormat() {
+  KARTEND_SKIP_QPROCESS_UNDER_TSAN();
+#ifdef Q_OS_WIN
+  QSKIP("PATH sandbox is POSIX-only here");
+#else
+  const QString sevenZip = QStandardPaths::findExecutable(QStringLiteral("7z"));
+  if (sevenZip.isEmpty()) {
+    QSKIP("7z not available");
+  }
+  QTemporaryDir src;
+  QTemporaryDir out;
+  QTemporaryDir bin;
+  QVERIFY(src.isValid() && out.isValid() && bin.isValid());
+  {
+    QFile f(src.path() + QStringLiteral("/plain.dat"));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("clean");
+  }
+
+  const auto run = [](const QString &program, const QStringList &args, const QString &cwd) {
+    QProcess p;
+    p.setWorkingDirectory(cwd);
+    p.start(program, args);
+    return p.waitForStarted(10000) && p.waitForFinished(30000) &&
+           p.exitStatus() == QProcess::NormalExit && p.exitCode() == 0;
+  };
+
+  // Build one archive per codec family. Each is skipped individually rather
+  // than failing the slot, so a host missing a packer still runs the rest.
+  QStringList fixtures;
+  if (run(sevenZip,
+          {QStringLiteral("a"), QStringLiteral("-bso0"), QStringLiteral("-bsp0"),
+           out.path() + QStringLiteral("/a.zip"), src.path() + QStringLiteral("/*")},
+          src.path())) {
+    fixtures << out.path() + QStringLiteral("/a.zip");
+  }
+  if (run(sevenZip,
+          {QStringLiteral("a"), QStringLiteral("-bso0"), QStringLiteral("-bsp0"),
+           out.path() + QStringLiteral("/a.7z"), src.path() + QStringLiteral("/*")},
+          src.path())) {
+    fixtures << out.path() + QStringLiteral("/a.7z");
+  }
+  const QString plainTar = out.path() + QStringLiteral("/a.tar");
+  if (makeTar(plainTar, src.path())) {
+    fixtures << plainTar;
+    // gzip/bzip2/xz: 7z sees the CONTAINER — one entry for the wrapped tar,
+    // with no link vocabulary at all. Those codecs cannot express a link, so
+    // the guard must exempt them rather than refuse.
+    if (!QStandardPaths::findExecutable(QStringLiteral("bsdtar")).isEmpty()) {
+      for (const auto &pair : {std::pair{QStringLiteral("-czf"), QStringLiteral("/a.tar.gz")},
+                               std::pair{QStringLiteral("-cjf"), QStringLiteral("/a.tar.bz2")},
+                               std::pair{QStringLiteral("-cJf"), QStringLiteral("/a.tar.xz")}}) {
+        const QString path = out.path() + pair.second;
+        if (run(QStringLiteral("bsdtar"), {pair.first, path, QStringLiteral(".")}, src.path())) {
+          fixtures << path;
+        }
+      }
+    }
+  }
+  if (fixtures.isEmpty()) {
+    QSKIP("no archive fixture could be built");
+  }
+
+  // 7z-only PATH so the fallback branch under test is the one that runs.
+  QVERIFY(QFile::link(sevenZip, bin.path() + QStringLiteral("/7z")));
+  const QByteArray oldPath = qgetenv("PATH");
+  qputenv("PATH", bin.path().toUtf8());
+  QList<std::pair<QString, QString>> failures;
+  for (const QString &fixture : fixtures) {
+    const auto scan = ArchiveSafety::scanArchiveEntries(fixture);
+    if (!scan.isOk()) {
+      failures.append({fixture, scan.error().userFacingSummary()});
+    }
+  }
+  qputenv("PATH", oldPath);
+
+  for (const auto &failure : failures) {
+    qWarning("false positive: %s -> %s", qPrintable(failure.first), qPrintable(failure.second));
+  }
+  QVERIFY2(failures.isEmpty(), "the link-vocabulary guard rejected a legitimate archive");
+#endif
+}
+
+// The gap itself: a listing that parses into entries while the link field is
+// named something we do not recognise. The real 7z here never does that (its
+// -slt keys are locale-invariant — verified across C/fr_FR/de_DE), so the
+// scenario is staged with a stub `7z` on a sandboxed PATH that emits a Type =
+// tar listing with the link fields renamed. Before this guard the scan reached
+// no link verdict and still reported SAFE.
+void TestArchiveSafety::sevenZipMissingLinkVocabularyFailsClosedWithoutSecurityVerdict() {
+  KARTEND_SKIP_QPROCESS_UNDER_TSAN();
+#ifdef Q_OS_WIN
+  QSKIP("shell-stub PATH sandbox is POSIX-only");
+#else
+  QTemporaryDir out;
+  QTemporaryDir bin;
+  QVERIFY(out.isValid() && bin.isValid());
+
+  // A non-empty file to stand in for the archive; the stub never reads it.
+  const QString fakeArchive = out.path() + QStringLiteral("/mystery.tar");
+  {
+    QFile f(fakeArchive);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("not really a tar, the stub does the talking");
+  }
+
+  const QString stub = bin.path() + QStringLiteral("/7z");
+  {
+    QFile f(stub);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    // printf is a SHELL BUILTIN — deliberate. PATH is stripped to the sandbox
+    // below, so a stub calling `cat` dies with "command not found" and the scan
+    // then fails for the wrong reason ("Archive listing tool failed"), which
+    // silently turns this into a test that passes without exercising anything.
+    f.write("#!/bin/sh\n"
+            "printf '%s\\n' \\\n"
+            "  'Listing archive: mystery.tar' \\\n"
+            "  '' \\\n"
+            "  'Type = tar' \\\n"
+            "  '' \\\n"
+            "  '----------' \\\n"
+            "  'Path = payload.bin' \\\n"
+            "  'Size = 5' \\\n"
+            "  'Verknuepfung = ' \\\n"
+            "  '' \\\n"
+            "  'Path = sub/other.bin' \\\n"
+            "  'Size = 7' \\\n"
+            "  'Verknuepfung = '\n");
+    f.close();
+    QVERIFY(f.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner |
+                             QFile::ReadUser | QFile::ExeUser));
+  }
+
+  const QByteArray oldPath = qgetenv("PATH");
+  qputenv("PATH", bin.path().toUtf8());
+  const auto scan = ArchiveSafety::scanArchiveEntriesWithTool(fakeArchive, QStringLiteral("7z"));
+  qputenv("PATH", oldPath);
+
+  // The stub must have RUN — a "tool failed" error would mean the listing was
+  // never parsed and this slot proved nothing.
+  QVERIFY2(
+      !scan.isError() || !scan.error().userFacingSummary().contains(QStringLiteral("tool failed")),
+      qPrintable(QStringLiteral("stub 7z did not run: %1").arg(scan.error().userFacingSummary())));
+  QVERIFY2(scan.isError(), "entries parsed but no link verdict possible must not scan as safe");
+  // Fails closed as a TOOL failure, not a security verdict, so
+  // scanArchiveEntries still falls through to bsdtar on a host that has it —
+  // only the 7z-only host of the reported scenario refuses outright.
+  QVERIFY2(!ArchiveSafety::isSecurityRejection(scan.error()),
+           "a missing link vocabulary is an uninterpretable listing, not an unsafe entry");
+#endif
 }
 
 QTEST_MAIN(TestArchiveSafety)

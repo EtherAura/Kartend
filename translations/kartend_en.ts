@@ -2242,7 +2242,7 @@ Kartend will now exit. Restart the application to apply the new configuration.</
 <context>
     <name>CreateCollectionDialog</name>
     <message>
-        <location filename="../src/ui/dialogs/collection/createcollectiondialog.cpp" line="+43"/>
+        <location filename="../src/ui/dialogs/collection/createcollectiondialog.cpp" line="+44"/>
         <source>Auto-detect</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2253,12 +2253,12 @@ Kartend will now exit. Restart the application to apply the new configuration.</
     </message>
     <message>
         <location line="+19"/>
-        <location line="+181"/>
+        <location line="+192"/>
         <source>Display name for the collection. Required.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-180"/>
+        <location line="-191"/>
         <source>Name:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2409,7 +2409,17 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+27"/>
+        <location line="+11"/>
+        <source>Fetch collection info &amp;&amp; artwork online after creating</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Runs the scraper&apos;s collection/platform pass for the new collection: description, manufacturer and dates from ScreenScraper or Wikipedia/Wikidata, plus logo and background art.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+25"/>
         <source>Display name for the collection. Cannot contain &apos;/&apos;, &apos;\\&apos;, or &apos;..&apos; — these would be substituted into launcher paths as a traversal segment.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4281,7 +4291,8 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/widgets/panes/detailspanesummary.cpp" line="+61"/>
+        <location filename="../src/ui/widgets/panes/detailspanesummary.cpp" line="+100"/>
+        <location line="+88"/>
         <source>Artwork</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4297,10 +4308,10 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/ui/widgets/panes/detailspane.cpp" line="+451"/>
-        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="+17"/>
-        <location line="+2"/>
-        <location line="+16"/>
+        <location filename="../src/ui/widgets/panes/detailspane.cpp" line="+473"/>
+        <location filename="../src/ui/widgets/panes/detailspanesummary.cpp" line="+29"/>
+        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="+24"/>
+        <location line="+22"/>
         <source>No item selected</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4326,7 +4337,8 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     </message>
     <message>
         <location line="+3"/>
-        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="-2"/>
+        <location filename="../src/ui/widgets/panes/detailspanesummary.cpp" line="-39"/>
+        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="-1"/>
         <source>File Information</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4394,67 +4406,136 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/widgets/panes/detailspanesummary.cpp" line="-26"/>
+        <location filename="../src/ui/widgets/panes/detailspanesummary.cpp" line="-117"/>
         <source>Collection Information</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+15"/>
+        <location line="+16"/>
+        <location line="+174"/>
+        <source>Description</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-173"/>
+        <location line="+174"/>
+        <source>Manufacturer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-173"/>
+        <location line="+174"/>
+        <source>Developer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-173"/>
+        <location line="+174"/>
+        <source>Publisher</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-173"/>
+        <location line="+174"/>
+        <source>Genre</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-173"/>
+        <location line="+174"/>
+        <source>Country</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-173"/>
+        <location line="+174"/>
+        <source>Released</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-173"/>
+        <location line="+174"/>
+        <source>Website</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-168"/>
+        <location line="+174"/>
         <source>Type</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="-171"/>
+        <location line="+99"/>
+        <location line="+75"/>
         <source>Items</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="-172"/>
+        <location line="+105"/>
+        <location line="+69"/>
         <source>Last scanned</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="-172"/>
+        <location line="+174"/>
         <source>Parent</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="-172"/>
+        <location line="+88"/>
         <source>Media</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="-86"/>
+        <location line="+88"/>
         <source>Video</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-87"/>
+        <location line="+88"/>
         <source>Manuals</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="-86"/>
+        <location line="+98"/>
         <source>Extensions</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+7"/>
+        <location line="-91"/>
         <source>⚠ Launcher path</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="-90"/>
+        <location line="+87"/>
+        <source>Size on disk</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>Subcollection</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="-102"/>
         <source>Item</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location filename="../src/ui/widgets/panes/detailspanesummary.cpp" line="+0"/>
+        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="+1"/>
         <source>Collection</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location filename="../src/ui/widgets/panes/detailspanetabs.cpp" line="+1"/>
         <source>File</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4502,7 +4583,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+362"/>
+        <location line="+364"/>
         <source>Artwork</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4510,7 +4591,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
 <context>
     <name>DetailsPaneManager</name>
     <message>
-        <location filename="../src/ui/controllers/detailspanemanager/detailspanemanagermetadata.cpp" line="+400"/>
+        <location filename="../src/ui/controllers/detailspanemanager/detailspanemanagermetadata.cpp" line="+431"/>
         <source>Background (theme)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -4537,6 +4618,36 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
     <message>
         <location line="+39"/>
         <source>Video</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../src/ui/controllers/detailspanemanager/detailspanemanager.cpp" line="+417"/>
+        <source>CPU</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>GPU</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Generation</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Units sold</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Predecessor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Successor</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -5392,8 +5503,8 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+26"/>
-        <source>Scrape collection / platform artwork…</source>
+        <location line="+29"/>
+        <source>Scrape collection info &amp;&amp; artwork…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -5497,7 +5608,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/input/interaction/interactionmanager_selection.cpp" line="+367"/>
+        <location filename="../src/modules/input/interaction/interactionmanager_selection.cpp" line="+386"/>
         <source>This collection&apos;s launcher paths are unresolvable on this host:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6785,7 +6896,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 <context>
     <name>LibraryOnboardingWizard</name>
     <message>
-        <location filename="../src/ui/dialogs/libraryonboardingwizard.cpp" line="+33"/>
+        <location filename="../src/ui/dialogs/libraryonboardingwizard.cpp" line="+34"/>
         <source>Welcome</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6821,12 +6932,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+1"/>
-        <location line="+74"/>
+        <location line="+88"/>
         <source>Browse…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-69"/>
+        <location line="-83"/>
         <source>Media folder:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6861,32 +6972,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+8"/>
-        <source>Video</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+0"/>
-        <source>Audio</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Reference</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+0"/>
-        <source>Image</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Other</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+1"/>
+        <location line="+25"/>
         <source>Type:</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6921,7 +7007,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+40"/>
+        <location line="+57"/>
+        <source>(none selected)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
         <source>Confirm</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6931,7 +7022,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+17"/>
+        <location line="+28"/>
         <source>&lt;b&gt;Name:&lt;/b&gt; %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6941,13 +7032,18 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+2"/>
+        <location line="+1"/>
         <source>&lt;b&gt;Type:&lt;/b&gt; %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+2"/>
         <source>&lt;b&gt;Artwork folder:&lt;/b&gt; %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>&lt;b&gt;Launcher:&lt;/b&gt; %1</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -7118,17 +7214,17 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+6"/>
-        <location line="+51"/>
+        <location line="+55"/>
         <source>Collection</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-35"/>
+        <location line="-39"/>
         <source>Sort by artwork</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+34"/>
+        <location line="+38"/>
         <source>Name</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8524,7 +8620,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/modules/data/scraper/providers/screenscraperprovider.cpp" line="+492"/>
+        <location filename="../src/modules/data/scraper/providers/screenscraperprovider.cpp" line="+592"/>
         <source>Extracting archive for hash ID…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8539,12 +8635,12 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+116"/>
+        <location line="+131"/>
         <source>%1 would expand to &quot;%2&quot;, which the launcher would read as an option rather than a value.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+139"/>
+        <location line="+165"/>
         <source>Launcher executable not found: %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8693,7 +8789,7 @@ The app will still load, but please fix these — collections that share an iden
     </message>
     <message>
         <location filename="../src/ui/dialogs/scraper/result/singleitemview.cpp" line="+43"/>
-        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="+415"/>
+        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="+485"/>
         <source>Publisher</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8704,13 +8800,15 @@ The app will still load, but please fix these — collections that share an iden
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="-2"/>
+        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="-26"/>
+        <location line="+24"/>
         <source>Genre</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
-        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="+1"/>
+        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="-23"/>
+        <location line="+24"/>
         <source>Developer</source>
         <translation type="unfinished"></translation>
     </message>
@@ -8757,17 +8855,24 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="-354"/>
+        <location filename="../src/ui/widgets/panes/detailspanemetadataview.cpp" line="-422"/>
         <source>Open Manual</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+347"/>
+        <location line="+389"/>
+        <location line="+26"/>
         <source>Description</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <location line="-25"/>
+        <source>No description available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+4"/>
+        <location line="+25"/>
         <source>Release date</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9063,7 +9168,17 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>ScrapeResultDialogUnified</name>
     <message>
-        <location filename="../src/ui/dialogs/scraper/result/scraperesultdialogunified.cpp" line="+210"/>
+        <location filename="../src/ui/dialogs/scraper/result/scraperesultdialogunified.cpp" line="+176"/>
+        <source>Collection info only — skip items</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Scrape description, manufacturer, dates and logo art for every checked collection without scraping any items. Turning this on pre-checks your shell collections (parents whose items live in subcollections); adjust the checks freely.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+43"/>
         <source>Collections</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9328,7 +9443,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+191"/>
+        <location line="+195"/>
         <source>Collection: %1 — scraping: %2</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9403,14 +9518,19 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+137"/>
+        <location line="+146"/>
         <location line="+17"/>
         <location line="+8"/>
-        <source>Scrape collection artwork</source>
+        <source>Scrape collection info</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-24"/>
+        <location line="+1"/>
+        <source>No collection- or platform-level info can be fetched for &quot;%1&quot;.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-25"/>
         <source>A scrape is already running — wait for it to finish.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9420,17 +9540,18 @@ The app will still load, but please fix these — collections that share an iden
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+8"/>
-        <source>The scraper for &quot;%1&quot; has no collection- or platform-level artwork to fetch.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <location line="+129"/>
+        <location line="+118"/>
+        <location line="+36"/>
         <source>Scraper</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-35"/>
+        <source>Check at least one collection before scraping.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+36"/>
         <source>Pick at least one collection (and one item) before scraping.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9534,7 +9655,7 @@ Remaining items: %5</source>
 <context>
     <name>ScraperCredentialsPanel</name>
     <message>
-        <location filename="../src/ui/dialogs/scraper/scrapercredentialspanel.cpp" line="+70"/>
+        <location filename="../src/ui/dialogs/scraper/scrapercredentialspanel.cpp" line="+71"/>
         <source>The Movie Database (TMDB)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9569,8 +9690,13 @@ Remaining items: %5</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+53"/>
-        <source>⚠ Warning — your scraper credentials are stored unencrypted in settings.ini because the system keychain was unavailable (%1). They will move back to the keychain automatically once it is available again.</source>
+        <location line="+61"/>
+        <source>⚠ Warning — your scraper credentials are stored unencrypted in kartend.cfg because this build of Kartend was compiled without system keychain support. This will not change on this build.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>⚠ Warning — your scraper credentials are stored unencrypted in kartend.cfg because the system keychain was unavailable (%1). They will move back to the keychain automatically once it is available again.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -10300,12 +10426,12 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+72"/>
+        <location line="+93"/>
         <source>closing the dialog</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="-27"/>
+        <location line="-35"/>
         <source>Rescan Required</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10317,7 +10443,7 @@ Would you like to rescan now?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+234"/>
+        <location line="+242"/>
         <source>Unsaved Changes</source>
         <translation type="unfinished"></translation>
     </message>
@@ -10539,7 +10665,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</s
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialogtreemutation.cpp" line="+131"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialogtreemutation.cpp" line="+169"/>
         <source>Create Collection</source>
         <translation type="unfinished"></translation>
     </message>
@@ -12332,7 +12458,7 @@ Continue?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+23"/>
+        <location line="+58"/>
         <source>Layout: Grid (click to change)</source>
         <translation type="unfinished"></translation>
     </message>

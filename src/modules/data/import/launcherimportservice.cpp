@@ -9,11 +9,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImageReader>
-#include <QRegularExpression>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
-#include <QStandardPaths>
 
 #include "bottleslibrary.h"
 #include "dbtxn.h"
@@ -422,6 +420,32 @@ auto sourceSlices(const QString &sourceId) -> QList<SourceSlice> {
   return slices;
 }
 
+auto coverHostAllowlist(const QString &sourceId) -> QStringList {
+  // Registrable domains rather than the exact CDN hostnames: the matcher on
+  // the other end accepts a host that IS the suffix or is a subdomain of it,
+  // so "itch.zone" covers img.itch.zone and any sibling shard the launcher
+  // starts handing out, while still refusing the look-alikes a plain
+  // endsWith would let through. Narrow enough to pin, wide enough that a CDN
+  // reshuffle does not quietly stop covers from downloading.
+  if (sourceId == QLatin1String(kSourceItch)) {
+    // butler.db cover_url / still_cover_url. itch serves art from img.itch.zone;
+    // itch.io itself is listed because uploaded covers have appeared on it.
+    return {QStringLiteral("itch.zone"), QStringLiteral("itch.io")};
+  }
+  if (sourceId == QLatin1String(kSourceHeroic)) {
+    // Heroic's art_square / art_cover come from whichever store the entry
+    // belongs to: Epic (cdn*.epicgames.com, some assets on unrealengine.com),
+    // GOG (images.gog.com, images-N.gog-statics.com) and Amazon via Nile
+    // (m.media-amazon.com).
+    return {QStringLiteral("epicgames.com"), QStringLiteral("unrealengine.com"),
+            QStringLiteral("gog.com"), QStringLiteral("gog-statics.com"),
+            QStringLiteral("media-amazon.com")};
+  }
+  // Every other source ships local artwork or none at all. Empty is a refusal
+  // here — see the header.
+  return {};
+}
+
 auto watchPaths(const QString &sourceId) -> QStringList {
   QStringList paths;
   const auto addExisting = [&paths](const QString &dir) {
@@ -736,8 +760,12 @@ auto syncEntries(const QList<GameEntry> &entries, const QString &sourceId, const
 }
 
 auto defaultBaseDir(const QString &sourceId, const QString &sourceKey) -> QString {
-  const QString base = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
-                       QStringLiteral("/launcher-imports/") + sourceId;
+  // Built from KartLink::managedStubRoot() rather than re-deriving the path,
+  // because that root is now the TRUST BOUNDARY the launch path checks against
+  // (Kartend-1o1a1): a stub only keeps its args if it lives under it. Two
+  // independent spellings of the same directory could drift and silently strip
+  // args from stubs Kartend itself wrote.
+  const QString base = KartLink::managedStubRoot() + QLatin1Char('/') + sourceId;
   if (sourceKey.isEmpty()) {
     return base;
   }
@@ -757,32 +785,12 @@ auto artworkDirFor(const QString &baseDir) -> QString {
 }
 
 auto sanitizeStubBaseName(const QString &title) -> QString {
-  QString base = title;
-  // Path separators and the characters PathUtils::validatePathSecurity
-  // rejects (plus Windows-reserved ones for tidiness) can't appear in a
-  // filename that later flows through the launch pipeline.
-  static const QRegularExpression kForbidden(QStringLiteral("[/\\\\;|`$<>\"*?\\x00-\\x1f]"));
-  base.replace(kForbidden, QStringLiteral(" "));
-  base = base.simplified();
-  while (base.endsWith(QLatin1Char('.'))) {
-    base.chop(1);
-  }
-  base = base.trimmed();
-  // A leading dash would read as a launcher option if the stub path were
-  // ever passed through verbatim; mirror buildLaunchCommand's guard.
-  while (base.startsWith(QLatin1Char('-'))) {
-    base.remove(0, 1);
-  }
-  base = base.trimmed();
-  constexpr int kMaxLength = 120;
-  if (base.size() > kMaxLength) {
-    base.truncate(kMaxLength);
-    base = base.trimmed();
-  }
-  if (base.isEmpty()) {
-    base = QStringLiteral("Untitled");
-  }
-  return base;
+  // Kartend-tb5nb: the rule set moved to PathUtils::sanitizeFileBaseName so
+  // this and MultiDisc::m3uFileNameFor cannot drift apart again — they had.
+  // Behaviour here is unchanged: same space substitute, same "Untitled"
+  // fallback, and no extraForbidden, so colons still survive as the
+  // "colon kept" case pins ("Half-Life 2: Episode Two").
+  return PathUtils::sanitizeFileBaseName(title, QStringLiteral(" "), QStringLiteral("Untitled"));
 }
 
 namespace {

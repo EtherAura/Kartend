@@ -75,8 +75,9 @@ struct CollectionBackground {
   bool operator==(const CollectionBackground &other) const {
     return backgroundType == other.backgroundType && backgroundColor == other.backgroundColor &&
            backgroundImage == other.backgroundImage && backgroundVideo == other.backgroundVideo &&
-           primaryColor == other.primaryColor && tileColor == other.tileColor &&
-           selectionColor == other.selectionColor && headerLogoImage == other.headerLogoImage &&
+           primaryColor == other.primaryColor && toolbarColorSource == other.toolbarColorSource &&
+           tileColor == other.tileColor && selectionColor == other.selectionColor &&
+           headerLogoImage == other.headerLogoImage &&
            headerLogoPosition == other.headerLogoPosition &&
            vignetteEnabled == other.vignetteEnabled &&
            vignetteIntensity == other.vignetteIntensity &&
@@ -93,11 +94,12 @@ struct CollectionBackground {
 // for the full rationale). Scoped enums are cast to int because qHash(Enum) only
 // exists since Qt 6.5 and CI pins Qt 6.4.2.
 inline size_t qHash(const CollectionBackground &key, size_t seed = 0) {
-  return qHashMulti(
-      seed, static_cast<int>(key.backgroundType), key.backgroundColor, key.backgroundImage,
-      key.backgroundVideo, key.primaryColor, key.tileColor, key.selectionColor, key.headerLogoImage,
-      static_cast<int>(key.headerLogoPosition), key.vignetteEnabled, key.vignetteIntensity,
-      key.wallpaperParallax, key.parallaxStrength, key.toolbarBackdropBlur, key.backdropBlurRadius);
+  return qHashMulti(seed, static_cast<int>(key.backgroundType), key.backgroundColor,
+                    key.backgroundImage, key.backgroundVideo, key.primaryColor,
+                    static_cast<int>(key.toolbarColorSource), key.tileColor, key.selectionColor,
+                    key.headerLogoImage, static_cast<int>(key.headerLogoPosition),
+                    key.vignetteEnabled, key.vignetteIntensity, key.wallpaperParallax,
+                    key.parallaxStrength, key.toolbarBackdropBlur, key.backdropBlurRadius);
 }
 
 #endif

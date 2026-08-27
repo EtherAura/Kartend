@@ -40,6 +40,18 @@ public:
     return m_credentialDemotionReason;
   }
 
+  /// Whether this BUILD has a keychain backend compiled in
+  /// (KARTEND_HAVE_QTKEYCHAIN). Says nothing about whether the backend is
+  /// currently reachable — a running keychain can still refuse a write, which
+  /// is the separate runtime-demotion case.
+  ///
+  /// Exposed because the definition is PRIVATE to kartend_data, so nothing
+  /// outside it — tests included — can answer the question by preprocessor.
+  /// That opacity is part of why the non-keychain build's permanently-hidden
+  /// warning banner went unnoticed: the configuration could not be asserted
+  /// about (Kartend-4ahok).
+  [[nodiscard]] static bool keychainBackendCompiledIn();
+
   // The settings-dialog orchestration half of this class (openSettingsDialog,
   // handleReloadRequired, handleLayoutChanges, onCollectionScanSummary plus
   // the pending-add-summary state) moved to the ui-layer

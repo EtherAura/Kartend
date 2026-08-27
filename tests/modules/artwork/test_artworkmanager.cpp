@@ -83,6 +83,9 @@ private slots:
   // Stale-size composed card re-delivery -------------------------------------
   void testStaleComposedCard_triggersRedelivery();
 
+  // Pool-recycled widget re-delivery -----------------------------------------
+  void testRecycledWidget_withStaleLoadedEntry_triggersRedelivery();
+
   // addPendingArtwork dedup --------------------------------------------------
   void testAddPendingArtwork_nullWidgetSafe();
   void testAddPendingArtwork_emptyPathSafe();
@@ -712,6 +715,54 @@ void TestArtworkManager::testStaleComposedCard_triggersRedelivery() {
   // re-registered as loaded.
   manager.addPendingArtwork(&widget, artPath);
   QVERIFY(!widget.hasStaleComposedArtwork());
+  QVERIFY(manager.hasArtworkForWidget(&widget));
+}
+
+void TestArtworkManager::testRecycledWidget_withStaleLoadedEntry_triggersRedelivery() {
+  // Kartend-eyfik: only clearWidgetReferences() wipes the registry, and it
+  // runs on collection change / pre-search / settings — NOT on a layout
+  // switch. A List round-trip releases every tile to the widget pool, whose
+  // resetForReuse() drops storedPixmap, so the registry goes on claiming
+  // "loaded" for a widget that is now blank. addPendingArtwork must notice
+  // the widget cannot honour that claim and re-deliver, or the whole grid
+  // comes back as hatched placeholders.
+  //
+  // Note this is NOT covered by the stale-composed-card case above:
+  // hasStaleComposedArtwork() returns false for a null pixmap, so a recycled
+  // widget looks "fine" to that check — which is exactly how the bug slipped
+  // through the dedup fast path.
+  const QString artPath = m_tempDir.path() + "/recycled.png";
+  QPixmap onDisk(400, 400);
+  onDisk.fill(Qt::darkGreen);
+  QVERIFY(onDisk.save(artPath, "PNG"));
+
+  ArtworkManager manager;
+  wireSetup(&manager);
+  m_cache->cacheArtworkInMemoryOnly(artPath, onDisk);
+
+  const QString itemPath = m_tempDir.path() + "/recycled.rom";
+  ItemWidget widget;
+  widget.setFilePath(itemPath);
+  widget.setItemDimensions(220, 280);
+
+  // First pass: cache hit delivers the art and registers the widget loaded.
+  manager.addPendingArtwork(&widget, artPath);
+  QVERIFY(manager.hasArtworkForWidget(&widget));
+  QVERIFY(widget.hasStoredArtwork());
+
+  // The pool recycles the widget. Nothing tells the registry, which is the
+  // whole point — the manager must not trust its own loaded entry blindly.
+  widget.resetForReuse();
+  QVERIFY(!widget.hasStoredArtwork());
+  QVERIFY(!widget.hasStaleComposedArtwork());    // null pixmap → not "stale"
+  QVERIFY(manager.hasArtworkForWidget(&widget)); // registry still says loaded
+
+  // The factory reconfigures the recycled widget for the same item and asks
+  // for the same artwork path again. This must repaint, not dedup away.
+  widget.setFilePath(itemPath);
+  widget.setItemDimensions(220, 280);
+  manager.addPendingArtwork(&widget, artPath);
+  QVERIFY(widget.hasStoredArtwork());
   QVERIFY(manager.hasArtworkForWidget(&widget));
 }
 

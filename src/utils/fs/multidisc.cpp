@@ -8,6 +8,8 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include "pathutils.h"
+
 namespace MultiDisc {
 
 namespace {
@@ -226,17 +228,18 @@ DiscMetadata mergeDiscs(const QList<DiscMetadata> &discsInOrder) {
 }
 
 QString m3uFileNameFor(const QString &base) {
-  QString safe = base.simplified();
-  // Path separators and the characters Windows refuses, so a name derived
-  // from a title can never escape its directory or fail to be written on a
-  // shared drive.
-  static const QRegularExpression illegal(QStringLiteral(R"([/\\:*?"<>|])"));
-  safe.replace(illegal, QStringLiteral("_"));
-  safe = safe.trimmed();
-  if (safe.isEmpty()) {
-    safe = QStringLiteral("playlist");
-  }
-  return safe + QStringLiteral(".m3u");
+  // Kartend-tb5nb: delegates to the shared rule set rather than carrying its
+  // own. This used to do the character replacement ALONE — no trailing-dot
+  // chop, no C0/NUL strip, no leading-dash strip, no length cap — which had
+  // silently diverged from the launcher-import stub namer in a sibling module.
+  //
+  // Underscore stays the substitute so names that were already legal resolve to
+  // the same .m3u file on disk as before. ':' is passed as an extra because a
+  // playlist may be written to a Windows/SMB share, which refuses it — the stub
+  // namer keeps colons on purpose, so it is a per-caller choice, not shared.
+  return PathUtils::sanitizeFileBaseName(base, QStringLiteral("_"), QStringLiteral("playlist"),
+                                         QStringLiteral(":")) +
+         QStringLiteral(".m3u");
 }
 
 } // namespace MultiDisc

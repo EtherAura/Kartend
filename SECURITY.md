@@ -4,7 +4,18 @@
 
 If you discover a security vulnerability in Kartend, please report it responsibly.
 
-**Email:** etheraura@protonmail.com
+**Preferred — [open a private security advisory](https://github.com/EtherAura/Kartend/security/advisories/new).**
+GitHub private vulnerability reporting is enabled on this repository. The report
+is private to you and the maintainer until an advisory is published, it keeps the
+report, the discussion and the fix on a single auditable thread, and it is the
+route that can request a CVE and credit you by name when the advisory goes out.
+
+**Fallback — etheraura@protonmail.com.** Use this if you would rather not go
+through GitHub, or do not have an account. It reaches the same person; it simply
+leaves no shared record either of us can refer back to.
+
+Please **do not** open a regular issue for a suspected vulnerability — issues are
+world-readable the moment they are filed.
 
 Please include:
 - Description of the vulnerability
@@ -12,7 +23,18 @@ Please include:
 - Potential impact
 - Suggested fix (if any)
 
-You will receive an acknowledgment within 48 hours. Security issues will be prioritized and a fix released as soon as practical.
+You will receive an acknowledgment within 48 hours on whichever channel you used. Security issues will be prioritized and a fix released as soon as practical.
+
+## Repository Security Posture
+
+Enabled on this repository, and verifiable from the outside:
+
+| Control | Status |
+|---------|--------|
+| [Private vulnerability reporting](https://github.com/EtherAura/Kartend/security/advisories/new) | Enabled |
+| Secret scanning | Enabled |
+| Secret scanning push protection | Enabled |
+| Dependabot security updates | Enabled |
 
 ## Security Considerations
 

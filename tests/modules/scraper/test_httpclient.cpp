@@ -24,6 +24,7 @@
 #include <QEventLoop>
 #include <QHostAddress>
 #include <QList>
+#include <QLoggingCategory>
 #include <QObject>
 #include <QSslCertificate>
 #include <QSslConfiguration>
@@ -396,6 +397,8 @@ private slots:
   void clearPending_cancelsQueuedRequestsViaCallback();
   void errorBody_controlCharacters_areFlattenedInDetails();
   void errorDetails_redactCredentialQueryValues();
+  void errorDetails_redactUnanticipatedCredentialKeys();
+  void enqueueLog_masksUnanticipatedQueryKeysButKeepsMediaPreset();
   void unconfiguredHost_defaultsToOneInFlightRequest();
   void throttledHost_admitsBurstOfMaxConcurrentPerWindow();
   void get_fromWrongThread_isRefusedInReleaseBuilds();
@@ -859,6 +862,121 @@ void TestHttpClient::errorDetails_redactCredentialQueryValues() {
       details.contains(QStringLiteral("<redacted>")),
       qPrintable(
           QStringLiteral("redaction marker missing — did the URL fold move? %1").arg(details)));
+}
+
+// Kartend-bvrp9: the same fold, but for a credential parameter NOBODY
+// anticipated. The masking used to key off a fixed list of credential names,
+// so `auth` — not on it, and a plausible name for the next provider's
+// parameter — travelled verbatim into details, the always-on error log and
+// the resume file. Masking is now keyed off an allow-list of request-shape
+// keys, which makes "unrecognised" mean "redacted" instead of "logged".
+// `output=json` on the same URL proves the allow-list still lets the
+// diagnostic half through.
+void TestHttpClient::errorDetails_redactUnanticipatedCredentialKeys() {
+  SKIP_LOCAL_TLS_SERVER_ON_MACOS();
+  const QByteArray body = "rejected credential auth=hunter2sekrit";
+  const QByteArray response = "HTTP/1.1 403 Forbidden\r\n"
+                              "Content-Type: text/plain\r\n"
+                              "Content-Length: " +
+                              QByteArray::number(body.size()) +
+                              "\r\n"
+                              "Connection: close\r\n\r\n" +
+                              body;
+  StaticResponseServer server(response);
+  QVERIFY(server.start());
+
+  QUrl url;
+  url.setScheme("https");
+  url.setHost("127.0.0.1");
+  url.setPort(server.port());
+  url.setPath("/v1/lookup");
+  url.setQuery("auth=hunter2sekrit&output=json");
+
+  std::optional<ErrorUtils::Result<QByteArray>> received;
+  QEventLoop loop;
+  Scraper::HttpClient::instance()->get(url, {{"User-Agent", "test-agent"}},
+                                       [&](ErrorUtils::Result<QByteArray> r) {
+                                         received = std::move(r);
+                                         loop.quit();
+                                       });
+  QTimer::singleShot(15000, &loop, &QEventLoop::quit);
+  loop.exec();
+
+  QVERIFY2(received.has_value(), "HttpClient callback never fired");
+  QVERIFY2(received->isError(), "Expected an error result for the HTTP 403");
+  const QString details = received->error().details;
+  QVERIFY2(
+      !details.contains(QStringLiteral("hunter2sekrit")),
+      qPrintable(
+          QStringLiteral("unanticipated credential key leaked into details: %1").arg(details)));
+  QVERIFY2(details.contains(QStringLiteral("<redacted>")),
+           qPrintable(QStringLiteral("redaction marker missing: %1").arg(details)));
+}
+
+// Kartend-bvrp9, the ENQ trace half. That line deliberately carries the query
+// string — it is how we confirm a media preset (maxwidth/maxheight) actually
+// reached the wire — so it cannot simply drop the query wholesale. The
+// allow-list has to cut exactly between the two: request SHAPE stays
+// readable, an unrecognised parameter is masked.
+//
+// No TLS server here: the ENQ line is emitted synchronously inside get(),
+// before a socket is opened, so a closed loopback port exercises it on every
+// platform. The refused reply is drained at the end so nothing outlives the
+// captures it writes to.
+void TestHttpClient::enqueueLog_masksUnanticipatedQueryKeysButKeepsMediaPreset() {
+  auto *client = Scraper::HttpClient::instance();
+  client->clearPending();
+
+  const QUrl url(QStringLiteral("https://127.0.0.1:1/jeuInfos.php?maxwidth=400&auth=hunter2sekrit&"
+                                "sspassword=topsecret99&output=json"));
+
+  static QStringList capturedTimingLines;
+  capturedTimingLines.clear();
+  // The timings category is compiled Warning-only, so without this rule the
+  // ENQ line is never built and the test would pass vacuously.
+  QLoggingCategory::setFilterRules(QStringLiteral("kartend.scrape.timings.debug=true"));
+  auto previousHandler =
+      qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &ctx, const QString &msg) {
+        Q_UNUSED(type);
+        if (ctx.category && QByteArray(ctx.category) == "kartend.scrape.timings") {
+          capturedTimingLines.append(msg);
+        }
+      });
+
+  bool settled = false;
+  client->get(url, {{"User-Agent", "test-agent"}},
+              [&](const ErrorUtils::Result<QByteArray> &) { settled = true; });
+
+  qInstallMessageHandler(previousHandler);
+  QLoggingCategory::setFilterRules(QString());
+
+  QString enqLine;
+  for (const QString &line : capturedTimingLines) {
+    if (line.startsWith(QStringLiteral("ENQ"))) {
+      enqLine = line;
+      break;
+    }
+  }
+  // Drain the in-flight request (fast connection-refused) BEFORE asserting:
+  // the line under test is already captured in enqLine, and a QVERIFY2
+  // failure returns immediately, which would otherwise leave a live reply
+  // writing to `settled` after this frame is gone — and leave the shared
+  // client's per-host accounting dirty for the cases that follow.
+  QTRY_VERIFY_WITH_TIMEOUT(settled, 10000);
+  client->clearPending();
+
+  QVERIFY2(!enqLine.isEmpty(),
+           qPrintable(QStringLiteral("no ENQ trace captured — got: %1")
+                          .arg(capturedTimingLines.join(QStringLiteral(" | ")))));
+  QVERIFY2(!enqLine.contains(QStringLiteral("hunter2sekrit")),
+           qPrintable(QStringLiteral("unanticipated credential logged verbatim: %1").arg(enqLine)));
+  QVERIFY2(!enqLine.contains(QStringLiteral("topsecret99")),
+           qPrintable(QStringLiteral("known credential logged verbatim: %1").arg(enqLine)));
+  QVERIFY2(enqLine.contains(QStringLiteral("maxwidth=400")),
+           qPrintable(
+               QStringLiteral("media preset must stay readable for diagnostics: %1").arg(enqLine)));
+  QVERIFY2(enqLine.contains(QStringLiteral("output=json")),
+           qPrintable(QStringLiteral("allow-listed key must not be masked: %1").arg(enqLine)));
 }
 
 // Locks in the documented default host policy: a host with NO setRateLimit

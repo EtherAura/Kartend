@@ -24,23 +24,41 @@
 #include "collection/listviewoptions.h"
 #include "collection/scraperoverrides.h"
 #include "collection/sidebarappearance.h"
+#include "collection/systemicon_settings.h"
 #include "collectiontypes.h"
 
 namespace {
 
-// Mutates a default-constructed T via `mutate` and asserts the cluster hash
-// differs from the default's — i.e. qHash is sensitive to that field. Also
-// pins that two default-constructed values hash equal (equal inputs must always
-// fingerprint equal, or the diff would fire spuriously on every save).
+// Mutates a default-constructed T via `mutate` and asserts BOTH halves of the
+// cluster's identity react: qHash is sensitive to that field, and so is
+// operator==. Also pins that two default-constructed values hash equal (equal
+// inputs must always fingerprint equal, or the diff would fire spuriously on
+// every save).
+//
+// The operator== half is Kartend-10sb1. Asserting only the hash catches the
+// two functions DRIFTING APART — a field in operator== but not qHash — but is
+// silent on the defect that actually shipped twice (SidebarAppearance::
+// sidebarJustification, CollectionBackground::toolbarColorSource): a field in
+// NEITHER. Checking both here means every case below covers both functions for
+// all ten clusters at once, so the next such field only has to be missing from
+// one of them to be caught. Missing from both is caught by
+// .scripts/check-cluster-fingerprints.py, which compares each struct's members
+// against the two function bodies — the completeness check plain C++ cannot
+// express without reflection.
 template <typename T, typename Mutator> void hashDetects(const char *label, Mutator &&mutate) {
   const T base;
   QVERIFY2(qHash(base) == qHash(T{}),
            "two default-constructed cluster values must produce the same fingerprint hash");
+  QVERIFY2(base == T{}, "two default-constructed cluster values must compare equal");
   T changed;
   mutate(changed);
   QVERIFY2(qHash(base) != qHash(changed),
            qPrintable(QStringLiteral("cluster fingerprint hash is insensitive to %1")
                           .arg(QLatin1String(label))));
+  QVERIFY2(
+      !(base == changed),
+      qPrintable(
+          QStringLiteral("cluster operator== is insensitive to %1").arg(QLatin1String(label))));
 }
 
 } // namespace
@@ -58,6 +76,7 @@ private slots:
   void scraperOverridesHashTracksEachField();
   void launcherProfileHashTracksEachField();
   void launcherConfigHashTracksEachField();
+  void systemIconHashTracksEachField();
 };
 
 void TestCollectionDiffFingerprint::gridLayoutHashTracksEachField() {
@@ -100,8 +119,10 @@ void TestCollectionDiffFingerprint::sidebarHashTracksEachField() {
                  [](T &c) { c.sidebarBackgroundColor = QStringLiteral("#123456"); });
   hashDetects<T>("sidebarBackgroundImage",
                  [](T &c) { c.sidebarBackgroundImage = QStringLiteral("/tmp/bg.png"); });
-  // sidebarPattern has a single enumerator (Crosshatch), so there is no other
-  // value to mutate it to — it is hashed for completeness but can't be tested.
+  // fingerprint-exempt: sidebarPattern DetailsPanePattern has a single
+  // enumerator (Crosshatch), so there is no other value to mutate it to. It is
+  // hashed for completeness but cannot be exercised until a second pattern
+  // exists — at which point this marker should go and a case replace it.
   hashDetects<T>("sidebarPatternIntensity", [](T &c) { c.sidebarPatternIntensity = 17; });
   hashDetects<T>("sidebarPatternColor",
                  [](T &c) { c.sidebarPatternColor = QStringLiteral("#abcdef"); });
@@ -120,6 +141,11 @@ void TestCollectionDiffFingerprint::sidebarHashTracksEachField() {
   hashDetects<T>("sidebarActiveTab", [](T &c) { c.sidebarActiveTab = DetailsPaneTab::Collection; });
   hashDetects<T>("sidebarFontFamily", [](T &c) { c.sidebarFontFamily = QStringLiteral("Mono"); });
   hashDetects<T>("sidebarFontPointSize", [](T &c) { c.sidebarFontPointSize = 14; });
+  // Kartend-10sb1: found by the completeness lint, not by hand. This field was
+  // in both operator== and qHash all along — it simply had no case, which is
+  // the hole the per-field assertions above cannot see.
+  hashDetects<T>("sidebarScrollbarMode",
+                 [](T &c) { c.sidebarScrollbarMode = ScrollbarMode::Hide; });
 }
 
 void TestCollectionDiffFingerprint::backgroundHashTracksEachField() {
@@ -129,6 +155,13 @@ void TestCollectionDiffFingerprint::backgroundHashTracksEachField() {
   hashDetects<T>("backgroundImage", [](T &c) { c.backgroundImage = QStringLiteral("/tmp/x.png"); });
   hashDetects<T>("backgroundVideo", [](T &c) { c.backgroundVideo = QStringLiteral("/tmp/x.mp4"); });
   hashDetects<T>("primaryColor", [](T &c) { c.primaryColor = QStringLiteral("#333333"); });
+  // Kartend-5lzvl: this field was in NEITHER operator== nor qHash — the same
+  // defect class as Kartend-g3fth one cluster up, found by auditing for it.
+  // A collection whose only change was the Appearance page's 'Toolbar colour'
+  // fingerprinted equal, so emitPerCollectionDiffs never fired
+  // collectionBackgroundChanged and the toolbar kept its old source.
+  hashDetects<T>("toolbarColorSource",
+                 [](T &c) { c.toolbarColorSource = ToolbarColorSource::Accent; });
   hashDetects<T>("tileColor", [](T &c) { c.tileColor = QStringLiteral("#444444"); });
   hashDetects<T>("selectionColor", [](T &c) { c.selectionColor = QStringLiteral("#555555"); });
   hashDetects<T>("headerLogoImage",
@@ -214,6 +247,29 @@ void TestCollectionDiffFingerprint::launcherConfigHashTracksEachField() {
   hashDetects<T>("corePath", [](T &c) { c.corePath = QStringLiteral("/cores/x.so"); });
   hashDetects<T>("launchParameters", [](T &c) { c.launchParameters = QStringLiteral("--fs"); });
   hashDetects<T>("presetId", [](T &c) { c.presetId = QStringLiteral("preset-1"); });
+}
+
+// Kartend-10sb1. SystemIconSettings (Kartend-1kkk2) had a qHash overload and a
+// place in the fingerprint baseline but no cases here at all — the whole
+// cluster was invisible to this file, which is the gap the per-field
+// assertions cannot see and .scripts/check-cluster-fingerprints.py can.
+//
+// Its operator== is `= default`, so equality tracks every member by
+// construction and cannot drift. qHash is the hand-written half, and it is the
+// one that would silently miss a tenth field.
+void TestCollectionDiffFingerprint::systemIconHashTracksEachField() {
+  using T = SystemIconSettings;
+  hashDetects<T>("enabled", [](T &c) { c.enabled = !c.enabled; });
+  hashDetects<T>("systemName",
+                 [](T &c) { c.systemName = QStringLiteral("Nintendo - Game Boy Advance"); });
+  hashDetects<T>("systemAutoDetected", [](T &c) { c.systemAutoDetected = !c.systemAutoDetected; });
+  hashDetects<T>("subject", [](T &c) { c.subject = SystemIconSubject::Console; });
+  hashDetects<T>("packOverride", [](T &c) { c.packOverride = QStringLiteral("monochrome"); });
+  hashDetects<T>("style", [](T &c) { c.style = TreeIconStyle::Tinted; });
+  hashDetects<T>("useCollectionArtwork",
+                 [](T &c) { c.useCollectionArtwork = !c.useCollectionArtwork; });
+  hashDetects<T>("placement", [](T &c) { c.placement = SystemIconPlacement::AfterName; });
+  hashDetects<T>("iconSize", [](T &c) { c.iconSize = 48; });
 }
 
 QTEST_APPLESS_MAIN(TestCollectionDiffFingerprint)

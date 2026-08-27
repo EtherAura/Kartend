@@ -369,6 +369,19 @@ void LauncherImportController::fetchRemoteCovers(
     qCWarning(lcLauncherImport) << "skipping cover fetch: cannot create" << frontDir;
     return;
   }
+  // Kartend-ob2um: pin the fetch to the launcher's own art hosts. Passing an
+  // allowlist is also what selects HttpClient's verified redirect policy —
+  // with none, a 3xx from a URL this launcher database supplied is followed
+  // to any HTTPS host without a check, which is a blind pivot at an internal
+  // one. Empty here means "no host is approved for this source", the
+  // opposite of HttpClient's empty-means-unpinned convention, so it has to
+  // stop the pass rather than be forwarded.
+  const QStringList coverHosts = LauncherImportService::coverHostAllowlist(config.importSource);
+  if (coverHosts.isEmpty()) {
+    qCWarning(lcLauncherImport) << "skipping cover fetch: no approved cover hosts for source"
+                                << config.importSource;
+    return;
+  }
 
   if (m_ctx.showStatusMessage) {
     m_ctx.showStatusMessage(
@@ -449,7 +462,8 @@ void LauncherImportController::fetchRemoteCovers(
         /*maxResponseBytes=*/kMaxCoverBytes,
         // Covers are images; a launcher database pointing at anything else is
         // refused before a byte is written.
-        /*expectedContentTypePrefix=*/QStringLiteral("image/"));
+        /*expectedContentTypePrefix=*/QStringLiteral("image/"),
+        /*allowedHostSuffixes=*/coverHosts);
   }
 }
 

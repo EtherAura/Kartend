@@ -59,6 +59,8 @@ private slots:
   void playlistsAreGroupedReservedFirstAndNeverInline();
   void hostileCycleRendersFinitely();
   void outOfRangeChildIsIgnored();
+  void childrenSortCaseInsensitivelyLikeTheGrid();
+  void caseOnlyTiesKeepConfigOrder();
 };
 
 void TestCollectionTreeModel::nestingBuildsRecursiveNodes() {
@@ -125,6 +127,38 @@ void TestCollectionTreeModel::outOfRangeChildIsIgnored() {
 
   const auto model = CollectionTreeModel::build(cols, cache);
   QCOMPARE(renderRoots(model), QStringLiteral("0"));
+}
+
+// Kartend-fxn4v: the reporter's exact vendor set. Config order here is the
+// case-SENSITIVE directory-scan order a recursive import produces on Linux,
+// which is what the sidebar used to render verbatim — "NEC, Nintendo, SNK,
+// Sega, Sharp", because 'N' < 'e' in ASCII. The grid sorted the same five
+// case-insensitively, so one screen showed two different orders.
+void TestCollectionTreeModel::childrenSortCaseInsensitivelyLikeTheGrid() {
+  QList<CollectionConfig> cols;
+  cols << plain("Consoles") << plain("NEC", 0) << plain("Nintendo", 0) << plain("SNK", 0)
+       << plain("Sega", 0) << plain("Sharp", 0);
+  CollectionHierarchyCache cache;
+  cache.rebuild(cols);
+
+  const auto model = CollectionTreeModel::build(cols, cache);
+
+  // Indices 1..5 are NEC, Nintendo, SNK, Sega, Sharp in config order. Sorted
+  // case-insensitively that is NEC, Nintendo, Sega, Sharp, SNK → 1,2,4,5,3.
+  QCOMPARE(renderRoots(model), QStringLiteral("0(1,2,4,5,3)"));
+}
+
+// Case-insensitive compare rates "Sega" and "SEGA" equal, so the sort must be
+// STABLE — an unstable pass would order such pairs arbitrarily and the sidebar
+// could reshuffle between builds for no visible reason.
+void TestCollectionTreeModel::caseOnlyTiesKeepConfigOrder() {
+  QList<CollectionConfig> cols;
+  cols << plain("Root") << plain("SEGA", 0) << plain("sega", 0) << plain("Sega", 0);
+  CollectionHierarchyCache cache;
+  cache.rebuild(cols);
+
+  const auto model = CollectionTreeModel::build(cols, cache);
+  QCOMPARE(renderRoots(model), QStringLiteral("0(1,2,3)"));
 }
 
 QTEST_MAIN(TestCollectionTreeModel)

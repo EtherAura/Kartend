@@ -135,6 +135,24 @@ struct SyncedStub {
   QString pendingCoverUrl;
 };
 
+/// Host suffixes a @p sourceId cover fetch is allowed to reach — including
+/// every redirect hop, since HttpClient switches to a verified redirect
+/// policy the moment a non-empty allowlist is pinned (Kartend-ob2um).
+///
+/// pendingCoverUrl is read out of a third-party launcher database, which is
+/// an ordinary user-writable file: itch's butler.db cover_url or Heroic's
+/// art_square JSON. Without a pin, a tampered database can 302 the fetch at
+/// any HTTPS host — an internal one included — and the reply is written into
+/// the artwork folder.
+///
+/// EMPTY MEANS REFUSE, not "unrestricted". Callers must not hand an empty
+/// list to HttpClient, whose own convention is the opposite: there, empty
+/// means unpinned. A source absent from this table is one that supplies no
+/// remote cover URLs today, so a fetch attempting one is a source that
+/// started supplying them without anyone deciding where they may come from —
+/// exactly the silent widening an allow-list exists to prevent.
+[[nodiscard]] QStringList coverHostAllowlist(const QString &sourceId);
+
 struct SyncResult {
   int written = 0;   ///< Stubs created or rewritten.
   int removed = 0;   ///< Stale stubs deleted (game uninstalled).

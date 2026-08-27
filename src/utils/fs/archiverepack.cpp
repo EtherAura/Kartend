@@ -4,6 +4,8 @@
 #include <QFileInfo>
 #include <QSet>
 
+#include "archivesafety.h"
+
 #ifdef KARTEND_HAS_LIBARCHIVE
 #include <archive.h>
 #include <archive_entry.h>
@@ -87,8 +89,48 @@ ErrorUtils::Result<int> repackLibarchive(const QString &src, const QString &dst,
     }
     const char *nm = archive_entry_pathname(entry);
     QString finalName = nm != nullptr ? QString::fromUtf8(nm) : QString();
+    // Kartend-11lzl: the source header used to be copied through verbatim, so
+    // a symlink entry, a hardlink entry or a "../" name in the source survived
+    // into the repacked archive — which then REPLACES the user's original
+    // file. Extraction is still gated by ArchiveSafety downstream, so this was
+    // never an escape on its own; what it was is the DAT-fix engine laundering
+    // a hostile archive into a fresh one and flagging nothing.
+    //
+    // Checked inline against libarchive's own view rather than by calling
+    // ArchiveSafety::scanArchiveEntries(src): that spawns bsdtar/7z to list an
+    // archive this function is already streaming, and the tool that writes the
+    // bytes should be the tool that vets them. The path RULE is still shared —
+    // entryPathEscapes is ArchiveSafety's — so the two surfaces cannot drift
+    // on what counts as an escape.
+    if (archive_entry_hardlink(entry) != nullptr) {
+      return fail(ErrorCode::InvalidFilePath, "Refusing to repack a hardlink entry", finalName);
+    }
+    if (archive_entry_symlink(entry) != nullptr || archive_entry_filetype(entry) == AE_IFLNK) {
+      return fail(ErrorCode::InvalidFilePath, "Refusing to repack a symlink entry", finalName);
+    }
+    // Anything that is not a plain file or a directory (device node, fifo,
+    // socket) has no business in a ROM archive and nothing downstream expects
+    // one; fail closed rather than propagate a type we have not reasoned about.
+    if (const auto type = archive_entry_filetype(entry); type != AE_IFREG && type != AE_IFDIR) {
+      return fail(ErrorCode::InvalidFilePath, "Refusing to repack a non-regular archive entry",
+                  finalName);
+    }
+    if (finalName.isEmpty()) {
+      return fail(ErrorCode::InvalidFilePath, "Refusing to repack an entry with no name", src);
+    }
+    if (ArchiveSafety::entryPathEscapes(finalName)) {
+      return fail(ErrorCode::InvalidFilePath, "Refusing to repack an escaping entry path",
+                  finalName);
+    }
     if (const auto it = renames.constFind(finalName); it != renames.constEnd()) {
       finalName = it.value();
+      // The replacement name derives from downloaded DAT data, so it is no
+      // more trusted than the source name — validate it on the same rule
+      // before it reaches the header.
+      if (finalName.isEmpty() || ArchiveSafety::entryPathEscapes(finalName)) {
+        return fail(ErrorCode::InvalidFilePath, "Refusing an escaping DAT rename target",
+                    finalName);
+      }
       const QByteArray newName = finalName.toUtf8();
       archive_entry_set_pathname(entry, newName.constData());
       ++renamed;
@@ -96,13 +138,11 @@ ErrorUtils::Result<int> repackLibarchive(const QString &src, const QString &dst,
     // Refuse two entries with the same final name: libarchive's zip/7z writer
     // accepts duplicates silently and one would shadow the other on extraction
     // (a lost ROM). The planner already skips colliding renames; guard here too.
-    if (!finalName.isEmpty()) {
-      if (writtenNames.contains(finalName)) {
-        return fail(ErrorCode::FileWriteError, "Refusing to write a duplicate entry name",
-                    finalName);
-      }
-      writtenNames.insert(finalName);
+    // (finalName is non-empty by the check above.)
+    if (writtenNames.contains(finalName)) {
+      return fail(ErrorCode::FileWriteError, "Refusing to write a duplicate entry name", finalName);
     }
+    writtenNames.insert(finalName);
     if (archive_write_header(out, entry) != ARCHIVE_OK) {
       return fail(ErrorCode::FileWriteError, "Could not write archive entry header",
                   dst + QStringLiteral(": ") + QString::fromUtf8(archive_error_string(out)));

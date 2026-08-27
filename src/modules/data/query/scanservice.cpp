@@ -22,6 +22,7 @@
 // declared there.
 #include "scanservice.h"
 #include "scanartwork.h"
+#include "scanmetadata.h"
 #include "scanservice_internal.h"
 
 #include "batchsizes.h"
@@ -811,10 +812,20 @@ void ScanService::maybeRefreshArtwork(const QString &uuid, const CollectionConfi
   const int changed = ScanArtwork::refreshArtworkForItems(
       m_db, txnDepth, artworkDir, uuid, collection.mediaDirectory,
       collection.folderBrowsing.includeArtworkSubfolders);
+  // The artwork directory moved or changed underneath us, and the metadata
+  // sidecars live inside it — so this is also the moment a library that
+  // arrived with its sidecars can hand them over (Kartend-zur26). Gated by the
+  // signature check above, so it does not run on an unchanged collection.
+  const int hydrated = ScanMetadata::hydrateFromSidecars(m_db, txnDepth, artworkDir, uuid);
   storeArtworkSignature(uuid, collection);
   if (changed > 0) {
     qCDebug(lcQueryManager).nospace()
         << "artwork refresh updated " << changed << " row(s) in '" << collection.name << "'";
+  }
+  if (hydrated > 0) {
+    qCDebug(lcQueryManager).nospace()
+        << "hydrated " << hydrated << " metadata row(s) from sidecars in '" << collection.name
+        << "'";
   }
 }
 
@@ -873,6 +884,21 @@ bool ScanService::ensureCollectionScanned(int collectionIndex, const CollectionC
     // current — record the fingerprint that made them so, or the next load
     // would run a redundant refresh (Kartend-d1l99).
     storeArtworkSignature(uuid, collection);
+    // Kartend-zur26: read metadata sidecars back for items that have no
+    // metadata row. This is the pass that makes a scraped library portable —
+    // a lost or moved media.db leaves the sidecars sitting next to the
+    // artwork, which is itself re-discovered by the scan above. Runs after
+    // the apply so the item rows it joins against are the final ones, and
+    // costs one directory listing (zero for a collection never scraped).
+    int hydrateTxnDepth = 0;
+    const int hydrated = ScanMetadata::hydrateFromSidecars(
+        m_db, hydrateTxnDepth,
+        PathUtils::validateAndExpandPath(collection.artworkDirectory, collection.name), uuid);
+    if (hydrated > 0) {
+      qCDebug(lcQueryManager).nospace()
+          << "hydrated " << hydrated << " metadata row(s) from sidecars in '" << collection.name
+          << "'";
+    }
   }
 
   // Remember a failed scan so the next reload-driven pass skips it instead of

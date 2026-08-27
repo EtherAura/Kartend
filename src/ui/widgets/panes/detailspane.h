@@ -327,6 +327,11 @@ protected:
   /// so the path always fits the available width without losing the start /
   /// end portions to a fixed-length right-truncation.
   void resizeEvent(QResizeEvent *event) override;
+  /// Kartend-z0dob: the content cap is latched from the viewport, and at
+  /// startup the pane is sized while still HIDDEN — so the viewport never
+  /// settles and never emits the resize the eventFilter waits for. Becoming
+  /// visible is the missing seam.
+  void showEvent(QShowEvent *event) override;
   /// Caps the scrolled content at the viewport width. The pane has no
   /// horizontal scrollbar, so anything wider is unreachable AND off-centres
   /// every child that centres itself in the content widget.

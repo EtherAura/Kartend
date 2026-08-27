@@ -1,14 +1,17 @@
 #include "test_interactionmanager.h"
 
 #include "applicationmanager.h"
+#include "collection/collectioncontext.h"
 #include "interactionmanager.h"
 #include "mainwindow.h"
+#include "scrollmanager.h"
 #include "selectionmanager.h"
 // Kartend-xrj9r: this suite asserts only on in-memory coordinator state
 // (never on persisted rows/INI), so it runs against the mocked fixture —
 // no SQLite/QSettings setup per slot.
 #include "mocks/mockedmainwindowfixture.h"
 
+#include <QStringList>
 #include <QTest>
 
 namespace {
@@ -165,4 +168,58 @@ void TestInteractionManager::testSelectionChangeNotificationResetsExpandState() 
   im->selectionManager()->notifySelectionChanged();
 
   QCOMPARE(im->state().expandedItemIndex(), -1);
+}
+
+void TestInteractionManager::testJumpToEdgePublishesSelectionNotJustTheRing() {
+  // Committing a selection is three steps, not two: move the index, draw the
+  // ring, and PUBLISH it — updateFilePathForSelection, the only place that
+  // resolves the selection's file path and decides between item metadata and a
+  // subcollection summary for the details pane.
+  //
+  // Home/End ran the first two and skipped the third. SelectionManager::
+  // setSelectedIndex is a bare field write, so this handler hand-rolls the ring
+  // and the counter itself; it simply never grew the publish. The ring moved,
+  // the toolbar counter agreed an item was selected, and the pane went on
+  // describing whatever was there before (Kartend-bioqp).
+  //
+  // selectedFilePath() is the precise witness: nothing but the publish step
+  // sets it, so an empty path after a completed jump IS the missing step.
+  KartendTest::MockedMainWindowFixture fixture;
+  auto *appManager = fixture.window()->getApplicationManager();
+  ScrollManager *sm = appManager->getScrollManager();
+  InteractionManager *im = interaction(fixture);
+  QVERIFY(sm);
+  QVERIFY(im);
+
+  // Three preloaded media items, no subcollections — same seeding pattern as
+  // the ScrollManager suite.
+  CollectionContext context;
+  context.filePaths =
+      QStringList{QStringLiteral("/items/Alpha.bin"), QStringLiteral("/items/Beta.bin"),
+                  QStringLiteral("/items/Gamma.bin")};
+  context.fileNames.insert(context.filePaths.at(0), QStringLiteral("Alpha"));
+  context.fileNames.insert(context.filePaths.at(1), QStringLiteral("Beta"));
+  context.fileNames.insert(context.filePaths.at(2), QStringLiteral("Gamma"));
+  sm->setupVirtualScrolling(context.filePaths.size(), context);
+  QCOMPARE(sm->getTotalItems(), 3);
+
+  // The reported entry point: a fresh visit with nothing selected, Home as the
+  // very first action.
+  im->clearSelection();
+  QCOMPARE(im->currentSelectedIndex(), -1);
+  QVERIFY(im->selectedFilePath().isEmpty());
+
+  // handleJumpToEdge is a private slot — reach it the way the KeyboardManager
+  // connection does rather than widening the header for a test.
+  QVERIFY(QMetaObject::invokeMethod(im, "handleJumpToEdge", Qt::DirectConnection,
+                                    Q_ARG(bool, false)));
+
+  QCOMPARE(im->currentSelectedIndex(), 0);
+  QCOMPARE(im->selectedFilePath(), context.filePaths.at(0));
+
+  // End must publish too — the same handler, the opposite edge.
+  QVERIFY(
+      QMetaObject::invokeMethod(im, "handleJumpToEdge", Qt::DirectConnection, Q_ARG(bool, true)));
+  QCOMPARE(im->currentSelectedIndex(), 2);
+  QCOMPARE(im->selectedFilePath(), context.filePaths.at(2));
 }

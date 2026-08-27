@@ -52,6 +52,12 @@ public:
   /// refresh the button's tooltip.
   void syncViewModeButton(ViewType viewType);
 
+  /// Reflect the ACTIVE collection's persisted viewType onto the layout-picker.
+  /// No-op when no collection is current (root/home view), which leaves the
+  /// previous checked state rather than inventing one. Wired to the popup's
+  /// aboutToShow so the menu can never disagree with the view (Kartend-lp7j9).
+  void syncViewModeButtonFromCurrentCollection();
+
   /// Create the search-mode QAction and attach it to the search QLineEdit at
   /// LeadingPosition. Wiring the triggered() signal to InteractionManager
   /// happens later (in the wiring pass) once that manager exists.

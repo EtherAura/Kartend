@@ -22,6 +22,8 @@ private slots:
   void parseSearchResponse_skipsMalformedWorkKey();
   void parseSearchResponse_emptyDocsArrayIsSuccess();
   void parseSearchResponse_malformedJsonReturnsError();
+  void parseSearchResponse_boundsCandidateCountFromAnOversizedArray();
+  void parseDetailResponse_boundsAndDedupesAJoinedField();
   void parseDetailResponse_extractsTitleSubjectsAndKey();
   void parseDetailResponse_descriptionAsObjectIsExtracted();
   void parseDetailResponse_includesCoverMediaWhenCoversListPresent();
@@ -153,6 +155,63 @@ void TestOpenLibraryParser::parseSearchResponse_emptyDocsArrayIsSuccess() {
 void TestOpenLibraryParser::parseSearchResponse_malformedJsonReturnsError() {
   auto result = OpenLibraryParser::parseSearchResponse(QByteArray("{not json"));
   QVERIFY(result.isError());
+}
+
+// Kartend-v3u04. The provider asks for 10 results; a compromised or MITM'd
+// one can answer with an array as long as the body cap allows, and the parser
+// used to reserve() straight from that length. The cap is far above anything
+// real, so this drives it from above with a synthetic array — what matters is
+// that the count stops climbing with the response, not the exact value.
+void TestOpenLibraryParser::parseSearchResponse_boundsCandidateCountFromAnOversizedArray() {
+  QByteArray json = QByteArrayLiteral("{\"docs\":[");
+  constexpr int kEntries = 600; // comfortably past the 256 cap
+  for (int i = 0; i < kEntries; ++i) {
+    if (i > 0) {
+      json.append(',');
+    }
+    json.append("{\"key\":\"/works/OL");
+    json.append(QByteArray::number(i));
+    json.append("W\",\"title\":\"T");
+    json.append(QByteArray::number(i));
+    json.append("\"}");
+  }
+  json.append("]}");
+
+  auto result = OpenLibraryParser::parseSearchResponse(json);
+  QVERIFY(result.isOk());
+  QVERIFY2(result.value().size() < kEntries,
+           "candidate count must not track the response's array length");
+  QCOMPARE(result.value().size(), 256);
+  // Truncation takes the head, so the results a user would actually look at
+  // are the ones the provider ranked first.
+  QCOMPARE(result.value().first().providerSpecificId, QStringLiteral("OL0W"));
+}
+
+// The joined fields deduped with a linear QStringList::contains inside the
+// loop — quadratic over an array the response sizes. Order still has to
+// survive (primary subject first), and duplicates still have to collapse.
+void TestOpenLibraryParser::parseDetailResponse_boundsAndDedupesAJoinedField() {
+  QByteArray json = QByteArrayLiteral("{\"title\":\"Bounded\",\"subjects\":[");
+  // 40 distinct values, each repeated 5x and interleaved, so a dedup that
+  // merely truncated would produce a different answer than one that dedupes.
+  for (int repeat = 0; repeat < 5; ++repeat) {
+    for (int i = 0; i < 40; ++i) {
+      if (repeat > 0 || i > 0) {
+        json.append(',');
+      }
+      json.append("\"Subject ");
+      json.append(QByteArray::number(i));
+      json.append('"');
+    }
+  }
+  json.append("]}");
+
+  auto result = OpenLibraryParser::parseDetailResponse(json, QStringLiteral("OL1W"));
+  QVERIFY(result.isOk());
+  const QStringList genres = result.value().genre.split(QStringLiteral(", "));
+  QCOMPARE(genres.size(), 40); // deduped, not truncated at the raw 200
+  QCOMPARE(genres.first(), QStringLiteral("Subject 0"));
+  QCOMPARE(genres.last(), QStringLiteral("Subject 39"));
 }
 
 void TestOpenLibraryParser::parseDetailResponse_extractsTitleSubjectsAndKey() {

@@ -713,6 +713,34 @@ void DetailsPane::constrainContentToViewport() {
   }
 }
 
+void DetailsPane::showEvent(QShowEvent *event) {
+  QWidget::showEvent(event);
+
+  // Kartend-z0dob. constrainContentToViewport() caps contentWidget at the
+  // viewport width, and contentWidget is what every child lays out inside — so
+  // one stale cap clips the artwork, the title bar and the metadata grid at
+  // once, with no horizontal scrollbar to reach what was cut.
+  //
+  // At startup the pane is resized to the collection's sidebarWidth while it
+  // is still HIDDEN (measured in the guest: the pane row reported
+  // `detailsPaneWidget w=300 max=300 vis=0` at that moment). A hidden widget's
+  // scroll area does not lay out, so the viewport still reported the old width
+  // when resizeEvent's constrain read it — cap latched at the stale value —
+  // and because no further pane resize followed, and the viewport's own
+  // settling resize never reached the eventFilter arm either, the cap stayed
+  // wrong for the rest of the session. Toggling the pane with F9 fixed it
+  // permanently, which is precisely this seam being reached by hand.
+  //
+  // Re-cap on show, then again one turn later: the show-triggered layout pass
+  // is what finally gives the viewport its real width, and that happens after
+  // this handler returns.
+  constrainContentToViewport();
+  // Deferred one event-loop turn because the layout pass that show() schedules
+  // has not run yet — reading the viewport here still returns the pre-show
+  // width, which is the very staleness this exists to correct.
+  QTimer::singleShot(0, this, [this]() { constrainContentToViewport(); });
+}
+
 void DetailsPane::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);
 

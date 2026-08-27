@@ -22,6 +22,9 @@ private slots:
   void applyMarqueeSettings_disabledCreatesNoWindow();
   void applyMarqueeSettings_enableReuseDisableLifecycle();
   void updateMarqueeArtwork_invalidCollectionIndexLeavesWindowAlone();
+  void screenChanges_areWiredAtConstruction();
+  void screenChange_repinsWithoutDuplicatingTheWindow();
+  void screenChange_isInertWhileTheMarqueeIsDisabled();
 };
 
 #endif // KARTEND_TESTS_TEST_MARQUEECONTROLLER_H

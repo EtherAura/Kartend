@@ -10,6 +10,8 @@
 #include <QRegularExpression>
 #include <QStringList>
 
+#include "parserlimits.h"
+
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
@@ -30,11 +32,10 @@ bool isValidWorkKey(const QString &key) {
 }
 
 QString joinStringArray(const QJsonArray &arr, const QString &sep = QStringLiteral(", ")) {
-  QStringList parts;
+  ScraperParsers::BoundedUniqueStrings parts;
   for (const auto &v : arr) {
-    const QString s = v.toString().trimmed();
-    if (!s.isEmpty() && !parts.contains(s)) {
-      parts.append(s);
+    if (!parts.add(v.toString().trimmed())) {
+      break; // sink full — stop walking an array the response sized
     }
   }
   return parts.join(sep);
@@ -67,8 +68,11 @@ ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> parseSearchResponse(const QB
   const QJsonArray docs = doc.object().value("docs").toArray();
 
   QList<Scraper::ScrapeCandidate> out;
-  out.reserve(docs.size());
+  out.reserve(ScraperParsers::boundedReserve(docs.size(), ScraperParsers::kMaxCandidates));
   for (const auto &v : docs) {
+    if (out.size() >= ScraperParsers::kMaxCandidates) {
+      break;
+    }
     const QJsonObject d = v.toObject();
     Scraper::ScrapeCandidate c;
     // Open Library returns work keys like "/works/OL12345W". Strip

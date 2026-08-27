@@ -786,9 +786,8 @@ bool InteractionManager::routeSectionInput(int dx, int dy) {
     }
     return true; // swallow vertical rather than driving what is hidden
   }
-  // Held modifier: the stick is purely a section switcher — this is the
-  // ONLY way the vertical axis reaches the toolbar (user decision
-  // 2026-08-18).
+  // Held modifier: the stick is purely a section switcher, from any
+  // section and on both axes.
   if (m_focusModifierHeld) {
     moveFocusSection(dx, dy);
     return false;
@@ -848,12 +847,25 @@ bool InteractionManager::routeSectionInput(int dx, int dy) {
     return true;
   }
   if (dy != 0) {
+    // Up from the grid hops to the toolbar even unheld (user request
+    // 2026-08-24, superseding the 2026-08-18 chord-only rule) — except
+    // while the ring is walking the pane, which keeps the vertical axis
+    // so the user can step back UP through its regions; the pane's idle
+    // timer ends that claim. Down from the toolbar returns to the grid:
+    // without it the hop would be a one-way trap for stick-only users.
+    QWidget *toolbarW = m_ctx ? m_ctx->ui.itemsTopBar : nullptr;
+    const bool toolbarUsable = toolbarW && toolbarW->isVisible();
+    if (dy < 0 && info.kind == FocusSection::Grid && !m_paneSelectionActive && toolbarUsable) {
+      moveFocusSection(0, dy);
+      return false;
+    }
+    if (dy > 0 && info.kind == FocusSection::Toolbar) {
+      moveFocusSection(0, dy);
+      return false;
+    }
     // Everywhere else the vertical axis belongs to the details pane,
-    // whether or not it holds focus — and it NEVER switches sections
-    // (user decision 2026-08-18: "up should only focus the toolbar when
-    // the chord button is held"). With nothing to drive it simply does
-    // nothing; falling back to section movement would smuggle the toolbar
-    // back onto the unheld stick, which is the bug this rule fixes.
+    // whether or not it holds focus. With nothing to drive it simply
+    // does nothing.
     return driveDetailsPane(dy, /*allowAdvance=*/true);
   }
   if (dx != 0) {

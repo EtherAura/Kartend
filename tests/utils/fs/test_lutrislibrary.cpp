@@ -2,6 +2,7 @@
 // (no DB mocking, per CONTRIBUTING) plus banner/coverart file lookups.
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QObject>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -18,6 +19,7 @@ private slots:
   void readsInstalledNonHiddenGames();
   void toleratesMissingHiddenColumn();
   void artworkPrefersCoverart();
+  void traversingSlugYieldsNoArtwork();
 
 private:
   QTemporaryDir m_dir;
@@ -125,6 +127,39 @@ void TestLutrisLibrary::artworkPrefersCoverart() {
       LutrisLibrary::artworkFor(dataDir, QStringLiteral("banner-only"));
   QVERIFY(bannerOnly.cover.isEmpty());
   QVERIFY(!bannerOnly.banner.isEmpty());
+}
+
+// Kartend-9guwj: slug is third-party input (a pga.db row) interpolated as a
+// single path component. Before the isSafePathComponent guard, a traversing
+// slug made this resolve to a real file OUTSIDE the Lutris data dir, which the
+// importer then copied in as the game's cover — an information-disclosure
+// primitive that surfaces a file the user never chose to share.
+void TestLutrisLibrary::traversingSlugYieldsNoArtwork() {
+  const QString dataDir = m_dir.filePath(QStringLiteral("escape"));
+  QDir().mkpath(dataDir + QStringLiteral("/coverart"));
+  // The "private" file the hostile slug aims at, one level above dataDir —
+  // deliberately named .jpg because the caller appends the extension.
+  const QString outsideDir = m_dir.filePath(QStringLiteral("outside"));
+  QDir().mkpath(outsideDir);
+  {
+    QFile f(outsideDir + QStringLiteral("/private.jpg"));
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("secret");
+  }
+  // Premise: the traversal really does name that file, so a pass here would be
+  // a genuine read of it rather than a miss.
+  QVERIFY(QFileInfo::exists(dataDir + QStringLiteral("/coverart/") +
+                            QStringLiteral("../../outside/private") + QStringLiteral(".jpg")));
+
+  for (const QString &hostile :
+       {QStringLiteral("../../outside/private"), QStringLiteral("../outside/private"),
+        QStringLiteral("/etc/hostname"), QStringLiteral(".."), QStringLiteral("."), QString()}) {
+    const LutrisLibrary::Artwork art = LutrisLibrary::artworkFor(dataDir, hostile);
+    QVERIFY2(art.cover.isEmpty(),
+             qPrintable(QStringLiteral("slug '%1' produced cover '%2'").arg(hostile, art.cover)));
+    QVERIFY2(art.banner.isEmpty(),
+             qPrintable(QStringLiteral("slug '%1' produced banner '%2'").arg(hostile, art.banner)));
+  }
 }
 
 QTEST_MAIN(TestLutrisLibrary)

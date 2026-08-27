@@ -19,6 +19,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#include "parserlimits.h"
 #include "pathutils.h"
 
 using ErrorUtils::ErrorCode;
@@ -178,7 +179,7 @@ QString pickByTag(const QJsonArray &arr, const char *tagKey, const QStringList &
   if (arr.isEmpty()) return {};
   // Build a tag→text lookup so the preference scan is O(P + N).
   QHash<QString, QString> byTag;
-  byTag.reserve(arr.size());
+  byTag.reserve(ScraperParsers::boundedReserve(arr.size(), ScraperParsers::kMaxJoinItems));
   QString firstNonEmpty;
   for (const auto &v : arr) {
     const QJsonObject obj = v.toObject();
@@ -387,12 +388,11 @@ ScreenScraperUserInfo mapUserInfo(const QJsonObject &ssuser) {
 }
 
 QString collectGenres(const QJsonArray &genres, const QStringList &languagePrefs) {
-  QStringList names;
+  ScraperParsers::BoundedUniqueStrings names;
   for (const auto &v : genres) {
     const QJsonObject g = v.toObject();
-    const QString name = pickByTag(g.value("noms").toArray(), "langue", languagePrefs);
-    if (!name.isEmpty() && !names.contains(name)) {
-      names.append(name);
+    if (!names.add(pickByTag(g.value("noms").toArray(), "langue", languagePrefs))) {
+      break; // sink full — stop walking an array the response sized
     }
   }
   return names.join(QStringLiteral(", "));
@@ -524,7 +524,7 @@ parseInner(const QByteArray &json, const ScreenScraperParser::ParseOptions &opti
   // controles[]: SS may return as array of strings or objects. Join
   // the user-visible names into a single comma-separated value.
   {
-    QStringList controls;
+    ScraperParsers::BoundedUniqueStrings controls;
     const auto arr = jeu.value("controles").toArray();
     for (const auto &v : arr) {
       QString name;
@@ -535,28 +535,26 @@ parseInner(const QByteArray &json, const ScreenScraperParser::ParseOptions &opti
         name = obj.value("text").toString().trimmed();
         if (name.isEmpty()) name = obj.value("name").toString().trimmed();
       }
-      if (!name.isEmpty() && !controls.contains(name)) controls.append(name);
+      if (!controls.add(name)) break; // sink full — stop walking a sized array
     }
     putIfFilled(QStringLiteral("controls"), controls.join(QStringLiteral(", ")));
   }
   // familles[]: game series (Mario, Zelda, etc.). Same shape as
   // genres — array of objects with localized noms[].
   {
-    QStringList families;
+    ScraperParsers::BoundedUniqueStrings families;
     for (const auto &v : jeu.value("familles").toArray()) {
       const QJsonObject f = v.toObject();
-      const QString n = pickByTag(f.value("noms").toArray(), "langue", languagePrefs);
-      if (!n.isEmpty() && !families.contains(n)) families.append(n);
+      if (!families.add(pickByTag(f.value("noms").toArray(), "langue", languagePrefs))) break;
     }
     putIfFilled(QStringLiteral("families"), families.join(QStringLiteral(", ")));
   }
   // modes[]: game modes (single-player, co-op, etc.). Same shape.
   {
-    QStringList modes;
+    ScraperParsers::BoundedUniqueStrings modes;
     for (const auto &v : jeu.value("modes").toArray()) {
       const QJsonObject m = v.toObject();
-      const QString n = pickByTag(m.value("noms").toArray(), "langue", languagePrefs);
-      if (!n.isEmpty() && !modes.contains(n)) modes.append(n);
+      if (!modes.add(pickByTag(m.value("noms").toArray(), "langue", languagePrefs))) break;
     }
     putIfFilled(QStringLiteral("modes"), modes.join(QStringLiteral(", ")));
   }

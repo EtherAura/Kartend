@@ -138,21 +138,7 @@ void ItemWidget::setItemName(const QString &name) {
     });
   }
   if (nameLabel) {
-    // Show title if: regular item with titles visible, OR subcollection with
-    // subcollection titles visible, OR virtual folder with subfolder titles
-    // visible
-    bool shouldShowTitle = false;
-    if (m_isVirtualFolder) {
-      shouldShowTitle = !m_hideSubfolderTitle;
-    } else if (m_isSubcollection) {
-      shouldShowTitle = !m_hideSubcollectionTitles;
-    } else {
-      // hideTitles is a grid-mode concern. In list mode the row
-      // IS the title -- suppressing it leaves a blank row with no fallback.
-      shouldShowTitle = m_isListMode || !m_hideTitles;
-    }
-
-    if (!shouldShowTitle) {
+    if (!shouldPaintTitle()) {
       // Keep the label visible but empty to reserve layout space
       nameLabel->setText("");
       nameLabel->setVisible(true);

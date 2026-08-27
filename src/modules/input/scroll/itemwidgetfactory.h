@@ -70,6 +70,24 @@ namespace ItemWidgetFactoryHelpers {
                                                       const QString &subcollectionName,
                                                       const QString &parentArtworkDirectory);
 
+// Does the view being built contain items that may belong to a collection
+// OTHER than the one whose config is in @p context? If so, the current
+// collection's artworkDirectory is not authoritative and each item's own
+// artwork directory has to be looked up (a DB hit per widget); if not, that
+// lookup is pure cost and is skipped.
+//
+// Three things widen the view: showAllSubcollectionItems, a config that
+// aggregates children into the parent's grid, and the two widened SEARCH
+// scopes — queryIncludeDescendants (current + subcollections) and
+// queryIncludeAllCollections (whole library). Only the first was consulted
+// until Kartend-12kzb, so a root-scope search resolved children's covers
+// against the PARENT's artwork directory and rendered items as hatched
+// placeholders that showed their posters perfectly one level down. The two
+// query flags are described in CollectionContext as not changing UI behavior,
+// which holds for layout — but artwork resolution follows the data, and these
+// flags are precisely what changes which data is on screen.
+[[nodiscard]] bool viewMaySpanCollections(const CollectionContext &context);
+
 } // namespace ItemWidgetFactoryHelpers
 
 /**
@@ -258,6 +276,22 @@ signals:
    */
   void requestItemsRange(int startIndex, int count);
 
+  /**
+   * @brief Emitted when a tile's cover was skipped because @p artworkDir has a
+   * queued-but-unscanned directory cache entry (Kartend-eyfik).
+   *
+   * configureArtworkForWidget deliberately does not pay a synchronous stat
+   * sweep while a prewarm is "in flight", on the promise that a post-prewarm
+   * reconfigure will fill the miss. Nothing guaranteed that promise:
+   * findArtworkForFileCached QUEUES a directory on a miss, but the only drain
+   * was the prewarm worker in ScrollManager::receiveItemsRange — which needs a
+   * DB chunk to arrive AND showAllSubcollectionItems to be on. A layout switch
+   * fetches no chunks, so after a List round-trip every cover-bearing
+   * directory stayed queued forever and the whole grid rendered placeholders.
+   * Emitting this makes the deferral's promise true on every path.
+   */
+  void requestArtworkPrewarm(const QString &artworkDir);
+
 private:
   [[nodiscard]] ItemWidget *acquireWidget();
   void configureBaseWidget(ItemWidget *widget);
@@ -282,6 +316,17 @@ private:
   const QStringList *m_filePaths = nullptr;
   const QHash<QString, QString> *m_fileNames = nullptr;
   QHash<QString, QString> m_cachedArtworkPaths; // fullPath -> artworkPath from session cache
+  /// Kartend-eyfik: true when EVERY directory the cover cascade would consult
+  /// for @p artworkDir is warm, so a cached miss can be trusted as "artless"
+  /// rather than "not scanned yet". Memoized because the cascade is ~10 path
+  /// builds and this sits on the virtual-scroll widget-materialization path,
+  /// where nearly every item shares one artwork directory. Keyed on the
+  /// cache's contentsGeneration so the memo self-invalidates the moment any
+  /// listing changes — a stale "settled" is precisely the false negative this
+  /// exists to prevent.
+  [[nodiscard]] bool artworkLookupSettled(const QString &artworkDir) const;
+  mutable QHash<QString, bool> m_artworkCascadeSettled;
+  mutable quint64 m_artworkCascadeGeneration = 0;
   // fullPath -> hand-linked cover (see setManualCoverPaths). Empty for every
   // library where nobody has linked a cover, which is the case the lookup in
   // configureArtworkForWidget short-circuits on.

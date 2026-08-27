@@ -12,6 +12,13 @@ namespace EsdeLibrary {
 
 namespace {
 
+/// Ceiling on es_settings.xml (Kartend-v3u04). A local file, so hygiene rather
+/// than an attack path — but the read below is readAll() plus a prepend and an
+/// append, which is three copies of the buffer live at once. A stock 3.4.1
+/// settings file is ~171 short elements; 8 MiB is orders of magnitude clear of
+/// that while keeping the transient bounded.
+constexpr qint64 kMaxSettingsBytes = 8LL * 1024 * 1024;
+
 /// Reads one `<string name="KEY" value="VALUE" />` out of es_settings.xml.
 /// Returns an empty string both when the key is absent and when its value is
 /// empty — the caller cannot distinguish them and does not need to, because
@@ -20,6 +27,9 @@ QString settingValue(const QString &settingsPath, const QString &key) {
   QFile file(settingsPath);
   if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
     return {};
+  }
+  if (file.size() > kMaxSettingsBytes) {
+    return {}; // absent and empty are already indistinguishable to the caller
   }
   // es_settings.xml IS NOT WELL-FORMED XML: ES-DE writes a bare, alphabetically
   // sorted sequence of <bool>/<string>/<int> elements with NO root element (171
@@ -37,6 +47,12 @@ QString settingValue(const QString &settingsPath, const QString &key) {
   body.append("</esSettings>");
 
   QXmlStreamReader xml(body);
+  // Kartend-v3u04: pin the entity-expansion ceiling instead of inheriting it.
+  // QXmlStreamReader resolves internal entities, so a recursive declaration is
+  // the billion-laughs shape; Qt already defaults this to 4096 characters, and
+  // 4096 is what we want — the point is that it is now a decision this project
+  // made, not one a future Qt version could change under us.
+  xml.setEntityExpansionLimit(4096);
   while (!xml.atEnd() && !xml.hasError()) {
     if (xml.readNext() != QXmlStreamReader::StartElement) {
       continue;
@@ -96,6 +112,12 @@ QHash<QString, GamelistEntry> readGamelist(const QString &dataDir, const QString
     return entries;
   }
   QXmlStreamReader xml(&file);
+  // Kartend-v3u04: pin the entity-expansion ceiling instead of inheriting it.
+  // QXmlStreamReader resolves internal entities, so a recursive declaration is
+  // the billion-laughs shape; Qt already defaults this to 4096 characters, and
+  // 4096 is what we want — the point is that it is now a decision this project
+  // made, not one a future Qt version could change under us.
+  xml.setEntityExpansionLimit(4096);
   while (!xml.atEnd() && !xml.hasError()) {
     if (xml.readNext() != QXmlStreamReader::StartElement || xml.name() != QLatin1String("game")) {
       continue;

@@ -139,6 +139,19 @@ void InteractionManager::handleJumpToEdge(bool toEnd) {
     scrollMgr()->updateSelectionForIndex(targetIndex);
   }
 
+  // Publish the selection to the details pane — the third step this path never
+  // grew. setSelectedIndex above is a bare field write: it draws no ring and
+  // touches no pane, which is why the ring and the counter are hand-rolled
+  // here. updateFilePathForSelection is the remaining piece, and the only
+  // place that decides between a subcollection summary and item metadata, so
+  // without it Home/End moved the ring and the counter while the pane went on
+  // describing whatever was there before (Kartend-bioqp). Deliberately AFTER
+  // the centre and updateVirtualView above so the target widget has been
+  // materialized and the pane reads real metadata instead of a null tile.
+  if (m_currentCollectionIndex) {
+    updateFilePathForSelection(targetIndex, getSubcollections(*m_currentCollectionIndex));
+  }
+
   emit selectionChanged(targetIndex);
 }
 

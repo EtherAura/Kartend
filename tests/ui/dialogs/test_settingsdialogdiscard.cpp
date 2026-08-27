@@ -59,6 +59,13 @@ public:
   void applyMarqueeSettings() override {}
   void applyToolbarCustomization() override {}
   void applyPixmapCacheBudget(int) override {}
+
+  /// Profile-import state: ConfigProfileController sets this on the real main
+  /// window right after kartend.cfg is replaced on disk and before it schedules
+  /// the quit.
+  bool configReplaced = false;
+  void markConfigReplacedOnDisk() override { configReplaced = true; }
+  [[nodiscard]] bool isConfigReplacedOnDisk() const override { return configReplaced; }
 };
 
 /// Counts saveGeneralSettings disk writes and captures the last payload.
@@ -138,7 +145,47 @@ private slots:
   void rejectSaveWithNoCollectionSelectedPersistsGeneralEdits();
   void formerStubFieldsNowFlipUnsavedChanges();
   void renamingStartupTargetRemapsStoredNameAndCombo();
+  void rejectAfterProfileImportClosesWithoutPromptingOrWriting();
+  void acceptAfterProfileImportWritesNothing();
+  void liveSavedEditDoesNotLeaveTheDialogDirty();
 };
+
+// Kartend-2r05k: the settings dialog reported unsaved changes with no pending
+// edit anywhere. The cause is the LIVE-SAVE panels (base colour, fonts,
+// splash): they apply and persist immediately, but the dirty baseline
+// m_originalGeneralSettings was never rebased onto what had just been written.
+// checkGeneralSettingsChanges() is a live whole-struct compare against that
+// baseline, so it stayed true for the rest of the session — the Save button
+// glowed and closing raised a prompt the user could not explain, for a value
+// already durably on disk. And having only nudged a splash toggle, which
+// applies instantly, they had made no edit they would call pending.
+//
+// The bisect that found it is worth recording: every GeneralSettings
+// sub-struct was populated with non-defaults in turn, the dialog opened, shown
+// and navigated — all clean. The dirty state does not arise at open at all,
+// which is why the existing construction-time assertion never caught it.
+void TestSettingsDialogDiscard::liveSavedEditDoesNotLeaveTheDialogDirty() {
+  Harness h;
+  h.dialog->show();
+  QTest::qWait(30);
+  QVERIFY2(!h.dialog->hasUnsavedChanges(), "a freshly opened dialog must be clean");
+
+  auto *boot = h.dialog->findChild<QCheckBox *>(QStringLiteral("bootSplashCheckBox"));
+  QVERIFY2(boot != nullptr, "boot-splash toggle is the live-save panel this case drives");
+  const bool wanted = !boot->isChecked();
+  boot->click();
+  QCOMPARE(boot->isChecked(), wanted);
+
+  // The write is debounced (SETTINGS_LIVE_SAVE_DEBOUNCE_MS = 500).
+  QTRY_VERIFY_WITH_TIMEOUT(h.sm.saveCount > 0, 4000);
+
+  // The edit really did reach the host and the disk...
+  QCOMPARE(h.host.settings.splash.bootSplashEnabled, wanted);
+  QCOMPARE(h.sm.lastSaved.splash.bootSplashEnabled, wanted);
+  // ...so there is nothing unsaved to warn about.
+  QVERIFY2(!h.dialog->hasUnsavedChanges(),
+           "a live-saved edit is already on disk — it must not read as an unsaved change");
+}
 
 void TestSettingsDialogDiscard::acceptNoLongerOffersDiscard() {
   Harness h;
@@ -299,6 +346,54 @@ void TestSettingsDialogDiscard::renamingStartupTargetRemapsStoredNameAndCombo() 
   // preserved under the new name.
   QCOMPARE(combo->currentData().toString(), QStringLiteral("Renamed"));
   QVERIFY(combo->findData(QStringLiteral("First")) < 0);
+}
+
+void TestSettingsDialogDiscard::rejectAfterProfileImportClosesWithoutPromptingOrWriting() {
+  Harness h;
+  auto *toggle = h.attractToggle();
+  QVERIFY(toggle);
+  const bool original = toggle->isChecked();
+
+  // Pending edits the dialog would normally offer to save. In the guest repro
+  // these were not even deliberate — the point is that whatever the dialog is
+  // holding describes the configuration that was just REPLACED.
+  toggle->setChecked(!original);
+  QVERIFY(h.dialog->hasUnsavedChanges());
+
+  // The profile import lands: kartend.cfg on disk is now the loaded profile and
+  // the quit is scheduled. Closing the dialog used to raise "Save changes
+  // before closing the dialog?" on top of the "Kartend will now exit" the user
+  // had already acknowledged — and its Save button wrote this stale model back
+  // over the freshly loaded profile, so the button that reads as "keep my work"
+  // was the one that destroyed it.
+  h.host.markConfigReplacedOnDisk();
+
+  ModalDriver driver(QMessageBox::Save);
+  h.dialog->reject();
+  QVERIFY2(!driver.triggered,
+           "Close after a profile import still prompted; its Save clobbers the loaded profile");
+  QCOMPARE(h.dialog->result(), static_cast<int>(QDialog::Rejected));
+
+  // Nothing reached disk, so the imported file stands.
+  QCOMPARE(h.sm.saveCount, 0);
+}
+
+void TestSettingsDialogDiscard::acceptAfterProfileImportWritesNothing() {
+  Harness h;
+  auto *toggle = h.attractToggle();
+  QVERIFY(toggle);
+  toggle->setChecked(!toggle->isChecked());
+
+  h.host.markConfigReplacedOnDisk();
+
+  // OK normally commits outright. Once the config has been replaced on disk
+  // that commit is the same clobber by another route, so it must not happen —
+  // the dialog just closes.
+  ModalDriver driver(QMessageBox::Save);
+  h.dialog->accept();
+  QVERIFY(!driver.triggered);
+  QCOMPARE(h.dialog->result(), static_cast<int>(QDialog::Accepted));
+  QCOMPARE(h.sm.saveCount, 0);
 }
 
 QTEST_MAIN(TestSettingsDialogDiscard)

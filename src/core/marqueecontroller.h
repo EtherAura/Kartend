@@ -10,6 +10,7 @@
 
 class MarqueeWindow;
 class QImage;
+class QScreen;
 template <typename T> class QFutureWatcher;
 #include "applicationcontext_fwd.h"
 
@@ -67,11 +68,27 @@ public:
   /// Falls back to a direct refresh if the debouncer isn't wired yet.
   void requestArtworkRefresh();
 
+private slots:
+  /// Re-pin the marquee when the monitor set changes mid-session
+  /// (Kartend-599xq). Wired to QGuiApplication::screenRemoved / screenAdded in
+  /// the constructor; the QScreen argument is unused because the answer is
+  /// always "re-resolve from the configured name", whichever screen moved.
+  ///
+  /// A private SLOT rather than a plain private method so the test can drive
+  /// it by name through the meta-object — QGuiApplication's screen signals
+  /// cannot be emitted from outside Qt, and the alternative was widening the
+  /// public API purely for the test.
+  void handleScreenConfigurationChanged(QScreen *screen);
+
 private:
   // Decode the marquee cover off the UI thread and push it when ready;
   // cancelMarqueeLoad supersedes any in-flight decode (Kartend-cq8yh).
   void startMarqueeLoad(const QString &path);
   void cancelMarqueeLoad();
+
+  /// Set between a screenRemoved/screenAdded burst and its deferred re-pin, so
+  /// a dock/undock that emits several signals costs one re-pin, not several.
+  bool m_screenChangePending = false;
 
   // Borrowed dependencies — never owned, never deleted through these.
   const ApplicationContext *m_ctx = nullptr;

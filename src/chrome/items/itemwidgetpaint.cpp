@@ -119,17 +119,7 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
   // Paint title text with tint color - bypasses broken QLabel stylesheet in
   // Qt 6.9
   if (nameLabel && !itemName.isEmpty() && nameLabel->isVisible()) {
-    bool shouldShowTitle = false;
-    if (m_isVirtualFolder) {
-      shouldShowTitle = !m_hideSubfolderTitle;
-    } else if (m_isSubcollection) {
-      shouldShowTitle = !m_hideSubcollectionTitles;
-    } else {
-      // hideTitles is a grid-mode concern. In list mode the row
-      // IS the title -- suppressing it leaves a blank row with no fallback.
-      shouldShowTitle = m_isListMode || !m_hideTitles;
-    }
-    if (shouldShowTitle) {
+    if (shouldPaintTitle()) {
       painter.setRenderHint(QPainter::TextAntialiasing);
       painter.setPen(m_titleTintColor);
 
@@ -401,17 +391,10 @@ void ItemWidget::applyDimensions() {
   QFontMetrics referenceFm(referenceFont);
 
   // Resolved BEFORE the artwork is sized, because the text reservation
-  // depends on it. Show title if: regular item with titles visible, OR
-  // subcollection with subcollection titles visible, OR virtual folder with
-  // subfolder titles visible.
-  bool shouldShowTitle = false;
-  if (m_isVirtualFolder) {
-    shouldShowTitle = !m_hideSubfolderTitle;
-  } else if (m_isSubcollection) {
-    shouldShowTitle = !m_hideSubcollectionTitles;
-  } else {
-    shouldShowTitle = !m_hideTitles;
-  }
+  // depends on it. The list-mode arm above already returned, so this is the
+  // grid answer either way — it shares shouldPaintTitle() so the rule has a
+  // single definition rather than a third hand-copy to drift out of.
+  const bool shouldShowTitle = shouldPaintTitle();
 
   // Three lines, so a long wrapped title never overlaps the art. RESERVED
   // UNCONDITIONALLY, including when no title is drawn.

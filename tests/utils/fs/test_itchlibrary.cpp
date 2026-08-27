@@ -18,6 +18,7 @@ private slots:
   void readsInstalledCavesWithTitles();
   void toleratesMissingGamesTable();
   void launchUriUsesCaveId();
+  void launchUriPercentEncodesCaveId();
   void coverUrlPrefersTheStill();
 
 private:
@@ -119,6 +120,31 @@ void TestItchLibrary::launchUriUsesCaveId() {
   game.caveId = QStringLiteral("6ad5f0ff-4b53-4b9c-9fca-d1a5bd0e6d0c");
   QCOMPARE(ItchLibrary::launchUri(game),
            QStringLiteral("itch://caves/6ad5f0ff-4b53-4b9c-9fca-d1a5bd0e6d0c/launch"));
+}
+
+// Kartend-9guwj: caveId comes raw from butler.db. Unencoded, a value carrying
+// '?', '#' or '/' reshapes the URI — the trailing "/launch" ends up in a query
+// string or fragment, or the cave path gains segments. HeroicLibrary::launchUri
+// already encoded its interpolated values; these two adjacent functions
+// disagreed.
+void TestItchLibrary::launchUriPercentEncodesCaveId() {
+  const auto uriFor = [](const QString &caveId) {
+    ItchLibrary::Game game;
+    game.caveId = caveId;
+    return ItchLibrary::launchUri(game);
+  };
+
+  // '?' would otherwise start a query and swallow "/launch" out of the path.
+  QCOMPARE(uriFor(QStringLiteral("abc?x=1")), QStringLiteral("itch://caves/abc%3Fx%3D1/launch"));
+  // '#' would otherwise start a fragment, same effect.
+  QCOMPARE(uriFor(QStringLiteral("abc#frag")), QStringLiteral("itch://caves/abc%23frag/launch"));
+  // '/' would otherwise add a path segment.
+  QCOMPARE(uriFor(QStringLiteral("a/b")), QStringLiteral("itch://caves/a%2Fb/launch"));
+
+  // An ordinary uuid must survive byte-for-byte — encoding must not change the
+  // normal case, which is what launchUriUsesCaveId pins above.
+  const QString uuid = QStringLiteral("6ad5f0ff-4b53-4b9c-9fca-d1a5bd0e6d0c");
+  QCOMPARE(uriFor(uuid), QStringLiteral("itch://caves/%1/launch").arg(uuid));
 }
 
 // Kartend-g1g30: itch keeps covers as URLs only. still_cover_url is populated

@@ -258,6 +258,15 @@ kartend_add_test(NAME ItemPlaceholderTint
   LINK kartend_chrome kartend_api kartend_utils
 )
 
+# Kartend-dsjco: ItemWidget::shouldPaintTitle() is the single rule for "is this
+# widget's name drawn?", shared by setItemName, paintEvent and applyDimensions.
+# The hide-titles settings are grid-only; a list row IS its title, so a
+# subcollection or virtual-folder row must never degrade to a bare folder icon.
+kartend_add_test(NAME ItemWidgetTitleVisibility
+  SOURCES ui/widgets/test_itemwidgettitlevisibility.cpp
+  LINK kartend_chrome kartend_api kartend_utils
+)
+
 # Kartend-e7xte: DetailsPane's file-info rows take the async stat result
 # whenever they are showing — the Item tab's unscraped fallback shows the same
 # rows the File tab does, and a tab-only gate left them on '…' for good.

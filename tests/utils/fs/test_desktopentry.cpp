@@ -20,6 +20,7 @@ private slots:
   void execProgramHandlesQuotingAndFieldCodes();
   void iconLookupPrefersLargestRaster();
   void shareRootsFollowXdgEnvironment();
+  void refusesImplausiblyLargeFile();
 
 private:
   QTemporaryDir m_dir;
@@ -160,6 +161,31 @@ void TestDesktopEntry::shareRootsFollowXdgEnvironment() {
   qputenv("XDG_DATA_HOME", previousHome);
   qputenv("XDG_DATA_DIRS", previousDirs);
 #endif
+}
+
+// Kartend-v3u04: the reader walks whatever carries the .desktop extension in a
+// scanned directory, and readLine() on a file with no newlines pins the whole
+// thing in one QString. A real entry is a couple of KB. parse() reports
+// "nothing usable here" by returning a blank Entry, so that is what an
+// over-ceiling file must produce — the caller already handles it.
+void TestDesktopEntry::refusesImplausiblyLargeFile() {
+  const QString path = m_dir.filePath(QStringLiteral("huge.desktop"));
+  QByteArray content = QByteArrayLiteral("[Desktop Entry]\nType=Application\nName=Huge\nExec=x\n");
+  // One line, no newlines, past the 1 MiB ceiling — the shape that makes
+  // readLine() no better than readAll().
+  content.append(QByteArray(1024 * 1024 + 1, 'x'));
+  writeFile(path, content);
+
+  const DesktopEntryFile::Entry entry = DesktopEntryFile::parse(path);
+  QVERIFY2(entry.name.isEmpty(), "an over-ceiling .desktop must not be parsed");
+  QVERIFY(entry.exec.isEmpty());
+  QVERIFY(entry.type.isEmpty());
+
+  // The same content under the ceiling still parses, so the guard is a size
+  // rule and not an accidental rejection of the fixture's shape.
+  const QString small = m_dir.filePath(QStringLiteral("small.desktop"));
+  writeFile(small, QByteArrayLiteral("[Desktop Entry]\nType=Application\nName=Huge\nExec=x\n"));
+  QCOMPARE(DesktopEntryFile::parse(small).name, QStringLiteral("Huge"));
 }
 
 QTEST_MAIN(TestDesktopEntry)

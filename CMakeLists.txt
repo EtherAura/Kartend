@@ -385,27 +385,52 @@ else()
   message(STATUS "libarchive not found; archive ROMs hashed via 7z/unzip/bsdtar")
 endif()
 
-# APP_* defines are read from every layer (logging, error reporting,
-# update checks, AboutDialog). Push them onto kartend_utils PUBLIC so they
-# propagate to every per-area lib through the link DAG.
+# APP_* / BUILD_DATE defines are scoped to the FOUR translation units that
+# actually read them, never pushed PUBLIC onto kartend_utils.
 #
-# BUILD_DATE is deliberately NOT in this list: build.sh stamps a fresh
-# timestamp on every configure, and a PUBLIC define here changes the compile
-# command of EVERY TU — each install build became a full recompile with a
-# 100% ccache miss rate (field report 2026-08-17: "builds take too long").
-# It is scoped below to the single TU that reads it, so a new stamp costs
-# one recompile plus the links.
-target_compile_definitions(kartend_utils
-  PUBLIC
-    APP_ID="${KARTEND_APP_ID}"
-    APP_NAME="kartend"
-    APP_DISPLAY_NAME="Kartend"
-    APP_VERSION="${PROJECT_VERSION}"
-    APP_AUTHOR="EtherAura"
-)
+# BUILD_DATE was scoped this way first: build.sh stamps a fresh timestamp on
+# every configure, and a PUBLIC define changes the compile command of EVERY TU,
+# so each install build became a full recompile with a 100% ccache miss rate
+# (field report 2026-08-17: "builds take too long").
+#
+# Kartend-l54fv: the APP_* block sat directly above that note and was NOT
+# covered by it — the comment read as though it were. They were PUBLIC on
+# kartend_utils, so APP_VERSION="x.y.z" landed on the compile line of the whole
+# tree through the link DAG, and bumping PROJECT_VERSION was a cold full
+# rebuild that ccache could not help with because the command line itself
+# differed. Measured on the generated build.ninja before this change: 1104
+# compile lines carried APP_VERSION (513 in a tests-off configure).
+#
+# Only these read them, verified by grep over src/ — providerbase.h mentions
+# APP_VERSION in a COMMENT only, so no header carries the define and nothing
+# propagates:
+#   core/main.cpp ............ APP_ID, APP_NAME, APP_VERSION
+#   core/mainwindow_dialogs.cpp APP_DISPLAY_NAME, APP_VERSION, APP_AUTHOR, BUILD_DATE
+#   ui/.../splashoverlay.cpp .. APP_DISPLAY_NAME, APP_VERSION
+#   data/.../providerbase.cpp . APP_VERSION
+#
+# COMPILE_DEFINITIONS is a REPLACING property, so each file lists every define
+# it needs in one call — notably mainwindow_dialogs.cpp, which needs BUILD_DATE
+# and three APP_* together.
+#
+# The test link twins reuse these same objects ($<TARGET_OBJECTS:...>, see
+# tests/CMakeLists.txt), and no test compiles any of these four sources
+# directly, so source-scoped defines reach every consumer that needs them.
+set_source_files_properties(${SRC_DIR}/core/main.cpp
+  TARGET_DIRECTORY kartend
+  PROPERTIES COMPILE_DEFINITIONS
+    "APP_ID=\"${KARTEND_APP_ID}\";APP_NAME=\"kartend\";APP_VERSION=\"${PROJECT_VERSION}\"")
+set_source_files_properties(${SRC_DIR}/ui/widgets/overlays/splashoverlay.cpp
+  TARGET_DIRECTORY kartend_ui
+  PROPERTIES COMPILE_DEFINITIONS
+    "APP_DISPLAY_NAME=\"Kartend\";APP_VERSION=\"${PROJECT_VERSION}\"")
+set_source_files_properties(${SRC_DIR}/modules/data/scraper/providers/providerbase.cpp
+  TARGET_DIRECTORY kartend_data
+  PROPERTIES COMPILE_DEFINITIONS "APP_VERSION=\"${PROJECT_VERSION}\"")
 set_source_files_properties(${SRC_DIR}/core/mainwindow_dialogs.cpp
   TARGET_DIRECTORY kartend_core
-  PROPERTIES COMPILE_DEFINITIONS "BUILD_DATE=\"${BUILD_DATE}\"")
+  PROPERTIES COMPILE_DEFINITIONS
+    "BUILD_DATE=\"${BUILD_DATE}\";APP_DISPLAY_NAME=\"Kartend\";APP_VERSION=\"${PROJECT_VERSION}\";APP_AUTHOR=\"EtherAura\"")
 
 # Per-area compile-flag application — single source of truth (Kartend-9fdsd).
 # kartend_apply_area_flags() (cmake/CompilerFlags.cmake) applies, to every

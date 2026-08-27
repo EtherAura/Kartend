@@ -233,10 +233,29 @@ void InteractionManager::scheduleSidebarMetadataUpdateIfVisible(int targetIndex,
       if (!guard->detailsPaneMgr()->isSidebarVisible()) {
         return;
       }
-      ItemWidget *itemWidget = guard->scrollMgr()->getActiveWidgets().value(targetIndex, nullptr);
-      if (itemWidget) {
-        guard->detailsPaneMgr()->updateSidebarMetadata(itemWidget);
+      // Re-run the FULL publish decision, not just its media-item half.
+      // This retry exists because the target ItemWidget may not have
+      // materialized yet — but the subcollection list that the
+      // tile-vs-item decision reads is primed just as late, and
+      // updateFilePathForSelection is the only route to
+      // showSubcollectionSummary. Calling updateSidebarMetadata on its own
+      // meant a selection landing on a SUBCOLLECTION tile before that data
+      // was primed reached the pane through neither branch: no widget yet,
+      // and no file path either (a subcollection tile has none), so the
+      // pane silently kept its previous contents. That is the state every
+      // launch with a restored selection starts in — ring drawn, counter
+      // right, pane still showing the collection overview (Kartend-rxstt).
+      //
+      // Guarded on the live index because, unlike the widget-only call it
+      // replaces, this also rewrites SelectionManager's cached file path —
+      // the one the launch path reads. A retry that fires after the user has
+      // moved on must not resurrect the old target's path. Same staleness
+      // rule SelectionManager::trySelectWidget applies to its own retries.
+      if (!guard->m_currentCollectionIndex || guard->currentSelectedIndex() != targetIndex) {
+        return;
       }
+      guard->updateFilePathForSelection(
+          targetIndex, guard->getSubcollections(*guard->m_currentCollectionIndex));
     });
   };
   schedule(initialDelayMs);

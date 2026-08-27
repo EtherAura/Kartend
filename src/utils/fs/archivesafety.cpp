@@ -83,6 +83,46 @@ ErrorContext uninterpretableListing(const QString &tool) {
                        .arg(tool));
 }
 
+/// Same fail-closed class as uninterpretableListing, but for a listing whose
+/// entries parsed while the field that carries this codec's LINK verdict never
+/// appeared (Kartend-mm5sp).
+ErrorContext missingLinkVocabulary(const QString &tool, const QString &type,
+                                   const QString &expectedField) {
+  return ErrorContext::error(ErrorCode::FileReadError, "Archive listing could not be interpreted",
+                             kSource)
+      .withDetails(QString("%1 listed a '%2' archive whose entries carry no '%3' field, so no "
+                           "link verdict was possible")
+                       .arg(tool, type, expectedField));
+}
+
+/// Which per-entry field carries the symlink/hardlink verdict for a given 7z
+/// `Type =` codec, or empty when the codec has no link semantics to verify.
+///
+/// MEASURED against 7z/7zz on 2026-08-24 rather than assumed, because the
+/// vocabulary genuinely differs per codec and a wrong entry here rejects real
+/// archives:
+///   tar   -> "Symbolic Link =" and "Hard Link =" on EVERY entry (empty for
+///            non-links). No Attributes field at all.
+///   zip   -> "Attributes =" on every entry. No link keys at all.
+///   7z    -> "Attributes =" on every entry. No link keys at all.
+///   gzip/bzip2/xz -> a single entry for the WRAPPED stream (e.g. "t.tar"),
+///            with neither vocabulary. Correct: these containers hold one
+///            byte-stream and cannot express a link, so extracting one yields
+///            the inner file rather than any symlink. Exempt.
+///
+/// Anything else — notably rar, plus iso/cab/wim — returns empty and is NOT
+/// enforced. That is deliberate: no rar was available to measure here, and
+/// guessing wrong would refuse every RAR on a 7z-only host, which is a worse
+/// outcome than the hypothetical this guards. Extend the table only with a
+/// measurement in hand.
+QString linkVerdictFieldForType(const QString &type) {
+  if (type == QLatin1String("tar")) return QStringLiteral("Symbolic Link =");
+  if (type == QLatin1String("zip") || type == QLatin1String("7z")) {
+    return QStringLiteral("Attributes =");
+  }
+  return {};
+}
+
 /// bsdtar scan: `-tvf` exposes the mode string (symlinks lead with 'l',
 /// hardlinks are marked "link to"), `-tf` yields one clean entry name per
 /// line for the path-escape checks.
@@ -136,14 +176,30 @@ ErrorUtils::Result<void> scanWith7z(const QString &archivePath) {
   if (listing.isError()) return listing.error();
   static const QRegularExpression kSymlinkMode(QStringLiteral("\\bl[rwxsStT-]{9}\\b"));
   bool inEntries = false;
+  // Kartend-mm5sp: the codec is read from the HEADER (before the separator) so
+  // the scan can afterwards assert it actually saw the field that carries this
+  // codec's link verdict, rather than inferring safety from its absence.
+  QString archiveType;
+  int entryCount = 0;
+  bool sawLinkVerdictField = false;
   const QStringList lines = QString::fromUtf8(listing.value()).split(QLatin1Char('\n'));
   for (const QString &rawLine : lines) {
     const QString line = rawLine.trimmed();
     if (!inEntries) {
+      if (line.startsWith(QLatin1String("Type = "))) {
+        archiveType = line.mid(7).trimmed();
+      }
       inEntries = line.startsWith(QLatin1String("----------"));
       continue;
     }
+    if (!sawLinkVerdictField) {
+      const QString expected = linkVerdictFieldForType(archiveType);
+      if (!expected.isEmpty() && line.startsWith(expected)) {
+        sawLinkVerdictField = true;
+      }
+    }
     if (line.startsWith(QLatin1String("Path = "))) {
+      ++entryCount;
       const QString path = line.mid(7);
       if (entryPathEscapes(path)) {
         return rejectEntry(QStringLiteral("Archive entry path escapes the extraction directory"),
@@ -169,6 +225,27 @@ ErrorUtils::Result<void> scanWith7z(const QString &archivePath) {
   // just with no entry blocks after it.
   if (!inEntries && QFileInfo(archivePath).size() > 0) {
     return uninterpretableListing(QStringLiteral("7z"));
+  }
+  // Kartend-mm5sp: the separator check above only fires when the listing shape
+  // is ENTIRELY unrecognised. The narrower gap it left: entries parse fine, but
+  // the field carrying the link verdict is named something we do not know (a
+  // codec change, a future 7z), so the loop above reached no verdict and
+  // returning {} here would report "safe" on the strength of a field we never
+  // read. For a codec whose vocabulary we have measured, require that field to
+  // have actually appeared.
+  //
+  // Gated on entryCount because a legitimately EMPTY archive lists no entries
+  // and therefore no fields — measured: an emptied .zip prints the separator,
+  // Type = zip, and nothing after it. Rejecting that would be a false positive.
+  //
+  // Fails closed as FileReadError, NOT a security rejection, so
+  // scanArchiveEntries still falls through to bsdtar; only a 7z-only host
+  // refuses outright. That is the host in the reported failure scenario.
+  if (entryCount > 0 && !sawLinkVerdictField) {
+    const QString expected = linkVerdictFieldForType(archiveType);
+    if (!expected.isEmpty()) {
+      return missingLinkVocabulary(QStringLiteral("7z"), archiveType, expected);
+    }
   }
   return {};
 }

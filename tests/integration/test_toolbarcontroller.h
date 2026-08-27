@@ -21,6 +21,8 @@ class TestToolbarController : public QObject {
 private slots:
   void setupViewModeButton_syncChecksExactlyActiveEntry_data();
   void setupViewModeButton_syncChecksExactlyActiveEntry();
+  void viewModePopup_aboutToShowSyncsFromActiveCollection();
+  void viewModePopup_aboutToShowLeavesStateAloneWithoutACollection();
   void setupSearchModeAction_installsLeadingSearchAction();
   void refreshHomeButton_followsStartupSettings();
   void applyToolbarCustomization_togglesFilterAndSearchVisibility();

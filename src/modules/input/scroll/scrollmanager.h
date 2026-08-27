@@ -298,6 +298,12 @@ private slots:
   void onArrowKeyViewUpdate();
   void onSliderMoved(int position);
   void reconfigureArtworkForActiveWidgets();
+  /// Kartend-eyfik: drain @p artworkDir's queued directory-cache entries on a
+  /// worker, then reconfigure the live tiles so the covers that were deferred
+  /// actually land. Coalesced through m_prewarmRequestDirs + a single-shot
+  /// timer: a rebuild asks once per tile and they nearly all share one
+  /// directory, so without the coalesce a 14-tile grid would start 14 scans.
+  void schedulePrewarmAndReconfigure(const QString &artworkDir);
   void onArtworkPreviewRequested(const QString &filePath, const QString &artworkDir);
   /// A manual artwork link was written or cleared for @p path
   /// (IDatabaseManager::itemArtworkLinksChanged). Re-reads the manual-cover map
@@ -497,6 +503,10 @@ private:
   // cascade settles, capped by HIDE_MISSING_REFILTER_MAX_RETRIES.
   int m_baselineRefilterRetries = 0;
   qint64 m_lastArtworkPrewarmTime = 0; // Debounce artwork directory prewarm
+  /// Kartend-eyfik: artwork directories whose tiles deferred their cover
+  /// pending a scan, coalesced until m_prewarmRequestTimer fires.
+  QSet<QString> m_prewarmRequestDirs;
+  QTimer *m_prewarmRequestTimer = nullptr;
 
   // Absolute item path -> hand-linked cover, for every item in the library
   // whose manual item_artwork links resolve to one (Kartend-1js9j). Owned here

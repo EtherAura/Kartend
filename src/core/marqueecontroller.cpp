@@ -18,10 +18,18 @@
 #include <QFutureWatcher>
 #include <QGuiApplication>
 #include <QImage>
+#include <QLoggingCategory>
 #include <QPixmap>
 #include <QScreen>
 #include <QString>
 #include <QtConcurrent>
+#include <QTimer>
+
+// Kartend-599xq: the screen-fallback path used a bare qWarning, so it could not
+// be filtered or enabled independently of everything else. Warning-level by
+// default — losing the configured marquee monitor is worth saying out loud,
+// since the window silently lands somewhere the user did not choose.
+Q_LOGGING_CATEGORY(lcMarquee, "kartend.marquee")
 
 namespace {
 // Trailing-edge debounce window for marquee-artwork refreshes triggered by
@@ -39,14 +47,57 @@ QScreen *resolveMarqueeScreen(const QString &screenName) {
     for (QScreen *s : QGuiApplication::screens()) {
       if (s->name() == screenName) return s;
     }
-    qWarning("Marquee: configured screen '%s' not found — falling back to primary",
-             qPrintable(screenName));
+    qCWarning(lcMarquee) << "configured screen" << screenName
+                         << "not found — falling back to primary";
   }
   return QGuiApplication::primaryScreen();
 }
 } // namespace
 
-MarqueeController::MarqueeController(QObject *parent) : QObject(parent) {}
+MarqueeController::MarqueeController(QObject *parent) : QObject(parent) {
+  // Kartend-599xq: react to the monitor set changing under us. Before this,
+  // resolveMarqueeScreen was reached ONLY from applyMarqueeSettings — i.e. at
+  // startup and on a Settings save — so unplugging the marquee monitor
+  // mid-session left the window pinned to a screen that no longer exists until
+  // the next save or restart. screenAdded is the counterpart: plugging the
+  // configured monitor back in should bring the marquee home rather than
+  // stranding it on primary until the user saves settings again.
+  connect(qApp, &QGuiApplication::screenRemoved, this,
+          &MarqueeController::handleScreenConfigurationChanged);
+  connect(qApp, &QGuiApplication::screenAdded, this,
+          &MarqueeController::handleScreenConfigurationChanged);
+}
+
+void MarqueeController::handleScreenConfigurationChanged(QScreen *) {
+  // Nothing to re-pin when the marquee is off or unconfigured;
+  // applyMarqueeSettings would early-return anyway, but this also keeps the
+  // deferral below off the common path.
+  if (!m_generalSettings || !m_generalSettings->marquee.marqueeEnabled) {
+    return;
+  }
+  // Deferred one turn deliberately, and this is the load-bearing part: Qt
+  // emits screenRemoved BEFORE the QScreen is destroyed and while
+  // QGuiApplication::screens() can still report it, so re-resolving inline
+  // could pin the window straight back onto the screen being torn down. By
+  // the next turn the list has settled and resolveMarqueeScreen sees the
+  // truth. Coalescing is free here too — a dock/undock emits several of these
+  // at once and they collapse into one re-pin.
+  if (m_screenChangePending) {
+    return;
+  }
+  m_screenChangePending = true;
+  // Deferred one event-loop turn because Qt emits screenRemoved BEFORE the
+  // QScreen is destroyed, and QGuiApplication::screens() can still report it
+  // at that moment — re-resolving inline could pin the window straight back
+  // onto the screen being torn down. By the next turn the list has settled.
+  QTimer::singleShot(0, this, [this]() {
+    m_screenChangePending = false;
+    if (!m_generalSettings || !m_generalSettings->marquee.marqueeEnabled) {
+      return;
+    }
+    applyMarqueeSettings();
+  });
+}
 
 MarqueeController::~MarqueeController() {
   // Drop any in-flight off-thread decode first so a late result can't touch

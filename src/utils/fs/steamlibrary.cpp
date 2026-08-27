@@ -1,4 +1,5 @@
 #include "steamlibrary.h"
+#include "pathutils.h"
 
 #include <algorithm>
 
@@ -323,6 +324,15 @@ auto playedAppIds(const QString &steamRoot) -> QSet<QString> {
 
 auto artworkFor(const QString &steamRoot, const QString &appId) -> Artwork {
   Artwork art;
+  // Kartend-9guwj: appId is read from the .acf VDF and interpolated both as a
+  // directory component and as a filename prefix. A crafted value containing
+  // separators would walk out of librarycache/ and surface an arbitrary
+  // .jpg/.png as a game's cover. steamappinfo.cpp already refuses ".." and a
+  // leading "/" on its relative asset paths; this is the same treatment for the
+  // id itself.
+  if (!PathUtils::isSafePathComponent(appId)) {
+    return art;
+  }
   const QString cacheDir = steamRoot + QStringLiteral("/appcache/librarycache/");
   const QString subDir = cacheDir + appId + QLatin1Char('/');
   art.cover = firstExistingFile({

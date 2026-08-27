@@ -19,6 +19,7 @@ private slots:
   void readRejectsEmptyTarget();
   void writeCreatesParentDirectory();
   void argsRoundTripAndStayOptional();
+  void readRejectsAnImplausiblyLargeStubWithoutReadingIt();
 
 private:
   QTemporaryDir m_dir;
@@ -124,6 +125,38 @@ void TestKartLink::argsRoundTripAndStayOptional() {
   const auto oddLoaded = KartLink::read(odd);
   QVERIFY(!oddLoaded.isError());
   QCOMPARE(oddLoaded.value().args, (QStringList{QStringLiteral("-b"), QStringLiteral("Bottle")}));
+}
+
+void TestKartLink::readRejectsAnImplausiblyLargeStubWithoutReadingIt() {
+  // read() is reached by SCANNING a media directory, so the file is whatever
+  // happened to be sitting there wearing a .kartlink suffix — not necessarily
+  // anything an importer wrote. Without a size check that was an unbounded
+  // readAll() into memory before QJsonDocument saw a byte (Kartend-1o1a1,
+  // secondary finding).
+  const QString oversized = path(QStringLiteral("huge.kartlink"));
+  // Just past the cap, and deliberately VALID JSON: a size rejection must not
+  // depend on the body being malformed. The padding rides in an unused member
+  // so the document stays well-formed at any length.
+  QByteArray body = QByteArray("{\"version\":1,\"source\":\"steam\","
+                               "\"target\":\"steam://rungameid/220\",\"pad\":\"");
+  body.append(QByteArray(KartLink::kMaxStubBytes, 'x'));
+  body.append("\"}");
+  QVERIFY(body.size() > KartLink::kMaxStubBytes);
+  writeRaw(oversized, body);
+
+  const auto result = KartLink::read(oversized);
+  QVERIFY2(result.isError(), "An oversized stub must be refused, not parsed");
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::InvalidConfigValue);
+
+  // The cap must not catch real stubs: a normal one is a few hundred bytes.
+  KartLink::LinkData ordinary;
+  ordinary.source = QStringLiteral("steam");
+  ordinary.target = QStringLiteral("steam://rungameid/220");
+  ordinary.title = QStringLiteral("A Documentary");
+  const QString fine = path(QStringLiteral("ordinary.kartlink"));
+  QVERIFY(KartLink::write(fine, ordinary));
+  const auto ok = KartLink::read(fine);
+  QVERIFY(!ok.isError());
 }
 
 QTEST_MAIN(TestKartLink)

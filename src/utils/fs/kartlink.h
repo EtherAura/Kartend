@@ -36,6 +36,16 @@ namespace KartLink {
 /// `extensions` list stores.
 inline constexpr auto kExtension = "kartlink";
 
+/// Refuse to read a stub larger than this. A stub is four short JSON fields —
+/// real ones are a few hundred bytes — but read() is reached by SCANNING a
+/// media directory, so the file is whatever happened to be sitting there with
+/// a .kartlink suffix. Without a cap, a multi-gigabyte file in a scanned
+/// directory became an unbounded readAll() straight into memory before
+/// QJsonDocument ever saw it (Kartend-1o1a1, secondary finding). 1 MiB is
+/// four orders of magnitude above any real stub and still bounded, matching
+/// the sizing rationale of the caps in kartformat.h.
+inline constexpr qint64 kMaxStubBytes = 1024 * 1024;
+
 struct LinkData {
   int version = 1;
   QString source; ///< Importer id: "steam" / "flatpak" / "lutris" / ….
@@ -55,6 +65,33 @@ struct LinkData {
 /// True iff the path's suffix is `kartlink` (case-insensitive). Cheap string
 /// test — no disk access — safe on the launch hot path.
 [[nodiscard]] bool isKartLinkPath(const QString &filePath);
+
+/// Root of the directory tree Kartend itself owns for launcher-import stubs:
+/// `<AppDataLocation>/launcher-imports`. LauncherImportService writes every
+/// stub beneath it (per-source, then per-key), which makes LOCATION the
+/// credential — see isManagedStubPath.
+[[nodiscard]] QString managedStubRoot();
+
+/// True iff @p stubPath lives inside managedStubRoot() — i.e. Kartend put it
+/// there, rather than a media scan finding it.
+///
+/// This is the trust boundary for `args` (Kartend-1o1a1). A stub is an on-disk
+/// file in a directory the user (or anything else) can write to, and its args
+/// land verbatim in the configured launcher's argv. Validating them the way a
+/// filename is validated is not enough: an option flag is a legitimate arg
+/// value, so there is no character-level rule separating "the bottle name
+/// Bottles needs" from "a flag that changes what the launcher executes". The
+/// only durable distinction is provenance, and the only provenance signal that
+/// cannot be forged by writing a file is where the file sits.
+///
+/// So: stubs under the managed root keep their args, stubs found anywhere else
+/// have them dropped. Their `target` is honoured either way — it is separately
+/// validated and dash-guarded — so a hand-placed stub still launches, it just
+/// cannot contribute flags.
+///
+/// Deliberately NOT a signature or a recorded-identity field: those live in
+/// the file, so anything that can write the file can write them too.
+[[nodiscard]] bool isManagedStubPath(const QString &stubPath);
 
 /// Reads and parses a stub. Errors: FileReadError when the file can't be
 /// opened; a malformed JSON body or an empty `target` reports

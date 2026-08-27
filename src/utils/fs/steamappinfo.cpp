@@ -21,6 +21,18 @@ constexpr quint32 kMagicV29 = 0x07564429;
 /// sha1(text) 20 + changeNumber u32 + sha1(binary) 20.
 constexpr qsizetype kRecordPrelude = 4 + 4 + 8 + 20 + 4 + 20;
 
+/// Ceiling on the whole-file read (Kartend-v3u04), the counterpart to the DAT
+/// path's kMaxDatBytes. Steam writes appinfo.vdf, but it sits in a
+/// user-writable directory whose path Kartend accepts from configuration, so
+/// the size is not ours to assume. The read cannot be streamed — the V29
+/// string table is addressed by absolute offset from the tail — so the guard
+/// has to be a refusal before the read, not a bound during it. It compounds:
+/// parseKeyValues materialises every record into a QVariantMap, roughly 25-40x
+/// the on-disk bytes, so a file well under this cap can still be the largest
+/// thing in the process. A stock appinfo.vdf for a large library is tens of
+/// MB; 512 MiB is the same generous margin the DAT reader allows.
+constexpr qint64 kMaxAppInfoBytes = 512LL * 1024 * 1024;
+
 quint32 readU32(const QByteArray &data, qsizetype pos) {
   return quint32(quint8(data[pos])) | quint32(quint8(data[pos + 1])) << 8 |
          quint32(quint8(data[pos + 2])) << 16 | quint32(quint8(data[pos + 3])) << 24;
@@ -241,6 +253,14 @@ auto read(const QString &appInfoPath, const QSet<QString> &wantedAppIds)
     return ErrorContext::error(ErrorCode::FileReadError, "Cannot open appinfo.vdf",
                                "SteamAppInfo::read")
         .withDetails(appInfoPath);
+  }
+  if (file.size() > kMaxAppInfoBytes) {
+    return ErrorContext::error(ErrorCode::ResourceLimitExceeded, "appinfo.vdf is implausibly large",
+                               "SteamAppInfo::read")
+        .withDetails(QStringLiteral("%1: %2 bytes exceeds the %3-byte ceiling")
+                         .arg(appInfoPath)
+                         .arg(file.size())
+                         .arg(kMaxAppInfoBytes));
   }
   const QByteArray data = file.readAll();
   if (data.size() < 8) {

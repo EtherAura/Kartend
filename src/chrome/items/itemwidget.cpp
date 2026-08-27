@@ -373,6 +373,21 @@ auto ItemWidget::event(QEvent *event) -> bool {
   return handled;
 }
 
+bool ItemWidget::shouldPaintTitle() const {
+  // List mode first, and unconditionally: the row's own text is the only thing
+  // identifying it there, for folder rows as much as for item rows.
+  if (m_isListMode) {
+    return true;
+  }
+  if (m_isVirtualFolder) {
+    return !m_hideSubfolderTitle;
+  }
+  if (m_isSubcollection) {
+    return !m_hideSubcollectionTitles;
+  }
+  return !m_hideTitles;
+}
+
 // Resize event
 void ItemWidget::resizeEvent(QResizeEvent *event) {
   QWidget::resizeEvent(event);

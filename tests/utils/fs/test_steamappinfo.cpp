@@ -1,6 +1,7 @@
 // SteamAppInfo binary parser against synthetic V28/V29 fixtures built by
 // tests/support/appinfofixture.h, plus the store-taxonomy mapping helpers.
 #include <QFile>
+#include <QFileInfo>
 #include <QObject>
 #include <QTemporaryDir>
 #include <QTest>
@@ -23,6 +24,7 @@ private slots:
   void rejectsUnknownMagic();
   void rejectsOverflowingStringTableOffset();
   void rejectsOversizedStringTableCount();
+  void rejectsImplausiblyLargeFile();
   void taxonomyHelpers();
 
 private:
@@ -253,6 +255,33 @@ void TestSteamAppInfo::rejectsOversizedStringTableCount() {
 
   const auto parsed = SteamAppInfo::read(writeFixture(bytes), {});
   QVERIFY(parsed.isError());
+}
+
+// Kartend-v3u04: the whole-file read had no ceiling, unlike the DAT path's
+// kMaxDatBytes. It cannot be streamed — the V29 string table is addressed by
+// absolute offset from the tail — so the guard has to refuse before the read
+// rather than bound it during. Compounding it, parseKeyValues expands every
+// record into a QVariantMap at roughly 25-40x the on-disk bytes.
+//
+// A 512 MiB fixture would be absurd to write, so this drives the guard from
+// the other side: a sparse file whose reported size is over the ceiling but
+// which occupies almost no disk. That is exactly what the guard consults —
+// QFile::size() before readAll() — so it is the real path, not a stand-in.
+void TestSteamAppInfo::rejectsImplausiblyLargeFile() {
+  const QString path = m_dir.filePath(QStringLiteral("huge.vdf"));
+  {
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    // Valid V29 magic up front, so a refusal cannot be mistaken for the
+    // unknown-magic rejection that already existed.
+    QVERIFY(file.write(QByteArrayLiteral("\x29\x44\x56\x07")) == 4);
+    QVERIFY(file.resize(513LL * 1024 * 1024));
+  }
+  QCOMPARE(QFileInfo(path).size(), 513LL * 1024 * 1024);
+
+  const auto parsed = SteamAppInfo::read(path, {});
+  QVERIFY2(parsed.isError(), "an appinfo.vdf past the size ceiling must be refused");
+  QCOMPARE(parsed.error().code, ErrorUtils::ErrorCode::ResourceLimitExceeded);
 }
 
 void TestSteamAppInfo::taxonomyHelpers() {

@@ -29,6 +29,7 @@ private slots:
   void testNewRowClickDoesNotLeaveSelectionSuppressionArmed();
   void testArtworkPreviewLaunchRequestClearsExpandState();
   void testSelectionChangeNotificationResetsExpandState();
+  void testJumpToEdgePublishesSelectionNotJustTheRing();
 };
 
 #endif // KARTEND_TESTS_TEST_INTERACTIONMANAGER_H

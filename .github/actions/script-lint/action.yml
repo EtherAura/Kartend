@@ -97,6 +97,14 @@ runs:
       shell: bash
       run: python3 .scripts/check-bd-id-leakage.py
 
+    - name: Check settings-cluster fingerprint completeness
+      # Kartend-10sb1: a field in neither operator== nor qHash makes a real
+      # user edit fingerprint clean, so its hot-reload signal never fires. The
+      # per-field test can only cover fields somebody wrote a case for; this
+      # diffs each cluster's member list against both functions AND the test.
+      shell: bash
+      run: python3 .scripts/check-cluster-fingerprints.py
+
     - name: Check required-checks path lists stay in lockstep
       shell: bash
       run: python3 .scripts/check-required-checks-consistency.py

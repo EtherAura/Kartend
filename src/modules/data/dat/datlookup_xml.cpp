@@ -30,6 +30,17 @@ constexpr int kMaxNameLen = 4096;
 // kMaxRomSize bounds a parsed `size` field. 1TiB is far above any real ROM /
 // disc image while rejecting nonsensical (overflowed / garbage) values.
 constexpr qint64 kMaxRomSize = 1LL << 40;
+// kMaxRecords bounds the number of emitted DatRecords (Kartend-v3u04). The
+// per-field caps above and the 512 MiB read cap in readDatFile do not bound
+// this on their own: a minimal `<rom name="a" crc="00000000"/>` is ~35 bytes
+// and expands to a multi-QString record, so peak RSS runs roughly 10-20x the
+// file. The clrmamepro path documents this same concern for its tokeniser;
+// the XML path had nothing. MAME's full listxml is the largest real catalogue
+// at a few hundred thousand roms, so 4 million is well clear of any genuine
+// DAT while making the expansion finite. Refuse rather than truncate — a
+// silently half-parsed catalogue would report clean matches for a set it
+// never actually read.
+constexpr qsizetype kMaxRecords = 4000000;
 
 /// Lowercase + strip surrounding whitespace, leaving a clean hex
 /// digest ready for hash-map lookup. Defensive about input source —
@@ -158,6 +169,12 @@ std::optional<ErrorContext> datParseTailError(const QXmlStreamReader &reader, bo
 
 ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
   QXmlStreamReader reader(xml);
+  // Kartend-v3u04: pin the entity-expansion ceiling instead of inheriting it.
+  // QXmlStreamReader resolves internal entities, so a recursive declaration is
+  // the billion-laughs shape; Qt already defaults this to 4096 characters, and
+  // 4096 is what we want — the point is that it is now a decision this project
+  // made, not one a future Qt version could change under us.
+  reader.setEntityExpansionLimit(4096);
   QList<DatRecord> out;
 
   // Track the current `<game>` so we can attach `<rom>` entries to
@@ -193,6 +210,12 @@ ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
     } else if (name == QLatin1String("rom") && !currentGameName.isEmpty()) {
       if (auto r =
               readRomElement(reader.attributes(), currentGameName, currentCloneOf, currentMia)) {
+        if (out.size() >= kMaxRecords) {
+          return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                     "Logiqx DAT declares too many entries to parse",
+                                     "DatLookup::parseLogiqxDat")
+              .withDetails(QStringLiteral("exceeded %1 records").arg(kMaxRecords));
+        }
         out.append(std::move(*r));
       }
     }
@@ -212,6 +235,12 @@ ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
 
 ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
   QXmlStreamReader reader(xml);
+  // Kartend-v3u04: pin the entity-expansion ceiling instead of inheriting it.
+  // QXmlStreamReader resolves internal entities, so a recursive declaration is
+  // the billion-laughs shape; Qt already defaults this to 4096 characters, and
+  // 4096 is what we want — the point is that it is now a decision this project
+  // made, not one a future Qt version could change under us.
+  reader.setEntityExpansionLimit(4096);
   QList<DatRecord> out;
 
   // MAME listxml differs from Logiqx in two ways we care about:
@@ -272,6 +301,15 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
         inDescription = true;
       } else if (name == QLatin1String("rom") && !currentSetId.isEmpty()) {
         if (auto r = readRomElement(reader.attributes(), QString())) {
+          // Both containers count: pendingRoms holds the current machine's
+          // roms until flushMachine moves them into out, so bounding only one
+          // would leave the other free to grow on a single vast <machine>.
+          if (out.size() + pendingRoms.size() >= kMaxRecords) {
+            return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                       "MAME listxml declares too many entries to parse",
+                                       "DatLookup::parseMameListXml")
+                .withDetails(QStringLiteral("exceeded %1 records").arg(kMaxRecords));
+          }
           // gameName left blank here; set in flushMachine() below.
           pendingRoms.append(std::move(*r));
         }

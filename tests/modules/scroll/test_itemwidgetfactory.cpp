@@ -63,6 +63,11 @@ private slots:
   void manualCover_listRowCountsWithoutAnArtworkDirectory();
   void manualCover_unlinkedListRowStillFallsThroughToTheNameCascade();
 
+  // Which artwork directory is authoritative (Kartend-12kzb)
+  void spansCollections_falseForAPlainSingleCollectionView();
+  void spansCollections_trueWhenTheConfigAggregatesChildren();
+  void spansCollections_trueForBothWidenedSearchScopes();
+
   // Pending range-request bookkeeping
   void prefetchRangeAt_requestsUnloadedChunkOnce();
   void prefetchRangeAt_guardsInvalidAndLoadedInputs();
@@ -706,6 +711,48 @@ void TestItemWidgetFactory::clearPendingRangeRequest_resetsRetryBudget() {
   h.factory.clearPendingRangeRequests();
   h.factory.prefetchRangeAt(0, 100);
   QCOMPARE(h.spy.count(), 6);
+}
+
+// ── Which artwork directory is authoritative (Kartend-12kzb) ──────────────
+//
+// The per-item artwork-directory lookup is a DB hit per widget, so it only
+// runs when the view can actually contain items from another collection.
+// Getting that predicate wrong is invisible in the common case and produces
+// hatched placeholders in exactly the widened-search case, so pin all four
+// inputs rather than just the one that was broken.
+
+void TestItemWidgetFactory::spansCollections_falseForAPlainSingleCollectionView() {
+  // Ordinary browsing: every item belongs to the collection being viewed, so
+  // its artworkDirectory is authoritative and the lookup is pure cost.
+  CollectionContext context;
+  QVERIFY(!ItemWidgetFactoryHelpers::viewMaySpanCollections(context));
+}
+
+void TestItemWidgetFactory::spansCollections_trueWhenTheConfigAggregatesChildren() {
+  // The one case that always worked: showAllSubcollectionItems pulls children
+  // into the parent's grid.
+  CollectionContext context;
+  context.config.showAllSubcollectionItems = true;
+  QVERIFY(ItemWidgetFactoryHelpers::viewMaySpanCollections(context));
+}
+
+void TestItemWidgetFactory::spansCollections_trueForBothWidenedSearchScopes() {
+  // The regression. A search widens which items are QUERIED without touching
+  // the collection config, so the config flag above stays false while the grid
+  // fills with other collections' items. Both widened scopes must count.
+  {
+    CollectionContext currentAndSubcollections;
+    currentAndSubcollections.queryIncludeDescendants = true;
+    QVERIFY2(ItemWidgetFactoryHelpers::viewMaySpanCollections(currentAndSubcollections),
+             "A current+subcollections search surfaces children's items; their covers do not "
+             "live in the parent's artwork directory");
+  }
+  {
+    CollectionContext allCollections;
+    allCollections.queryIncludeAllCollections = true;
+    QVERIFY2(ItemWidgetFactoryHelpers::viewMaySpanCollections(allCollections),
+             "An all-collections search spans the whole library");
+  }
 }
 
 QTEST_MAIN(TestItemWidgetFactory)

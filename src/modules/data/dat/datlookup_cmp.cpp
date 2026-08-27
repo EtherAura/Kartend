@@ -297,6 +297,12 @@ Dialect detectDialect(const QByteArray &xml) {
   // Cheap even on a 100MB MAME listxml because QXmlStreamReader
   // streams from the byte buffer and doesn't materialise the tree.
   QXmlStreamReader reader(xml);
+  // Kartend-v3u04: pin the entity-expansion ceiling instead of inheriting it.
+  // QXmlStreamReader resolves internal entities, so a recursive declaration is
+  // the billion-laughs shape; Qt already defaults this to 4096 characters, and
+  // 4096 is what we want — the point is that it is now a decision this project
+  // made, not one a future Qt version could change under us.
+  reader.setEntityExpansionLimit(4096);
   while (!reader.atEnd()) {
     const auto token = reader.readNext();
     if (reader.hasError()) break; // not well-formed XML — fall through to the text sniff
@@ -362,6 +368,12 @@ DatHeader probeHeader(const QByteArray &xml, Dialect dialect) {
   }
 
   QXmlStreamReader reader(xml);
+  // Kartend-v3u04: pin the entity-expansion ceiling instead of inheriting it.
+  // QXmlStreamReader resolves internal entities, so a recursive declaration is
+  // the billion-laughs shape; Qt already defaults this to 4096 characters, and
+  // 4096 is what we want — the point is that it is now a decision this project
+  // made, not one a future Qt version could change under us.
+  reader.setEntityExpansionLimit(4096);
   bool sawRoot = false;
   bool inHeader = false;
   // Accumulates the current captured text element; nullptr between them.

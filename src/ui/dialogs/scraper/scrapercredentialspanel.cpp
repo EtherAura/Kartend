@@ -2,6 +2,7 @@
 
 #include "collectiontypes.h"
 #include "formbuilders.h"
+#include "settingskeys.h"
 #include "settingsmodel.h"
 
 #include <QFont>
@@ -159,12 +160,26 @@ void ScraperCredentialsPanel::updateStorageDemotionBanner() {
     m_storageDemotionBanner->clear();
     return;
   }
-  m_storageDemotionBanner->setText(
-      tr("⚠ Warning — your scraper credentials are stored unencrypted in "
-         "settings.ini because the system keychain was unavailable (%1). "
-         "They will move back to the keychain automatically once it is "
-         "available again.")
-          .arg(m_storageDemotionReason));
+  // Two cases, two messages. A RUNTIME keychain failure is recoverable, so the
+  // promise that credentials move back is true. A build compiled without
+  // keychain support has nothing to move back to, and telling that user to
+  // wait would be a lie — they need to know it is permanent for this build
+  // (Kartend-4ahok). The file name is kartend.cfg; this string said
+  // "settings.ini", which is a file that does not exist.
+  if (m_storageDemotionReason ==
+      QLatin1String(kartend::settings::keys::kCredentialDemotionNoKeychainBuild)) {
+    m_storageDemotionBanner->setText(
+        tr("⚠ Warning — your scraper credentials are stored unencrypted in "
+           "kartend.cfg because this build of Kartend was compiled without "
+           "system keychain support. This will not change on this build."));
+  } else {
+    m_storageDemotionBanner->setText(
+        tr("⚠ Warning — your scraper credentials are stored unencrypted in "
+           "kartend.cfg because the system keychain was unavailable (%1). "
+           "They will move back to the keychain automatically once it is "
+           "available again.")
+            .arg(m_storageDemotionReason));
+  }
   m_storageDemotionBanner->show();
 }
 

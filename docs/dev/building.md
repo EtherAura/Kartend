@@ -95,6 +95,25 @@ CI.
   `--format-check`** (what CI runs) instead **fails loud** with a remediation
   message pointing at the container — it no longer silently passes while
   running nothing. This is the one check CI fails hard on.
+
+  For a quick pass over just what you touched, use
+  [`.scripts/format.sh`](../../.scripts/format.sh) rather than a hand-written
+  `docker run`:
+
+  ```bash
+  .scripts/format.sh            # format files changed vs HEAD
+  .scripts/format.sh --check    # report drift, change nothing
+  .scripts/format.sh --all      # every .cpp/.h under src/ and tests/
+  ```
+
+  It resolves the pinned binary through the same shared helper, falling back to
+  the `kartend-ci` container automatically. Prefer it over invoking the
+  container yourself: the obvious hand-written `docker run` omits `--user`, so
+  the container writes as **root** and every file it formats becomes root-owned
+  in your working tree. That fails nothing at the time and surfaces days later
+  as a permission-denied error mid-edit (Kartend-o07rm). The wrapper always
+  passes `--user`, and warns if it finds root-owned files an earlier run left
+  behind.
 - **clang-tidy** — ships with the LLVM/Clang tooling (`clang-tools-extra` on
   Fedora, `clang-tools` on Debian/Ubuntu).
 - **cppcheck** — package `cppcheck` on all distros.

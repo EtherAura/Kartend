@@ -70,9 +70,21 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
     // invocation has more than one variable part (Bottles needs the bottle
     // name alongside the program). Each entry becomes exactly one argv slot —
     // they are never re-split — so a value containing spaces cannot introduce
-    // an argument boundary. They are still validated below, on the same terms
-    // as the target, because a stub is an on-disk file a user can edit.
-    stubArguments = link.value().args;
+    // an argument boundary.
+    //
+    // Kartend-1o1a1: taken ONLY from a stub under Kartend's managed import
+    // root. This list is an argv-flag primitive — its entries land verbatim in
+    // the launcher's option set — and character-level validation cannot police
+    // it, because an option flag is a legitimate value here. The previous
+    // justification ("the importer wrote it") was not a security property: the
+    // reader accepts any .kartlink a media scan finds, and a scanned directory
+    // is somewhere an attacker who can drop a file already controls. Location
+    // is the one provenance signal that writing a file cannot forge, so that
+    // is what is checked. A stub found elsewhere still launches — its target is
+    // validated and dash-guarded below — it just contributes no flags.
+    if (KartLink::isManagedStubPath(filePath)) {
+      stubArguments = link.value().args;
+    }
   }
 
   // Validate the media argument (file path, or resolved shortcut target) for
@@ -84,8 +96,11 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
   }
   // Same character-level check for the stub's own arguments. The leading-dash
   // guard below deliberately does NOT apply to them: an option flag is the
-  // whole point of the list, and unlike a filename it was written by the
-  // importer rather than derived from whatever a directory happened to hold.
+  // whole point of the list. That exemption is why the list needed a
+  // provenance gate above and not merely a stronger character rule — no
+  // character-level test can separate a legitimate flag from a hostile one.
+  // Trusted provenance is not a pass for metacharacters, though: a managed
+  // stub's args still go through this loop.
   for (const QString &argument : stubArguments) {
     auto argumentValidation = PathUtils::validatePathSecurity(argument);
     if (argumentValidation.isError()) {
@@ -169,6 +184,10 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
   }
 
   bool sawFilePlaceholder = false;
+  // Kartend-li94g: the libretro branch's counterpart to sawFilePlaceholder —
+  // true once a template has positioned the core itself, so the branch knows
+  // not to append a second `-L <core>` on top of the one it just expanded.
+  bool sawCorePlaceholder = false;
   // Boundary-aware placeholder tokens, mirroring previewLaunchCommand's
   // unresolved-placeholder regex (kPlaceholderRe below). Plain substring
   // replacement mangled longer tokens: `%f` matched inside %file% /
@@ -206,7 +225,10 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
         sawFilePlaceholder = true;
         arg.replace(kFileTokenRe, mediaArgument);
       }
-      arg.replace(kCoreTokenRe, expandedCorePath);
+      if (arg.contains(kCoreTokenRe)) {
+        sawCorePlaceholder = true;
+        arg.replace(kCoreTokenRe, expandedCorePath);
+      }
     }
     out.append(expandedArgs);
     return {};
@@ -240,7 +262,26 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
     if (paramResult.isError()) {
       return paramResult.error();
     }
-    cmd.arguments << "-L" << expandedCorePath << mediaArgument;
+    // Kartend-li94g: append only the halves the template did NOT already
+    // place. This used to append the whole `-L <core> <media>` triple
+    // unconditionally, which double-emitted it for every launcher carrying the
+    // placeholders — including the probe's own RetroArch default,
+    // `-L %core "%1"` (launcherprobe.cpp), i.e. the normal wizard-seeded path.
+    // Observed argv was `-L core rom -L core rom`. RetroArch tolerates that,
+    // which is why it went unnoticed, but a template naming a DIFFERENT core
+    // had the collection's corePath appended after its own, silently competing
+    // with an explicit choice.
+    //
+    // The plain-launcher branch below has always guarded the media half this
+    // way; the libretro branch set sawFilePlaceholder and then ignored it.
+    // Order is unchanged for the common "template carries neither" case, which
+    // still produces exactly `[params…] -L <core> <media>`.
+    if (!sawCorePlaceholder) {
+      cmd.arguments << "-L" << expandedCorePath;
+    }
+    if (!sawFilePlaceholder) {
+      cmd.arguments << mediaArgument;
+    }
     cmd.arguments << stubArguments; // normally empty; never silently dropped
     return cmd;
   }

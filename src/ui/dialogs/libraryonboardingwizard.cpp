@@ -16,6 +16,7 @@
 #include <QVBoxLayout>
 #include <QWizardPage>
 
+#include "collection/typehelpers.h"
 #include "launcherprobe.h"
 #include "uiconstants/color.h"
 
@@ -126,10 +127,24 @@ public:
 
     m_typeCombo = new QComboBox(this);
     m_typeCombo->setEditable(true);
-    m_typeCombo->addItems(
-        {LibraryOnboardingWizard::tr("Video"), LibraryOnboardingWizard::tr("Audio"),
-         LibraryOnboardingWizard::tr("Reference"), LibraryOnboardingWizard::tr("Image"),
-         LibraryOnboardingWizard::tr("Other")});
+    // Kartend-0ydo7: presets come from CollectionUtils — the same source the
+    // settings dialog's Media Type combo is fed from (via
+    // collectionTypeChoices). This list used to be hardcoded here and had
+    // drifted from canon in four of its five entries: "Reference" and "Image"
+    // for canon's "Documents" and "Images", an "Other" that is not a preset at
+    // all, and no "Games", so the one guided path into a new collection could
+    // not name the type most of Kartend's feature surface is built around.
+    //
+    // Deliberately NOT tr()'d, and deliberately no leading blank row:
+    //   - these strings are the PERSISTED value (config.type, matched
+    //     case-insensitively by normaliseCategory to pick a scraper provider),
+    //     so a translated "Video" would persist as a type nothing recognises;
+    //     the settings-dialog combo has always used the untranslated presets.
+    //   - the combo's current text IS the type, and the Finish handler relies
+    //     on it being non-empty for a user who clicks through without opening
+    //     this page. collectionTypeChoices' leading blank exists to express
+    //     "untagged" when EDITING an existing collection; it has no meaning here.
+    m_typeCombo->addItems(CollectionUtils::standardCollectionTypes());
     form->addRow(LibraryOnboardingWizard::tr("Type:"), m_typeCombo);
 
     auto *artworkRow = new QHBoxLayout();
@@ -216,6 +231,31 @@ private:
   QListWidget *m_list = nullptr;
 };
 
+/// Locates the LauncherPage among @p wizard's pages, or nullptr if it isn't
+/// present. A scan rather than a captured page id (the way the Finish handler
+/// does it) because this runs from initializePage(), by which point every page
+/// has been added — so unlike a build-order-dependent id it cannot go stale if
+/// the buildXxxPage() calls are ever reordered (cf. Kartend-5a5da).
+LauncherPage *findLauncherPage(const QWizard *wizard) {
+  if (!wizard) {
+    return nullptr;
+  }
+  const QList<int> ids = wizard->pageIds();
+  for (int id : ids) {
+    if (auto *launcherPage = dynamic_cast<LauncherPage *>(wizard->page(id))) {
+      return launcherPage;
+    }
+  }
+  return nullptr;
+}
+
+/// Placeholder for a step the user skipped. The summary states these
+/// explicitly rather than dropping the row: a silently absent line reads as
+/// "the wizard forgot", which is exactly the complaint in Kartend-8cxjy.
+QString noneSelected() {
+  return LibraryOnboardingWizard::tr("(none selected)");
+}
+
 /// Page 5: summary. Echoes the choices back so the user can review
 /// before Finish.
 class SummaryPage : public QWizardPage {
@@ -238,16 +278,26 @@ public:
     const QString type = field(QString::fromLatin1(kFieldType)).toString();
     const QString artwork = field(QString::fromLatin1(kFieldArtworkDir)).toString();
 
+    // Kartend-8cxjy: echo EVERY step the wizard collected, in page order, and
+    // name the ones that were skipped. This page previously listed name, media
+    // folder and type only — dropping the artwork row whenever it was blank and
+    // omitting the launcher entirely, so the one screen whose job is "review
+    // the configuration before it is created" under-reported a whole step. The
+    // launcher was the awkward one: LauncherPage's rows are a checkable
+    // QListWidget, not registered fields, so it has to be located and asked
+    // directly (the same reason the Finish handler reaches for it by page).
+    const auto *launcherPage = findLauncherPage(wizard());
+    const QString launcher = launcherPage ? launcherPage->chosen().binary : QString();
+
     QStringList lines;
     lines << LibraryOnboardingWizard::tr("<b>Name:</b> %1").arg(name.toHtmlEscaped());
     lines << LibraryOnboardingWizard::tr("<b>Media folder:</b> %1").arg(dir.toHtmlEscaped());
-    if (!type.isEmpty()) {
-      lines << LibraryOnboardingWizard::tr("<b>Type:</b> %1").arg(type.toHtmlEscaped());
-    }
-    if (!artwork.trimmed().isEmpty()) {
-      lines
-          << LibraryOnboardingWizard::tr("<b>Artwork folder:</b> %1").arg(artwork.toHtmlEscaped());
-    }
+    lines << LibraryOnboardingWizard::tr("<b>Type:</b> %1")
+                 .arg(type.trimmed().isEmpty() ? noneSelected() : type.toHtmlEscaped());
+    lines << LibraryOnboardingWizard::tr("<b>Artwork folder:</b> %1")
+                 .arg(artwork.trimmed().isEmpty() ? noneSelected() : artwork.toHtmlEscaped());
+    lines << LibraryOnboardingWizard::tr("<b>Launcher:</b> %1")
+                 .arg(launcher.isEmpty() ? noneSelected() : launcher.toHtmlEscaped());
     m_summary->setText(lines.join(QStringLiteral("<br>")));
   }
 

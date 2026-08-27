@@ -13,6 +13,8 @@
 #include <QRegularExpression>
 #include <QStringList>
 
+#include "parserlimits.h"
+
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
@@ -53,13 +55,12 @@ QString joinArtistCredit(const QJsonArray &credits) {
 }
 
 QString joinLabelInfo(const QJsonArray &labelInfo) {
-  QStringList names;
+  ScraperParsers::BoundedUniqueStrings names;
   for (const auto &v : labelInfo) {
     const QJsonObject info = v.toObject();
     const QJsonObject label = info.value("label").toObject();
-    const QString name = label.value("name").toString();
-    if (!name.isEmpty() && !names.contains(name)) {
-      names.append(name);
+    if (!names.add(label.value("name").toString())) {
+      break; // sink full — stop walking an array the response sized
     }
   }
   return names.join(QStringLiteral(", "));
@@ -71,11 +72,10 @@ QString collectGenreTags(const QJsonObject &release) {
   // prefer `genres` when present; fall back to top-voted `tags`.
   const QJsonArray genres = release.value("genres").toArray();
   if (!genres.isEmpty()) {
-    QStringList names;
+    ScraperParsers::BoundedUniqueStrings names;
     for (const auto &g : genres) {
-      const QString n = g.toObject().value("name").toString();
-      if (!n.isEmpty() && !names.contains(n)) {
-        names.append(n);
+      if (!names.add(g.toObject().value("name").toString())) {
+        break; // sink full — stop walking an array the response sized
       }
     }
     if (!names.isEmpty()) {
@@ -90,8 +90,14 @@ QString collectGenreTags(const QJsonObject &release) {
     int count = 0;
   };
   QList<Tag> all;
-  all.reserve(tags.size());
+  // Bounded because `tags` is response-sized. A release carries a handful, so
+  // the cap only ever bites on a response that is not one — and even then the
+  // sort below still picks the top 5 of what was collected.
+  all.reserve(ScraperParsers::boundedReserve(tags.size(), ScraperParsers::kMaxJoinItems));
   for (const auto &t : tags) {
+    if (all.size() >= ScraperParsers::kMaxJoinItems) {
+      break;
+    }
     const QJsonObject obj = t.toObject();
     Tag tag;
     tag.name = obj.value("name").toString();
@@ -131,8 +137,11 @@ ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> parseSearchResponse(const QB
   const QJsonArray releases = root.value("releases").toArray();
 
   QList<Scraper::ScrapeCandidate> out;
-  out.reserve(releases.size());
+  out.reserve(ScraperParsers::boundedReserve(releases.size(), ScraperParsers::kMaxCandidates));
   for (const auto &v : releases) {
+    if (out.size() >= ScraperParsers::kMaxCandidates) {
+      break;
+    }
     const QJsonObject r = v.toObject();
     Scraper::ScrapeCandidate c;
     c.providerSpecificId = r.value("id").toString();

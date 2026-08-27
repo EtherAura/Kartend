@@ -56,7 +56,7 @@ private slots:
   // 2026-08-18: vertical reaches the toolbar ONLY with the modifier held;
   // unheld it drives the details pane, and the pulsing ring marks what is
   // selected.
-  void rightStick_verticalReachesToolbarOnlyWithModifier();
+  void rightStick_upFromGridFocusesToolbar_paneWalkKeepsVertical();
 
   // 2026-08-18: traversing collections from the tree must not hand focus
   // back to the window, or the stick stops driving the tree mid-traversal.

@@ -8,6 +8,8 @@
 #include <QTextDocumentFragment>
 #include <QTimeZone>
 
+#include "parserlimits.h"
+
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
@@ -29,14 +31,14 @@ QString htmlToPlainText(const QString &html) {
 /// every entry in a games collection carries it, so as a genre it says
 /// nothing ("Game, StrategyGame" → "StrategyGame").
 QString genreFromCategories(const QJsonArray &categories) {
-  QStringList parts;
+  ScraperParsers::BoundedUniqueStrings parts;
   for (const auto &value : categories) {
     const QString entry = value.toString().trimmed();
-    if (entry.isEmpty() || entry.compare(QStringLiteral("Game"), Qt::CaseInsensitive) == 0) {
+    if (entry.compare(QStringLiteral("Game"), Qt::CaseInsensitive) == 0) {
       continue;
     }
-    if (!parts.contains(entry)) {
-      parts.append(entry);
+    if (!parts.add(entry)) {
+      break; // sink full — stop walking an array the response sized
     }
   }
   return parts.join(QStringLiteral(", "));

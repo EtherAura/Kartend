@@ -18,6 +18,7 @@ private slots:
   void skipsUnreadableCacheWithoutLosingOthers();
   void findsLocalIconsWhereHeroicLeavesThem();
   void launchUriIsPercentEncoded();
+  void traversingAppNameYieldsNoLocalIcon();
   void coverUrlPrefersPortraitAndSubstitutesExtPlaceholder();
   void emptyConfigDirYieldsNothing();
 
@@ -125,6 +126,50 @@ void TestHeroicLibrary::findsLocalIconsWhereHeroicLeavesThem() {
   // the normal case — and must never be mistaken for a path.
   QCOMPARE(games.at(2).title, QStringLiteral("No Art At All"));
   QVERIFY(games.at(2).iconPath.isEmpty());
+}
+
+// Kartend-9guwj: app_name comes from Heroic's JSON and was interpolated
+// straight into "<configDir>/icons/<appName>.png", so a traversing value made
+// the icon probe resolve to a file outside the Heroic config dir — which the
+// importer then copied in as the game's cover.
+void TestHeroicLibrary::traversingAppNameYieldsNoLocalIcon() {
+  const QString configDir = newConfigDir();
+  // A real .png one level above the icons dir, exactly where the hostile
+  // app_name points. The icons/ directory itself must exist for the "../"
+  // to resolve at all, so a decoy is written there too.
+  writeFile(configDir + QStringLiteral("/private.png"), "secret");
+  writeFile(configDir + QStringLiteral("/icons/decoy.png"), "x");
+  QVERIFY(QFileInfo::exists(configDir + QStringLiteral("/icons/") + QStringLiteral("../private") +
+                            QStringLiteral(".png")));
+
+  writeFile(configDir + QStringLiteral("/store_cache/legendary_library.json"),
+            QByteArrayLiteral("{\"library\":[") +
+                game("../private", "Traversal", "legendary", true) + QByteArrayLiteral("]}"));
+
+  const QList<HeroicLibrary::Game> games = HeroicLibrary::installedGames(configDir);
+  QCOMPARE(games.size(), 1);
+  QCOMPARE(games.at(0).title, QStringLiteral("Traversal"));
+  QVERIFY2(
+      games.at(0).iconPath.isEmpty(),
+      qPrintable(QStringLiteral("traversing app_name resolved to '%1'").arg(games.at(0).iconPath)));
+
+  // The GOG install_path branch is a separate input: an absolute path from the
+  // same JSON. A ".." segment in it is refused; a plain absolute path is not,
+  // because Heroic legitimately installs anywhere.
+  const QString configDir2 = newConfigDir();
+  const QString realInstall = m_dir.filePath(QStringLiteral("gog/title"));
+  writeFile(realInstall + QStringLiteral("/support/icon.png"), "x");
+  const QString climbing = realInstall + QStringLiteral("/../../gog/title");
+  QVERIFY(QFileInfo::exists(climbing + QStringLiteral("/support/icon.png")));
+  writeFile(configDir2 + QStringLiteral("/store_cache/gog_library.json"),
+            QByteArrayLiteral("{\"games\":[") + game("climber", "Climber", "gog", true, climbing) +
+                QByteArrayLiteral("]}"));
+  const QList<HeroicLibrary::Game> gogGames = HeroicLibrary::installedGames(configDir2);
+  QCOMPARE(gogGames.size(), 1);
+  QVERIFY2(
+      gogGames.at(0).iconPath.isEmpty(),
+      qPrintable(
+          QStringLiteral("install_path with '..' resolved to '%1'").arg(gogGames.at(0).iconPath)));
 }
 
 void TestHeroicLibrary::launchUriIsPercentEncoded() {

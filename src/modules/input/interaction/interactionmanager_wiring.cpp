@@ -259,7 +259,11 @@ void InteractionManager::connectGamepadManagerSignals() {
     if (visibleArtworkOverlay()) {
       return; // expand mode owns the stick
     }
-    if (!m_focusModifierHeld && currentFocusSection().kind != FocusSection::Tree) {
+    // Toolbar is skipped like the tree: a held up-deflection lands focus
+    // on the toolbar (user request 2026-08-24) and must not keep scrolling
+    // the pane behind it.
+    const FocusSection kind = currentFocusSection().kind;
+    if (!m_focusModifierHeld && kind != FocusSection::Tree && kind != FocusSection::Toolbar) {
       (void)driveDetailsPane(steps, /*allowAdvance=*/false);
     }
   });

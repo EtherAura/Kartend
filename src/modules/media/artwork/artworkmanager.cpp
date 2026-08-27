@@ -368,14 +368,26 @@ void ArtworkManager::addPendingArtwork(ItemWidget *widget, const QString &artwor
   const QString existingPath = m_widgetRegistry->pathFor(widget);
   if (existingPath == artworkPath) {
     if (m_widgetRegistry->isLoaded(widget)) {
-      if (!widget->hasStaleComposedArtwork()) {
+      if (widget->hasStoredArtwork() && !widget->hasStaleComposedArtwork()) {
         return;
       }
-      // The registry says loaded, but the widget's stored card was composed
-      // for a previous tile size — a final card can't be re-composited
-      // without doubling its border and corner mask, so treat the widget as
-      // needing re-delivery: clear its entries and fall through to the cache
-      // fast path / pending pipeline, which rebuilds at the current size.
+      // The registry says loaded, but the widget cannot honour that claim, so
+      // treat it as needing re-delivery: clear its entries and fall through to
+      // the cache fast path / pending pipeline, which rebuilds at the current
+      // size. Two ways to get here:
+      //
+      //  - the widget holds nothing at all (Kartend-eyfik). Only
+      //    clearWidgetReferences() wipes the registry, and that runs on
+      //    collection change / pre-search / settings — NOT on a layout switch.
+      //    A List round-trip releases every tile to the pool, whose
+      //    resetForReuse() drops storedPixmap, so the registry kept claiming
+      //    "loaded" for blank widgets and this fast path skipped the one
+      //    delivery that would have repainted them. The whole grid came back
+      //    as hatched placeholders until an unrelated collection change
+      //    happened to clear the registry.
+      //  - the widget's stored card was composed for a previous tile size. A
+      //    final card can't be re-composited without doubling its border and
+      //    corner mask, so it also needs rebuilding rather than reuse.
       m_widgetRegistry->removeAllEntriesFor(widget);
     } else if (m_widgetRegistry->isPendingFor(widget, artworkPath)) {
       return;

@@ -156,6 +156,10 @@ ScrollManager::ScrollManager(QObject *parent) : IScrollManager(parent) {
                      << "mediaFileCount=" << (m_dataManager ? m_dataManager->fileCount() : -1));
             emit requestItemsRange(offset, limit);
           });
+  // Kartend-eyfik: a tile deferred its cover because this directory was queued
+  // in the artwork cache. Make good on that deferral — see the signal's docs.
+  connect(m_widgetFactory.get(), &ItemWidgetFactory::requestArtworkPrewarm, this,
+          &ScrollManager::schedulePrewarmAndReconfigure);
 
   // Arrow key scroll helper for centering animation
   m_arrowKeyScrollHelper = std::make_unique<ArrowKeyScrollHelper>(this);

@@ -26,6 +26,7 @@
 #include "../../support/machomesandbox.h"
 #include "collection/generalsettings.h"
 #include "settingsmanager.h"
+#include "settingskeys.h"
 #include "settingsutils.h"
 
 class TestCredentialDemotion : public QObject {
@@ -40,6 +41,7 @@ private slots:
   void metaKey_doesNotPoisonCredentialMap();
   void plaintextCredential_loadsAsValue_noFlag();
   void cleanSave_clearsFlag_emitsSignalOnce();
+  void noKeychainBuild_alwaysFlagsPlaintext();
 
 private:
   static void writeConfigIni(const QString &iniContents);
@@ -150,6 +152,54 @@ void TestCredentialDemotion::cleanSave_clearsFlag_emitsSignalOnce() {
   // A second clean save must not re-emit — the state didn't change.
   QVERIFY(!mgr.saveGeneralSettings(gs).isError());
   QCOMPARE(demotionSpy.count(), 0);
+}
+
+void TestCredentialDemotion::noKeychainBuild_alwaysFlagsPlaintext() {
+  // Kartend-4ahok. In a build compiled WITHOUT keychain support every
+  // credential is plaintext, always — and that was the one configuration whose
+  // warning banner never appeared, because the #else arm of the save path set
+  // no demotion reason and the persist of that reason was itself inside
+  // #ifdef KARTEND_HAVE_QTKEYCHAIN. The weakest storage was the only silent one.
+  //
+  // The file comment above explains why no other test here seeds a credential
+  // and saves: on a developer machine with a live keyring that issues real
+  // keychain writes under the production service name. That objection does not
+  // apply in this configuration — there is no keychain to write to — which is
+  // exactly why this case can finally be asserted rather than reasoned about.
+  if (SettingsManager::keychainBackendCompiledIn()) {
+    QSKIP("Keychain backend compiled in; this asserts the no-keychain build. "
+          "Configure with -DCMAKE_DISABLE_FIND_PACKAGE_Qt6Keychain=ON to run it.");
+  }
+
+  writeConfigIni(QStringLiteral("[Scrapers]\n"));
+
+  SettingsManager mgr(nullptr, nullptr);
+  GeneralSettings gs;
+  mgr.loadGeneralSettings(gs);
+  QCOMPARE(mgr.credentialDemotionReason(), QString());
+
+  gs.scraper.credentials[QStringLiteral("screenscraper")][QStringLiteral("password")] =
+      QStringLiteral("hunter2");
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+
+  // The running app now warns...
+  QCOMPARE(mgr.credentialDemotionReason(),
+           QLatin1String(kartend::settings::keys::kCredentialDemotionNoKeychainBuild));
+  // ...and the marker survives a restart, like the runtime-failure one does.
+  const QString ini = readConfigIni();
+  QVERIFY2(ini.contains(QLatin1String(kartend::settings::keys::kCredentialDemotionNoKeychainBuild)),
+           "The demotion marker must be persisted in a no-keychain build too");
+
+  SettingsManager reloaded(nullptr, nullptr);
+  GeneralSettings gs2;
+  reloaded.loadGeneralSettings(gs2);
+  QCOMPARE(reloaded.credentialDemotionReason(),
+           QLatin1String(kartend::settings::keys::kCredentialDemotionNoKeychainBuild));
+  // The credential itself is genuinely in the clear — that IS the thing being
+  // warned about, so assert it rather than assume it.
+  QCOMPARE(gs2.scraper.credentials.value(QStringLiteral("screenscraper"))
+               .value(QStringLiteral("password")),
+           QStringLiteral("hunter2"));
 }
 
 int main(int argc, char *argv[]) {

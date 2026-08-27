@@ -263,6 +263,14 @@ private:
   auto checkGeneralSettingsChanges() const -> bool;
   /// Prompts the user to resolve unsaved changes for the specified action.
   auto promptUnsavedChanges(const QString &actionDescription) -> QMessageBox::StandardButton;
+  /// True once a profile import has replaced kartend.cfg wholesale on disk and
+  /// scheduled the quit. Both close paths consult this before persisting
+  /// anything: the dialog's model still describes the PRE-import
+  /// configuration, so every write it can make would land on top of the file
+  /// the user was just told is now active. Same invariant
+  /// scheduleLiveSettingsSave and restoreLiveAppliedSettings already enforce
+  /// against their own disk writes (Kartend-ghwlg).
+  [[nodiscard]] auto configReplacedOnDisk() const -> bool;
   /// Restores the current collection to its last saved state.
   void revertCurrentCollectionEdits();
   /// Restores m_generalSettings to the dialog-open baseline and refreshes the

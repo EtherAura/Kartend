@@ -40,7 +40,11 @@ Thank you for considering contributing to Kartend! This document outlines the pr
    the same set CI's `script-lint` job enforces; findings are **fatal** and
    fail in under a second, before the build starts. **clang-format drift is
    fatal** too, and the formatter is pinned to **clang-format-19** — a newer
-   system clang-format reformats differently and fails CI. clang-tidy /
+   system clang-format reformats differently and fails CI. To format just what
+   you touched, run `.scripts/format.sh` (or `--check`); it finds the pinned
+   binary or falls back to the `kartend-ci` container correctly, which a
+   hand-written `docker run` does not — see
+   [docs/dev/building.md](docs/dev/building.md). clang-tidy /
    cppcheck / raw-`qDebug` findings surface as non-fatal notices. Local Qt is
    newer than CI's pinned **Qt 6.4.2**, so reproduce CI failures in the
    pinned image with `.scripts/ci-local.sh` (see

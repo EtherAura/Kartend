@@ -189,6 +189,11 @@ void ItemWidgetFactory::updateCollectionIndexFromDatabase(const QString &fullPat
   }
 }
 
+bool ItemWidgetFactoryHelpers::viewMaySpanCollections(const CollectionContext &context) {
+  return context.config.showAllSubcollectionItems || context.queryIncludeDescendants ||
+         context.queryIncludeAllCollections;
+}
+
 QString ItemWidgetFactoryHelpers::resolvePlaceholderArtwork(
     const QList<CollectionConfig> *collections, int collectionIndex,
     const QString &contextPlaceholder, const QString &contextCollectionName) {
@@ -254,6 +259,23 @@ void ItemWidgetFactory::applyPlaceholderArtwork(ItemWidget *widget,
   }
 }
 
+bool ItemWidgetFactory::artworkLookupSettled(const QString &artworkDir) const {
+  auto &cache = ArtworkUtils::DirectoryCache::instance();
+  const quint64 generation = cache.contentsGeneration();
+  if (generation != m_artworkCascadeGeneration) {
+    m_artworkCascadeGeneration = generation;
+    m_artworkCascadeSettled.clear();
+  }
+  const auto memo = m_artworkCascadeSettled.constFind(artworkDir);
+  if (memo != m_artworkCascadeSettled.constEnd()) {
+    return memo.value();
+  }
+  const bool settled =
+      cache.areDirectoriesCached(ArtworkUtils::artworkLookupDirectories(artworkDir));
+  m_artworkCascadeSettled.insert(artworkDir, settled);
+  return settled;
+}
+
 void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QString &fullPath,
                                                   bool forceDirectLookup) {
   QElapsedTimer perfTimer;
@@ -317,7 +339,11 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
 
   QString artworkDir = m_context.config.artworkDirectory;
 
-  if (auto *db = dbMgr(); db && m_context.config.showAllSubcollectionItems) {
+  // The current collection's artwork directory is authoritative only while
+  // every item on screen belongs to that collection — see
+  // viewMaySpanCollections for which scopes break that and why the two search
+  // ones were being missed (Kartend-12kzb).
+  if (auto *db = dbMgr(); db && ItemWidgetFactoryHelpers::viewMaySpanCollections(m_context)) {
     QString foundArtworkDir = db->findArtworkDirectoryForFile(fullPath);
     if (!foundArtworkDir.isEmpty()) {
       artworkDir = foundArtworkDir;
@@ -376,12 +402,27 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     artworkPath =
         ArtworkUtils::findArtworkForFileCached(QFileInfo(fullPath).fileName(), artworkDir);
     // Don't fall back to direct lookup - let prewarm handle it
-  } else if (ArtworkUtils::DirectoryCache::instance().isDirectoryCached(artworkDir)) {
+  } else if (artworkLookupSettled(artworkDir)) {
     // Kartend-urrpp: the dir listing is already warm (early prewarm fires on
     // every collection selection now) — resolve via the O(1) cached lookup,
     // including cached NEGATIVES, instead of re-paying the multi-stat sweep
     // on every widget materialization while scrolling. First-ever misses
     // self-patch with a bounded probe inside findInDirectory.
+    //
+    // Kartend-eyfik: this asks about the WHOLE cascade, not just the root.
+    // isDirectoryCached(artworkDir) alone was a false-negative machine here:
+    // covers live in typed subdirs (…/Artwork/Videos/front/Sintel.jpg) and
+    // warming is not atomic across root-then-subdirs, so the root goes warm
+    // first. On the very first pass into a collection nothing was cached, so
+    // this fell through to the direct on-disk lookup and found the art; by
+    // the time a layout switch rebuilt every tile the ROOT was cached but
+    // `front/` was not, this branch was taken, the cached lookup returned
+    // empty, and an empty result is accepted as "genuinely artless" — the
+    // whole grid came back as hatched placeholders. Trusting a negative is
+    // only sound once every directory the cascade would consult is warm,
+    // which is exactly what areDirectoriesCached answers (Kartend-t4rjw made
+    // Cover Flow ask the right question; the grid factory kept asking the
+    // narrow one).
     artworkPath =
         ArtworkUtils::findArtworkForFileCached(QFileInfo(fullPath).fileName(), artworkDir);
   } else if (!ArtworkUtils::DirectoryCache::instance().isDirectoryQueued(artworkDir)) {
@@ -397,6 +438,18 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     // (forceDirectLookup=true), mirroring the list-mode path (Kartend-bpkkm).
     artworkPath =
         ArtworkUtils::findArtworkForFileCached(QFileInfo(fullPath).fileName(), artworkDir);
+    // Kartend-eyfik: "queued" was being read as "a prewarm is in flight and
+    // will reconfigure me", but nothing made that true. The queue is filled by
+    // findArtworkForFileCached misses (list mode calls it once per row) and was
+    // drained ONLY by receiveItemsRange's worker, which needs a DB chunk to
+    // land AND showAllSubcollectionItems to be on. A layout switch fetches no
+    // chunks, so a List round-trip left every artwork dir queued-but-unscanned
+    // and this branch returned empty for every tile, forever — the grid came
+    // back fully hatched and only a collection change repaired it. Ask for the
+    // drain we are depending on; ScrollManager debounces it.
+    if (artworkPath.isEmpty()) {
+      emit requestArtworkPrewarm(artworkDir);
+    }
   }
 
   qint64 afterArtworkFind = lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;

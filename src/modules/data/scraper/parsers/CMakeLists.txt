@@ -9,6 +9,7 @@ target_sources(kartend_data PRIVATE
   flathubparser.h
   musicbrainzparser.h
   openlibraryparser.h
+  parserlimits.h
   screenscraperparser.h
   steamstoreparser.h
   tmdbparser.h

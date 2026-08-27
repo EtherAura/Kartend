@@ -79,6 +79,14 @@ kartend_add_test(NAME OnboardingWizards
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# CollectionsTreeShell: the passive container at the top of the Collections
+# tab. Pins the settings-scope "Mode:" combo's width hint against its own
+# longest entry (Kartend-kzxcs).
+kartend_add_test(NAME CollectionsTreeShell
+  SOURCES ui/dialogs/test_collectionstreeshell.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # Kartend-0eeuk (mission 2): src/ui/dialogs/collection/ + kart/ logic tests.
 # Same headless pattern as the item/ block above.
 

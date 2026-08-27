@@ -457,9 +457,22 @@ SettingsDialog::~SettingsDialog() {
   delete ui;
 }
 
+auto SettingsDialog::configReplacedOnDisk() const -> bool {
+  return m_host != nullptr && m_host->isConfigReplacedOnDisk();
+}
+
 void SettingsDialog::accept() {
   if (m_gamepadCapture) {
     m_gamepadCapture->stop();
+  }
+  // A profile import already replaced kartend.cfg wholesale and scheduled the
+  // quit, so close straight through: every write below — the collection row,
+  // the general settings, the rescan the user can no longer act on — would put
+  // the pre-import model back over the file that is now authoritative
+  // (Kartend-ghwlg).
+  if (configReplacedOnDisk()) {
+    QDialog::accept();
+    return;
   }
   // OK means "save and close", so commit pending edits outright rather than
   // asking (Kartend-1g46b). Routing this through resolveUnsavedChanges raised
@@ -509,7 +522,15 @@ void SettingsDialog::reject() {
   if (m_gamepadCapture) {
     m_gamepadCapture->stop();
   }
-  if (!resolveUnsavedChanges(tr("closing the dialog"), true)) {
+  // Same gate as accept(), and the reason the prompt had to go: the dialog is
+  // still holding the PRE-import model, so its "Save changes before closing
+  // the dialog?" offer is worse than redundant — Save writes the old
+  // configuration back over the profile the user was told, two dialogs
+  // earlier, had already been loaded, while Discard is what actually preserves
+  // it. Nothing here is worth saving, so the question is not asked.
+  // restoreLiveAppliedSettings still runs: it reverts live-applied edits in
+  // memory and already declines the disk write in this state.
+  if (!configReplacedOnDisk() && !resolveUnsavedChanges(tr("closing the dialog"), true)) {
     return;
   }
   restoreLiveAppliedSettings();
@@ -538,7 +559,30 @@ void SettingsDialog::scheduleLiveSettingsSave() {
       auto result = sm->saveGeneralSettings(mainWindow->generalSettings());
       if (result.isError()) {
         ErrorDialog::showError(this, result.error());
+        return;
       }
+      // Kartend-2r05k: rebase the dirty baseline onto what was just durably
+      // written. Without this the live-save panels (base colour, fonts, splash)
+      // left the dialog permanently dirty: the edit lands in m_generalSettings
+      // and on disk, but m_originalGeneralSettings kept the pre-edit snapshot,
+      // so checkGeneralSettingsChanges() stayed true for the rest of the
+      // session. The user sees the Save button glow and a "you have unsaved
+      // changes" prompt on close, for a setting that is already saved — and
+      // having only nudged a font size or a splash toggle (which apply
+      // instantly), they made no edit they would call pending.
+      //
+      // Rebase onto the HOST struct, not m_generalSettings: the live handlers
+      // deliberately mirror only their own fields, so the host holds exactly
+      // what reached the disk. Deferred edits live only in m_generalSettings
+      // and must stay dirty until an explicit Save.
+      //
+      // This mirrors what the explicit-save path already does (see
+      // setupBasicUIConnections / handleSaveCollection, which rebase right
+      // after saveGeneralSettingsFromUI succeeds) and inherits the same
+      // consequence: once an edit is durably persisted, Cancel no longer
+      // reverts it. That trade is pre-existing, not new here.
+      m_originalGeneralSettings = mainWindow->generalSettings();
+      updateSaveButtonStyle();
     });
   }
   m_liveSaveTimer->start(); // restart: the burst's last edit wins the window

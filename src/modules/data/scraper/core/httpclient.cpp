@@ -44,27 +44,70 @@ namespace {
 /// the timer because bytes are still arriving.
 constexpr int kTransferTimeoutMs = 30000;
 
-/// Builds a log-safe URL string with credential-bearing query parameters
-/// masked. Scraper request URLs carry ScreenScraper `devpassword` /
-/// `sspassword` (and account ids) in the query string; logging them
-/// verbatim leaks working credentials into scrape.log. START / FINISH log
-/// only url.path() and are unaffected — this is for the ENQ line, which
-/// needs the query string to show media presets.
-constexpr const char *kSensitiveQueryKeys[] = {"devpassword", "sspassword", "password",
-                                               "passwd",      "apikey",     "api_key",
-                                               "token",       "ssid",       "devid"};
+/// Query-parameter names whose VALUES may be written to a log verbatim.
+///
+/// This is an ALLOW-list, and the direction is the whole point. Scraper
+/// request URLs carry ScreenScraper `devpassword` / `sspassword` (and
+/// account ids) in the query string; logging them verbatim leaks working
+/// credentials into scrape.log. A deny-list of credential names got that
+/// right only for the names somebody thought of — adding a provider is the
+/// common case, and one naming its credential parameter `auth` or `secret`
+/// would have had it logged in full with nothing failing to compile and no
+/// test going red. Masking by default inverts that: an unanticipated
+/// parameter is redacted, and widening what gets logged takes a deliberate
+/// edit to this list.
+///
+/// Everything here is request SHAPE, not identity — the media preset,
+/// output format, result limit, region/language, the search text and the
+/// file hashes used for dedup. The ENQ line exists to confirm things like
+/// `maxwidth`/`maxheight` actually reached the wire, so those must stay
+/// readable; that is why this is a list rather than a blanket mask.
+/// START / FINISH log only url.path() and are unaffected.
+constexpr const char *kLoggableQueryKeys[] = {"action",     "append_to_response",
+                                              "appids",     "cc",
+                                              "crc",        "entity",
+                                              "fmt",        "format",
+                                              "ids",        "inc",
+                                              "isbn",       "include_adult",
+                                              "l",          "language",
+                                              "languages",  "limit",
+                                              "maxheight",  "maxwidth",
+                                              "md5",        "media",
+                                              "output",     "outputformat",
+                                              "property",   "props",
+                                              "q",          "query",
+                                              "romnom",     "romtaille",
+                                              "search",     "sha1",
+                                              "sitefilter", "softname",
+                                              "systemeid",  "term",
+                                              "type"};
+
+/// True if @p key is a known request-shape parameter that is safe to log.
+/// Compare case-insensitively: the keys are ours, but a redirect target's
+/// query string is not, and `Token=` must not slip past a `token` compare.
+bool isLoggableQueryKey(const QString &key) {
+  for (const char *loggable : kLoggableQueryKeys) {
+    if (key.compare(QLatin1String(loggable), Qt::CaseInsensitive) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
 
 QString redactedUrlForLog(const QUrl &url) {
   QUrl sanitized = url;
   QUrlQuery query(sanitized);
   bool changed = false;
-  for (const char *key : kSensitiveQueryKeys) {
-    const QString k = QLatin1String(key);
-    if (query.hasQueryItem(k)) {
-      query.removeAllQueryItems(k);
-      query.addQueryItem(k, QStringLiteral("<redacted>"));
-      changed = true;
+  // Snapshot the items first: the loop mutates the query, and re-reading it
+  // mid-iteration would walk a container we are editing.
+  const QList<QPair<QString, QString>> items = query.queryItems();
+  for (const QPair<QString, QString> &item : items) {
+    if (isLoggableQueryKey(item.first)) {
+      continue;
     }
+    query.removeAllQueryItems(item.first);
+    query.addQueryItem(item.first, QStringLiteral("<redacted>"));
+    changed = true;
   }
   if (changed) {
     sanitized.setQuery(query);
@@ -74,8 +117,8 @@ QString redactedUrlForLog(const QUrl &url) {
       .left(200);
 }
 
-/// Masks the VALUES of @p url's credential-bearing query parameters wherever
-/// they appear in @p text. Qt's QNetworkReply::errorString() embeds the full
+/// Masks the VALUES of @p url's non-loggable query parameters wherever they
+/// appear in @p text. Qt's QNetworkReply::errorString() embeds the full
 /// request URL ("Error transferring <url> - server replied: ..."), so an
 /// error fold that starts from errorString() carries devpassword /
 /// sspassword verbatim — and that string flows into ErrorContext::details,
@@ -83,13 +126,20 @@ QString redactedUrlForLog(const QUrl &url) {
 /// the scrape-failure UI list, and the persisted resume file. Replacing the
 /// values (raw and percent-encoded forms) rather than re-parsing the URL out
 /// of prose also covers a server body that echoes a credential back.
+///
+/// Keyed off the same allow-list as redactedUrlForLog, and deliberately so:
+/// this runs against reply->url() as well as the request's, and a reply URL
+/// is a redirect target we did not build. Signed-CDN parameters
+/// (`token`, `expires`, `signature`) are exactly the unanticipated names a
+/// deny-list would have missed. Over-masking here costs a less legible
+/// error string; under-masking writes a credential to disk.
 QString redactCredentialValues(QString text, const QUrl &url) {
   const QUrlQuery query(url);
-  for (const char *key : kSensitiveQueryKeys) {
-    const QString k = QLatin1String(key);
-    if (!query.hasQueryItem(k)) continue;
-    for (const QString &value : {query.queryItemValue(k, QUrl::FullyDecoded),
-                                 query.queryItemValue(k, QUrl::FullyEncoded)}) {
+  const QList<QPair<QString, QString>> items = query.queryItems();
+  for (const QPair<QString, QString> &item : items) {
+    if (isLoggableQueryKey(item.first)) continue;
+    for (const QString &value : {query.queryItemValue(item.first, QUrl::FullyDecoded),
+                                 query.queryItemValue(item.first, QUrl::FullyEncoded)}) {
       // Single-character values would shotgun the whole string; real
       // credentials are longer.
       if (value.size() >= 2) text.replace(value, QStringLiteral("<redacted>"));

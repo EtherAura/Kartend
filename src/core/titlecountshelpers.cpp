@@ -69,6 +69,35 @@ int memoizedVirtualFolderCount(const CollectionConfig &config) {
   return count;
 }
 
+// Kartend-0ylim: the window title agreed with nothing at n == 1 — "1
+// subcollections", and "(1 Items)" for a collection holding a single file.
+//
+// Pluralised in CODE rather than through tr()/%n on purpose. The committed
+// translations/kartend_en.ts carries only `type="unfinished"` entries with
+// EMPTY translation bodies — it is a seed for translators, not a filled English
+// catalogue — so tr() falls back to the source text verbatim and a
+// "%Ln subcollection(s)" source would render literally as "1 subcollection(s)",
+// which is worse than the bug it fixes. Qt does no English plural selection of
+// its own for an untranslated string. The rest of this title builder is
+// likewise untranslated raw QString; making the whole title translatable is a
+// separate job (Kartend-rp0hk), and doing it half-way here would regress the
+// default-locale user everyone actually has.
+
+/// "3 subfolders" / "1 subcollection". Small counts, so no digit grouping —
+/// matching what this suffix has always emitted.
+QString childPart(int n, const QString &singular, const QString &plural) {
+  return QString("%1 %2").arg(QString::number(n), n == 1 ? singular : plural);
+}
+
+/// "(1 Item)" / "(54 Items)". @p display carries the already locale-formatted
+/// digits so grouping survives, and may be a joined ancestor chain ("6/6/7").
+/// @p governing is the count the noun agrees with; pass -1 when several numbers
+/// are shown at once, since a compound like "19/54" reads as plural regardless.
+QString itemsCount(const QString &display, qint64 governing) {
+  return QString("(%1 %2)").arg(display,
+                                governing == 1 ? QStringLiteral("Item") : QStringLiteral("Items"));
+}
+
 } // namespace
 
 namespace TitleCountsHelpers {
@@ -120,10 +149,15 @@ void refreshTitleCounts(QWidget *titleHost, const ApplicationContext &ctx,
     const int directSubcollectionCount = CollectionUtils::directChildrenOf(cur, collections).size();
     QStringList childParts;
     if (directSubfolderCount > 0) {
-      childParts << QString("%1 subfolders").arg(directSubfolderCount);
+      // "subfolders" and "subcollections" are deliberately different nouns:
+      // the first counts filesystem folders browsed as virtual folders, the
+      // second counts real child collections. Not a vocabulary inconsistency.
+      childParts << childPart(directSubfolderCount, QStringLiteral("subfolder"),
+                              QStringLiteral("subfolders"));
     }
     if (directSubcollectionCount > 0) {
-      childParts << QString("%1 subcollections").arg(directSubcollectionCount);
+      childParts << childPart(directSubcollectionCount, QStringLiteral("subcollection"),
+                              QStringLiteral("subcollections"));
     }
     if (!childParts.isEmpty()) {
       title += QString(" — %1").arg(childParts.join(", "));
@@ -147,11 +181,13 @@ void refreshTitleCounts(QWidget *titleHost, const ApplicationContext &ctx,
     const qint64 collectionCount = cachedRecursiveCountForIndex(cur);
     QString counts;
     if (collectionCount >= 0) {
-      counts = QString("(%1/%2 Items)")
-                   .arg(StringUtils::formatCountNumber(subfolderItemCount))
-                   .arg(StringUtils::formatCountNumber(collectionCount));
+      // Two numbers shown ("19/54") — governing count -1 keeps the noun plural,
+      // which is what a compound like that reads as in English either way.
+      counts = itemsCount(QString("%1/%2").arg(StringUtils::formatCountNumber(subfolderItemCount),
+                                               StringUtils::formatCountNumber(collectionCount)),
+                          -1);
     } else {
-      counts = QString("(%1 Items)").arg(StringUtils::formatCountNumber(subfolderItemCount));
+      counts = itemsCount(StringUtils::formatCountNumber(subfolderItemCount), subfolderItemCount);
     }
 
     QString title = QString("%1 %2").arg(subfolderName, counts);
@@ -181,6 +217,9 @@ void refreshTitleCounts(QWidget *titleHost, const ApplicationContext &ctx,
 
   QStringList parts;
   bool anyKnown = false;
+  // The count for the collection being viewed (chain[0]) — the one the noun
+  // agrees with when it is the only number on show. -1 while unknown.
+  qint64 currentCount = -1;
   for (int i = 0; i < chain.size(); ++i) {
     int idx = chain[i];
     qint64 countVal = -1;
@@ -188,6 +227,9 @@ void refreshTitleCounts(QWidget *titleHost, const ApplicationContext &ctx,
       countVal = viewTotalItems;
     } else {
       countVal = cachedRecursiveCountForIndex(idx);
+    }
+    if (i == 0) {
+      currentCount = countVal;
     }
     if (countVal >= 0) {
       anyKnown = true;
@@ -200,7 +242,11 @@ void refreshTitleCounts(QWidget *titleHost, const ApplicationContext &ctx,
   const QString base = collections[cur].name;
   QString counts;
   if (anyKnown) {
-    counts = QString("(%1 Items)").arg(parts.size() == 1 ? parts.first() : parts.join('/'));
+    // A single part is this collection's own count, so it governs the noun —
+    // this is the "(1 Items)" case from the report. An ancestor chain
+    // ("6/6/7") shows several numbers at once and stays plural.
+    counts = parts.size() == 1 ? itemsCount(parts.first(), currentCount)
+                               : itemsCount(parts.join('/'), -1);
   }
 
   QString title = counts.isEmpty() ? base : QString("%1 %2").arg(base, counts);

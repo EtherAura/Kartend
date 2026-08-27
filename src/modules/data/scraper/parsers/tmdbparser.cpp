@@ -9,6 +9,8 @@
 #include <QJsonParseError>
 #include <QStringList>
 
+#include "parserlimits.h"
+
 using ErrorUtils::ErrorCode;
 using ErrorUtils::ErrorContext;
 
@@ -87,8 +89,11 @@ ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> parseSearchResponse(const QB
   const QJsonArray results = doc.object().value("results").toArray();
 
   QList<Scraper::ScrapeCandidate> out;
-  out.reserve(results.size());
+  out.reserve(ScraperParsers::boundedReserve(results.size(), ScraperParsers::kMaxCandidates));
   for (const auto &v : results) {
+    if (out.size() >= ScraperParsers::kMaxCandidates) {
+      break;
+    }
     const QJsonObject r = v.toObject();
     const QString mediaType = r.value("media_type").toString();
     // /search/multi also returns "person" rows — those have no media

@@ -607,7 +607,7 @@ void TestCollectionTreePanel::rightStick_upFocusesToolbar_andDrivesTheFocusedSec
   QVERIFY2(tree->currentItem() != before, "the tree's current row must advance");
 }
 
-void TestCollectionTreePanel::rightStick_verticalReachesToolbarOnlyWithModifier() {
+void TestCollectionTreePanel::rightStick_upFromGridFocusesToolbar_paneWalkKeepsVertical() {
   CollectionConfig shell;
   shell.name = QStringLiteral("Shell");
   CollectionConfig child;
@@ -629,12 +629,26 @@ void TestCollectionTreePanel::rightStick_verticalReachesToolbarOnlyWithModifier(
     return fw && (fw == topBar || topBar->isAncestorOf(fw));
   };
 
-  // Unheld: vertical must NOT reach the toolbar — it belongs to the pane.
+  // Unheld up from the grid hops to the toolbar (user request 2026-08-24,
+  // superseding the 2026-08-18 chord-only rule)…
   im->returnGamepadFocusToGrid();
   im->routeSectionInput(0, -1);
-  QVERIFY2(!onToolbar(), "without the modifier, up must not focus the toolbar");
+  QVERIFY2(onToolbar(), "unheld up from the grid must focus the toolbar");
 
-  // Held: vertical switches sections again.
+  // …and unheld down returns to the grid, so the hop is not a trap.
+  im->routeSectionInput(0, 1);
+  QVERIFY2(!onToolbar(), "unheld down from the toolbar must return to the grid");
+
+  // While the ring is walking the pane, vertical stays with the pane:
+  // up steps back through its regions instead of leaving for the toolbar.
+  im->returnGamepadFocusToGrid();
+  if (im->driveDetailsPane(1, /*allowAdvance=*/true)) {
+    im->routeSectionInput(0, -1);
+    QVERIFY2(!onToolbar(), "up must keep driving the pane while its ring is active");
+  }
+
+  // Held: vertical switches sections as before.
+  im->returnGamepadFocusToGrid();
   im->setFocusModifierActive(true);
   im->routeSectionInput(0, -1);
   QVERIFY2(onToolbar(), "with the modifier held, up must focus the toolbar");

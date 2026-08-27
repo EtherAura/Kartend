@@ -5,6 +5,7 @@
 #endif
 
 #include <limits>
+#include <QtEndian>
 
 namespace KartCompression {
 
@@ -68,13 +69,55 @@ ErrorUtils::Result<QByteArray> decompress(const QByteArray &compressed,
   }
 
   case KartFormat::Compression_Zlib: {
+    // qUncompress sizes its output allocation from a 4-byte big-endian prefix
+    // embedded in the COMPRESSED bytes. That prefix is attacker-controlled and
+    // wholly independent of the entry header's origSize — which is the value
+    // MAX_ENTRY_SIZE was checked against upstream — so a ~30-byte payload whose
+    // prefix claims 4 GiB reached a 4 GiB allocation attempt before any cap of
+    // ours could speak. The size comparison below cannot help: it is post-hoc
+    // by construction, inspecting a buffer qUncompress has already allocated
+    // (Kartend-ohqfs).
+    //
+    // Note this is NOT mitigated by zlib entries only being written by no-zstd
+    // builds. That is a property of our WRITER; the reader accepts
+    // Compression_Zlib from any bundle with no gate, so a hostile bundle simply
+    // always selects zlib.
+    //
+    // So validate the prefix ourselves, before qUncompress sees the bytes —
+    // mirroring the zstd branch above, which never lets a declared size reach
+    // an allocator unchecked. Starting with that branch's own range gate: the
+    // reader's only call site passes the header's origSize, which is unsigned
+    // and already capped, so this rejects nothing legitimate.
+    if (expectedSize < 0 || static_cast<quint64>(expectedSize) > KartFormat::MAX_ENTRY_SIZE) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                             "Decompressed size out of range",
+                                             "KartCompression::decompress");
+    }
+    constexpr qsizetype kSizePrefixBytes = 4;
+    if (compressed.size() < kSizePrefixBytes) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                             "zlib payload too short to carry a size prefix",
+                                             "KartCompression::decompress")
+          .withDetails(QString("payloadBytes=%1").arg(compressed.size()));
+    }
+    // The header already stated this entry's size and that value is bounded, so
+    // a prefix disagreeing with it IS the attack — not a mismatch worth
+    // discovering after qUncompress has sized a buffer from it.
+    const auto prefixSize = static_cast<qint64>(
+        qFromBigEndian<quint32>(reinterpret_cast<const uchar *>(compressed.constData())));
+    if (prefixSize != expectedSize) {
+      return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
+                                             "zlib size prefix disagrees with entry header",
+                                             "KartCompression::decompress")
+          .withDetails(QString("prefix=%1 header=%2").arg(prefixSize).arg(expectedSize));
+    }
     const QByteArray result = qUncompress(compressed);
     if (result.isEmpty() && !compressed.isEmpty()) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
                                              "qUncompress (zlib) failed",
                                              "KartCompression::decompress");
     }
-    if (expectedSize >= 0 && result.size() != expectedSize) {
+    if (result.size() != expectedSize) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::KartCompressionFailed,
                                              "zlib decompressed size mismatch",
                                              "KartCompression::decompress")

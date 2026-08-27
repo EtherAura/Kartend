@@ -1,4 +1,5 @@
 #include "lutrislibrary.h"
+#include "pathutils.h"
 
 #include <algorithm>
 #include <atomic>
@@ -122,6 +123,15 @@ auto installedGames(const QString &dataDir) -> ErrorUtils::Result<QList<Game>> {
 
 auto artworkFor(const QString &dataDir, const QString &slug) -> Artwork {
   Artwork art;
+  // Kartend-9guwj: slug comes from Lutris' pga.db and is interpolated as a
+  // single path COMPONENT. A row with slug "../../../../home/user/Pictures/private"
+  // made this read that file and the importer copy it into the collection's
+  // artwork directory as the game's cover — surfacing a file the user never
+  // chose to share inside the app UI. No artwork is the correct answer for a
+  // slug that cannot name one.
+  if (!PathUtils::isSafePathComponent(slug)) {
+    return art;
+  }
   art.cover = firstExistingFile({
       dataDir + QStringLiteral("/coverart/") + slug + QStringLiteral(".jpg"),
       dataDir + QStringLiteral("/coverart/") + slug + QStringLiteral(".png"),

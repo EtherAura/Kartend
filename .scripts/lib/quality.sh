@@ -88,6 +88,7 @@ do_python_guardrails() {
     check-singleshot-comments.py \
     check-test-mapping.py \
     check-bd-id-leakage.py \
+    check-cluster-fingerprints.py \
     check-required-checks-consistency.py; do
     echo "== $script =="
     python3 "$rootdir/.scripts/$script" || rc=1
