@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The right stick reaches the toolbar on its own.** Flicking up while
+  the grid or list has focus now hops straight to the toolbar — no more
+  holding Select first — and flicking down from the toolbar drops back.
+  Left/right still walks between the navigation sidebar, the grid/list,
+  and the details pane. While the pane's ring is mid-walk the vertical
+  axis stays with the pane, so stepping back up through its regions
+  still works; the ring's one-second idle timeout hands up-to-toolbar
+  back afterwards.
+
 - **System scrapes now bring home the whole press kit.** A platform scrape
   pulls every still image its ScreenScraper catalog advertises — wheels,
   icons, bezels, photos, whatever exists — plus the console photograph
@@ -125,7 +134,318 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in the Item area; with nothing selected it describes the collection
   being viewed, as before.
 
+### Added
+
+- **A scraped library now survives losing its database.** Scraping
+  writes two things next to your artwork: the images, and a small file
+  per item holding everything it found — title, description, genre,
+  developer, publisher, release date, rating, players, tags. The images
+  came back by themselves on the next scan, because Kartend re-reads the
+  artwork folder. Those metadata files were never read back at all, so
+  the database was the only copy: lose it to corruption, a fresh
+  install, or moving the library to another machine, and you had to
+  scrape the whole library again while the answers sat on disk the whole
+  time. Scanning now reads them back for any item that has no metadata
+  yet. Items that already have metadata are left completely alone —
+  including anything you typed yourself, and including fields you
+  deliberately left blank.
+
 ### Fixed
+
+- **Programs installed under Program Files no longer look suspicious on
+  Windows.** Importing a `.kart` bundle on Windows flagged practically every
+  launcher it named as sitting outside the trusted install locations — the
+  list of those locations only ever held Linux ones, so an ordinary
+  `C:\Program Files\...` player was reported in the same breath as something
+  genuinely unusual. Kartend now recognises `Program Files` and
+  `Program Files (x86)` on any drive, so a normal Windows install reads as
+  ordinary. Every launcher a bundle asks for is still shown to you before the
+  import goes ahead; this only changes which ones are called out as worth a
+  second look.
+
+- **Titles that collide with reserved Windows device names keep their name.**
+  A handful of names — `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9` and
+  `LPT1`–`LPT9` — cannot be used as filenames on Windows at any extension.
+  A launcher-import stub or multi-disc playlist for a title named exactly one
+  of those produced a file Windows refused to create. Those names are now
+  prefixed rather than rejected, so the item keeps a name you can recognise
+  instead of falling back to "Untitled". Trailing dots and spaces are also
+  cleaned up more thoroughly: a title ending in something like `. .` used to
+  leave one dot behind, which Windows then dropped, so two differently-named
+  items could end up fighting over one file.
+
+- **Recursive Import keeps your place in the collections tree.** Every run
+  collapsed the settings dialog's tree back to the top level and cleared the
+  selection, so the header went from "Editing collection: Nintendo" to "No
+  collection selected" — meaning a re-expand and a re-select before each of
+  the next vendor's imports, on the one workflow that is inherently
+  repetitive. The tree now stays as you left it, with the collection you
+  imported into still selected and opened to show its new children.
+
+- **The settings dialog's "Mode:" chooser shows its full text.** It was cut
+  mid-word to "Current colle" — sharing a row with three buttons left it too
+  narrow for its own entries, at any dialog width, including maximised. It
+  now sits on its own row and shows entries like "Current + subcollections"
+  in full.
+
+- **A wider details pane no longer cuts off its own contents.** Widening
+  the details pane — or opening a collection that had been saved wide —
+  left everything inside it laid out for a narrower pane: the artwork
+  lost its right edge, the item's title and the section heading were cut
+  mid-word, and the metadata split into two columns too narrow to hold
+  it, with no way to scroll across to what was missing. The pane worked
+  out how much room it had before it was actually on screen, and never
+  revisited the answer. It now measures again once it is visible.
+  Hiding and re-showing the pane used to fix it for the session, which
+  is why it could seem to come and go.
+
+- **The marquee follows its monitor being unplugged.** If you run a
+  second screen as a marquee and disconnected it mid-session, Kartend
+  carried on addressing a screen that was no longer there — the marquee
+  stayed lost until you next saved settings or restarted, with nothing
+  said about it. Kartend now notices monitors coming and going: unplug
+  the marquee screen and the window moves to your primary one, plug it
+  back in and the marquee returns to it. Docking or undocking a laptop,
+  which announces several changes at once, is handled as a single move.
+
+- **Settings no longer claims you have unsaved changes when you don't.**
+  A few settings apply the moment you change them and save themselves
+  straight away — the boot and resume splash screens, the interface font,
+  and the title base colour. Kartend went on treating those as pending
+  work anyway: the Save button kept glowing for the rest of the visit,
+  and closing raised a "you have unsaved changes" question about a
+  setting that was already written to disk. Since these are exactly the
+  settings that feel finished the instant you set them, the prompt named
+  changes you had no memory of making. Kartend now updates its idea of
+  "last saved" when one of those writes completes, so the question is
+  only asked when something really is pending.
+
+- **Cover art imported from another launcher can no longer be
+  redirected anywhere.** Steam, Lutris, itch and Heroic keep their game
+  lists in ordinary files on your disk, and Kartend reads cover-image
+  addresses out of them when it imports. Those addresses were fetched
+  without any restriction on where they could lead: a tampered launcher
+  database could hand over an address that bounced the request onward to
+  a machine on your own network, and the reply was written into your
+  artwork folder. Kartend now only follows cover addresses belonging to
+  the launcher's own image hosts, and checks that again at every hop.
+  Nothing changes for real covers; they already come from those hosts.
+
+- **A password in a scraper address is now hidden by default rather
+  than by name.** Kartend masks credentials before writing a web address
+  into its logs, but it did so by looking for a fixed list of names —
+  `sspassword`, `token` and a handful of others. Anything not on the
+  list was written out in full, so a future scraper naming its password
+  field something unanticipated would have leaked it silently. The rule
+  is now the other way round: only the parts Kartend recognises as
+  harmless — the image-size preset, the output format, the search text —
+  are written, and everything else is masked. The diagnostic detail the
+  logs are there for is unchanged.
+
+- **The disc-image repair step can no longer pass a booby-trapped
+  archive along.** When Kartend renames files inside a `.zip` or `.7z`
+  to match a verification database, it rebuilds the archive and replaces
+  your original with the result. The rebuild copied each entry's
+  description across untouched, so a shortcut-style entry, or one whose
+  name climbs out of the folder, came through into the new archive — and
+  the replacement name taken from the downloaded database was never
+  checked at all. Kartend now refuses to rebuild an archive containing
+  either, and refuses a database rename that tries to escape the folder.
+  Unpacking already had these checks; the repair step now has them too,
+  so nothing hostile gets quietly reissued as a clean file.
+
+- **A hostile or broken response can no longer wedge the window.**
+  Several places sized their work directly from what arrived: a scraper
+  reply claiming a million results had memory set aside for a million
+  results and then compared each one against every other, all on the
+  thread that draws the window. A `.dat` catalogue and Steam's app
+  database were read whole with no ceiling at all. Every one of those
+  now has a limit, set far above anything a real response or file
+  reaches — searches ask for ten results, a release lists a handful of
+  genres — so nothing legitimate is affected, but a reply that has
+  stopped making sense is refused instead of followed.
+
+- **A crafted bundle can no longer claim gigabytes it does not
+  contain.** Kartend bundles store each file compressed, alongside a
+  note of how big it should come out. For files packed with the older of
+  the two compression methods, the unpacking step ignored that note and
+  instead trusted a size written inside the compressed data itself —
+  which a hostile bundle controls. A thirty-byte entry could therefore
+  announce four gigabytes and have the memory reserved for it before
+  anything checked. The declared size is now compared against the
+  bundle's own record before a byte is unpacked, and a disagreement
+  refuses the entry. Bundles you made yourself are unaffected: the two
+  numbers always agree.
+
+- **The builds that always store scraper passwords in the clear now say
+  so.** Kartend keeps scraper credentials in your system keychain where
+  one is available, and falls back to storing them unencrypted in
+  `kartend.cfg` where it is not. A warning about that fallback already
+  existed — but only builds *with* keychain support could ever show it.
+  A build compiled without keychain support, which stores every
+  credential in the clear every time, was the one configuration that
+  stayed silent, showing the same reassuring masked password box as any
+  other. It now warns, and says plainly that this will not change on
+  that build rather than promising the credentials will move back to a
+  keychain that isn't there. The warning also names the right file: it
+  used to point at `settings.ini`, which Kartend has never written.
+
+- **Only shortcuts Kartend created can add options to a launcher
+  command.** Shortcut stubs may carry extra command-line arguments —
+  Bottles needs the bottle's name alongside the program, so one
+  substitution is not enough. Those arguments were taken from any stub,
+  including one that merely turned up during a library scan, and passed
+  straight to the launcher. Since a stub is an ordinary file in a folder
+  you scan, anything able to write there could hand your launcher
+  options of its choosing. Arguments are now accepted only from stubs in
+  the folder Kartend writes them to itself. A stub found anywhere else
+  still launches its game — it simply cannot contribute options. Nothing
+  changes for libraries imported the normal way.
+
+- **A huge file wearing a shortcut's name can no longer be swallowed
+  whole.** Shortcut stubs — the tiny placeholder files standing in for
+  games installed through Steam, Lutris and friends — are found by
+  scanning your library, which means Kartend meets whatever happens to
+  be sitting there with that file extension, not only the ones it wrote.
+  It read the whole file into memory before checking anything, so a
+  multi-gigabyte file dropped into a scanned folder became a
+  multi-gigabyte read. Anything implausibly large for a stub is now
+  refused before a byte of it is loaded. Real stubs are a few hundred
+  bytes and are unaffected.
+
+- **Search results from other collections bring their artwork with
+  them.** Searching from a parent collection — or across the whole
+  library — found the right items but drew them all as blank hatched
+  tiles. The same items showed their artwork the moment you went into
+  the collection they live in, which made it look like the search had
+  found something different. Kartend was looking for their images in the
+  artwork folder of the collection you were searching *from*, rather
+  than the one each result actually belongs to. It now looks in the
+  right folder per result, whenever a search reaches past the current
+  collection.
+
+- **The details pane keeps up with selections you did not make by
+  hand.** Two ways of selecting something moved the ring and updated the
+  toolbar counter but left the pane describing whatever was there before.
+  On launch, the tile Kartend restores was drawn as selected while the
+  pane still showed the collection overview — the state every session
+  began in, before you touched anything. Pressing Home to jump to the
+  first item did the same. Clicking always worked, which is what made it
+  look arbitrary. Both paths were committing the selection without the
+  step that publishes it, and the retry meant to cover a tile that had
+  not finished loading only ever republished ordinary items, never
+  subcollections. Both now go through the same publish the click path
+  uses.
+
+- **Subcollection rows in List layout show their name again.** A
+  subcollection listed inside its parent drew a folder icon and nothing
+  beside it — a row identified only by a generic glyph, while every item
+  row below it read normally and the same subcollection displayed fine in
+  Grid. The "hide subcollection titles" setting was being applied to list
+  rows, where there is no artwork to fall back on and the row's text is
+  the only thing naming it. Hiding titles is now understood as the grid
+  setting it always was: grid tiles still honour it, list rows always
+  print their name. Virtual folder rows were silently affected the same
+  way and are fixed with them.
+
+- **Loading a saved configuration profile no longer offers you a button
+  that undoes it.** After confirming the switch and acknowledging
+  "Kartend will now exit", the app did not exit: a third prompt appeared
+  on top, asking whether to save changes before closing the settings
+  dialog. That dialog was still holding the configuration you had just
+  replaced, so "Save" — the button that reads as *keep my work* — wrote
+  the old settings back over the profile you had been told was already
+  loaded, and "Discard" was what actually preserved it. The settings
+  dialog now closes without asking once a profile has been loaded; the
+  file on disk is the one that counts, and the app exits as promised.
+
+- **An imported launcher library can no longer surface a file you never
+  chose to share.** When importing from Steam, Lutris or Heroic, Kartend
+  looks for cover art the launcher has already downloaded, using an
+  identifier taken from that launcher's own database to build the filename.
+  Those identifiers were used exactly as written, so one crafted to point
+  somewhere else — up and out of the launcher's folder — made Kartend read
+  the image it named and show it as a game's cover. Identifiers are now
+  checked to be plain filenames before any file is looked for, and an
+  identifier that fails simply gets no artwork. Nothing was ever written
+  outside the collection, and the identifiers come from applications
+  already installed on your own machine.
+
+- **The sidebar and the grid agree on the order of the same
+  subcollections.** A collection holding NEC, Nintendo, SNK, Sega and
+  Sharp listed them in one order down the navigation sidebar and a
+  different one across the grid — both on screen at once. The sidebar was
+  ordering strictly by character code, which files an all-caps name like
+  SNK ahead of Sega and Sharp; the grid had always ignored case, the way
+  a reader would. The sidebar now does the same, so the two lists match.
+  Names differing only in capitalisation keep the order they are
+  configured in.
+
+- **Counts in the window title read correctly when there is only one of
+  something.** A collection with a single subcollection announced "1
+  subcollections", and one holding a single file read "(1 Items)". Both
+  now drop the "s". Larger counts, and the stacked totals shown while
+  you are inside a subcollection, are unchanged.
+
+- **The toolbar's Layout menu shows which layout you are actually in.**
+  Opening it straight after launch showed all four entries — Grid, List,
+  Cover Flow, Horizontal — with empty radio buttons, even though the view
+  was plainly rendering as one of them. Picking any entry fixed it for the
+  rest of the session, so the menu was blank exactly when you were most
+  likely to open it to ask which view you were in. It now reads the active
+  collection's saved layout each time it opens.
+
+- **Changing only the Toolbar colour now takes effect straight away.**
+  Picking a different source on the Appearance page — titlebar, accent,
+  highlight, or the collection's own primary colour — left the toolbar
+  looking exactly as it did. The choice was saved correctly and came back
+  on the next launch, and it also applied immediately if you happened to
+  change some other background setting during the same visit, which is
+  what made it look intermittent. On its own it never reached the
+  toolbar: the check that decides whether a collection's background
+  settings changed had simply never been taught to look at this one.
+
+- **The New Library Wizard offers Games as a media type.** Its type list
+  was written out by hand and had drifted from the one the settings dialog
+  shows — it said "Reference", "Image" and "Other" where the rest of the
+  app says "Documents" and "Images", and it left out Games altogether. So
+  the one guided path into a new collection could not name the type most
+  of Kartend's feature surface is built for, and anyone picking from the
+  list rather than typing over it landed on "Other". Both pickers now read
+  the same list and cannot drift apart again. Typing a custom type still
+  works, exactly as before.
+
+- **The wizard's Confirm step shows the launcher you just picked.** The
+  final review screen listed the name, media folder and type only: the
+  launcher chosen one step earlier was missing from it entirely, and the
+  artwork folder vanished from the summary whenever it had been left
+  blank. Both settings were applied correctly regardless — this was the
+  summary under-reporting, not a lost setting — but it left the one screen
+  whose whole job is to show the configuration before it is created
+  quietly omitting a step's worth of it. Every step is now listed, and the
+  ones left unset say so instead of disappearing.
+
+- **A RetroArch collection no longer passes its core and ROM twice.**
+  Launching handed the emulator `-L <core> <rom> -L <core> <rom>` — the
+  launch parameters already name the core and the file, and Kartend then
+  added its own copy of both on the end. RetroArch quietly ignored the
+  repeat, so games still ran, but a collection whose parameters pointed at
+  a hand-picked core had Kartend's core appended after it, competing with
+  the choice the user had made. Kartend now adds only the parts the
+  parameters left out.
+
+- **Switching to List and back no longer empties the grid of its cover
+  art.** Coming back to Grid left every tile as a blank hatched
+  placeholder, squared off instead of poster-shaped, and it stayed that
+  way — only visiting another collection brought the art back. Behind it,
+  a tile whose artwork folder had a scan pending skipped its cover and
+  waited for that scan to finish, but nothing was actually scheduled to
+  run it: the only thing that did needed a fresh batch of items to arrive
+  from the database, which a layout switch never asks for. The wait is now
+  something the app actually follows through on. A cover is also no longer
+  written off as missing while only part of the artwork folder has been
+  looked at — covers live in per-type subfolders that finish scanning
+  after the top level does.
 
 - **List view and search results now start at the top of the view, not
   part-way down it.** A collection whose content was shorter than the window
