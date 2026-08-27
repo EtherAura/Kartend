@@ -55,6 +55,12 @@ private slots:
   void trust_trustedPathDemotesAllowlistOnly();
   void trust_confirmationRowsCarryValueAndReason();
 
+  // Kartend-7f43t — Windows-native program roots. Classification is by path
+  // shape, so it holds on either host: a Windows-authored bundle reads the
+  // same way whether it is imported on Windows or inspected on Linux.
+  void trust_windowsProgramFilesLauncherIsQuiet();
+  void trust_windowsProgramRootLookalikesStayLoud();
+
   // The preflight report must never come back clean for a bundle whose
   // launcher configuration it merely listed.
   void report_launchParametersAlone_defeatTheAllClear();
@@ -378,6 +384,27 @@ KartLauncherFinding findingFor(const QList<KartLauncherFinding> &findings, const
   return KartLauncherFinding{};
 }
 
+/// Pins the working directory to the filesystem root for the duration of a
+/// test, and puts it back afterwards even if an assertion returns early.
+///
+/// The Windows-root cases below are RELATIVE paths on POSIX ("C:/…" has no
+/// leading slash), so QFileInfo absolutises them against the cwd — and the cwd
+/// during a test run is the build tree, which normally sits under $HOME, the
+/// one allowlisted root on every platform. Every such path would then read
+/// quiet for a reason that has nothing to do with the rule under test, and the
+/// negative cases would pass vacuously. The root is under no allowed prefix on
+/// either host, so it makes the shape rule the only thing that can quiet a row.
+class ScopedRootWorkingDir {
+public:
+  ScopedRootWorkingDir() : m_previous(QDir::currentPath()) { QDir::setCurrent(QDir::rootPath()); }
+  ~ScopedRootWorkingDir() { QDir::setCurrent(m_previous); }
+  ScopedRootWorkingDir(const ScopedRootWorkingDir &) = delete;
+  ScopedRootWorkingDir &operator=(const ScopedRootWorkingDir &) = delete;
+
+private:
+  QString m_previous;
+};
+
 } // namespace
 
 void TestKartPreflight::trust_noLauncherBlock_producesNothing() {
@@ -596,6 +623,55 @@ void TestKartPreflight::trust_confirmationRowsCarryValueAndReason() {
       kart::launcherTrustReasonLabel(LauncherTrustReason::InterpreterProgram)));
   QCOMPARE(rows.at(0).second, QStringLiteral("/usr/bin/python3"));
   QCOMPARE(rows.at(2).second, QStringLiteral("/etc/icon.png"));
+}
+
+void TestKartPreflight::trust_windowsProgramFilesLauncherIsQuiet() {
+  // Kartend-7f43t: before this, EVERY Windows launcher outside %USERPROFILE%
+  // read OutsideAllowlist, because the roots were POSIX-only. "C:/Program
+  // Files/mpv/mpv.exe" is the exact Windows analogue of "/usr/bin/mpv" — an
+  // admin-writable-only install root — so it earns the same quiet row.
+  //
+  // Quiet, not absent: the finding is still emitted, it just stops claiming a
+  // danger signal matched.
+  const ScopedRootWorkingDir atRoot;
+  const QString field = QStringLiteral("launcher.launcherPath");
+  const QStringList quiet = {
+      QStringLiteral("C:/Program Files/mpv/mpv.exe"),
+      QStringLiteral("C:/Program Files (x86)/mpv/mpv.exe"),
+      QStringLiteral("c:/program files/mpv/mpv.exe"),        // Windows paths are case-insensitive
+      QStringLiteral("D:\\Program Files\\mpv\\mpv.exe"),     // other drive, native separators
+      QStringLiteral("C:/Program Files/mpv/../mpv/mpv.exe"), // .. that stays inside
+  };
+  for (const QString &p : quiet) {
+    const auto out = kart::collectLauncherTrustFindings(configWithLauncher(p), {}, QString());
+    QCOMPARE(out.size(), 1);        // disclosed
+    QCOMPARE(out.first().value, p); // verbatim, as the UI shows it
+    QVERIFY2(
+        !kart::isElevatedLauncherTrustReason(findingFor(out, field).reason),
+        qPrintable(QStringLiteral("a Windows program-root launcher must read quiet: %1").arg(p)));
+  }
+}
+
+void TestKartPreflight::trust_windowsProgramRootLookalikesStayLoud() {
+  // The shape test matches a raw manifest string, so it does not get the ".."
+  // collapse that absolutisation hands the POSIX prefix compare for free —
+  // this is the Windows half of suspicious_dotDotTraversalEscapingRoot_flagged.
+  // A path that prefixes Program Files and then climbs out of it must not buy
+  // silence for System32, and neither must a near-miss spelling.
+  const ScopedRootWorkingDir atRoot;
+  const QString field = QStringLiteral("launcher.launcherPath");
+  const QStringList loud = {
+      QStringLiteral("C:/Program Files/../Windows/System32/evil.exe"),      // escapes the root
+      QStringLiteral("C:\\Program Files\\..\\Windows\\System32\\evil.exe"), // same, native seps
+      QStringLiteral("C:/ProgramFiles/evil.exe"),         // no space — a different directory
+      QStringLiteral("C:/Program Files Custom/evil.exe"), // prefix, not a path segment
+      QStringLiteral("C:/Program Files"),                 // the root itself is not a program
+  };
+  for (const QString &p : loud) {
+    const auto out = kart::collectLauncherTrustFindings(configWithLauncher(p), {}, QString());
+    QCOMPARE(out.size(), 1);
+    QCOMPARE(findingFor(out, field).reason, LauncherTrustReason::OutsideAllowlist);
+  }
 }
 
 void TestKartPreflight::report_launchParametersAlone_defeatTheAllClear() {

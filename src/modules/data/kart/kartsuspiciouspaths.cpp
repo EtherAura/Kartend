@@ -11,7 +11,46 @@ namespace kart {
 
 namespace {
 
+/// The Windows equivalent of the POSIX program roots below: an install under
+/// "C:/Program Files" or "C:/Program Files (x86)" needs administrator rights to
+/// write, so it earns the same quiet-but-still-disclosed treatment /usr/bin
+/// gets.
+///
+/// Recognised by SHAPE, matched against the value the manifest carries rather
+/// than an absolutised one. Both details are load-bearing:
+///
+///   • %ProgramFiles% is not readable off-platform, and a .kart authored on
+///     Windows is routinely inspected on Linux. A shape test classifies the
+///     same bundle the same way on either host.
+///   • QFileInfo treats "C:/Program Files/…" as a RELATIVE path on POSIX and
+///     prefixes the cwd, so the absolutised form never prefix-matches. This is
+///     the mirror of the wrinkle trust_allowlistedLauncherIsStillDisclosed
+///     documents for the POSIX roots on Windows.
+///
+/// Drive-letter agnostic and case-insensitive because Windows paths are, so a
+/// D: install and "c:/program files/…" both match, and either separator is
+/// accepted because the manifest carries whatever the authoring host wrote. A
+/// ProgramFiles redirected somewhere non-standard stays loud — disclosure-first
+/// means an unrecognised root costs a louder row, never a missing one.
+///
+/// Separators are folded and ".." is collapsed BEFORE the shape test, because
+/// the prefix compare below gets that collapse for free from absolutisation and
+/// this one would not: "C:/Program Files/../../Windows/System32/evil.exe"
+/// prefixes an allowed root and lands outside it, which is exactly the escape
+/// suspicious_dotDotTraversalEscapingRoot_flagged guards on the POSIX side.
+/// Folding backslashes is safe to do unconditionally here: only a drive-letter
+/// path can match, so a POSIX name containing a literal backslash is unaffected.
+bool isWindowsProgramRootPath(const QString &path) {
+  static const QRegularExpression kProgramFilesRoot(
+      QStringLiteral(R"(^[A-Za-z]:/Program Files(?: \(x86\))?/.)"),
+      QRegularExpression::CaseInsensitiveOption);
+  QString normalized = path.trimmed();
+  normalized.replace(QLatin1Char('\\'), QLatin1Char('/'));
+  return kProgramFilesRoot.match(QDir::cleanPath(normalized)).hasMatch();
+}
+
 bool isPathInsideAllowedRoots(const QString &path) {
+  if (isWindowsProgramRootPath(path)) return true;
   const QString home = QDir::homePath();
   const QStringList allowedRoots = {home, QStringLiteral("/usr/bin"),
                                     QStringLiteral("/usr/local/bin"), QStringLiteral("/opt")};
