@@ -283,6 +283,28 @@ void syncStickyRoot(QWidget *header) {
   }
 }
 
+/// The ink a row's LABEL is painted with (Kartend-pz7bq).
+///
+/// ONE resolver, because the delegate has two paint paths and they had drifted:
+/// the text-only path resolved the full rule, while the pixmap path set a pen
+/// only when ForegroundRole was valid and otherwise left whatever pen the
+/// painter happened to carry — under a comment claiming it was doing the same
+/// thing. ForegroundRole is set on the CHROME ROOT ROW ONLY (the breadcrumb-
+/// derived tint); every ordinary row clears it, so that missing fallback was
+/// the case that actually mattered, not an edge case.
+///
+/// refreshIcons bakes the system glyph through this same function, which is the
+/// point: a glyph inked by one rule beside a label inked by another is exactly
+/// how Kartend-cfvfp ended up dark-on-dark next to a white label.
+QColor resolveLabelInk(const QVariant &foregroundRole, bool selected, const QPalette &palette) {
+  if (foregroundRole.canConvert<QBrush>()) {
+    if (const QColor ink = foregroundRole.value<QBrush>().color(); ink.isValid()) {
+      return ink; // an explicit per-row tint wins in BOTH states, as before
+    }
+  }
+  return selected ? palette.color(QPalette::HighlightedText) : palette.color(QPalette::Text);
+}
+
 /// Paints the baked row pixmap directly in viewport coordinates — TRUE
 /// panel centring at any depth. Qt's decoration mechanism cannot do this:
 /// the decoration never paints left of the row's indent, so a
@@ -334,6 +356,12 @@ protected:
     // Hoisted this high because the pill's width depends on it: a text-sized
     // pill has to make room for the glyph as well as the label, or the glyph
     // would be drawn over its own backdrop's edge.
+    //
+    // ONE glyph, whatever the selection state. See the bake in refreshIcons:
+    // an ordinary row's label keeps `color: palette(text)` when selected too,
+    // because this delegate strips State_Selected and the panel stylesheet's
+    // ::item:selected rule stops matching — so a selection-specific glyph ink
+    // would walk away from the label rather than follow it (Kartend-cfvfp).
     const QPixmap systemGlyph = displayMode == TreeIconDisplay::IconOnly
                                     ? QPixmap()
                                     : index.data(kRoleSystemGlyph).value<QPixmap>();
@@ -564,7 +592,6 @@ protected:
       // cannot override.
       const QVariant fg = index.data(Qt::ForegroundRole);
       const QString label = index.data(Qt::DisplayRole).toString();
-      QColor ink = fg.canConvert<QBrush>() ? fg.value<QBrush>().color() : QColor();
 
       // MARQUEE OFFSET, computed for BOTH draw paths below. It lived inside the
       // explicit-colour branch at first, which meant it never ran: only tinted
@@ -653,13 +680,8 @@ protected:
         const QRect pill = bodyRect();
         painter->save();
         painter->setFont(labelFont);
-        if (ink.isValid()) {
-          painter->setPen(ink);
-        } else {
-          painter->setPen((option.state & QStyle::State_Selected)
-                              ? option.palette.color(QPalette::HighlightedText)
-                              : option.palette.color(QPalette::Text));
-        }
+        painter->setPen(
+            resolveLabelInk(fg, (option.state & QStyle::State_Selected) != 0, option.palette));
         int align = Qt::AlignVCenter | Qt::AlignLeft;
         if (const QVariant a = index.data(Qt::TextAlignmentRole); a.canConvert<int>()) {
           align = a.toInt();
@@ -853,11 +875,16 @@ protected:
           // Same ink resolution as the text-only path: the panel stylesheet's
           // `color:` wins over ForegroundRole and the option palette, so the
           // label has to be painted directly to be tinted at all.
-          const QVariant fg = index.data(Qt::ForegroundRole);
-          if (const QColor ink = fg.canConvert<QBrush>() ? fg.value<QBrush>().color() : QColor();
-              ink.isValid()) {
-            painter->setPen(ink);
-          }
+          //
+          // It now genuinely IS the same resolution (Kartend-pz7bq). This arm
+          // used to set a pen ONLY when ForegroundRole was valid and otherwise
+          // leave whatever pen the painter carried — under this very comment
+          // claiming parity. ForegroundRole is set on the chrome root row only,
+          // so the missing selected/unselected fallback was the ordinary case,
+          // and a selected row here kept the unselected ink.
+          painter->setPen(resolveLabelInk(index.data(Qt::ForegroundRole),
+                                          (option.state & QStyle::State_Selected) != 0,
+                                          option.palette));
           if (const QVariant fnt = index.data(Qt::FontRole); fnt.canConvert<QFont>()) {
             painter->setFont(fnt.value<QFont>());
           } else {
@@ -952,8 +979,8 @@ QPixmap trimTransparentBorders(const QPixmap &pm) {
   return QPixmap::fromImage(img.copy(box));
 }
 
-/// Recolour a SILHOUETTE glyph to @p ink, and leave anything else alone
-/// (Kartend-1kkk2).
+/// True when @p pm is a SILHOUETTE — art whose opaque pixels are all
+/// essentially one colour — and therefore safe to recolour (Kartend-1kkk2).
 ///
 /// RetroArch's icon packs split cleanly in two. `monochrome` and `automatic`
 /// are white-on-transparent: drawn as-is they are invisible on a light theme,
@@ -962,11 +989,16 @@ QPixmap trimTransparentBorders(const QPixmap &pm) {
 /// coloured, so flattening them to one ink would throw away the reason for
 /// choosing them.
 ///
-/// Rather than ask the user which kind they picked, look: a silhouette is art
-/// whose opaque pixels are all essentially one colour. That test is a property
-/// of the art itself, so it keeps working for packs nobody has classified.
-QPixmap tintSilhouetteGlyph(const QPixmap &pm, const QColor &ink) {
-  if (pm.isNull() || !ink.isValid()) return pm;
+/// Rather than ask the user which kind they picked, look. That test is a
+/// property of the art itself, so it keeps working for packs nobody has
+/// classified.
+///
+/// Split out from the tint itself (Kartend-cfvfp) because the glyph is now
+/// baked TWICE — once for the ordinary row's ink and once for the selected
+/// row's — and this scan is the expensive half. Testing once and tinting twice
+/// keeps the second bake to a fill.
+bool isSilhouetteGlyph(const QPixmap &pm) {
+  if (pm.isNull()) return false;
   const QImage img = pm.toImage().convertToFormat(QImage::Format_ARGB32);
   QRgb reference = 0;
   bool haveReference = false;
@@ -994,7 +1026,14 @@ QPixmap tintSilhouetteGlyph(const QPixmap &pm, const QColor &ink) {
   }
   // A couple of percent of stragglers still counts as one ink; a genuinely
   // coloured mark blows straight past this.
-  if (opaque == 0 || offReference * 100 > opaque * 3) return pm;
+  return opaque > 0 && offReference * 100 <= opaque * 3;
+}
+
+/// Flat-fill @p pm with @p ink through its own alpha. Only ever called on art
+/// isSilhouetteGlyph has already approved, where "keep the internal detail" is
+/// vacuous — there is none to keep.
+QPixmap tintGlyphTo(const QPixmap &pm, const QColor &ink) {
+  if (pm.isNull() || !ink.isValid()) return pm;
   QPixmap tinted(pm.size());
   tinted.setDevicePixelRatio(pm.devicePixelRatio());
   tinted.fill(Qt::transparent);
@@ -1781,9 +1820,12 @@ void CollectionTreeController::refreshIcons() {
   const QList<RetroArchIcons::Pack> glyphPacks = assetsDir.isEmpty()
                                                      ? QList<RetroArchIcons::Pack>()
                                                      : RetroArchIcons::discoverPacks(assetsDir);
-  // Silhouette packs are recoloured to the ordinary label ink so they read on
-  // a light theme as well as a dark one — see tintSilhouetteGlyph.
-  const QColor glyphInk = m_tree->palette().color(QPalette::Text);
+  // Silhouette packs are recoloured to the row's LABEL ink so they read on a
+  // light theme as well as a dark one — see isSilhouetteGlyph. The ink itself is
+  // resolved per row down in the bake, through the delegate's own
+  // resolveLabelInk, rather than read off the palette here: a tinted chrome-root
+  // row and an ordinary row do not share an ink, and glyph and label must agree
+  // (Kartend-pz7bq, which is what Kartend-cfvfp was blocked on).
   /// The ink a glyph STYLE asks for, or an invalid colour for Normal (which
   /// means "leave the art alone"). Mirrors the row artwork's own switch so the
   /// two vocabularies cannot mean different things, and resolves Tinted
@@ -1805,7 +1847,7 @@ void CollectionTreeController::refreshIcons() {
     }
     return {};
   };
-  QHash<QString, QPixmap> glyphCache; // path|size — one bake per distinct glyph
+  QHash<QString, QPixmap> glyphCache; // path|size|ink — one bake per distinct glyph
   // Collected in the pass below, applied after it: every row in this set gets
   // ONE height, so the group reads as an even list. See the setSizeHint arm.
   QList<QTreeWidgetItem *> normalisedRows;
@@ -1957,10 +1999,19 @@ void CollectionTreeController::refreshIcons() {
         // Style and source both change the baked pixels, so both are in the
         // key — otherwise two collections sharing a system but styled
         // differently would get whichever baked first.
+        // The row's label ink is part of the key too (Kartend-pz7bq): the
+        // silhouette bake is now inked per ROW rather than per pass, because a
+        // tinted chrome-root row resolves a different ink from an ordinary one.
+        // Without it the first row to bake a given glyph would win and every
+        // other row sharing that file would reuse its ink.
+        const QVariant rowForeground = item->data(0, Qt::ForegroundRole);
+        const QPalette &treePalette = m_tree->palette();
+        const QColor normalInk = resolveLabelInk(rowForeground, false, treePalette);
         const QString glyphKey = glyphPath + QLatin1Char('|') + QString::number(glyphCfg.iconSize) +
                                  QLatin1Char('|') +
                                  QString::number(static_cast<int>(glyphCfg.style)) +
-                                 (glyphFromFallback ? QLatin1String("|f") : QLatin1String("|s"));
+                                 (glyphFromFallback ? QLatin1String("|f") : QLatin1String("|s")) +
+                                 QLatin1Char('|') + normalInk.name(QColor::HexArgb);
         auto cachedGlyph = glyphCache.find(glyphKey);
         if (cachedGlyph == glyphCache.end()) {
           QPixmap glyph(glyphPath);
@@ -1982,12 +2033,39 @@ void CollectionTreeController::refreshIcons() {
             // different hardcoded rules — which is exactly what they were.
             if (const QColor styleInk = glyphStyleInk(glyphCfg.style); styleInk.isValid()) {
               glyph = flattenToInk(glyph, styleInk, glyphCfg.style == TreeIconStyle::Tinted);
-            } else {
+              // No selected variant for the styled inks: MonochromeDark/Light
+              // are fixed colours and Tinted resolves through the user's own
+              // tint/accent. All three are a deliberate choice about what the
+              // glyph should look like, and the selection fill does not get to
+              // overrule it.
+            } else if (isSilhouetteGlyph(glyph)) {
               // Normal — art keeps its own colours. A flat SILHOUETTE is the
               // exception: RetroArch's monochrome and automatic sets are
               // white-on-transparent and would be invisible on a light theme,
               // so those are inked to the label colour regardless.
-              glyph = tintSilhouetteGlyph(glyph, glyphInk);
+              //
+              // Baked against BOTH label inks (Kartend-cfvfp). The selected row
+              // fills its pill with the accent and switches its label to
+              // HighlightedText; a glyph left on the ordinary Text ink washes
+              // out on any scheme where Text and that fill are close, while the
+              // label beside it stays readable.
+              // ONE ink, resolved through the delegate's own resolver against
+              // this row's ForegroundRole (hoisted above, since the cache key
+              // needs it). It picks up a tinted chrome-root row's own colour
+              // instead of the flat palette Text this used to read, so glyph
+              // and label finally agree on that row.
+              //
+              // NO SELECTED VARIANT, and that is a MEASURED conclusion rather
+              // than an omission (Kartend-cfvfp, verified in the guest): the
+              // delegate strips State_Selected before handing off, so the panel
+              // stylesheet's `::item:selected { color: palette(highlighted-text) }`
+              // rule stops matching and an ordinary row's label keeps
+              // `color: palette(text)` in BOTH states. A glyph baked against
+              // HighlightedText therefore does not follow its label onto the
+              // selected row — it walks away from it, which on a scheme with a
+              // distinct selection foreground rendered a dark glyph beside a
+              // white label. Matching the label means one ink.
+              glyph = tintGlyphTo(glyph, normalInk);
             }
             glyph.setDevicePixelRatio(dpr);
           }
