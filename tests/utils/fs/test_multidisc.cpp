@@ -30,6 +30,7 @@ private slots:
 
   void m3u_writesRelativePathsForSiblingsAndAbsoluteOtherwise();
   void m3uFileName_sanitisesIllegalCharacters();
+  void m3uFileName_appliesSharedHardening();
 
   void playlistDir_isScopedPerCollectionAndRefusesEscapes();
 
@@ -181,6 +182,54 @@ void TestMultiDisc::m3uFileName_sanitisesIllegalCharacters() {
   QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("AC/DC: Live?")),
            QStringLiteral("AC_DC_ Live_.m3u"));
   QCOMPARE(MultiDisc::m3uFileNameFor(QString()), QStringLiteral("playlist.m3u"));
+}
+
+// Kartend-tb5nb: m3uFileNameFor used to do the character replacement and stop —
+// no trailing-dot chop, no C0/NUL strip, no leading-dash strip, no length cap —
+// having silently diverged from the launcher-import stub namer. It now shares
+// PathUtils::sanitizeFileBaseName, so each of those rules must hold here too.
+void TestMultiDisc::m3uFileName_appliesSharedHardening() {
+  // C0 controls, NUL included. These previously passed through into a filename.
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("Live\x01In\x1FTokyo")),
+           QStringLiteral("Live_In_Tokyo.m3u"));
+  QString withNul = QStringLiteral("Rec");
+  withNul.append(QChar(u'\0'));
+  withNul.append(QStringLiteral("ital"));
+  QCOMPARE(MultiDisc::m3uFileNameFor(withNul), QStringLiteral("Rec_ital.m3u"));
+
+  // Trailing dots: Windows drops them, so "Recital..." and "Recital" would
+  // otherwise collide as two playlists claiming one file.
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("Recital...")), QStringLiteral("Recital.m3u"));
+
+  // Leading dash — the argv-flag shape the issue called out as the one worth
+  // noting, since a generated path starting with '-' reads as an option.
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("-Recital")), QStringLiteral("Recital.m3u"));
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("--force")), QStringLiteral("force.m3u"));
+
+  // Shell metacharacters the old set omitted entirely (; | ` $).
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("A;B|C`D$E")), QStringLiteral("A_B_C_D_E.m3u"));
+
+  // 120-character cap, applied to the BASE before the extension.
+  const QString overlong(200, QLatin1Char('x'));
+  const QString capped = MultiDisc::m3uFileNameFor(overlong);
+  QCOMPARE(capped.size(), 120 + 4); // ".m3u"
+  QVERIFY(capped.endsWith(QStringLiteral(".m3u")));
+
+  // A title that sanitises away entirely still yields the fallback, not ".m3u".
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("...")), QStringLiteral("playlist.m3u"));
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("---")), QStringLiteral("playlist.m3u"));
+
+  // Kartend-ildfg: Windows reserved device names. A release titled "AUX" used
+  // to yield AUX.m3u, which cannot be created on Windows at all. The shared
+  // rule prefixes instead of rejecting, so the playlist keeps its name.
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("AUX")), QStringLiteral("t_AUX.m3u"));
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("nul")), QStringLiteral("t_nul.m3u"));
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("LPT3")), QStringLiteral("t_LPT3.m3u"));
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("CONSOLE")), QStringLiteral("CONSOLE.m3u"));
+
+  // Trailing dots and spaces chop to a fixed point, so nothing survives that
+  // Windows would silently drop into a collision with the plain title.
+  QCOMPARE(MultiDisc::m3uFileNameFor(QStringLiteral("Recital . .")), QStringLiteral("Recital.m3u"));
 }
 
 void TestMultiDisc::playlistDir_isScopedPerCollectionAndRefusesEscapes() {

@@ -7,6 +7,7 @@
 #include <QLoggingCategory>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
 
@@ -411,6 +412,82 @@ QString pathStatusDescription(PathStatus status) {
 bool isSafePathComponent(const QString &s) {
   return !s.isEmpty() && !s.contains(QLatin1Char('/')) && !s.contains(QLatin1Char('\\')) &&
          s != QLatin1String(".") && s != QLatin1String("..");
+}
+
+namespace {
+
+/// True for the MS-DOS device names Windows still reserves in every directory:
+/// CON, PRN, AUX, NUL, COM1-9, LPT1-9. Case-insensitive, because the reservation
+/// is — "nul", "NUL" and "Nul" all name the same device.
+///
+/// The caller passes the stem BEFORE the first dot, not the whole base name:
+/// Windows resolves "NUL.txt" to the device too, so the extension buys nothing.
+bool isWindowsReservedStem(const QString &stem) {
+  static const QSet<QString> kReservedNames = {QStringLiteral("con"), QStringLiteral("prn"),
+                                               QStringLiteral("aux"), QStringLiteral("nul")};
+  const QString low = stem.toLower();
+  if (kReservedNames.contains(low)) return true;
+  return low.size() == 4 &&
+         (low.startsWith(QLatin1String("com")) || low.startsWith(QLatin1String("lpt"))) &&
+         low.at(3) >= QLatin1Char('1') && low.at(3) <= QLatin1Char('9');
+}
+
+} // namespace
+
+QString sanitizeFileBaseName(const QString &title, const QString &replacement,
+                             const QString &fallback, const QString &extraForbidden) {
+  QString base = title;
+  // The SECURITY set, shared by every caller and not negotiable: path
+  // separators, the shell metacharacters PathUtils::validatePathSecurity
+  // rejects, and C0 controls \x00-\x1f — NUL included, which the playlist
+  // namer previously let through entirely (Kartend-tb5nb).
+  //
+  // ':' is deliberately NOT here. It is legal in POSIX filenames and common in
+  // titles, and the stub namer has a test pinning that it survives; the
+  // playlist namer passes it via extraForbidden because a .m3u also has to be
+  // writable on a Windows/SMB share. Portability, not safety.
+  static const QRegularExpression kForbidden(QStringLiteral("[/\\\\;|`$<>\"*?\\x00-\\x1f]"));
+  base.replace(kForbidden, replacement);
+  for (const QChar ch : extraForbidden) {
+    base.replace(ch, replacement);
+  }
+  base = base.simplified();
+  // Trailing dots AND spaces: Windows silently drops both, so "Disc 1..." and
+  // "Disc 1" would collide as filenames. Chopped together to a fixed point —
+  // chopping dots first and trimming after left "Disc 1 . ." as "Disc 1 .",
+  // still carrying the trailing dot the rule exists to remove, because each
+  // pass only cleaned up after itself. kartreader's isSegmentSafe rejects both
+  // for the same reason (Kartend-ildfg).
+  while (!base.isEmpty() && (base.endsWith(QLatin1Char('.')) || base.back().isSpace())) {
+    base.chop(1);
+  }
+  // A leading dash reads as a launcher option if the path is ever passed
+  // through verbatim; mirrors buildLaunchCommand's own guard.
+  while (base.startsWith(QLatin1Char('-'))) {
+    base.remove(0, 1);
+  }
+  base = base.trimmed();
+  // Windows reserved device names (Kartend-ildfg). PREFIX rather than reject:
+  // both callers are WRITERS deriving a filename from a display name, so a
+  // release genuinely titled "NUL" must stay recognisable as itself — falling
+  // back to "Untitled"/"playlist" would discard the user's name to fix a
+  // Windows-only nuisance. kartreader's isSegmentSafe still REFUSES these,
+  // which is the right split: a writer rewrites, a reader validating hostile
+  // input refuses. "t_" is kartwriter's existing spelling, kept identical so
+  // that its hand-rolled copy can later delegate here.
+  const int firstDot = base.indexOf(QLatin1Char('.'));
+  if (isWindowsReservedStem(firstDot < 0 ? base : base.left(firstDot))) {
+    base.prepend(QStringLiteral("t_"));
+  }
+  constexpr int kMaxLength = 120;
+  if (base.size() > kMaxLength) {
+    base.truncate(kMaxLength);
+    base = base.trimmed();
+  }
+  if (base.isEmpty()) {
+    base = fallback;
+  }
+  return base;
 }
 
 } // namespace PathUtils

@@ -31,6 +31,8 @@ class TestLauncherImportService : public QObject {
 private slots:
   void watchPathsAreDirectoriesThatExist();
   void watchPathsIgnoreUnknownSources();
+  void coverHostAllowlistAdmitsTheLaunchersOwnArtHosts();
+  void coverHostAllowlistIsEmptyForSourcesWithoutRemoteCovers();
   void sanitizeStubBaseName_data();
   void sanitizeStubBaseName();
   void initialSyncWritesStubs();
@@ -105,6 +107,29 @@ void TestLauncherImportService::sanitizeStubBaseName_data() {
   QTest::newRow("leading dash") << "--force" << "force";
   QTest::newRow("empty") << "" << "Untitled";
   QTest::newRow("only forbidden") << "///" << "Untitled";
+
+  // Kartend-ildfg: Windows reserved device names. PREFIXED, never rejected —
+  // a title of "NUL" must stay recognisable as itself rather than collapsing
+  // into the "Untitled" fallback and discarding what the user actually owns.
+  QTest::newRow("reserved exact") << "NUL" << "t_NUL";
+  QTest::newRow("reserved lowercase") << "con" << "t_con";
+  QTest::newRow("reserved mixed case") << "Aux" << "t_Aux";
+  QTest::newRow("reserved com digit") << "COM1" << "t_COM1";
+  QTest::newRow("reserved lpt digit") << "lpt9" << "t_lpt9";
+  // Windows resolves "NUL.txt" to the device as well, so the stem before the
+  // first dot is what the rule looks at.
+  QTest::newRow("reserved with suffix") << "NUL.txt" << "t_NUL.txt";
+  // Near misses stay untouched: the reservation is the exact stem, not a prefix,
+  // and COM/LPT reserve only digits 1-9.
+  QTest::newRow("not reserved com0") << "COM0" << "COM0";
+  QTest::newRow("not reserved com10") << "COM10" << "COM10";
+  QTest::newRow("not reserved longer word") << "CONSOLE" << "CONSOLE";
+  QTest::newRow("not reserved as suffix") << "ANNUL" << "ANNUL";
+
+  // Trailing dots and spaces are chopped to a FIXED POINT. Chopping dots and
+  // then trimming once left this as "Disc 1 ." — still ending in the dot
+  // Windows drops, which is the collision the rule exists to prevent.
+  QTest::newRow("trailing dot space alternating") << "Disc 1 . ." << "Disc 1";
 }
 
 void TestLauncherImportService::sanitizeStubBaseName() {
@@ -812,6 +837,69 @@ void TestLauncherImportService::watchPathsIgnoreUnknownSources() {
   // and not a stray watch.
   QVERIFY(LauncherImportService::watchPaths(QStringLiteral("not-a-launcher")).isEmpty());
   QVERIFY(LauncherImportService::watchPaths(QString()).isEmpty());
+}
+
+namespace {
+// Mirrors HttpClient's hostMatchesAllowlist: a host is admitted when it IS a
+// listed suffix or is a subdomain of one. The leading-dot boundary is the
+// load-bearing part — a plain endsWith would also admit the look-alikes
+// "evilitch.zone" and "itch.zone.attacker.test".
+bool hostIsAdmitted(const QString &host, const QStringList &suffixes) {
+  for (const QString &suffix : suffixes) {
+    if (host.compare(suffix, Qt::CaseInsensitive) == 0 ||
+        host.endsWith(QLatin1Char('.') + suffix, Qt::CaseInsensitive)) {
+      return true;
+    }
+  }
+  return false;
+}
+} // namespace
+
+// Kartend-ob2um: the cover fetch reads its URL out of a third-party launcher
+// database, so it must be pinned to that launcher's art hosts — passing an
+// allowlist is also what makes HttpClient verify redirects instead of
+// following a 3xx anywhere. The pin is worthless if it is too narrow to admit
+// real covers, so the representative hosts here are the ones the provider
+// fixtures in tests/utils/fs actually parse.
+void TestLauncherImportService::coverHostAllowlistAdmitsTheLaunchersOwnArtHosts() {
+  const QStringList itch =
+      LauncherImportService::coverHostAllowlist(QLatin1String(LauncherImportService::kSourceItch));
+  QVERIFY(!itch.isEmpty());
+  QVERIFY2(hostIsAdmitted(QStringLiteral("img.itch.zone"), itch),
+           "itch serves butler.db cover_url art from img.itch.zone");
+
+  const QStringList heroic = LauncherImportService::coverHostAllowlist(
+      QLatin1String(LauncherImportService::kSourceHeroic));
+  QVERIFY(!heroic.isEmpty());
+  QVERIFY2(hostIsAdmitted(QStringLiteral("cdn1.epicgames.com"), heroic),
+           "Heroic art_square for an Epic entry");
+  QVERIFY2(hostIsAdmitted(QStringLiteral("images.gog.com"), heroic),
+           "Heroic art_cover for a GOG entry");
+  QVERIFY2(hostIsAdmitted(QStringLiteral("images-4.gog-statics.com"), heroic),
+           "GOG's sharded static hosts must not fall outside the pin");
+
+  // The boundary the pin exists to hold: a look-alike registered by someone
+  // else, and a redirect target that merely ends with the trusted name.
+  QVERIFY(!hostIsAdmitted(QStringLiteral("evilitch.zone"), itch));
+  QVERIFY(!hostIsAdmitted(QStringLiteral("itch.zone.attacker.test"), itch));
+  QVERIFY(!hostIsAdmitted(QStringLiteral("127.0.0.1"), heroic));
+}
+
+// Empty means REFUSE for this table, which is the inverse of HttpClient's
+// empty-means-unpinned convention — the controller has to stop the pass, not
+// forward the empty list. Locking the sources down here keeps a future source
+// that starts serving remote covers from silently inheriting "any host".
+void TestLauncherImportService::coverHostAllowlistIsEmptyForSourcesWithoutRemoteCovers() {
+  for (const char *sourceId :
+       {LauncherImportService::kSourceSteam, LauncherImportService::kSourceFlatpak,
+        LauncherImportService::kSourceLutris, LauncherImportService::kSourceBottles,
+        LauncherImportService::kSourceXdg, LauncherImportService::kSourceEsde}) {
+    QVERIFY2(LauncherImportService::coverHostAllowlist(QLatin1String(sourceId)).isEmpty(),
+             qPrintable(QStringLiteral("%1 ships local artwork; it must not carry a cover-host pin")
+                            .arg(QLatin1String(sourceId))));
+  }
+  QVERIFY(LauncherImportService::coverHostAllowlist(QStringLiteral("not-a-launcher")).isEmpty());
+  QVERIFY(LauncherImportService::coverHostAllowlist(QString()).isEmpty());
 }
 
 QTEST_MAIN(TestLauncherImportService)

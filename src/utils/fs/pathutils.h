@@ -140,6 +140,47 @@ enum class PathStatus {
 /// scraper persistence and ScreenScraper parser paths (Kartend-2mol7).
 [[nodiscard]] bool isSafePathComponent(const QString &s);
 
+/// Canonical sanitizer for a FILENAME BASE derived from a title — the single
+/// rule set every "turn this display name into a file on disk" path must use.
+///
+/// Applies, in order: replace path separators, shell metacharacters and C0
+/// control characters (including NUL) with @p replacement; simplify whitespace;
+/// chop trailing dots and spaces (Windows drops both, so "Disc 1..." and
+/// "Disc 1" would collide); strip leading dashes (a name starting with one is
+/// argv-flag-shaped if the path is ever passed through verbatim); prefix "t_"
+/// onto a Windows reserved device name; cap at 120 characters; fall back to
+/// @p fallback when nothing survives.
+///
+/// The reserved-name rule (Kartend-ildfg) PREFIXES rather than rejects: CON,
+/// PRN, AUX, NUL, COM1-9 and LPT1-9 cannot be created on Windows in any
+/// directory, at any extension, but both callers here are WRITERS turning a
+/// display name into a filename — so a release genuinely titled "NUL" becomes
+/// "t_NUL" and stays recognisable, where falling back to "Untitled" would throw
+/// the user's name away. kartreader's isSegmentSafe deliberately does the
+/// opposite and REFUSES them: it validates untrusted bundle input, where
+/// rewriting a hostile name is the wrong answer.
+///
+/// Exists because two sanitizers ~40 lines apart had silently diverged
+/// (Kartend-tb5nb): the launcher-import stub namer did all of the above while
+/// the .m3u playlist namer did the character replacement ALONE — no trailing-dot
+/// chop, no control-character or NUL strip, no leading-dash strip, no length
+/// cap. Containment held, so it was drift risk rather than a live hole, but the
+/// two must not be able to drift again.
+///
+/// Two parameters exist ONLY to preserve each caller's deliberate, tested
+/// behaviour — they are cosmetic/portability choices, never security ones:
+///   - @p replacement: the stub namer has always substituted a space and the
+///     playlist namer an underscore. Unifying that would rename files already
+///     on disk for no security gain.
+///   - @p extraForbidden: additional characters to replace. The playlist namer
+///     passes ":" because a .m3u must be writable on a Windows/SMB share; the
+///     stub namer deliberately KEEPS colons, which are legal in POSIX filenames
+///     and common in titles ("Half-Life 2: Episode Two") — pinned by its own
+///     "colon kept" test case. That difference is a real requirement, not drift.
+[[nodiscard]] QString sanitizeFileBaseName(const QString &title, const QString &replacement,
+                                           const QString &fallback,
+                                           const QString &extraForbidden = QString());
+
 } // namespace PathUtils
 
 #endif
