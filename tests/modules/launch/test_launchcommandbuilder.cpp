@@ -578,8 +578,8 @@ void TestLaunchCommandBuilder::testKartLinkStubArgumentsIgnoredOutsideTheManaged
   const QString stub = scanned.filePath(QStringLiteral("Dropped In.kartlink"));
   QVERIFY(KartLink::write(stub, hostile));
 
-  const auto cmd = LaunchCommandBuilder::buildLaunchCommand(
-      plainLauncher(QStringLiteral("%1")), QStringLiteral("Steam"), stub);
+  const auto cmd = LaunchCommandBuilder::buildLaunchCommand(plainLauncher(QStringLiteral("%1")),
+                                                            QStringLiteral("Steam"), stub);
   // The TARGET is still honoured — it is separately validated and dash-guarded
   // — so a hand-placed stub keeps launching. It just contributes no flags.
   QVERIFY(!cmd.isError());

@@ -5,8 +5,8 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTemporaryFile>
-#include <QTest>
 #include <QtEndian>
+#include <QTest>
 
 #include <limits>
 
@@ -761,15 +761,16 @@ void TestKartReader::testZlibRejectsALyingSizePrefixBeforeAllocating() {
   qToBigEndian(std::numeric_limits<quint32>::max(), reinterpret_cast<uchar *>(lying.data()));
   QVERIFY(lying.size() < 200); // the whole point: tiny input, enormous claim
   const auto result = KartCompression::decompress(lying, KartFormat::Compression_Zlib, raw.size());
-  QVERIFY2(result.isError(), "A zlib size prefix disagreeing with the entry header must be refused");
+  QVERIFY2(result.isError(),
+           "A zlib size prefix disagreeing with the entry header must be refused");
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::KartCompressionFailed);
 
   // A prefix that UNDERSTATES is equally a disagreement — the check is
   // equality against the header, not a ceiling.
   QByteArray understated = pristine;
   qToBigEndian(quint32{1}, reinterpret_cast<uchar *>(understated.data()));
-  QVERIFY(KartCompression::decompress(understated, KartFormat::Compression_Zlib, raw.size())
-              .isError());
+  QVERIFY(
+      KartCompression::decompress(understated, KartFormat::Compression_Zlib, raw.size()).isError());
 
   // Too short to even carry a prefix.
   QVERIFY(KartCompression::decompress(QByteArray("ab"), KartFormat::Compression_Zlib, raw.size())

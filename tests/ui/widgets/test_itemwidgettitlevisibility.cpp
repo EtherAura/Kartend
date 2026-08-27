@@ -70,8 +70,7 @@ void TestItemWidgetTitleVisibility::gridHonoursEveryHideTitlesSetting() {
 }
 
 // The reported bug: List layout, subcollection titles hidden, row went blank.
-void TestItemWidgetTitleVisibility::
-    listShowsSubcollectionNameEvenWhenSubcollectionTitlesHidden() {
+void TestItemWidgetTitleVisibility::listShowsSubcollectionNameEvenWhenSubcollectionTitlesHidden() {
   ItemWidget sub;
   sub.setListMode(true);
   sub.setHideSubcollectionTitles(true);

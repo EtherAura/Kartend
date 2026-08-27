@@ -254,8 +254,8 @@ void InteractionManager::scheduleSidebarMetadataUpdateIfVisible(int targetIndex,
       if (!guard->m_currentCollectionIndex || guard->currentSelectedIndex() != targetIndex) {
         return;
       }
-      guard->updateFilePathForSelection(
-          targetIndex, guard->getSubcollections(*guard->m_currentCollectionIndex));
+      guard->updateFilePathForSelection(targetIndex,
+                                        guard->getSubcollections(*guard->m_currentCollectionIndex));
     });
   };
   schedule(initialDelayMs);

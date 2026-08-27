@@ -211,8 +211,8 @@ void TestInteractionManager::testJumpToEdgePublishesSelectionNotJustTheRing() {
 
   // handleJumpToEdge is a private slot — reach it the way the KeyboardManager
   // connection does rather than widening the header for a test.
-  QVERIFY(QMetaObject::invokeMethod(im, "handleJumpToEdge", Qt::DirectConnection,
-                                    Q_ARG(bool, false)));
+  QVERIFY(
+      QMetaObject::invokeMethod(im, "handleJumpToEdge", Qt::DirectConnection, Q_ARG(bool, false)));
 
   QCOMPARE(im->currentSelectedIndex(), 0);
   QCOMPARE(im->selectedFilePath(), context.filePaths.at(0));

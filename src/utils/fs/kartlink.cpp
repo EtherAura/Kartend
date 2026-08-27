@@ -53,8 +53,8 @@ auto read(const QString &filePath) -> ErrorUtils::Result<LinkData> {
   // body at all. Reported as a config-value problem rather than a read error
   // because the file opened fine — it is simply not a stub.
   if (file.size() > kMaxStubBytes) {
-    return ErrorContext::error(ErrorCode::InvalidConfigValue,
-                               "Shortcut stub is implausibly large", "KartLink::read")
+    return ErrorContext::error(ErrorCode::InvalidConfigValue, "Shortcut stub is implausibly large",
+                               "KartLink::read")
         .withDetails(QString("%1: %2 bytes exceeds the %3-byte limit")
                          .arg(filePath)
                          .arg(file.size())

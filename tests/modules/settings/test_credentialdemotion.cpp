@@ -25,8 +25,8 @@
 
 #include "../../support/machomesandbox.h"
 #include "collection/generalsettings.h"
-#include "settingsmanager.h"
 #include "settingskeys.h"
+#include "settingsmanager.h"
 #include "settingsutils.h"
 
 class TestCredentialDemotion : public QObject {
