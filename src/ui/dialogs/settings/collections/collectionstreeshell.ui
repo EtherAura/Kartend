@@ -48,6 +48,23 @@
           <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
          </spacer>
         </item>
+       </layout>
+      </item>
+      <!-- Kartend-kzxcs: the Mode label + combo get their OWN row rather than
+           sharing the button row. Sharing it left the combo about 85px inside
+           the 260px navigation rail — three 30px buttons, their spacing, the
+           label and the margins consume the rest — so "Current + subcollections"
+           was hard-cut to "Current co".
+           Widening the combo cannot fix that from inside: navPane carries an
+           EXPLICIT minimumSize of 220 in settingsdialog.ui, and an explicit
+           minimum overrides the computed minimumSizeHint, so no child minimum
+           can push the rail wider and an over-wide child is simply clipped.
+           A full-width row hands the combo the rail's whole inner width, which
+           fits the longest entry without touching the rail geometry — the
+           "rail stays compact; every extra pixel of width goes to the content
+           pane" intent in settingsdialognav.cpp is preserved. -->
+      <item>
+       <layout class="QHBoxLayout" name="settingsScopeLayout">
         <item>
          <widget class="QLabel" name="settingsScopeLabel">
           <property name="text"><string>Mode:</string></property>
@@ -56,6 +73,11 @@
         </item>
         <item>
          <widget class="QComboBox" name="settingsScopeComboBox">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+            <horstretch>1</horstretch><verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
           <property name="toolTip"><string>Settings Mode controls the scope of Save: just the selected collection, the selected collection plus its subcollections, or every collection</string></property>
           <item><property name="text"><string>Current collection</string></property></item>
           <item><property name="text"><string>Current + subcollections</string></property></item>
