@@ -199,12 +199,30 @@ void SettingsDialog::performRecursiveImport(const QString &baseDir, bool isConte
     collections.append(newCollection);
   }
 
-  // Refresh the tree widget
+  // Refresh the tree widget.
+  //
+  // READ THE INDEX FIRST (Kartend-ejii4). updateCollectionTreeWidget() goes
+  // through TreeManager::rebuild(), whose clear() drives
+  // onWidgetSelectionChanged with an empty selection — and while m_rebuilding
+  // suppresses the unsaved-changes prompt there, it does NOT cover the
+  // `*m_currentCollectionIndex = -1` below it, which runs regardless. So by the
+  // time these three lines used to read currentCollectionIndex it was already
+  // -1: expandPathToCollection(-1) and itemAt(-1) both no-op, and the import
+  // finished with the tree collapsed to the top level and the header reading
+  // "No collection selected" — once per import, on the one workflow that is
+  // inherently repetitive.
+  //
+  // handleSaveCollection's refreshTree has always done it this way with its own
+  // local editedIndex, which is why saving keeps its place and importing did
+  // not. The reselect below re-drives the selection handler, which is what
+  // restores currentCollectionIndex — so it is deliberately not reassigned here.
+  const int importedIntoIndex = currentCollectionIndex;
   updateCollectionTreeWidget();
-  expandPathToCollection(currentCollectionIndex);
+  expandPathToCollection(importedIntoIndex);
 
-  // Reselect current collection
-  if (auto *item = m_treeManager ? m_treeManager->itemAt(currentCollectionIndex) : nullptr) {
+  // Reselect the collection the subcollections were imported into — it is also
+  // the one most likely to be configured next, since its children just appeared.
+  if (auto *item = m_treeManager ? m_treeManager->itemAt(importedIntoIndex) : nullptr) {
     collectionTreeWidget->setCurrentItem(item);
     item->setSelected(true);
     item->setExpanded(true);

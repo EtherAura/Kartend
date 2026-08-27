@@ -102,6 +102,7 @@ private slots:
   void rename_updatesListsMirrorsAndAliases();
   void rename_blankNameReverts();
   void rename_backToOriginalRestoresSavedFlag();
+  void rebuild_clearsBorrowedSelectionState();
   void selectionChange_loadsRowAndGuardsUnsaved();
   void deselect_guardsUnsavedAndClearsState();
   void rearranged_resyncsParentsAndSignals();
@@ -239,6 +240,37 @@ void TestTreeManager::rename_backToOriginalRestoresSavedFlag() {
   // reports no other pending edits.
   f.manager.itemAt(0)->setText(0, QStringLiteral("Original"));
   QVERIFY(f.saved);
+}
+
+void TestTreeManager::rebuild_clearsBorrowedSelectionState() {
+  // Kartend-ejii4. rebuild()'s clear() drives onWidgetSelectionChanged with an
+  // empty selection. m_rebuilding suppresses the unsaved-changes PROMPT there,
+  // but it does not cover the state reset below it — so the borrowed
+  // currentCollectionIndex comes back -1 whether or not it was valid going in.
+  //
+  // This is the CONTRACT, not a defect: rebuild() destroys every item, so the
+  // pointers and the index it hands back could only dangle. It is pinned here
+  // because it is a trap, and Recursive Import fell into it — that call site
+  // read currentCollectionIndex AFTER rebuilding to decide what to re-expand
+  // and re-select, got -1, and so finished with the tree collapsed to the top
+  // level and the header reading "No collection selected", once per import.
+  // Its siblings (add, duplicate, save-refresh) all capture a local index
+  // BEFORE rebuilding, which is exactly why only import was affected.
+  Fixture f({makeCol(QStringLiteral("Root")), makeCol(QStringLiteral("Child"), 0)});
+  f.widget.setCurrentItem(f.manager.itemAt(1));
+  // Premise, or the test would pass vacuously against an already-empty state.
+  QCOMPARE(f.currentIndex, 1);
+  QCOMPARE(f.currentItem, f.manager.itemAt(1));
+
+  f.manager.rebuild();
+
+  QCOMPARE(f.currentIndex, -1);
+  QCOMPARE(f.currentItem, nullptr);
+  // The other half of the trap: with the index gone there is nothing left to
+  // restore FROM, so a caller that did not save it first cannot recover.
+  QCOMPARE(f.manager.itemAt(f.currentIndex), nullptr);
+  // The rows themselves survive — this is lost selection state, not a lost tree.
+  QVERIFY(f.manager.itemAt(1) != nullptr);
 }
 
 void TestTreeManager::selectionChange_loadsRowAndGuardsUnsaved() {
