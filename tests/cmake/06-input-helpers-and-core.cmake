@@ -401,11 +401,18 @@ target_include_directories(test_titlecountshelpers PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
 # Kartend-rp0hk: the title's plural forms come from the compiled English
 # catalogue, exactly as they do in the app, so the test needs to find and
-# install it. Depending on the lrelease target keeps the .qm built before the
-# test runs rather than leaving the assertion to depend on build order.
+# install it.
+#
+# Depends on kartend_translations, NOT on the kartend app target. The app
+# dependency only ever worked by coincidence: it does not pull in lrelease, so
+# whether the .qm existed came down to build order — and on Qt 6.4 (CI's) it
+# landed in the build root rather than the directory this define names, so the
+# assertion failed on every clean build there while passing locally on 6.11.
+# kartend_translations is the target that guarantees a catalogue in
+# KARTEND_TRANSLATION_BUILD_DIR whichever Qt is underneath.
 target_compile_definitions(test_titlecountshelpers PRIVATE
   KARTEND_TEST_TRANSLATIONS_DIR="${KARTEND_TRANSLATION_BUILD_DIR}")
-add_dependencies(test_titlecountshelpers kartend)
+add_dependencies(test_titlecountshelpers kartend_translations)
 
 # ScrollEventHandler — scroll-event wiring + user-scroll activity tracking:
 # valueChanged forwarding (connect/disconnect/re-target lifecycle), slider

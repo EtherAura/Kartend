@@ -337,8 +337,39 @@ if(KARTEND_TS_FILES)
     QM_FILES_OUTPUT_VARIABLE KARTEND_TRANSLATION_QM_FILES
     QM_OUTPUT_DIRECTORY "${KARTEND_TRANSLATION_BUILD_DIR}"
   )
+  # QM_OUTPUT_DIRECTORY above is NOT honoured by every Qt we build against:
+  # Qt 6.4 (what ubuntu-24.04 ships, and so what CI compiles with) ignores it
+  # and writes kartend_en.qm to the BUILD ROOT, while 6.11 puts it under
+  # translations/ as asked. Everything that consumes the catalogue —
+  # APP_BUILD_TRANSLATIONS_DIR for a run-from-build-tree app, and
+  # KARTEND_TEST_TRANSLATIONS_DIR for the plural-forms test — resolves the
+  # canonical directory, so on the older Qt the file was built and then never
+  # found. Restage whatever lrelease produced into the one place, so the
+  # answer stops depending on the Qt version underneath.
+  set(KARTEND_TRANSLATION_QM_STAGED "")
+  foreach(_kartend_qm IN LISTS KARTEND_TRANSLATION_QM_FILES)
+    get_filename_component(_kartend_qm_name "${_kartend_qm}" NAME)
+    set(_kartend_qm_staged "${KARTEND_TRANSLATION_BUILD_DIR}/${_kartend_qm_name}")
+    if(NOT "${_kartend_qm}" STREQUAL "${_kartend_qm_staged}")
+      add_custom_command(
+        OUTPUT "${_kartend_qm_staged}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${KARTEND_TRANSLATION_BUILD_DIR}"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_kartend_qm}" "${_kartend_qm_staged}"
+        DEPENDS "${_kartend_qm}"
+        COMMENT "Staging ${_kartend_qm_name} into ${KARTEND_TRANSLATION_BUILD_DIR}"
+        VERBATIM
+      )
+    endif()
+    list(APPEND KARTEND_TRANSLATION_QM_STAGED "${_kartend_qm_staged}")
+  endforeach()
+  # In ALL so an ordinary `cmake --build .` produces the catalogue, and named
+  # so targets that need it (the plural-forms test) can depend on it rather
+  # than hoping for build order.
+  add_custom_target(kartend_translations ALL DEPENDS ${KARTEND_TRANSLATION_QM_STAGED})
 else()
   set(KARTEND_TRANSLATION_QM_FILES "")
+  set(KARTEND_TRANSLATION_QM_STAGED "")
+  add_custom_target(kartend_translations)
 endif()
 target_compile_definitions(kartend PRIVATE
   APP_TRANSLATIONS_SUBDIR="${KARTEND_TRANSLATION_INSTALL_SUBDIR}"
