@@ -270,16 +270,16 @@ void SettingsDialog::setupTreeWidgetConnections() {
 void SettingsDialog::setupUIConstraints() {
   if (ui->appearanceLayoutPanel->horizontalSpacingSpinBox()) {
     ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->setMinimum(
-        spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
+        UIConstants::Viewport::SPACING_MIN);
     ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->setMaximum(
-        spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
+        UIConstants::Viewport::SPACING_MAX);
     ui->appearanceLayoutPanel->horizontalSpacingSpinBox()->setSingleStep(1);
   }
   if (ui->appearanceLayoutPanel->verticalSpacingSpinBox()) {
     ui->appearanceLayoutPanel->verticalSpacingSpinBox()->setMinimum(
-        spacingInternalToUi(UIConstants::Viewport::SPACING_MIN));
+        UIConstants::Viewport::SPACING_MIN);
     ui->appearanceLayoutPanel->verticalSpacingSpinBox()->setMaximum(
-        spacingInternalToUi(UIConstants::Viewport::SPACING_MAX));
+        UIConstants::Viewport::SPACING_MAX);
     ui->appearanceLayoutPanel->verticalSpacingSpinBox()->setSingleStep(1);
   }
   if (ui->appearanceLayoutPanel->gridWidthSpinBox()) {

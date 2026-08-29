@@ -576,22 +576,20 @@
         <translation>Horizontal Spacing:</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Horizontal spacing adjustment (0 = tightest, 150 = loosest)</source>
-        <translation>Horizontal spacing adjustment (0 = tightest, 150 = loosest)</translation>
+        <translation type="vanished">Horizontal spacing adjustment (0 = tightest, 150 = loosest)</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+2"/>
         <source>Vertical Spacing:</source>
         <translation>Vertical Spacing:</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>Vertical spacing adjustment (0 = tightest, 150 = loosest)</source>
-        <translation>Vertical spacing adjustment (0 = tightest, 150 = loosest)</translation>
+        <translation type="vanished">Vertical spacing adjustment (0 = tightest, 150 = loosest)</translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+4"/>
         <source>Horizontal Scrollbar:</source>
         <translation>Horizontal Scrollbar:</translation>
     </message>
@@ -675,7 +673,17 @@
         <translation>Height of collection items in pixels</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+2"/>
+        <source>Horizontal gap between tiles, in pixels. Negative values pack tiles closer together than their own size, and covers then shrink so they stay clear of each other.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Vertical gap between tiles, in pixels. Negative values pack tiles closer together than their own size, and covers then shrink so they stay clear of each other.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
         <source>Corner Radius:</source>
         <translation>Corner Radius:</translation>
     </message>
@@ -9682,7 +9690,7 @@ Errors: %4</translation>
 %1</translation>
     </message>
     <message>
-        <location line="+250"/>
+        <location line="+251"/>
         <source>Resume scrape?</source>
         <translation>Resume scrape?</translation>
     </message>
@@ -10633,7 +10641,7 @@ Would you like to rescan now?</source>
 Would you like to rescan now?</translation>
     </message>
     <message>
-        <location line="+265"/>
+        <location line="+258"/>
         <source>Unsaved Changes</source>
         <translation>Unsaved Changes</translation>
     </message>
@@ -12830,7 +12838,7 @@ Continue?</translation>
         </translation>
     </message>
     <message numerus="yes">
-        <location line="+14"/>
+        <location line="+26"/>
         <source>(%1 Item(s))</source>
         <translation>
             <numerusform>(%1 Item)</numerusform>

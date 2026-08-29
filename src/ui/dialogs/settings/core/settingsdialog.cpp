@@ -749,14 +749,6 @@ void SettingsDialog::applyScopeFieldGating() {
   }
 }
 
-auto SettingsDialog::spacingInternalToUi(int spacing) -> int {
-  return spacing - UIConstants::Viewport::SPACING_MIN;
-}
-
-auto SettingsDialog::spacingUiToInternal(int spacing) -> int {
-  return spacing + UIConstants::Viewport::SPACING_MIN;
-}
-
 // Add a new collection, optionally inheriting from current selection;
 // initialize defaults.
 auto SettingsDialog::promptUnsavedChanges(const QString &actionDescription)

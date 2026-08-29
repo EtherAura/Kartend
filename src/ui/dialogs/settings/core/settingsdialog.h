@@ -190,8 +190,6 @@ private:
   void setupFormFieldConnections();
   void setupTreeWidgetConnections();
   void setupUIConstraints();
-  [[nodiscard]] static auto spacingInternalToUi(int spacing) -> int;
-  [[nodiscard]] static auto spacingUiToInternal(int spacing) -> int;
   void setupGeneralSettingsConnections();
   /// Builds the left-rail category list, wires it to the page stack, styles
   /// the context header, and indexes settings for search. Implementation in

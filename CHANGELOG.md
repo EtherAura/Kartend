@@ -245,6 +245,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The grid spacing fields now show the real value.** They were drawn
+  on an unlabelled 0-150 scale where 100 meant zero spacing, so a stored
+  gap of -80 was displayed as "20" and read naturally as 20 pixels. The
+  fields are now the pixel value itself, negatives included, and the
+  tooltip says so. **Your stored spacing is unchanged and your grid will
+  look exactly as it did** — but the number in the box will differ from
+  what you saw before, because it is now the number actually in use.
+
 - **"Item Width: 325" now draws a 325px tile.** With titles hidden it
   drew 277 at best, and 237 once tight spacing was in play — the cell
   reserved room for a caption that was not being drawn, and counted the

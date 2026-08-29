@@ -64,9 +64,9 @@ void TestSettingsDialogChecks::baselineIsClean() {
 }
 
 void TestSettingsDialogChecks::spacingSpinBox_marksDirtyAndRevertsClean() {
-  // Spacing runs through the spacingUiToInternal mapping in the panel's
-  // save() — a representative for the value-mapped fields (UI value differs
-  // from the persisted value).
+  // Spacing is stored exactly as shown since Kartend-hxly2 (it used to be
+  // offset by SPACING_MIN). Kept as the representative dirty-tracking case for
+  // the spin boxes: what it pins is value-compare, not the mapping.
   SettingsDialog dialog(nullptr, twoCollections(), 0);
   auto *spin = dialog.findChild<QSpinBox *>(QStringLiteral("horizontalSpacingSpinBox"));
   QVERIFY2(spin, "horizontalSpacingSpinBox must exist on the appearance layout panel");

@@ -21,8 +21,10 @@ struct SettingsModel;
 /// Cross-cutting widgets exposed via accessors: the gridWidth* spinbox is read
 /// by the host dialog's dirty-check; horizontal/vertical spacing values are
 /// shown in user units
-/// but stored offset by SPACING_MIN, so spacingUiToInternal /
-/// spacingInternalToUi conversions stay paired with the host's helpers.
+/// in the same units they are stored in: the spacing spin boxes are PIXELS
+/// between tiles, negative included (Kartend-hxly2). They used to be shown on
+/// an unlabelled 0-150 scale offset by SPACING_MIN, so a stored -80 read as
+/// "20" and users reasonably took that for 20px.
 class AppearanceLayoutPanel : public QWidget, public ISettingsPanel {
   Q_OBJECT
   Q_DISABLE_COPY_MOVE(AppearanceLayoutPanel)
@@ -48,9 +50,6 @@ signals:
   void changed();
 
 private:
-  static int spacingInternalToUi(int spacing);
-  static int spacingUiToInternal(int spacing);
-
   Ui::AppearanceLayoutPanel *ui;
   SettingsModel *m_model = nullptr;
 };

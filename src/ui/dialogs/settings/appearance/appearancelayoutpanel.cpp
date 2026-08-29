@@ -58,10 +58,8 @@ void AppearanceLayoutPanel::load() {
                                 config.gridLayout.horizontalGridHeight);
   SettingsFormBinding::loadInto(ui->horizontalGridHeightSidebarHiddenSpinBox,
                                 config.gridLayout.horizontalGridHeightSidebarHidden);
-  SettingsFormBinding::loadInto(ui->horizontalSpacingSpinBox,
-                                spacingInternalToUi(config.gridLayout.horizontalSpacing));
-  SettingsFormBinding::loadInto(ui->verticalSpacingSpinBox,
-                                spacingInternalToUi(config.gridLayout.verticalSpacing));
+  SettingsFormBinding::loadInto(ui->horizontalSpacingSpinBox, config.gridLayout.horizontalSpacing);
+  SettingsFormBinding::loadInto(ui->verticalSpacingSpinBox, config.gridLayout.verticalSpacing);
   SettingsFormBinding::loadInto(ui->itemWidthSpinBox, config.gridLayout.itemWidth);
   SettingsFormBinding::loadInto(ui->itemHeightSpinBox, config.gridLayout.itemHeight);
   SettingsFormBinding::loadInto(ui->cornerRadiusSpinBox, config.gridLayout.cornerRadius);
@@ -78,8 +76,8 @@ void AppearanceLayoutPanel::clear() {
   ui->gridWidthSidebarHiddenSpinBox->setValue(0);
   ui->horizontalGridHeightSpinBox->setValue(0);
   ui->horizontalGridHeightSidebarHiddenSpinBox->setValue(0);
-  ui->horizontalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
-  ui->verticalSpacingSpinBox->setValue(spacingInternalToUi(UIConstants::Grid::SPACING));
+  ui->horizontalSpacingSpinBox->setValue(UIConstants::Grid::SPACING);
+  ui->verticalSpacingSpinBox->setValue(UIConstants::Grid::SPACING);
   ui->itemWidthSpinBox->setValue(200);
   ui->itemHeightSpinBox->setValue(300);
   ui->cornerRadiusSpinBox->setValue(0);
@@ -101,8 +99,8 @@ void AppearanceLayoutPanel::save() {
   config.gridLayout.horizontalGridHeight = ui->horizontalGridHeightSpinBox->value();
   config.gridLayout.horizontalGridHeightSidebarHidden =
       ui->horizontalGridHeightSidebarHiddenSpinBox->value();
-  config.gridLayout.horizontalSpacing = spacingUiToInternal(ui->horizontalSpacingSpinBox->value());
-  config.gridLayout.verticalSpacing = spacingUiToInternal(ui->verticalSpacingSpinBox->value());
+  config.gridLayout.horizontalSpacing = ui->horizontalSpacingSpinBox->value();
+  config.gridLayout.verticalSpacing = ui->verticalSpacingSpinBox->value();
   config.gridLayout.itemWidth = ui->itemWidthSpinBox->value();
   config.gridLayout.itemHeight = ui->itemHeightSpinBox->value();
   config.gridLayout.cornerRadius = ui->cornerRadiusSpinBox->value();
@@ -132,11 +130,4 @@ QSpinBox *AppearanceLayoutPanel::verticalSpacingSpinBox() const {
 }
 QComboBox *AppearanceLayoutPanel::viewTypeComboBox() const {
   return ui->viewTypeComboBox;
-}
-
-int AppearanceLayoutPanel::spacingInternalToUi(int spacing) {
-  return spacing - UIConstants::Viewport::SPACING_MIN;
-}
-int AppearanceLayoutPanel::spacingUiToInternal(int spacing) {
-  return spacing + UIConstants::Viewport::SPACING_MIN;
 }
