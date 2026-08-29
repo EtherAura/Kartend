@@ -25,7 +25,9 @@ struct CollectionConfig;
 /// from the runner means the user cancelled.
 struct SmartPlaylistEdit {
   QString name;
-  SmartFilter::Filter filter;
+  /// Kartend-8pn2w: a rule SET. Carries one rule for the playlists that had
+  /// one, so nothing about the single-rule flow changes.
+  SmartFilter::FilterSet filterSet;
 };
 
 /// (displayName, uuid) pairs the smart-playlist dialog uses to populate
@@ -39,7 +41,7 @@ using SmartPlaylistCollectionEntries = QList<QPair<QString, QString>>;
 /// UI layer supplies a closure that builds the dialog with the right
 /// parent and reads back the result.
 using SmartPlaylistDialogRunner = std::function<std::optional<SmartPlaylistEdit>(
-    const QString &initialName, const std::optional<SmartFilter::Filter> &initialFilter,
+    const QString &initialName, const std::optional<SmartFilter::FilterSet> &initialFilterSet,
     const SmartPlaylistCollectionEntries &collections)>;
 
 /**

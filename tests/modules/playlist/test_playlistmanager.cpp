@@ -60,6 +60,7 @@ private slots:
   void updateSmartFilter_changesPersistedJson();
   void loadSmartFilter_rejectsStaticPlaylist();
   void exportImportSmartPlaylist_roundTripsViaV2Json();
+  void multiRuleSmartPlaylist_survivesStoreAndJsonRoundTrip();
   void importV1Json_stillCreatesStaticPlaylist();
 
 private:
@@ -162,7 +163,7 @@ void TestPlaylistManager::initialize_addsSmartColumnsToV10Table() {
   SmartFilter::Filter filter;
   filter.kind = SmartFilter::Kind::TopPlayed;
   filter.limit = 5;
-  QVERIFY(m_pm->createSmartPlaylist("Top 5", filter).isOk());
+  QVERIFY(m_pm->createSmartPlaylist("Top 5", {SmartFilter::MatchMode::All, {filter}}).isOk());
 }
 
 void TestPlaylistManager::initialize_preservesSchemaVersionOnBootstrappedDb() {
@@ -707,7 +708,7 @@ void TestPlaylistManager::createSmartPlaylist_persistsFlagAndFilter() {
   filter.kind = SmartFilter::Kind::TopPlayed;
   filter.limit = 25;
 
-  auto created = m_pm->createSmartPlaylist("Top 25", filter);
+  auto created = m_pm->createSmartPlaylist("Top 25", {SmartFilter::MatchMode::All, {filter}});
   QVERIFY(created.isOk());
   const QString id = created.value();
 
@@ -719,28 +720,31 @@ void TestPlaylistManager::createSmartPlaylist_persistsFlagAndFilter() {
   // The serialized filter must round-trip back through loadSmartFilter.
   auto loaded = m_pm->loadSmartFilter(id);
   QVERIFY(loaded.isOk());
-  QCOMPARE(static_cast<int>(loaded.value().kind), static_cast<int>(SmartFilter::Kind::TopPlayed));
-  QCOMPARE(loaded.value().limit, 25);
+  QCOMPARE(loaded.value().rules.size(), 1);
+  QCOMPARE(static_cast<int>(loaded.value().rules[0].kind),
+           static_cast<int>(SmartFilter::Kind::TopPlayed));
+  QCOMPARE(loaded.value().rules[0].limit, 25);
 }
 
 void TestPlaylistManager::updateSmartFilter_changesPersistedJson() {
   SmartFilter::Filter initial;
   initial.kind = SmartFilter::Kind::RecentlyLaunched;
   initial.limit = 10;
-  auto created = m_pm->createSmartPlaylist("Recents", initial);
+  auto created = m_pm->createSmartPlaylist("Recents", {SmartFilter::MatchMode::All, {initial}});
   QVERIFY(created.isOk());
   const QString id = created.value();
 
   SmartFilter::Filter updated;
   updated.kind = SmartFilter::Kind::ByExtension;
   updated.extensions = {"mp4", "mkv"};
-  QVERIFY(m_pm->updateSmartFilter(id, updated));
+  QVERIFY(m_pm->updateSmartFilter(id, {SmartFilter::MatchMode::All, {updated}}));
 
   auto reloaded = m_pm->loadSmartFilter(id);
   QVERIFY(reloaded.isOk());
-  QCOMPARE(static_cast<int>(reloaded.value().kind),
+  QCOMPARE(reloaded.value().rules.size(), 1);
+  QCOMPARE(static_cast<int>(reloaded.value().rules[0].kind),
            static_cast<int>(SmartFilter::Kind::ByExtension));
-  QCOMPARE(reloaded.value().extensions, QStringList({"mp4", "mkv"}));
+  QCOMPARE(reloaded.value().rules[0].extensions, QStringList({"mp4", "mkv"}));
 }
 
 void TestPlaylistManager::loadSmartFilter_rejectsStaticPlaylist() {
@@ -760,7 +764,7 @@ void TestPlaylistManager::exportImportSmartPlaylist_roundTripsViaV2Json() {
   SmartFilter::Filter filter;
   filter.kind = SmartFilter::Kind::NeverPlayed;
   filter.limit = 8;
-  auto created = m_pm->createSmartPlaylist("Untouched", filter);
+  auto created = m_pm->createSmartPlaylist("Untouched", {SmartFilter::MatchMode::All, {filter}});
   QVERIFY(created.isOk());
 
   const QString jsonPath = tmp.filePath("untouched.json");
@@ -786,9 +790,59 @@ void TestPlaylistManager::exportImportSmartPlaylist_roundTripsViaV2Json() {
   const QString newId = reimported.value();
   auto reloaded = m_pm->loadSmartFilter(newId);
   QVERIFY(reloaded.isOk());
-  QCOMPARE(static_cast<int>(reloaded.value().kind),
+  QCOMPARE(reloaded.value().rules.size(), 1);
+  QCOMPARE(static_cast<int>(reloaded.value().rules[0].kind),
            static_cast<int>(SmartFilter::Kind::NeverPlayed));
-  QCOMPARE(reloaded.value().limit, 8);
+  QCOMPARE(reloaded.value().rules[0].limit, 8);
+}
+
+void TestPlaylistManager::multiRuleSmartPlaylist_survivesStoreAndJsonRoundTrip() {
+  // Kartend-8pn2w. A composed playlist used to lose every rule but the
+  // first, and to do it SILENTLY: the wire format mirrors rule[0] into the
+  // legacy top-level fields precisely so an older build can still read the
+  // playlist, which meant the single-Filter parse on the store and import
+  // paths succeeded and quietly dropped the rest.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+
+  SmartFilter::Filter neverPlayed;
+  neverPlayed.kind = SmartFilter::Kind::NeverPlayed;
+  neverPlayed.limit = 8;
+  SmartFilter::Filter pdfs;
+  pdfs.kind = SmartFilter::Kind::ByExtension;
+  pdfs.extensions = {"pdf"};
+  const SmartFilter::FilterSet composed{SmartFilter::MatchMode::All, {neverPlayed, pdfs}};
+
+  auto created = m_pm->createSmartPlaylist("Unread PDFs", composed);
+  QVERIFY(created.isOk());
+
+  // Straight out of the database first: both rules and the match mode.
+  auto loaded = m_pm->loadSmartFilter(created.value());
+  QVERIFY(loaded.isOk());
+  QCOMPARE(loaded.value().rules.size(), 2);
+  QCOMPARE(static_cast<int>(loaded.value().match), static_cast<int>(SmartFilter::MatchMode::All));
+  QCOMPARE(static_cast<int>(loaded.value().rules[1].kind),
+           static_cast<int>(SmartFilter::Kind::ByExtension));
+  QCOMPARE(loaded.value().rules[1].extensions, QStringList{"pdf"});
+
+  // …then through a v2 JSON export/import, which is the path that was
+  // flattening. Any is a deliberate non-default so a match mode reset to
+  // the All default would show up as a failure rather than a coincidence.
+  const SmartFilter::FilterSet anyOf{SmartFilter::MatchMode::Any, {neverPlayed, pdfs}};
+  QVERIFY(m_pm->updateSmartFilter(created.value(), anyOf));
+  const QString jsonPath = tmp.filePath("unread.json");
+  QVERIFY(m_pm->exportToJson(created.value(), jsonPath).isOk());
+
+  auto reimported = m_pm->importFromJson(jsonPath, "Unread PDFs (Copy)");
+  QVERIFY(reimported.isOk());
+  auto reloaded = m_pm->loadSmartFilter(reimported.value());
+  QVERIFY(reloaded.isOk());
+  QCOMPARE(reloaded.value().rules.size(), 2);
+  QCOMPARE(static_cast<int>(reloaded.value().match), static_cast<int>(SmartFilter::MatchMode::Any));
+  QCOMPARE(static_cast<int>(reloaded.value().rules[0].kind),
+           static_cast<int>(SmartFilter::Kind::NeverPlayed));
+  QCOMPARE(reloaded.value().rules[0].limit, 8);
+  QCOMPARE(reloaded.value().rules[1].extensions, QStringList{"pdf"});
 }
 
 void TestPlaylistManager::importV1Json_stillCreatesStaticPlaylist() {

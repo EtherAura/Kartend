@@ -47,13 +47,33 @@ Some examples of what you can build:
 2. Open **Add to Playlist ▶ → New smart playlist…**.
 3. Pick a **Name** — must be unique across all playlists. The Save
    button stays disabled until the name is non-empty.
-4. Pick a **Kind** — the dropdown swaps in a different parameter pane
-   below it.
-5. Set the per-kind parameters (see [filter kinds](#filter-kinds)).
-6. **OK** to create.
+4. Pick a **Criterion** — the dropdown swaps in a different parameter
+   pane below it.
+5. Set the per-criterion parameters (see [filter kinds](#filter-kinds)).
+6. Optionally **Add rule** for more criteria — see
+   [multiple rules](#multiple-rules) below.
+7. **OK** to create.
 
 The new playlist appears at the root level of the collection grid
 immediately and opens populated with its current matches.
+
+### Multiple rules
+
+**Add rule** appends another criterion. With two or more rules a
+**Match** selector appears above them:
+
+| Match | Meaning |
+|-------|---------|
+| **all of the rules** | An item must satisfy *every* rule — an intersection. "Never launched" **and** "By extension: pdf" gives unread PDFs. |
+| **any of the rules** | An item must satisfy *at least one* — a union. "Pinned" **or** "Continue later" gives everything you've flagged either way. |
+
+**Remove** drops a rule; the last one can't be removed, since a playlist
+with no rules would have nothing to match on. The selector is hidden
+while there is only one rule — there is nothing to combine yet.
+
+**OK** stays disabled until every rule is complete, not just the first.
+A "Match all" set containing one blank rule would match nothing at all,
+which is a confusing way to end up with an empty playlist.
 
 ## Filter kinds
 
@@ -224,10 +244,11 @@ re-evaluation in the meantime.
 
 ## Limitations
 
-- **One rule per playlist in the editor** — the dialog builds a single rule. The stored format and the evaluator already support AND / OR sets of rules, so a `smart_filter` written by hand or by another tool is honoured; there is just no UI for building one yet. If
-  you want "Never played PDFs", combine extension filtering with a
-  separate workflow (e.g., a custom field, or the structured search
-  tokens described in [Search](Search-Sort-Filter.md#structured-search-tokens)).
+- **Rules combine one way per playlist** — a playlist is *all* of its
+  rules or *any* of them, not a mix. There is no nesting, so
+  "(A or B) and C" can't be expressed; build it as two playlists, or
+  reach for the structured search tokens described in
+  [Search](Search-Sort-Filter.md#structured-search-tokens).
 - **Snapshot export is lossy** — exporting a smart playlist to JSON or
   M3U writes the matches at export time, not the rule. Importing
   produces a regular (non-smart) playlist. Use the
@@ -269,6 +290,31 @@ The JSON spec stored in `smart_filter` looks like:
 
 Per-kind fields irrelevant to the chosen `kind` are still emitted
 with default values so the schema stays predictable for tooling.
+
+A playlist with **more than one rule** adds `match` and `rules`
+alongside those fields:
+
+```json
+{
+  "kind": "never_played",
+  "limit": 8,
+  "extensions": [],
+  "days": 30,
+  "collection_uuid": "",
+  "title_search": "",
+  "match": "all",
+  "rules": [
+    { "kind": "never_played", "limit": 8, "…": "…" },
+    { "kind": "by_extension", "extensions": ["pdf"], "…": "…" }
+  ]
+}
+```
+
+`match` is `"all"` or `"any"`. The top-level fields are not redundant
+padding: they mirror the **first** rule, which is what lets a build
+that predates multi-rule playlists open one and see its first rule
+rather than fail outright. A single-rule playlist emits no `match` or
+`rules` at all, so nothing already on disk changes shape.
 
 Kind tags are stable across versions, so a smart playlist created in a
 newer build can be re-opened in an older build if the kind tag is

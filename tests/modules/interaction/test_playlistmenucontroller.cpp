@@ -46,11 +46,11 @@ public:
   }
 
   ErrorUtils::Result<QString>
-  createSmartPlaylist(const QString &name, const SmartFilter::Filter &filter,
+  createSmartPlaylist(const QString &name, const SmartFilter::FilterSet &filterSet,
                       const QString &parentCollectionUuid = QString()) override {
     Q_UNUSED(parentCollectionUuid)
     createdSmartNames.append(name);
-    lastSmartFilter = filter;
+    lastSmartFilterSet = filterSet;
     if (failCreateSmart) {
       return ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::DatabaseQueryFailed,
                                              QStringLiteral("forced smart-create failure"),
@@ -59,13 +59,13 @@ public:
     return QStringLiteral("pl-smart");
   }
 
-  bool updateSmartFilter(const QString &id, const SmartFilter::Filter &filter) override {
+  bool updateSmartFilter(const QString &id, const SmartFilter::FilterSet &filterSet) override {
     updatedFilterIds.append(id);
-    lastSmartFilter = filter;
+    lastSmartFilterSet = filterSet;
     return updateFilterResult;
   }
 
-  [[nodiscard]] ErrorUtils::Result<SmartFilter::Filter>
+  [[nodiscard]] ErrorUtils::Result<SmartFilter::FilterSet>
   loadSmartFilter(const QString &id) const override {
     Q_UNUSED(id)
     if (failLoadFilter) {
@@ -73,7 +73,7 @@ public:
                                              QStringLiteral("forced filter-load failure"),
                                              QStringLiteral("FakePlaylistManager"));
     }
-    return storedFilter;
+    return storedFilterSet;
   }
 
   bool renamePlaylist(const QString &id, const QString &newName) override {
@@ -174,13 +174,13 @@ public:
   bool failExport = false;
   int m3uSkipped = 0;
   QList<PlaylistRow> rows;
-  SmartFilter::Filter storedFilter;
+  SmartFilter::FilterSet storedFilterSet{SmartFilter::MatchMode::All, {SmartFilter::Filter{}}};
 
   // Captured calls.
   QStringList createdNames;
   QStringList createdSmartNames;
   QStringList updatedFilterIds;
-  SmartFilter::Filter lastSmartFilter;
+  SmartFilter::FilterSet lastSmartFilterSet;
   QList<RenameCall> renames;
   QStringList deletedIds;
   QList<ItemCall> addedItems;
@@ -503,7 +503,7 @@ void TestPlaylistMenuController::importM3uReportsSkippedEntries() {
 void TestPlaylistMenuController::smartCreateCancelledCreatesNothing() {
   Harness h;
   h.m_setup.runSmartPlaylistDialog =
-      [](const QString &, const std::optional<SmartFilter::Filter> &,
+      [](const QString &, const std::optional<SmartFilter::FilterSet> &,
          const SmartPlaylistCollectionEntries &) -> std::optional<SmartPlaylistEdit> {
     return std::nullopt;
   };
@@ -515,19 +515,22 @@ void TestPlaylistMenuController::smartCreateCancelledCreatesNothing() {
 void TestPlaylistMenuController::smartCreateForwardsNameAndFilter() {
   Harness h;
   h.m_setup.runSmartPlaylistDialog =
-      [](const QString &, const std::optional<SmartFilter::Filter> &,
+      [](const QString &, const std::optional<SmartFilter::FilterSet> &,
          const SmartPlaylistCollectionEntries &) -> std::optional<SmartPlaylistEdit> {
     SmartPlaylistEdit edit;
     edit.name = QStringLiteral("Recent Reels");
-    edit.filter.kind = SmartFilter::Kind::ByDateAdded;
-    edit.filter.days = 14;
+    SmartFilter::Filter rule;
+    rule.kind = SmartFilter::Kind::ByDateAdded;
+    rule.days = 14;
+    edit.filterSet.rules = {rule};
     return edit;
   };
   h.rewire();
   h.controller.createSmartPlaylistDialog();
   QCOMPARE(h.playlists.createdSmartNames, QStringList{QStringLiteral("Recent Reels")});
-  QCOMPARE(h.playlists.lastSmartFilter.kind, SmartFilter::Kind::ByDateAdded);
-  QCOMPARE(h.playlists.lastSmartFilter.days, 14);
+  QCOMPARE(h.playlists.lastSmartFilterSet.rules.size(), 1);
+  QCOMPARE(h.playlists.lastSmartFilterSet.rules[0].kind, SmartFilter::Kind::ByDateAdded);
+  QCOMPARE(h.playlists.lastSmartFilterSet.rules[0].days, 14);
   QVERIFY(h.warnings.isEmpty());
 }
 
@@ -535,7 +538,7 @@ void TestPlaylistMenuController::smartCreateFailureWarns() {
   Harness h;
   h.playlists.failCreateSmart = true;
   h.m_setup.runSmartPlaylistDialog =
-      [](const QString &, const std::optional<SmartFilter::Filter> &,
+      [](const QString &, const std::optional<SmartFilter::FilterSet> &,
          const SmartPlaylistCollectionEntries &) -> std::optional<SmartPlaylistEdit> {
     SmartPlaylistEdit edit;
     edit.name = QStringLiteral("Doomed");
@@ -551,7 +554,7 @@ void TestPlaylistMenuController::smartEditLoadFailureWarnsAndSkipsDialog() {
   h.playlists.failLoadFilter = true;
   bool dialogRan = false;
   h.m_setup.runSmartPlaylistDialog =
-      [&dialogRan](const QString &, const std::optional<SmartFilter::Filter> &,
+      [&dialogRan](const QString &, const std::optional<SmartFilter::FilterSet> &,
                    const SmartPlaylistCollectionEntries &) -> std::optional<SmartPlaylistEdit> {
     dialogRan = true;
     return std::nullopt;
@@ -566,17 +569,20 @@ void TestPlaylistMenuController::smartEditLoadFailureWarnsAndSkipsDialog() {
 void TestPlaylistMenuController::smartEditUpdatesFilterAndRenamesOnNameChange() {
   Harness h;
   h.m_setup.runSmartPlaylistDialog =
-      [](const QString &, const std::optional<SmartFilter::Filter> &,
+      [](const QString &, const std::optional<SmartFilter::FilterSet> &,
          const SmartPlaylistCollectionEntries &) -> std::optional<SmartPlaylistEdit> {
     SmartPlaylistEdit edit;
     edit.name = QStringLiteral("Renamed");
-    edit.filter.kind = SmartFilter::Kind::TopPlayed;
+    SmartFilter::Filter rule;
+    rule.kind = SmartFilter::Kind::TopPlayed;
+    edit.filterSet.rules = {rule};
     return edit;
   };
   h.rewire();
   h.controller.editSmartPlaylistDialog(QStringLiteral("pl-smart"), QStringLiteral("Recent"));
   QCOMPARE(h.playlists.updatedFilterIds, QStringList{QStringLiteral("pl-smart")});
-  QCOMPARE(h.playlists.lastSmartFilter.kind, SmartFilter::Kind::TopPlayed);
+  QCOMPARE(h.playlists.lastSmartFilterSet.rules.size(), 1);
+  QCOMPARE(h.playlists.lastSmartFilterSet.rules[0].kind, SmartFilter::Kind::TopPlayed);
   QCOMPARE(h.playlists.renames.size(), 1);
   QCOMPARE(h.playlists.renames[0].name, QStringLiteral("Renamed"));
 }
@@ -584,11 +590,13 @@ void TestPlaylistMenuController::smartEditUpdatesFilterAndRenamesOnNameChange() 
 void TestPlaylistMenuController::smartEditKeepsNameWhenUnchanged() {
   Harness h;
   h.m_setup.runSmartPlaylistDialog =
-      [](const QString &currentName, const std::optional<SmartFilter::Filter> &,
+      [](const QString &currentName, const std::optional<SmartFilter::FilterSet> &,
          const SmartPlaylistCollectionEntries &) -> std::optional<SmartPlaylistEdit> {
     SmartPlaylistEdit edit;
     edit.name = currentName; // unchanged
-    edit.filter.kind = SmartFilter::Kind::NeverPlayed;
+    SmartFilter::Filter rule;
+    rule.kind = SmartFilter::Kind::NeverPlayed;
+    edit.filterSet.rules = {rule};
     return edit;
   };
   h.rewire();

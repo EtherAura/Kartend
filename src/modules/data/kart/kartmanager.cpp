@@ -455,7 +455,12 @@ ErrorUtils::Result<QString> KartManager::finalizeImport(const KartReader::Extrac
       for (const KartManifest::PlaylistEntry &entry : result.manifest.playlists) {
         QString newPlaylistId;
         if (entry.isSmart) {
-          auto filterRes = SmartFilter::fromJsonString(entry.smartFilterJson);
+          // Kartend-8pn2w: parsed as a SET. Export already carried the
+          // stored JSON verbatim, so a multi-rule playlist left the machine
+          // intact; the single-Filter parse on this side then imported only
+          // its first rule, because the format mirrors rule[0] into the
+          // legacy top-level fields and so parses without complaint.
+          auto filterRes = SmartFilter::setFromJsonString(entry.smartFilterJson);
           if (filterRes.isError()) {
             ErrorUtils::logError(filterRes.error());
             continue;

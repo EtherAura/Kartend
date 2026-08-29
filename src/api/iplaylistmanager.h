@@ -66,11 +66,16 @@ public:
   virtual ErrorUtils::Result<QString>
   createPlaylist(const QString &name, const QString &parentCollectionUuid = QString(),
                  const QString &reservedKind = QString()) = 0;
+  /// Kartend-8pn2w: these take and return a FilterSet rather than a single
+  /// Filter. The wire format is a superset — a one-rule set serialises to
+  /// byte-identical JSON — so nothing already on disk changes shape, but a
+  /// multi-rule playlist now survives a round trip instead of being flattened
+  /// to its first rule by a single-Filter parse.
   virtual ErrorUtils::Result<QString>
-  createSmartPlaylist(const QString &name, const SmartFilter::Filter &filter,
+  createSmartPlaylist(const QString &name, const SmartFilter::FilterSet &filterSet,
                       const QString &parentCollectionUuid = QString()) = 0;
-  virtual bool updateSmartFilter(const QString &id, const SmartFilter::Filter &filter) = 0;
-  [[nodiscard]] virtual ErrorUtils::Result<SmartFilter::Filter>
+  virtual bool updateSmartFilter(const QString &id, const SmartFilter::FilterSet &filterSet) = 0;
+  [[nodiscard]] virtual ErrorUtils::Result<SmartFilter::FilterSet>
   loadSmartFilter(const QString &id) const = 0;
   virtual bool renamePlaylist(const QString &id, const QString &newName) = 0;
   virtual bool deletePlaylist(const QString &id) = 0;

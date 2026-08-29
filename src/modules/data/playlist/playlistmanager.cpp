@@ -215,7 +215,7 @@ ErrorUtils::Result<QString> PlaylistManager::createPlaylist(const QString &name,
 }
 
 ErrorUtils::Result<QString>
-PlaylistManager::createSmartPlaylist(const QString &name, const SmartFilter::Filter &filter,
+PlaylistManager::createSmartPlaylist(const QString &name, const SmartFilter::FilterSet &filterSet,
                                      const QString &parentCollectionUuid) {
   assertOwnerThread();
   if (!m_db.isOpen()) {
@@ -233,7 +233,7 @@ PlaylistManager::createSmartPlaylist(const QString &name, const SmartFilter::Fil
 
   const QString id = newPlaylistId();
   const QString now = PlaylistIo::isoNow();
-  const QString filterJson = SmartFilter::toJsonString(filter);
+  const QString filterJson = SmartFilter::setToJsonString(filterSet);
 
   QSqlQuery q(m_db);
   q.prepare(QStringLiteral(
@@ -257,12 +257,13 @@ PlaylistManager::createSmartPlaylist(const QString &name, const SmartFilter::Fil
   return id;
 }
 
-bool PlaylistManager::updateSmartFilter(const QString &id, const SmartFilter::Filter &filter) {
+bool PlaylistManager::updateSmartFilter(const QString &id,
+                                        const SmartFilter::FilterSet &filterSet) {
   assertOwnerThread();
   if (!m_db.isOpen() || id.isEmpty()) {
     return false;
   }
-  const QString filterJson = SmartFilter::toJsonString(filter);
+  const QString filterJson = SmartFilter::setToJsonString(filterSet);
   QSqlQuery q(m_db);
   q.prepare(QStringLiteral(
       "UPDATE playlists SET smart_filter = ?, updated_at = ? WHERE id = ? AND is_smart = 1"));
@@ -281,7 +282,8 @@ bool PlaylistManager::updateSmartFilter(const QString &id, const SmartFilter::Fi
   return true;
 }
 
-ErrorUtils::Result<SmartFilter::Filter> PlaylistManager::loadSmartFilter(const QString &id) const {
+ErrorUtils::Result<SmartFilter::FilterSet>
+PlaylistManager::loadSmartFilter(const QString &id) const {
   assertOwnerThread();
   if (!m_db.isOpen() || id.isEmpty()) {
     return ErrorContext::error(ErrorCode::InvalidArgument, "Database closed or empty id",
@@ -298,7 +300,7 @@ ErrorUtils::Result<SmartFilter::Filter> PlaylistManager::loadSmartFilter(const Q
     return ErrorContext::error(ErrorCode::InvalidArgument, "Playlist is not a smart playlist",
                                "PlaylistManager::loadSmartFilter");
   }
-  return SmartFilter::fromJsonString(q.value(1).toString());
+  return SmartFilter::setFromJsonString(q.value(1).toString());
 }
 
 bool PlaylistManager::renamePlaylist(const QString &id, const QString &newName) {
@@ -730,7 +732,11 @@ ErrorUtils::Result<QString> PlaylistManager::importFromJson(const QString &inPat
   // are imported — they'll be evaluated on first open). v1 documents
   // never carry these fields so they fall through to the static path.
   if (parsed.value().isSmart) {
-    auto filterResult = SmartFilter::fromJsonString(parsed.value().smartFilterJson);
+    // Kartend-8pn2w: parsed as a SET. The single-Filter parse used here
+    // before succeeded on a multi-rule document — the format mirrors rule[0]
+    // into the legacy top-level fields — and then silently imported only
+    // that first rule.
+    auto filterResult = SmartFilter::setFromJsonString(parsed.value().smartFilterJson);
     if (filterResult.isError()) {
       return filterResult.error();
     }

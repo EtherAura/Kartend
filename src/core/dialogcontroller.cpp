@@ -19,26 +19,25 @@ DialogController::DialogController(QWidget *parentWidget)
 
 DialogController::~DialogController() = default;
 
-std::optional<SmartPlaylistEdit>
-DialogController::runSmartPlaylistDialog(const QString &initialName,
-                                         const std::optional<SmartFilter::Filter> &initialFilter,
-                                         const SmartPlaylistCollectionEntries &collectionEntries) {
+std::optional<SmartPlaylistEdit> DialogController::runSmartPlaylistDialog(
+    const QString &initialName, const std::optional<SmartFilter::FilterSet> &initialFilterSet,
+    const SmartPlaylistCollectionEntries &collectionEntries) {
   CreateSmartPlaylistDialog dialog(m_parent);
-  // Populate the ByCollection picker before setInitialFilter so the
-  // initial-selection lookup can find the saved uuid in the combo.
+  // Populate the ByCollection pickers before loading the saved rules so
+  // each rule's initial-selection lookup can find its uuid in the combo.
   dialog.setCollectionList(collectionEntries);
   if (!initialName.isEmpty()) {
     dialog.setInitialName(initialName);
   }
-  if (initialFilter.has_value()) {
-    dialog.setInitialFilter(*initialFilter);
+  if (initialFilterSet.has_value()) {
+    dialog.setInitialFilterSet(*initialFilterSet);
   }
   if (dialog.exec() != QDialog::Accepted) {
     return std::nullopt;
   }
   SmartPlaylistEdit out;
   out.name = dialog.name();
-  out.filter = dialog.filter();
+  out.filterSet = dialog.filterSet();
   return out;
 }
 

@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Smart playlists can be built from more than one rule.** The editor
+  gained **Add rule**, and with two or more rules a **Match** selector
+  above them choosing *all of the rules* (an intersection) or *any of
+  them* (a union) — so "never launched **and** a PDF" is one playlist
+  instead of a workaround. **Remove** drops a rule; the last one stays,
+  since a playlist with nothing to match on has no meaning. OK stays
+  disabled until *every* rule is filled in, not just the first — a
+  match-all set with one blank rule would quietly match nothing.
+  Existing playlists are untouched and store exactly the bytes they did
+  before.
+
+  This also fixes a way multi-rule playlists could be silently mangled.
+  The storage format has understood rule sets for a while, and a
+  `smart_filter` written by hand or by another tool was honoured when the
+  playlist was displayed — but importing one, from a `.kart` bundle or a
+  playlist JSON, kept only its first rule and reported success. The
+  format deliberately repeats the first rule at the top level so older
+  builds can still read a newer playlist, which is exactly why the loss
+  was invisible.
+
 - **The collection tree's two bindings are settable without editing a
   file.** Both already worked — a key to show or hide the navigation
   sidebar, and a gamepad button for the same — but neither had a row in

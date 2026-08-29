@@ -57,20 +57,20 @@ public:
   /// API to make the static-vs-smart choice obvious. Reserved smart
   /// playlists are not currently supported.
   ErrorUtils::Result<QString>
-  createSmartPlaylist(const QString &name, const SmartFilter::Filter &filter,
+  createSmartPlaylist(const QString &name, const SmartFilter::FilterSet &filterSet,
                       const QString &parentCollectionUuid = QString()) override;
 
   /// Replace the filter on an existing smart playlist, stamp updated_at,
   /// and emit playlistsChanged so the synthesizer re-renders the tile and
   /// the QueryManager scope cache invalidates on next open.
-  bool updateSmartFilter(const QString &id, const SmartFilter::Filter &filter) override;
+  bool updateSmartFilter(const QString &id, const SmartFilter::FilterSet &filterSet) override;
 
   /// Load and parse the persisted SmartFilter for a playlist. Returns an
   /// error if the playlist is unknown, not a smart playlist, or if the
   /// stored JSON is malformed. UI consumers should bail rather than
   /// fabricating a default filter — the user expects to see what they
   /// configured.
-  [[nodiscard]] ErrorUtils::Result<SmartFilter::Filter>
+  [[nodiscard]] ErrorUtils::Result<SmartFilter::FilterSet>
   loadSmartFilter(const QString &id) const override;
 
   /// Updates `name` and stamps `updated_at`. Returns false if the id is

@@ -162,7 +162,7 @@ void PlaylistMenuController::createSmartPlaylistDialog() {
   if (!edit.has_value() || edit->name.isEmpty()) {
     return;
   }
-  auto created = playlistMgr()->createSmartPlaylist(edit->name, edit->filter);
+  auto created = playlistMgr()->createSmartPlaylist(edit->name, edit->filterSet);
   if (created.isError()) {
     warnDialog(tr("Could not create smart playlist"), created.error().message);
   }
@@ -185,7 +185,7 @@ void PlaylistMenuController::editSmartPlaylistDialog(const QString &playlistId,
   if (!edit.has_value()) {
     return;
   }
-  if (!playlistMgr()->updateSmartFilter(playlistId, edit->filter)) {
+  if (!playlistMgr()->updateSmartFilter(playlistId, edit->filterSet)) {
     warnDialog(tr("Could not update smart filter"),
                tr("The filter update failed. See logs for details."));
     return;
