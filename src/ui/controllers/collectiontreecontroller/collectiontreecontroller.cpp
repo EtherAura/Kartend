@@ -2669,9 +2669,13 @@ void CollectionTreeController::applyPrimaryColor(const QString &hexColor) {
   // with accent-from-wallpaper the titlebar and the accent are different
   // oranges, so the earlier accent version still visibly mismatched. The
   // collection's colour still carries the header text.
+  // Kartend-svcrg: the selection colour is handed to the DELEGATE as a widget
+  // property below and no longer appears in the stylesheet — a styled fill
+  // always spans the full row, which is the thing the delegate exists to
+  // avoid. The string form this used to build for the sheet is gone with it;
+  // leaving it (and its second .arg()) behind made every restyle log
+  // "QString::arg: 1 argument(s) missing", on every collection switch.
   const QColor titlebar = KdeColorScheme::activeTitlebarColor();
-  const QString selectionColor =
-      titlebar.isValid() ? titlebar.name() : QStringLiteral("palette(highlight)");
   if (m_tree) {
     // Handed to the delegate, which stops the fill at the scrollbar lane.
     m_tree->setProperty("kartendSelectionColor",
@@ -2707,7 +2711,7 @@ void CollectionTreeController::applyPrimaryColor(const QString &hexColor) {
                                         // thicker edge. The 8px drag target stays.
                                         "QWidget#collectionTreeGrip {"
                                         " background-color: transparent; }")
-                             .arg(accent, selectionColor));
+                             .arg(accent));
 }
 
 void CollectionTreeController::refreshDesktopTint() {
