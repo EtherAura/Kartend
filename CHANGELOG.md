@@ -185,6 +185,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A collection with no artwork folder can now keep its logo.** Fetching
+  a collection's info when it had no artwork directory of its own looked
+  like it worked — the text arrived, nothing reported an error — but the
+  logo and background had nowhere to be written to, so the icon stayed
+  empty and the whole thing read as having done nothing. The art now goes
+  to the first artwork folder any of your collections has. Nothing can
+  collide there: collection artwork is filed under a shared subfolder
+  with the collection's own identity in the filename, and Kartend already
+  looks through every collection's artwork folder when resolving icons.
+  The borrowed folder's own collection is untouched — it lends the space,
+  it does not receive the art. If no collection has an artwork folder at
+  all, the text is still fetched and a line in the scrape log says the
+  art could not be kept.
+
 - **Counts in the interface now agree in number.** Twenty-six messages
   showed their plural marker instead of choosing a form — "1 DAT file(s)
   failed to load", "1 error(s) logged", "1 game(s) imported" — because

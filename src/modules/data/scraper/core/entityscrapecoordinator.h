@@ -56,6 +56,21 @@ private:
   void onEntityFetchComplete(const ErrorUtils::Result<Scraper::ScrapedItem> &result,
                              const std::shared_ptr<MetadataLookupProvider> &provider,
                              quint64 generation, bool wikiFallbackTried = false);
+  /// Kartend-9i8ls: give an entity job with no artwork directory of its own
+  /// somewhere to write, by substituting the first non-empty artwork root in
+  /// the collections list. Without it the fetch succeeds and books zero
+  /// errors while no art can land, which reads as "the scrape did nothing".
+  /// Entity files are name-scoped under `_shared/`, so borrowing another
+  /// collection's root cannot collide, and every root is probed by the
+  /// sidebar and the startup matching pass anyway. No-op when the job already
+  /// has a directory. Logs when it substitutes, and when no root exists at
+  /// all — that case still scrapes metadata, it just cannot keep the art.
+  ///
+  /// Takes no job argument and mutates the queue entry at the current cursor,
+  /// matching every other method here: ScraperService is only forward-declared
+  /// in this header (scraperservice.h includes it, so the dependency cannot be
+  /// reversed), which puts CollectionJob out of reach of a signature.
+  void substituteMissingArtworkDirForCurrentJob() const;
   /// Map scraped platform art (the _shared/ paths writeMediaFiles wrote this
   /// run PLUS the ones it kept because they already satisfied the rescrape
   /// policy, Kartend-jjyst.5) onto the collection's CollectionConfig art

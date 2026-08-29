@@ -159,6 +159,8 @@ private slots:
   void entityScrapeNotFoundCountedSeparately();
   void entityScrapeDownloadsArtToSharedAndConfig();
   void entityScrapeCollectionArtToSharedAndConfig();
+  void entityScrapeWithoutArtworkDirBorrowsAnotherCollectionsRoot();
+  void entityScrapeWithNoArtworkRootAnywhereStillSucceeds();
   void entityScrapeCollectionLogoDoesNotStealPlatformWiredIcon();
   void entityScrapeFillMissingWiresExistingArtIntoConfig();
   void entityJobLoadsFromPendingState();
@@ -782,6 +784,121 @@ void TestScraperServiceResume::entityScrapeCollectionArtToSharedAndConfig() {
       QDir(tmp.path()).filePath(QStringLiteral("_shared/background/collection_a1b2c3d4.png"));
   QVERIFY2(QFile::exists(expectedBg), qPrintable(expectedBg));
   QCOMPARE(collections[0].background.backgroundImage, expectedBg);
+}
+
+void TestScraperServiceResume::entityScrapeWithoutArtworkDirBorrowsAnotherCollectionsRoot() {
+  // Kartend-9i8ls: a collection created without an artwork folder scraped
+  // "successfully" — metadata written, errors 0 — while its logo had nowhere
+  // to go, so collectionIcon and headerLogoImage stayed empty and the run
+  // looked like it had done nothing. The job now borrows the first non-empty
+  // artwork root in the list; entity files are name-scoped under _shared/, so
+  // they cannot collide with the lending collection's own art, and every root
+  // is probed by the sidebar and the startup matching pass anyway.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString uuid = QStringLiteral("c0ffee01");
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Freshly Created");
+  Scraper::MediaAsset logo;
+  logo.type = QStringLiteral("logo");
+  logo.scope = Scraper::MediaScope::Collection;
+  logo.scopeKey = uuid;
+  logo.url = QUrl(QStringLiteral("https://example.test/logo.png"));
+  logo.entityRole = Scraper::EntityArtRole::Logo;
+  item.media.append(logo);
+  provider->entityResult = item;
+  provider->mediaBytes.insert(logo.url, QByteArray("\x89PNG\x0d\x0a"
+                                                   "logo-bytes"));
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  // Index 0 is the collection being scraped and has NO artwork directory.
+  // Index 1 is an unrelated collection that does — the root the job borrows.
+  QList<CollectionConfig> collections;
+  CollectionConfig fresh;
+  fresh.name = QStringLiteral("Freshly Created");
+  collections.append(fresh);
+  CollectionConfig established;
+  established.name = QStringLiteral("Established");
+  established.artworkDirectory = tmp.path();
+  collections.append(established);
+  ctx.collections = &collections; // ctx.ctx left null → in-memory mutate, no disk save
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("Freshly Created");
+  job.artworkDir = QString(); // the whole point of the case
+  job.entity.type = Scraper::ScrapeEntityType::Collection;
+  job.entity.identity = uuid;
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QVERIFY2(service.summary().mediaWritten >= 1,
+           "the art must actually land somewhere, not be silently dropped");
+  const QString expectedLogo =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/logo/collection_c0ffee01.png"));
+  QVERIFY2(QFile::exists(expectedLogo), qPrintable(expectedLogo));
+  // Wired onto the collection that was SCRAPED (index 0), not onto the one
+  // that lent its directory — borrowing a root must not hand over the art.
+  QCOMPARE(collections[0].collectionIcon, expectedLogo);
+  QCOMPARE(collections[0].background.headerLogoImage, expectedLogo);
+  QVERIFY(collections[1].collectionIcon.isEmpty());
+  QVERIFY(collections[1].background.headerLogoImage.isEmpty());
+}
+
+void TestScraperServiceResume::entityScrapeWithNoArtworkRootAnywhereStillSucceeds() {
+  // The degenerate end of Kartend-9i8ls: no collection in the list has an
+  // artwork directory, so there is nothing to borrow. The metadata half must
+  // still complete rather than erroring — the art simply cannot be kept, and
+  // the coordinator logs that rather than booking a failure.
+  const QString uuid = QStringLiteral("badc0de1");
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("Nowhere To Write");
+  Scraper::MediaAsset logo;
+  logo.type = QStringLiteral("logo");
+  logo.scope = Scraper::MediaScope::Collection;
+  logo.scopeKey = uuid;
+  logo.url = QUrl(QStringLiteral("https://example.test/logo.png"));
+  logo.entityRole = Scraper::EntityArtRole::Logo;
+  item.media.append(logo);
+  provider->entityResult = item;
+  provider->mediaBytes.insert(logo.url, QByteArray("\x89PNG\x0d\x0a"
+                                                   "logo-bytes"));
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  CollectionConfig fresh;
+  fresh.name = QStringLiteral("Nowhere To Write");
+  collections.append(fresh); // no artworkDirectory on any entry
+  ctx.collections = &collections;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("Nowhere To Write");
+  job.artworkDir = QString();
+  job.entity.type = Scraper::ScrapeEntityType::Collection;
+  job.entity.identity = uuid;
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QCOMPARE(service.summary().errors, 0);
+  // Nothing was wired, because nothing landed — but the run settled cleanly.
+  QVERIFY(collections[0].collectionIcon.isEmpty());
 }
 
 void TestScraperServiceResume::entityScrapeCollectionLogoDoesNotStealPlatformWiredIcon() {

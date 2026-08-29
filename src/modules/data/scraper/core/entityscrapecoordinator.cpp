@@ -60,7 +60,40 @@ makeCollectionDataProvider(const ScraperService::Context &ctx, int collectionInd
 }
 } // namespace
 
+void EntityScrapeCoordinator::substituteMissingArtworkDirForCurrentJob() const {
+  auto &job = m_svc->m_queue[m_svc->m_queueCursor];
+  // Kartend-9i8ls: a collection with no artwork directory of its own has
+  // nowhere to put a logo, so the fetch would succeed — metadata rows written,
+  // errors 0 — while collectionIcon and headerLogoImage stayed empty and the
+  // scrape looked like it had done nothing. Substitute the first non-empty
+  // artwork root so the art has a home. Any root serves: entity files are
+  // scoped by name (`platform_<systemeid>` / `collection_<uuid>`) under
+  // `_shared/`, so they cannot collide with another collection's, and both the
+  // navigation sidebar and the startup matching pass probe every collection's
+  // root rather than only the owning one.
+  //
+  // This was previously done only on the Wikidata not-found fallback, where
+  // manufacturer shells made it obvious. It belongs here instead — every
+  // entity job passes through this function, and the creation-time auto-fetch
+  // (Kartend-ud6q2) made "collection built without an artwork folder" the
+  // common case rather than the shell-shaped exception.
+  if (!job.artworkDir.isEmpty() || !m_svc->m_ctx.collections) return;
+  for (const CollectionConfig &c : *m_svc->m_ctx.collections) {
+    const QString root = PathUtils::validateAndExpandPath(c.artworkDirectory, c.name);
+    if (!root.isEmpty()) {
+      job.artworkDir = root;
+      qCInfo(lcEntityScrape) << "entity job for" << job.collectionName
+                             << "has no artwork directory — routing its art to" << root;
+      return;
+    }
+  }
+  qCInfo(lcEntityScrape) << "entity job for" << job.collectionName
+                         << "has no artwork directory and no collection has one — "
+                            "metadata will be written but art cannot land";
+}
+
 void EntityScrapeCoordinator::startEntityCollection() {
+  substituteMissingArtworkDirForCurrentJob();
   auto &job = m_svc->m_queue[m_svc->m_queueCursor];
   qCInfo(lcEntityScrape) << "startEntityCollection idx=" << job.collectionIndex
                          << "name=" << job.collectionName
@@ -163,20 +196,10 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
       // in the bucket instead of recursing.
       if (!wikiFallbackTried && job.entity.type == Scraper::ScrapeEntityType::Platform &&
           m_svc->m_ctx.collections) {
-        // Shells frequently carry no artwork directory of their own —
-        // substitute the first non-empty root so the logo has a home (the
-        // navigation sidebar and the startup matching pass search every
-        // collection's root, so any of them serves).
-        auto &mutableJob = m_svc->m_queue[m_svc->m_queueCursor];
-        if (mutableJob.artworkDir.isEmpty()) {
-          for (const CollectionConfig &c : *m_svc->m_ctx.collections) {
-            const QString root = PathUtils::validateAndExpandPath(c.artworkDirectory, c.name);
-            if (!root.isEmpty()) {
-              mutableJob.artworkDir = root;
-              break;
-            }
-          }
-        }
+        // The artwork-directory substitution shells depend on used to live
+        // here; it moved to substituteMissingArtworkDir, which runs for every
+        // entity job in startEntityCollection (Kartend-9i8ls). By the time a
+        // fallback is reached the job already has somewhere to write.
         auto fallback = makeCollectionDataProvider(m_svc->m_ctx, job.collectionIndex);
         Scraper::EntityScrapeTarget wikiTarget;
         wikiTarget.type = Scraper::ScrapeEntityType::Collection;
