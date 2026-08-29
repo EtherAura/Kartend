@@ -133,6 +133,18 @@ The Windows builds are unsigned, so SmartScreen warns on first launch —
 **More info → Run anyway**. Older distros, PGO, sanitizers and a `9999`
 Gentoo live build all mean building from source.
 
+Every built asset carries a build provenance attestation, so you can check
+a download actually came from this repository's release workflow rather
+than a mirror or a rebuild — see
+[Verifying a Release Download](SECURITY.md#verifying-a-release-download):
+
+```bash
+gh attestation verify kartend_<version>_amd64.deb --repo EtherAura/Kartend
+```
+
+Each release also ships a CycloneDX SBOM (`*.cdx.json`) listing what is
+bundled inside the Linux and Windows downloads.
+
 ## Build from source
 
 ```bash

@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Release downloads can now be checked against where they were built.**
+  Every asset the release pipeline builds — the source tarball, the `.deb`,
+  the Windows portable `.zip` and the Windows installer — now carries a
+  build provenance attestation recording which workflow, at which commit,
+  produced those exact bytes. `gh attestation verify <file> --repo
+  EtherAura/Kartend` answers "did this really come from Kartend?", which
+  the `.sha256` sidecars could not: anyone able to swap an asset could swap
+  its checksum file alongside it. The Windows assets are attested after
+  signing, so the attestation covers the bytes the release page actually
+  serves. This is provenance, not code signing — the Windows builds are
+  still unsigned and SmartScreen still warns on first launch. Each release
+  also publishes a CycloneDX software bill of materials, one for the Linux
+  assets and one for the Windows assets, both attested alongside the
+  binaries. The Windows document is the one that closes a real gap: it
+  lists the Qt runtime and the SDL2 and zstd libraries bundled next to the
+  executable, which a Windows user has no package manager to ask about.
+
 - **New collections arrive with their artwork already fetched.** Creating a
   collection — adding one in settings, duplicating an existing one,
   importing a `.kart` bundle, or picking one up from an installed

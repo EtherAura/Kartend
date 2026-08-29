@@ -35,6 +35,46 @@ Enabled on this repository, and verifiable from the outside:
 | Secret scanning | Enabled |
 | Secret scanning push protection | Enabled |
 | Dependabot security updates | Enabled |
+| [Build provenance attestations](https://github.com/EtherAura/Kartend/attestations) on release assets | Enabled |
+| CycloneDX SBOM published per release | Enabled |
+
+## Verifying a Release Download
+
+Every release asset that this project *builds* — the source tarball, the
+`.deb`, the Windows `.zip` and the Windows `setup.exe` — carries a
+[Sigstore-backed build provenance attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds)
+recording which workflow, at which commit, produced those exact bytes.
+Check a download with the GitHub CLI:
+
+```bash
+gh attestation verify kartend_<version>_amd64.deb --repo EtherAura/Kartend
+```
+
+A pass means the file came from this repository's release workflow and has
+not been altered since. This is stronger than the `.sha256` sidecars beside
+each asset, which only prove a file matches a hash published on the same
+page — anyone who can replace the asset can replace the sidecar too.
+
+**Provenance is not code signing.** It tells you where a file came from; it
+does not put a publisher certificate on it. The Windows builds remain
+unsigned and SmartScreen still warns on first launch. The `PKGBUILD` and
+`.ebuild` recipes are not attested either — they are source files copied
+out of the tree, not artifacts this pipeline built.
+
+## Software Bill of Materials
+
+Each release also publishes a [CycloneDX](https://cyclonedx.org/) SBOM, and
+each SBOM is attested the same way the binaries are — a bill of materials
+you cannot trace back to its build is worth little:
+
+| Asset | Covers |
+|-------|--------|
+| `Kartend-<version>-linux-x64.cdx.json` | The `.deb` and the source tarball — the same source at the same commit, with the `.deb` carrying the resolved dependency data. |
+| `Kartend-<version>-windows-x64.cdx.json` | The portable `.zip` and the installer — both ship the same staged tree, so one document covers the Qt runtime and the vcpkg-built SDL2 and zstd libraries bundled beside the executable. |
+
+The Windows document is the one that closes a real gap: a Windows user has
+no package manager to ask what is inside the download, whereas on Debian
+`dpkg` already answers most of the same question.
 
 ## Security Considerations
 

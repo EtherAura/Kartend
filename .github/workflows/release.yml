@@ -26,9 +26,16 @@ jobs:
     # is a protected branch, and github-actions[bot] is not exempt from its
     # PR requirement, so the direct push gets GH006 (seen on v0.0.13, run
     # 27404798003).
+    # Kartend-r8tko: id-token + attestations back the build-provenance step
+    # below. id-token: write mints the short-lived OIDC token that proves to
+    # Sigstore which workflow, at which commit, produced these bytes;
+    # attestations: write stores the resulting attestation against the repo.
+    # Neither grants repo write access.
     permissions:
       contents: write
       pull-requests: write
+      id-token: write
+      attestations: write
     # Expose the parsed tag version as a job output so the windows-release
     # job (below) can name its artifacts consistently without re-deriving
     # GITHUB_REF.
@@ -226,6 +233,54 @@ jobs:
           echo "pkgbuild=PKGBUILD" >> "$GITHUB_OUTPUT"
           echo "ebuild=kartend-${VERSION}.ebuild" >> "$GITHUB_OUTPUT"
 
+      - name: Generate SBOM (Linux artifacts)
+        # Kartend-r8tko. CycloneDX JSON over the built .deb — that one scan
+        # covers the tarball too, because both artifacts are the same source
+        # at the same commit and the .deb is the one that actually carries
+        # resolved dependency data (its Depends field plus the ELF linkage of
+        # the binary inside).
+        #
+        # upload-artifact / upload-release-assets are both off: this workflow
+        # publishes through action-gh-release, and letting the SBOM action
+        # upload on its own would give the release two upload paths that could
+        # disagree about what shipped.
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          file: ${{ steps.deb.outputs.deb }}
+          format: cyclonedx-json
+          output-file: Kartend-${{ steps.version.outputs.version }}-linux-x64.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest build provenance (tarball + .deb + SBOM)
+        # Kartend-r8tko. Records, in a Sigstore-backed attestation stored
+        # against this repo, that these exact bytes were produced by this
+        # workflow at this commit — so anyone can check a downloaded asset
+        # came from here and not from a mirror or a rebuild:
+        #
+        #     gh attestation verify kartend_<version>_amd64.deb --repo EtherAura/Kartend
+        #
+        # This is PROVENANCE, not code signing. It says where a file came
+        # from; it does not put a publisher certificate on it, and it does
+        # not change the unsigned-Windows-binary caveat in readme.md.
+        #
+        # Only build OUTPUTS are attested. The .sha256 sidecars are derived
+        # from the files beside them, and PKGBUILD / the ebuild are source
+        # files copied out of the tree rather than things this run built —
+        # attesting either would be a provenance claim about nothing. The
+        # SBOM IS attested: it is a document this run produced, and one that
+        # is worth nothing if a consumer cannot tell it came from here.
+        #
+        # Runs BEFORE the release is published on purpose: a release that
+        # exists without its attestation is a claim with no evidence behind
+        # it, and failing here is the cheaper outcome.
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ steps.version.outputs.tarball }}
+            ${{ steps.deb.outputs.deb }}
+            Kartend-${{ steps.version.outputs.version }}-linux-x64.cdx.json
+
       - name: Publish release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
@@ -236,6 +291,7 @@ jobs:
             ${{ steps.deb.outputs.deb_sha }}
             ${{ steps.recipes.outputs.pkgbuild }}
             ${{ steps.recipes.outputs.ebuild }}
+            Kartend-${{ steps.version.outputs.version }}-linux-x64.cdx.json
           generate_release_notes: true
           fail_on_unmatched_files: true
 
@@ -318,8 +374,12 @@ jobs:
     # This job also holds SIGNPATH_API_TOKEN, which is exactly why the
     # workflow-level default above is read — a compromised dependency here
     # should not be able to push to the repo.
+    # Kartend-r8tko: id-token + attestations back the provenance step below,
+    # same as the linux job. Neither grants repo write access.
     permissions:
       contents: write
+      id-token: write
+      attestations: write
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -501,6 +561,43 @@ jobs:
           "$hash  $exeName" | Out-File -Encoding ASCII -NoNewline $shaName
           "sha=$shaName" | Out-File -Encoding ASCII -Append $env:GITHUB_OUTPUT
 
+      - name: Generate SBOM (Windows artifacts)
+        # Kartend-r8tko, Windows half — and the half with a real gap behind
+        # it. The portable .zip and the installer both ship the SAME staged
+        # dist\kartend tree, so one scan of that directory covers both: the
+        # Qt runtime windeployqt copied in and the vcpkg-built SDL2 + zstd
+        # DLLs sitting beside it. Unlike the .deb, none of that is visible
+        # from packaging metadata on the consumer's side — a Windows user has
+        # no dpkg to ask what is inside.
+        #
+        # Scans the directory rather than the .zip so the individual DLLs are
+        # enumerated instead of one opaque archive entry.
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: dist/kartend
+          format: cyclonedx-json
+          output-file: Kartend-${{ needs.release.outputs.version }}-windows-x64.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attest build provenance (Windows .zip + setup.exe + SBOM)
+        # Kartend-r8tko, Windows half. Placed AFTER the SignPath pass and the
+        # sha256 step for the same reason the hash is: signing rewrites the
+        # bytes, and an attestation over the pre-signing bytes would not match
+        # what the release page serves. Verify a download with:
+        #
+        #     gh attestation verify Kartend-<version>-windows-x64-setup.exe --repo EtherAura/Kartend
+        #
+        # Independent of whether SignPath was configured for this run — the
+        # unsigned path is exactly where provenance is worth the most, since
+        # there is no publisher certificate to fall back on.
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ steps.package.outputs.zip }}
+            ${{ steps.installer.outputs.exe }}
+            Kartend-${{ needs.release.outputs.version }}-windows-x64.cdx.json
+
       - name: Attach Windows assets to the release
         # softprops/action-gh-release@v3 upserts files on an existing
         # release at the tag this workflow fired for — the linux job
@@ -516,4 +613,5 @@ jobs:
             ${{ steps.package.outputs.sha }}
             ${{ steps.installer.outputs.exe }}
             ${{ steps.installer_sha.outputs.sha }}
+            Kartend-${{ needs.release.outputs.version }}-windows-x64.cdx.json
           fail_on_unmatched_files: true
