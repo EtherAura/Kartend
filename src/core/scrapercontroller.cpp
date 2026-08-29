@@ -321,7 +321,8 @@ void ScraperController::drainPendingBackgroundEntityScrape() {
   // drain (a later creation, or the end of another run) retries once the DB
   // is up. Same "absent getter counts as no database" reading as
   // prepareScraperDialog.
-  if (!(m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr)) return;
+  IDatabaseManager *db = m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr;
+  if (!db) return;
 
   QList<CollectionConfig> *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
   if (!collections) return;
