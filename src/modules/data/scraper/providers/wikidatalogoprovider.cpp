@@ -137,7 +137,11 @@ void WikidataLogoProvider::fetchEntity(const Scraper::EntityScrapeTarget &target
                 callback(notFound("logo or descriptive data"));
                 return;
               }
-              finishEntityWithData(name, scopeKey, data, std::move(callback));
+              // No std::move: finishEntityWithData takes the callback by CONST
+              // reference (it copies into each continuation itself), so a move
+              // here cannot happen and only reads as though ownership were
+              // being handed over. clang-tidy performance-move-const-arg.
+              finishEntityWithData(name, scopeKey, data, callback);
             });
       });
 }
