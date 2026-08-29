@@ -355,6 +355,24 @@ SETUP_GETTER_DEF_MGR_CTX_ONLY(ScrollManagerSetup, InteractionStateHolder *, Inte
 SETUP_GETTER_DEF_COL_CTX_ONLY(ScrollManagerSetup, const GeneralSettings *, GeneralSettings,
                               generalSettings)
 
+// Kartend-wmxwg: attract mode's autoscroll drives the item scroll area's
+// scrollbar, which Cover Flow hides outright. These two forward the equivalent
+// carousel operations, so attract has one question to ask the view layer
+// ("can you move, and did you hit an end") regardless of view type.
+bool ScrollManager::coverFlowDriftable() const {
+  return m_coverFlow && m_coverFlow->isDriftable();
+}
+
+bool ScrollManager::driftCoverFlow(qreal px) {
+  return m_coverFlow && m_coverFlow->driftBy(px);
+}
+
+void ScrollManager::settleCoverFlow() {
+  if (m_coverFlow) {
+    m_coverFlow->settle();
+  }
+}
+
 void ScrollManager::updateViewType(ViewType viewType) {
   if (m_context.config.viewType == viewType) {
     return;

@@ -4,6 +4,7 @@
 #include "collection/launcherconfig.h"
 #include "collection/launcherpreset.h"
 #include "extensionutils.h"
+#include "pathutils.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -180,6 +181,56 @@ QJsonObject collectionConfigToJson(const CollectionConfig &c) {
   o["sidebar_font_point_size"] = c.sidebar.sidebarFontPointSize;
   o["sidebar_hide_scrollbar"] =
       CollectionUtils::scrollbarModeToString(c.sidebar.sidebarScrollbarMode);
+
+  // Kartend-0wri2: the navigation sidebar (the collection TREE panel — not the
+  // details pane, whose keys are the `sidebar_*` block above). Left out when
+  // the block was written, so exporting and re-importing silently reset every
+  // one of these to its default.
+  //
+  // These are presentation state, and a bundle carrying presentation is a
+  // deliberate choice (user decision 2026-08-27) rather than an oversight:
+  // a .kart is a whole collection as its author arranged it, and arriving with
+  // the panel on the wrong side reads as the bundle being broken.
+  //
+  // Every value here is safe to travel: sizes are numbers the importer clamps,
+  // enums round-trip through the shared string helpers and fall back to their
+  // default on an unknown token, and the one free-text field is a colour.
+  // Nothing is a path, so none of it can leak the sender's filesystem layout
+  // or arrive pointing somewhere that does not exist.
+  o["tree_visible"] = c.collectionTree.treeVisible;
+  o["tree_position"] = CollectionUtils::detailsPanePositionToString(c.collectionTree.treePosition);
+  o["tree_justification"] =
+      CollectionUtils::sidebarJustificationToString(c.collectionTree.treeJustification);
+  o["tree_mode"] = sidebarModeToString(c.collectionTree.treeMode);
+  o["tree_width"] = c.collectionTree.treeWidth;
+  o["tree_icon_display"] =
+      CollectionUtils::treeIconDisplayToString(c.collectionTree.treeIconDisplay);
+  o["tree_scroll_clipped_labels"] = c.collectionTree.treeScrollClippedLabels;
+  o["tree_scroll_clipped_labels_on_hover"] = c.collectionTree.treeScrollClippedLabelsOnHover;
+  o["tree_show_lines"] = c.collectionTree.treeShowLines;
+  o["tree_icon_size"] = c.collectionTree.treeIconSize;
+  o["tree_icon_style"] = CollectionUtils::treeIconStyleToString(c.collectionTree.treeIconStyle);
+  o["tree_colorize_selected"] = c.collectionTree.treeColorizeSelected;
+  o["tree_scrollbar_mode"] =
+      CollectionUtils::scrollbarModeToString(c.collectionTree.treeScrollbarMode);
+  o["tree_icon_tint_color"] = c.collectionTree.treeIconTintColor;
+
+  // The system-glyph block (Kartend-1kkk2), exported alongside the tree it
+  // draws into. Unusually safe even by the standard above: systemName and
+  // packOverride are IDENTITIES — a libretro system name and a pack directory
+  // name — resolved against whatever RetroArch the RECEIVING machine has, and
+  // both are validated as path components by RetroArchIcons::iconPath before
+  // they reach the filesystem. A bundle from a machine with no RetroArch, or
+  // naming a pack the importer lacks, simply draws no glyph.
+  o["system_icon_enabled"] = c.systemIcon.enabled;
+  o["system_icon_name"] = c.systemIcon.systemName;
+  o["system_icon_auto_detected"] = c.systemIcon.systemAutoDetected;
+  o["system_icon_subject"] = CollectionUtils::systemIconSubjectToString(c.systemIcon.subject);
+  o["system_icon_pack"] = c.systemIcon.packOverride;
+  o["system_icon_style"] = CollectionUtils::treeIconStyleToString(c.systemIcon.style);
+  o["system_icon_use_collection_artwork"] = c.systemIcon.useCollectionArtwork;
+  o["system_icon_placement"] = CollectionUtils::systemIconPlacementToString(c.systemIcon.placement);
+  o["system_icon_size"] = c.systemIcon.iconSize;
 
   o["view_type"] = CollectionUtils::viewTypeToString(c.viewType);
   o["hide_missing_artwork"] = c.hideMissingArtwork;
@@ -390,6 +441,64 @@ CollectionConfig jsonToCollectionConfig(const QJsonObject &o) {
   c.customFontFamily = o["custom_font_family"].toString();
 
   c.additionalParentNames = jsonToStringList(o["additional_parent_names"]);
+
+  // Kartend-0wri2. Every default below is the struct's own, so a bundle
+  // written before these keys existed imports exactly as it did before —
+  // absent key reads as "the default", not as "off".
+  const CollectionTreeSettings treeDefaults;
+  c.collectionTree.treeVisible = o["tree_visible"].toBool(treeDefaults.treeVisible);
+  c.collectionTree.treePosition =
+      CollectionUtils::stringToDetailsPanePosition(o["tree_position"].toString(
+          CollectionUtils::detailsPanePositionToString(treeDefaults.treePosition)));
+  c.collectionTree.treeJustification =
+      CollectionUtils::stringToSidebarJustification(o["tree_justification"].toString(
+          CollectionUtils::sidebarJustificationToString(treeDefaults.treeJustification)));
+  c.collectionTree.treeMode =
+      stringToSidebarMode(o["tree_mode"].toString(sidebarModeToString(treeDefaults.treeMode)));
+  c.collectionTree.treeWidth = o["tree_width"].toInt(treeDefaults.treeWidth);
+  c.collectionTree.treeIconDisplay =
+      CollectionUtils::stringToTreeIconDisplay(o["tree_icon_display"].toString(
+          CollectionUtils::treeIconDisplayToString(treeDefaults.treeIconDisplay)));
+  c.collectionTree.treeScrollClippedLabels =
+      o["tree_scroll_clipped_labels"].toBool(treeDefaults.treeScrollClippedLabels);
+  c.collectionTree.treeScrollClippedLabelsOnHover =
+      o["tree_scroll_clipped_labels_on_hover"].toBool(treeDefaults.treeScrollClippedLabelsOnHover);
+  c.collectionTree.treeShowLines = o["tree_show_lines"].toBool(treeDefaults.treeShowLines);
+  c.collectionTree.treeIconSize = o["tree_icon_size"].toInt(treeDefaults.treeIconSize);
+  c.collectionTree.treeIconStyle =
+      CollectionUtils::stringToTreeIconStyle(o["tree_icon_style"].toString(
+          CollectionUtils::treeIconStyleToString(treeDefaults.treeIconStyle)));
+  c.collectionTree.treeColorizeSelected =
+      o["tree_colorize_selected"].toBool(treeDefaults.treeColorizeSelected);
+  c.collectionTree.treeScrollbarMode =
+      CollectionUtils::stringToScrollbarMode(o["tree_scrollbar_mode"].toString(
+          CollectionUtils::scrollbarModeToString(treeDefaults.treeScrollbarMode)));
+  c.collectionTree.treeIconTintColor = o["tree_icon_tint_color"].toString();
+
+  const SystemIconSettings iconDefaults;
+  c.systemIcon.enabled = o["system_icon_enabled"].toBool(iconDefaults.enabled);
+  // systemName / packOverride are identities, never paths — but they DO become
+  // path components at resolve time, so they go through the same component
+  // guard the rest of the manifest's filesystem-adjacent strings use. A
+  // hostile value is dropped rather than carried, leaving the row glyphless.
+  const QString rawSystemName = o["system_icon_name"].toString().trimmed();
+  c.systemIcon.systemName =
+      PathUtils::isSafePathComponent(rawSystemName) ? rawSystemName : QString();
+  const QString rawPack = o["system_icon_pack"].toString().trimmed();
+  c.systemIcon.packOverride = PathUtils::isSafePathComponent(rawPack) ? rawPack : QString();
+  c.systemIcon.systemAutoDetected =
+      o["system_icon_auto_detected"].toBool(iconDefaults.systemAutoDetected);
+  c.systemIcon.subject =
+      CollectionUtils::stringToSystemIconSubject(o["system_icon_subject"].toString(
+          CollectionUtils::systemIconSubjectToString(iconDefaults.subject)));
+  c.systemIcon.style = CollectionUtils::stringToTreeIconStyle(
+      o["system_icon_style"].toString(CollectionUtils::treeIconStyleToString(iconDefaults.style)));
+  c.systemIcon.useCollectionArtwork =
+      o["system_icon_use_collection_artwork"].toBool(iconDefaults.useCollectionArtwork);
+  c.systemIcon.placement =
+      CollectionUtils::stringToSystemIconPlacement(o["system_icon_placement"].toString(
+          CollectionUtils::systemIconPlacementToString(iconDefaults.placement)));
+  c.systemIcon.iconSize = o["system_icon_size"].toInt(iconDefaults.iconSize);
 
   // Clamp every numeric layout field to the UI-enforced ranges at the import
   // boundary — the same canonical clamp the settings loader applies — so an

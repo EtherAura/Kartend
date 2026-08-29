@@ -275,12 +275,36 @@ extern "C" auto main(int argc, char *argv[]) -> int {
   translationDirs << (QCoreApplication::applicationDirPath() + QStringLiteral("/../share/") +
                       QStringLiteral(APP_TRANSLATIONS_SUBDIR));
   translationDirs.removeDuplicates();
+  bool appTranslatorLoaded = false;
   for (const QString &translationDir : translationDirs) {
     if (appTranslator.load(QLocale(), QStringLiteral("kartend"), QStringLiteral("_"),
                            translationDir)) {
-      QCoreApplication::installTranslator(&appTranslator);
+      appTranslatorLoaded = true;
       break;
     }
+  }
+  // Kartend-rp0hk: fall back to the ENGLISH catalogue when the active locale
+  // ships none, rather than to the raw source text.
+  //
+  // This is load-bearing, not tidiness. Source-text fallback cannot select an
+  // English plural — Qt substitutes the count into the source verbatim — so a
+  // `tr("%n subcollection(s)")` renders literally as "1 subcollection(s)" for
+  // anyone without a catalogue. Every locale except English is in that
+  // position today, so without this line adopting tr() for a plural would
+  // REGRESS every non-English user, which is worse than the in-code
+  // pluralisation it replaced. With it, English is the guaranteed floor:
+  // locale catalogue if one exists, English if not, source text only if the
+  // install is missing its translations entirely.
+  if (!appTranslatorLoaded) {
+    for (const QString &translationDir : translationDirs) {
+      if (appTranslator.load(QStringLiteral("kartend_en"), translationDir)) {
+        appTranslatorLoaded = true;
+        break;
+      }
+    }
+  }
+  if (appTranslatorLoaded) {
+    QCoreApplication::installTranslator(&appTranslator);
   }
 
   // parse CLI options. Use process so --help, --version, and

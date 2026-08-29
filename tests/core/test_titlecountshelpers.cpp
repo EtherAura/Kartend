@@ -6,6 +6,7 @@
 #include <QApplication>
 #include <QLabel>
 #include <QTest>
+#include <QTranslator>
 #include <QWidget>
 
 #include "applicationcontext.h"
@@ -59,6 +60,7 @@ private:
 class TestTitleCountsHelpers : public QObject {
   Q_OBJECT
 private slots:
+  void initTestCase();
   void nullHostIsNoOp();
   void noDatabaseManagerIsNoOp();
   void outOfRangeIndexResetsToApplicationName();
@@ -66,6 +68,21 @@ private slots:
   void itemCountAgreesInNumber_data();
   void itemCountAgreesInNumber();
 };
+
+// Kartend-rp0hk: the title's counts are pluralised through tr()/%n now, and Qt
+// performs NO English plural selection for an untranslated string — it
+// substitutes the count into the source, so an uninstalled catalogue renders
+// "1 subcollection(s)". main.cpp guarantees an English catalogue is loaded
+// (locale catalogue, else English, else source text), so the test installs the
+// same one rather than asserting against a configuration the app never runs in.
+void TestTitleCountsHelpers::initTestCase() {
+  static QTranslator translator;
+  QVERIFY2(
+      translator.load(QStringLiteral("kartend_en"), QStringLiteral(KARTEND_TEST_TRANSLATIONS_DIR)),
+      "kartend_en.qm not found — the English catalogue must be compiled (lrelease) for the "
+      "window title's plural forms to resolve");
+  QVERIFY(QCoreApplication::installTranslator(&translator));
+}
 
 void TestTitleCountsHelpers::nullHostIsNoOp() {
   // No title host → must return without dereferencing anything.

@@ -35,6 +35,11 @@ private slots:
   void testUserStateFieldsDefaultWhenKeysAbsent();
   void testUserStateRatingIsClamped();
   void testParseRejectsOversizedArtworkLinksArray();
+
+  // Kartend-0wri2: navigation-sidebar clusters in the bundle.
+  void testNavigationSidebarDefaultsWhenKeysAbsent();
+  void testNavigationSidebarSizesAreClamped();
+  void testSystemIconIdentitiesRejectPathTraversal();
 };
 
 namespace {
@@ -233,6 +238,34 @@ void TestKartManifest::testCollectionConfigAllFieldsRoundTrip() {
   c.customFontFamily = "Roboto";
   c.additionalParentNames = {"P1", "P2"};
 
+  // Kartend-0wri2: the navigation sidebar's two clusters. Every field is set
+  // AWAY from its default, so the whole-struct QCOMPARE below fails for any
+  // one the manifest forgets — which is exactly how they were lost before.
+  c.collectionTree.treeVisible = false;
+  c.collectionTree.treePosition = DetailsPanePosition::Right;
+  c.collectionTree.treeJustification = SidebarJustification::BelowToolbar;
+  c.collectionTree.treeMode = DetailsPaneMode::Overlay;
+  c.collectionTree.treeWidth = 300;
+  c.collectionTree.treeIconDisplay = TreeIconDisplay::IconAndText;
+  c.collectionTree.treeScrollClippedLabels = true;
+  c.collectionTree.treeScrollClippedLabelsOnHover = false;
+  c.collectionTree.treeShowLines = true;
+  c.collectionTree.treeIconSize = 48;
+  c.collectionTree.treeIconStyle = TreeIconStyle::MonochromeDark;
+  c.collectionTree.treeColorizeSelected = true;
+  c.collectionTree.treeScrollbarMode = ScrollbarMode::Autohide;
+  c.collectionTree.treeIconTintColor = "#778899";
+
+  c.systemIcon.enabled = true;
+  c.systemIcon.systemName = "Nintendo - Game Boy Advance";
+  c.systemIcon.systemAutoDetected = true;
+  c.systemIcon.subject = SystemIconSubject::Console;
+  c.systemIcon.packOverride = "monochrome";
+  c.systemIcon.style = TreeIconStyle::Tinted;
+  c.systemIcon.useCollectionArtwork = true;
+  c.systemIcon.placement = SystemIconPlacement::AfterName;
+  c.systemIcon.iconSize = 24;
+
   LauncherConfig lc;
   lc.name = "Secondary";
   lc.launcherPath = "/lp2";
@@ -245,6 +278,94 @@ void TestKartManifest::testCollectionConfigAllFieldsRoundTrip() {
   auto result = KartManifest::parse(bytes);
   QVERIFY2(result.isOk(), qPrintable(result.error().message));
   QCOMPARE(result.value().collectionConfig, c);
+}
+
+// A bundle written before Kartend-0wri2 has none of these keys. Each must read
+// as its STRUCT DEFAULT, not as false/0 — otherwise importing an older bundle
+// would hide the panel and blank the glyph rather than leaving them alone.
+void TestKartManifest::testNavigationSidebarDefaultsWhenKeysAbsent() {
+  const QByteArray json = R"({"format_version":1,"uuid":"u","name":"n",
+                              "collection":{"name":"C"}})";
+  auto result = KartManifest::parse(json);
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  const CollectionConfig &c = result.value().collectionConfig;
+
+  const CollectionTreeSettings treeDefaults;
+  QCOMPARE(c.collectionTree.treeVisible, treeDefaults.treeVisible);
+  QCOMPARE(c.collectionTree.treePosition, treeDefaults.treePosition);
+  QCOMPARE(c.collectionTree.treeJustification, treeDefaults.treeJustification);
+  QCOMPARE(c.collectionTree.treeMode, treeDefaults.treeMode);
+  QCOMPARE(c.collectionTree.treeWidth, treeDefaults.treeWidth);
+  QCOMPARE(c.collectionTree.treeIconDisplay, treeDefaults.treeIconDisplay);
+  QCOMPARE(c.collectionTree.treeScrollClippedLabelsOnHover,
+           treeDefaults.treeScrollClippedLabelsOnHover);
+  QCOMPARE(c.collectionTree.treeIconSize, treeDefaults.treeIconSize);
+  QCOMPARE(c.collectionTree.treeIconStyle, treeDefaults.treeIconStyle);
+  QCOMPARE(c.collectionTree.treeScrollbarMode, treeDefaults.treeScrollbarMode);
+
+  const SystemIconSettings iconDefaults;
+  QCOMPARE(c.systemIcon.enabled, iconDefaults.enabled);
+  QCOMPARE(c.systemIcon.systemName, QString());
+  QCOMPARE(c.systemIcon.subject, iconDefaults.subject);
+  QCOMPARE(c.systemIcon.style, iconDefaults.style);
+  QCOMPARE(c.systemIcon.placement, iconDefaults.placement);
+  QCOMPARE(c.systemIcon.iconSize, iconDefaults.iconSize);
+}
+
+// The sizes travel as plain numbers, so a hand-edited bundle can carry a panel
+// wider than any screen or a glyph big enough to be an allocation. They are
+// bounded by CollectionConfig::clampValues() the same way the layout fields
+// are — the clamp lives there rather than in the loaders alone precisely
+// because the bundle is now a second entry point.
+void TestKartManifest::testNavigationSidebarSizesAreClamped() {
+  KartManifest::Manifest m;
+  m.uuid = "u";
+  m.name = "n";
+  m.collectionConfig.name = "C";
+  m.collectionConfig.collectionTree.treeWidth = 9'000'000;
+  m.collectionConfig.collectionTree.treeIconSize = -50;
+  m.collectionConfig.systemIcon.iconSize = 100'000;
+
+  auto result = KartManifest::parse(KartManifest::serialize(m));
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  const CollectionConfig &c = result.value().collectionConfig;
+  QCOMPARE(c.collectionTree.treeWidth, CollectionTreeSettings::kMaxWidth);
+  QCOMPARE(c.collectionTree.treeIconSize, CollectionTreeSettings::kMinIconSize);
+  QCOMPARE(c.systemIcon.iconSize, SystemIconSettings::kMaxIconSize);
+}
+
+// systemName and packOverride are identities, not paths — but they BECOME path
+// components when RetroArchIcons resolves the glyph, so a hostile bundle must
+// not be able to smuggle a traversal through them. Dropped rather than
+// sanitised: the row simply gets no glyph, which is the same outcome as naming
+// a system the importing machine does not have.
+void TestKartManifest::testSystemIconIdentitiesRejectPathTraversal() {
+  KartManifest::Manifest m;
+  m.uuid = "u";
+  m.name = "n";
+  m.collectionConfig.name = "C";
+  m.collectionConfig.systemIcon.systemName = "../../../../etc/passwd";
+  m.collectionConfig.systemIcon.packOverride = "..";
+
+  auto result = KartManifest::parse(KartManifest::serialize(m));
+  QVERIFY2(result.isOk(), qPrintable(result.error().message));
+  QCOMPARE(result.value().collectionConfig.systemIcon.systemName, QString());
+  QCOMPARE(result.value().collectionConfig.systemIcon.packOverride, QString());
+
+  // A separator-bearing name is refused for the same reason.
+  m.collectionConfig.systemIcon.systemName = "packs/evil";
+  auto slashed = KartManifest::parse(KartManifest::serialize(m));
+  QVERIFY(slashed.isOk());
+  QCOMPARE(slashed.value().collectionConfig.systemIcon.systemName, QString());
+
+  // ...while an ordinary libretro system name survives untouched.
+  m.collectionConfig.systemIcon.systemName = "Nintendo - Game Boy Advance";
+  m.collectionConfig.systemIcon.packOverride = "monochrome";
+  auto good = KartManifest::parse(KartManifest::serialize(m));
+  QVERIFY(good.isOk());
+  QCOMPARE(good.value().collectionConfig.systemIcon.systemName,
+           QStringLiteral("Nintendo - Game Boy Advance"));
+  QCOMPARE(good.value().collectionConfig.systemIcon.packOverride, QStringLiteral("monochrome"));
 }
 
 void TestKartManifest::testImportClampsOutOfRangeLayout() {

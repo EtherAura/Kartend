@@ -414,14 +414,6 @@ bool isSafePathComponent(const QString &s) {
          s != QLatin1String(".") && s != QLatin1String("..");
 }
 
-namespace {
-
-/// True for the MS-DOS device names Windows still reserves in every directory:
-/// CON, PRN, AUX, NUL, COM1-9, LPT1-9. Case-insensitive, because the reservation
-/// is — "nul", "NUL" and "Nul" all name the same device.
-///
-/// The caller passes the stem BEFORE the first dot, not the whole base name:
-/// Windows resolves "NUL.txt" to the device too, so the extension buys nothing.
 bool isWindowsReservedStem(const QString &stem) {
   static const QSet<QString> kReservedNames = {QStringLiteral("con"), QStringLiteral("prn"),
                                                QStringLiteral("aux"), QStringLiteral("nul")};
@@ -431,8 +423,6 @@ bool isWindowsReservedStem(const QString &stem) {
          (low.startsWith(QLatin1String("com")) || low.startsWith(QLatin1String("lpt"))) &&
          low.at(3) >= QLatin1Char('1') && low.at(3) <= QLatin1Char('9');
 }
-
-} // namespace
 
 QString sanitizeFileBaseName(const QString &title, const QString &replacement,
                              const QString &fallback, const QString &extraForbidden) {
@@ -473,8 +463,10 @@ QString sanitizeFileBaseName(const QString &title, const QString &replacement,
   // back to "Untitled"/"playlist" would discard the user's name to fix a
   // Windows-only nuisance. kartreader's isSegmentSafe still REFUSES these,
   // which is the right split: a writer rewrites, a reader validating hostile
-  // input refuses. "t_" is kartwriter's existing spelling, kept identical so
-  // that its hand-rolled copy can later delegate here.
+  // input refuses. "t_" is kartwriter's existing spelling, kept identical; as
+  // of Kartend-7abos kartwriter shares the PREDICATE below rather than its own
+  // copy, but keeps its own prefixing step because it sanitizes a type token,
+  // not a title.
   const int firstDot = base.indexOf(QLatin1Char('.'));
   if (isWindowsReservedStem(firstDot < 0 ? base : base.left(firstDot))) {
     base.prepend(QStringLiteral("t_"));

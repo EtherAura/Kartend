@@ -96,6 +96,10 @@ private slots:
   void testPathStatusDescription_okAndEmptyAreBlank();
   void testPathStatusDescription_nonOkProducesText();
 
+  // isWindowsReservedStem tests (Kartend-7abos)
+  void testIsWindowsReservedStem_data();
+  void testIsWindowsReservedStem();
+
 private:
   QTemporaryDir m_tempDir;
 };
@@ -656,6 +660,52 @@ void TestPathUtils::testPathStatusDescription_nonOkProducesText() {
   QVERIFY(!PathUtils::pathStatusDescription(PathUtils::PathStatus::NotExecutable).isEmpty());
   QVERIFY(!PathUtils::pathStatusDescription(PathUtils::PathStatus::NotReadable).isEmpty());
   QVERIFY(!PathUtils::pathStatusDescription(PathUtils::PathStatus::WrongType).isEmpty());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// isWindowsReservedStem tests (Kartend-7abos)
+//
+// The predicate is now shared by sanitizeFileBaseName and kartwriter's
+// artworkTypeFileStem, so it is pinned directly rather than only through each
+// caller's output. Both callers PREFIX on a true result; kartreader's
+// isSegmentSafe refuses instead, and has its own tests.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestPathUtils::testIsWindowsReservedStem_data() {
+  QTest::addColumn<QString>("stem");
+  QTest::addColumn<bool>("reserved");
+
+  QTest::newRow("con") << QStringLiteral("con") << true;
+  QTest::newRow("prn") << QStringLiteral("prn") << true;
+  QTest::newRow("aux") << QStringLiteral("aux") << true;
+  QTest::newRow("nul") << QStringLiteral("nul") << true;
+  // Case-insensitive: Windows reserves the device, not the spelling.
+  QTest::newRow("NUL upper") << QStringLiteral("NUL") << true;
+  QTest::newRow("Nul mixed") << QStringLiteral("Nul") << true;
+  // COM/LPT are reserved only with a 1-9 suffix.
+  QTest::newRow("com1") << QStringLiteral("com1") << true;
+  QTest::newRow("com9") << QStringLiteral("com9") << true;
+  QTest::newRow("LPT1 upper") << QStringLiteral("LPT1") << true;
+  QTest::newRow("lpt9") << QStringLiteral("lpt9") << true;
+  QTest::newRow("com0 not reserved") << QStringLiteral("com0") << false;
+  QTest::newRow("com10 not reserved") << QStringLiteral("com10") << false;
+  QTest::newRow("com bare not reserved") << QStringLiteral("com") << false;
+  QTest::newRow("lpt bare not reserved") << QStringLiteral("lpt") << false;
+  // Ordinary names, including ones that merely start with a reserved word.
+  QTest::newRow("empty") << QString() << false;
+  QTest::newRow("console") << QStringLiteral("console") << false;
+  QTest::newRow("nullptr") << QStringLiteral("nullptr") << false;
+  QTest::newRow("boxart") << QStringLiteral("boxart") << false;
+  // The caller is contracted to pass the stem BEFORE the first dot, so a
+  // dotted name is not itself reserved here — sanitizeFileBaseName does the
+  // splitting, and kartwriter never has a dot left to split on.
+  QTest::newRow("nul.txt whole name") << QStringLiteral("nul.txt") << false;
+}
+
+void TestPathUtils::testIsWindowsReservedStem() {
+  QFETCH(QString, stem);
+  QFETCH(bool, reserved);
+  QCOMPARE(PathUtils::isWindowsReservedStem(stem), reserved);
 }
 
 QTEST_MAIN(TestPathUtils)

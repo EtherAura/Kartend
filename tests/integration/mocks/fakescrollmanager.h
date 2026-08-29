@@ -6,8 +6,11 @@
 #include "itemwidget.h"
 
 #include <QHash>
+#include <QList>
 #include <QString>
 #include <QStringList>
+
+#include <functional>
 
 namespace KartendTest {
 
@@ -31,6 +34,23 @@ public:
   /// When >= 0, getFilteredIndex(visualIndex) returns this fixed value;
   /// otherwise it is the identity (the original fake's behavior).
   int filteredIndexOverride = -1;
+
+  /// Kartend-wmxwg cover-flow drift, recorded rather than performed. Default
+  /// false keeps every pre-existing test on the scrollbar path unchanged.
+  bool coverFlowDrift = false;
+  /// Pixels of travel each driftCoverFlow() call has been handed, in order.
+  QList<qreal> driftCalls;
+  /// Number of drift calls to accept before reporting "hit an end" (the bounce
+  /// signal). Negative means never — the carousel drifts forever.
+  int driftCallsBeforeEnd = -1;
+  /// Invoked from inside driftCoverFlow(), i.e. at the exact point the real
+  /// carousel would be re-entering the selection pipeline. Lets a test observe
+  /// caller state that is only true for the duration of the call — chiefly
+  /// AttractManager::isDrivingSelection().
+  std::function<void()> onDrift;
+  /// Times settleCoverFlow() has been called — attract settles the carousel
+  /// when it stops, so a drift never leaves it parked between two cards.
+  int settleCalls = 0;
 
   [[nodiscard]] int getTotalItems() const override { return totalItems; }
   [[nodiscard]] const QHash<int, ItemWidget *> &getActiveWidgets() const override {
@@ -72,6 +92,15 @@ public:
   void setForceSelectionOverlayVisible(bool) override {}
   void applyFilter(const QString &) override {}
   void cleanupActiveWidgets() override {}
+  [[nodiscard]] bool coverFlowDriftable() const override { return coverFlowDrift; }
+  bool driftCoverFlow(qreal px) override {
+    driftCalls.append(px);
+    if (onDrift) {
+      onDrift();
+    }
+    return driftCallsBeforeEnd < 0 || driftCalls.size() < driftCallsBeforeEnd;
+  }
+  void settleCoverFlow() override { ++settleCalls; }
   void clearFilter() override {}
   void showSearchLoadingOverlay() override {}
   void hideSearchLoadingOverlay() override {}

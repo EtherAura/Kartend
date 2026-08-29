@@ -32,10 +32,14 @@
 #include <QBoxLayout>
 #include <QDir>
 #include <QFileInfo>
+#include <QScopeGuard>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSet>
 #include <QTimer>
+
+#include <algorithm>
+#include <cmath>
 
 CoverFlowController::CoverFlowController(QObject *parent) : QObject(parent) {
   // Resolve debouncer — coalesces per-tick DB + FS lookups during a wheel
@@ -295,7 +299,12 @@ void CoverFlowController::onSelectionChanged(int selectedIndex) {
   if (selectedIndex < 0) {
     return;
   }
-  m_widget->setSelectedIndex(selectedIndex, true);
+  // Snap rather than glide while attract is drifting us (Kartend-wmxwg): the
+  // drift has already placed the carousel at this card, so the glide has
+  // nothing to travel — and letting it run would have it write
+  // selectionPositionF back toward 0 on every frame for 240ms, cancelling the
+  // drift ticks that land inside that window.
+  m_widget->setSelectedIndex(selectedIndex, !m_driftingSelection);
   // Lazy video-path + gallery resolution: scanning the video directory and
   // loading per-item artwork rows for every one of N items at rebuild time
   // freezes the UI for large collections, so the per-item lookup happens
@@ -312,6 +321,61 @@ void CoverFlowController::onSelectionChanged(int selectedIndex) {
     resolveAndPushVideo(selectedIndex);
     resolveAndPushGallery(selectedIndex);
   }
+}
+
+bool CoverFlowController::isDriftable() const {
+  return isActive() && m_widget && m_widget->cardCount() > 1;
+}
+
+bool CoverFlowController::driftBy(qreal px) {
+  if (!isDriftable()) {
+    return false;
+  }
+  const int count = m_widget->cardCount();
+  const qreal last = count - 1;
+
+  // Work in absolute carousel position (index + fractional offset), which is
+  // exactly the coordinate space CoverFlowWidget::currentPositionF() paints
+  // from, so the conversion back below is lossless.
+  const qreal from = m_widget->selectedIndex() + m_widget->selectionPositionF();
+  qreal to = from + (px / m_widget->cardPitchPx());
+
+  const bool hitEnd = to <= 0.0 || to >= last;
+  to = std::clamp(to, qreal(0.0), last);
+
+  // The card NEAREST to centre owns the selection, so it changes hands at the
+  // half-card mark — the moment the eye reads a different card as centred.
+  // std::lround on the clamped position keeps target inside [0, count-1]
+  // without a second clamp.
+  const int target = static_cast<int>(std::lround(to));
+  if (target != m_widget->selectedIndex()) {
+    // Route through the canonical selection path rather than poking the widget:
+    // the toolbar counter, details pane and preview resolution all hang off
+    // SelectionManager, and a carousel that drifted without telling them would
+    // desync every one of them. The flag makes onSelectionChanged snap on the
+    // way back in — see its comment.
+    m_driftingSelection = true;
+    const auto guard = qScopeGuard([this]() { m_driftingSelection = false; });
+    emit selectItemByIndex(target);
+  }
+  // Re-read rather than assuming `target` landed: the selection pipeline may
+  // clamp or refuse (empty store, filter change mid-drift), and rebasing the
+  // offset against a selection that did NOT happen would jump the carousel.
+  m_widget->setSelectionPositionF(to - m_widget->selectedIndex());
+  return !hitEnd;
+}
+
+void CoverFlowController::settle() {
+  if (!isActive() || !m_widget) {
+    return;
+  }
+  // Re-selecting the SAME index with animate=true is the whole implementation:
+  // setSelectedIndex early-outs when the offset is already zero, and otherwise
+  // takes its animate branch with startPos == the current offset and endValue
+  // 0 — i.e. exactly the glide-home this wants, using the same easing every
+  // other selection change uses. m_driftingSelection is false here (attract has
+  // stopped by the time this runs), so the glide is not suppressed.
+  m_widget->setSelectedIndex(m_widget->selectedIndex(), true);
 }
 
 // Compute the directory a card's primary artwork is resolved from: the

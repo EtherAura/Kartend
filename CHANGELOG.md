@@ -125,6 +125,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Attract mode now moves the Cover Flow carousel.** Autoscroll used to
+  do nothing at all in Cover Flow: it drives the item scroll area's
+  scrollbar, and Cover Flow hides that area with both scrollbars forced
+  off, so the feature silently declined to start. It now drifts the
+  carousel instead — cards flow continuously through the centre and the
+  selection travels with them, changing to whichever card is nearest the
+  middle, so the centred card and the selected item never disagree.
+  Scroll speed keeps its meaning, pixels of travel per tick, measured
+  against the width one card crosses through the centre; the carousel
+  bounces at the first and last card the way the viewport bounces at the
+  top and bottom, and glides back onto the selected card when attract
+  stops, so it is never left parked half-way between two. Advance-selection
+  still works as before, so in Cover Flow you now want one or the other
+  rather than both.
+
 - **The Collection tab follows the selection.** It used to pin to the
   collection being browsed. It now answers "where does this live?" for
   whatever is selected: browsing an aggregated parent with *Show
@@ -151,6 +166,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deliberately left blank.
 
 ### Fixed
+
+- **Counts in the interface now agree in number.** Twenty-six messages
+  showed their plural marker instead of choosing a form — "1 DAT file(s)
+  failed to load", "1 error(s) logged", "1 game(s) imported" — because
+  English was treated as needing no translation file, and without one Qt
+  has no way to pick between "file" and "files". Kartend now ships a real
+  English catalogue, so those read correctly at every count, and the window
+  title's own counts ("1 subcollection", "(1 Item)") go through the same
+  machinery rather than a hand-rolled rule beside it. If you run Kartend in
+  a language it has not been translated into yet, it falls back to English
+  rather than to raw text, so counts stay correct there too.
+
+- **Navigation sidebar settings now travel with a `.kart` bundle.**
+  Exporting a collection and importing it elsewhere silently reset every
+  option for the tree panel — which side it docked on, its width, whether
+  it overlapped or pushed the grid, row display mode, icon size, style and
+  tint, scrollbar policy — along with the whole system-glyph block. They
+  are all carried now, so a bundle arrives arranged the way its author
+  left it. Bundles made before this still import exactly as they did:
+  a missing setting reads as its default rather than as "off". The glyph's
+  system and icon-pack names travel as names, not paths, and are resolved
+  against whatever RetroArch the receiving machine has — so a bundle can
+  neither reveal where the sender kept their files nor arrive pointing at
+  somewhere that does not exist.
+
+- **Hiding titles gives the space back to the artwork.** The three-line
+  caption band under each tile was reserved whether or not a title was
+  actually drawn, so turning titles off just left a strip of dead space.
+  It now goes to the cover. This was tried once before and reverted the
+  same hour because it made artwork overlap artwork: with negative grid
+  spacing your tiles sit closer together than their own size implies, and
+  the enlarged cover grew straight into its neighbour. Covers are now
+  capped to the spacing you actually set, so they can grow into the freed
+  band but never into the tile next door. Positive or zero spacing is
+  unaffected.
+
+- **Arrow keys now stop attract mode.** Moving the selection with the
+  keyboard while attract was running did nothing to interrupt it — in every
+  view, not just one. Scrolling the wheel, hovering, or clicking all stopped
+  it as expected, which made the gap look like a Cover Flow quirk rather than
+  what it was: the keyboard takes a different route through the selection
+  code than the mouse does, and only the mouse's route was telling attract
+  that you were back. Attract now yields to keyboard navigation the same way
+  it always yielded to the mouse, and still ignores the selection moves it
+  makes itself.
 
 - **Programs installed under Program Files no longer look suspicious on
   Windows.** Importing a `.kart` bundle on Windows flagged practically every

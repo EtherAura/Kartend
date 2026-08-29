@@ -126,6 +126,16 @@ public:
   qreal selectionPositionF() const { return m_selectionPositionF; }
   void setSelectionPositionF(qreal v);
 
+  /// Horizontal distance, in pixels, one card travels while it moves through
+  /// the centre slot — i.e. the pixel cost of advancing currentPositionF() by
+  /// 1.0. Exists so attract mode can convert its pixels-per-tick speed setting
+  /// into carousel positions (Kartend-wmxwg); the grid autoscroll it mirrors is
+  /// specified in pixels, and a "cards per tick" setting would mean something
+  /// different at every card size. Side cards use the narrower kSideStrideFactor
+  /// so this is the widest stride on screen, not an average — that is the right
+  /// one, because it is the centre slot the eye tracks.
+  [[nodiscard]] qreal cardPitchPx() const;
+
   // Test-visible state getters. The setters above clamp/early-out and clear
   // caches; without these the clamp and cache-invalidation contracts are
   // unobservable from outside a paint pass (tests/ui/widgets/

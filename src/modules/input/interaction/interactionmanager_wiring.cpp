@@ -403,21 +403,46 @@ void InteractionManager::connectAttractManagerSignals() {
   // isDrivingSelection() guard via a scope guard immediately after emitting, so
   // a Qt::QueuedConnection anywhere in this chain would let selectionChanged
   // fire after the guard cleared — stopping attract mode on its own first tick.
+  auto noteSelectionActivity = [this](int index) {
+    Q_UNUSED(index);
+    // Selection changes that AttractManager itself drives via the
+    // advance-selection timer or the Cover Flow drift must not be treated as
+    // user activity, otherwise attract mode would immediately stop on its own
+    // tick. This guard is load-bearing on BOTH wires below: attract's
+    // requestSelectIndex and the carousel drift each land in
+    // InteractionManager::selectItemByIndex.
+    if (m_attractManager->isDrivingSelection()) {
+      // Record that we saw the driven change synchronously — the
+      // AttractManager debug-asserts this to enforce the b93at Direct-
+      // connection invariant (a queued hop would land here too late).
+      m_attractManager->noteDrivenSelectionObserved();
+      return;
+    }
+    m_attractManager->onActivityDetected();
+  };
   connect(m_selectionManager.get(), &SelectionManager::selectionChanged, m_attractManager.get(),
-          [this](int index) {
-            Q_UNUSED(index);
-            // Selection changes that AttractManager itself drives via the
-            // advance-selection timer must not be treated as user activity,
-            // otherwise attract mode would immediately stop on its own tick.
-            if (m_attractManager->isDrivingSelection()) {
-              // Record that we saw the driven change synchronously — the
-              // AttractManager debug-asserts this to enforce the b93at Direct-
-              // connection invariant (a queued hop would land here too late).
-              m_attractManager->noteDrivenSelectionObserved();
-              return;
-            }
-            m_attractManager->onActivityDetected();
-          });
+          noteSelectionActivity);
+  // Kartend-k9utx: SelectionManager::selectionChanged is NOT the whole story,
+  // and wiring only it left keyboard navigation unable to stop attract in any
+  // view.
+  //
+  // TWO near-identical selectItemByIndex implementations exist, and which one a
+  // given input reaches is the whole subtlety. SelectionManager's is the CLICK
+  // path (reached from processSingleClickSelection in selectionmanagerclick.cpp)
+  // and emits THIS class's signal. InteractionManager's does the same job —
+  // setSelectedIndex, handleSuccessfulSelection, its own emit — and is what
+  // ArrowNavigationHandler::requestFullSelectionUpdate reaches, emitting
+  // InteractionManager's signal instead. So the SelectionManager signal fires
+  // for pointer-shaped input — a wheel landing (via notifySelectionChanged), a
+  // hover, and a click — and never for the keyboard, which is exactly why the
+  // wheel appeared to work while arrow keys silently did not.
+  //
+  // Both signals are connected rather than one replacing the other: they cover
+  // different, partly-overlapping paths, and onActivityDetected is idempotent
+  // (it stops attract only if active, then re-arms the idle timer), so a
+  // selection that happens to raise both is harmless.
+  connect(this, &InteractionManager::selectionChanged, m_attractManager.get(),
+          noteSelectionActivity);
   // A wheel scroll that does NOT move the selection is still browsing, and
   // attract mode exists to yield to browsing. selectionChanged above covers
   // the wheel only when applySelectionDelta actually lands on a new index; it

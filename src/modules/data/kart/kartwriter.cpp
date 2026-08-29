@@ -40,12 +40,15 @@ QString artworkTypeFileStem(const QString &type) {
   if (stem.isEmpty()) {
     stem = QStringLiteral("type");
   }
-  static const QSet<QString> kReserved = {"con", "prn", "aux", "nul"};
-  const bool reservedComLpt =
-      stem.size() == 4 &&
-      (stem.startsWith(QLatin1String("com")) || stem.startsWith(QLatin1String("lpt"))) &&
-      stem.at(3) >= QLatin1Char('1') && stem.at(3) <= QLatin1Char('9');
-  if (kReserved.contains(stem) || reservedComLpt) {
+  // Kartend-7abos: the "is this a Windows device name" test is the one piece
+  // genuinely shared with PathUtils::sanitizeFileBaseName, so it lives there
+  // and this used to carry a byte-identical copy. The rest of this function
+  // stays local on purpose — it lowercases, restricts to [a-z0-9_-] and falls
+  // back to "type", none of which the title sanitizer does or should.
+  //
+  // No stem.left(firstDot) here, unlike sanitizeFileBaseName: the loop above
+  // has already replaced every '.' with '_', so the stem cannot contain one.
+  if (PathUtils::isWindowsReservedStem(stem)) {
     stem.prepend(QStringLiteral("t_"));
   }
   return stem;

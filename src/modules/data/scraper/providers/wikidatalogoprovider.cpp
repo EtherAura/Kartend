@@ -188,7 +188,7 @@ void WikidataLogoProvider::resolveEntityId(const QStringList &queries, int index
 // one-line description.
 void WikidataLogoProvider::finishEntityWithData(const QString &name, const QString &scopeKey,
                                                 const WikidataLogoParser::EntityData &data,
-                                                DetailCallback callback) {
+                                                const DetailCallback &callback) {
   auto compose = [name, scopeKey, data](const QHash<QString, QString> &labels,
                                         const QString &summary) {
     Scraper::ScrapedItem item;

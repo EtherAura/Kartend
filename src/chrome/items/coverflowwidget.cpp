@@ -379,6 +379,14 @@ int CoverFlowWidget::cardSize() const {
   return std::max(64, static_cast<int>(extent * kCardSizeFactor));
 }
 
+qreal CoverFlowWidget::cardPitchPx() const {
+  // Mirrors the |delta| <= 1.0 branch of computeVisibleLayout's cardOffsetX,
+  // which is the stride the centre card actually travels. Kept as a max(1.0)
+  // so a caller dividing by it cannot divide by zero on a not-yet-laid-out
+  // widget.
+  return std::max<qreal>(1.0, cardSize() * kCenterStrideFactor);
+}
+
 QColor CoverFlowWidget::tileColorOrFallback() const {
   if (!m_tileColor.isEmpty() && QColor::isValidColorName(m_tileColor)) {
     return QColor(m_tileColor);

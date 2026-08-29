@@ -96,6 +96,28 @@ public:
   /// and (debounced) resolve its preview video + artwork gallery.
   void onSelectionChanged(int selectedIndex);
 
+  /// True when the carousel is showing AND has more than one card, i.e. when
+  /// there is somewhere for driftBy() to go. Attract mode's stand-in for the
+  /// `bar->maximum() > 0` test it applies to every other view (Kartend-wmxwg).
+  [[nodiscard]] bool isDriftable() const;
+
+  /// Move the carousel by @p px pixels of horizontal travel, signed. Commits a
+  /// selection change through the canonical selectItemByIndex path each time a
+  /// different card becomes the nearest to centre, so the centred card and the
+  /// selected item never disagree — the carousel has no notion of "scrolled
+  /// away from the selection", which is why attract's scrollbar-driven
+  /// autoscroll could never work here (Kartend-wmxwg).
+  ///
+  /// Returns false when the drift ran into either end of the carousel, which is
+  /// the caller's cue to bounce; true while it still has room.
+  bool driftBy(qreal px);
+
+  /// Glide the carousel back onto its selected card, cancelling the fractional
+  /// offset a driftBy() left behind. Attract calls this when it stops, because
+  /// the drift halts wherever the last tick landed — usually between two cards
+  /// (Kartend-wmxwg). No-op when already centred.
+  void settle();
+
   [[nodiscard]] CoverFlowWidget *widget() const { return m_widget; }
 
   /// Absolute item path -> hand-linked cover, from
@@ -195,6 +217,13 @@ private:
   CoverFlowWidget *m_widget = nullptr;
   TimerUtils::DebouncedTimer *m_resolveDebouncer = nullptr;
   int m_pendingVisualIndex = -1;
+
+  // True only for the duration of the selectItemByIndex emit inside driftBy().
+  // onSelectionChanged reads it to SNAP instead of glide: the drift has already
+  // walked the carousel to the new card, so the 240ms OutCubic glide would both
+  // be a visual no-op and, worse, keep writing selectionPositionF back toward 0
+  // for its whole duration — clobbering the next several drift ticks.
+  bool m_driftingSelection = false;
 
   // Kartend-6x8tn: carousel slots whose primary artwork resolved empty
   // against a still-cold DirectoryCache, keyed by visual index → the artwork

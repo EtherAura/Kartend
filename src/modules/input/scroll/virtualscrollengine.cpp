@@ -309,6 +309,11 @@ void VirtualScrollEngine::recreateLayout() {
     widget->setFontSize(fontSize);
     widget->setCornerRadius(owner->m_context.config.gridLayout.cornerRadius);
     widget->setItemDimensions(owner->m_metrics.itemWidth, owner->m_metrics.itemHeight);
+    // Kartend-ari1x: the tile PITCH, which is what neighbours are actually
+    // spaced by. Only differs from the cell under negative spacing, and that is
+    // the case where artwork could otherwise grow into the next tile.
+    widget->setGridPitch(owner->m_metrics.itemWidth + owner->m_metrics.horizontalSpacing,
+                         owner->m_metrics.itemHeight + owner->m_metrics.verticalSpacing);
     QPoint position = owner->getItemPosition(it.key());
     widget->setGeometry(position.x(), position.y(), owner->m_metrics.itemWidth,
                         owner->m_metrics.itemHeight);
@@ -646,6 +651,9 @@ void VirtualScrollEngine::ensureWidgetForIndex(int visualIndex) {
       existing->setFontSize(fontSize);
       existing->setCornerRadius(m_owner->m_context.config.gridLayout.cornerRadius);
       existing->setItemDimensions(m_owner->m_metrics.itemWidth, m_owner->m_metrics.itemHeight);
+      // Kartend-ari1x — see the sibling call in the reconfigure path above.
+      existing->setGridPitch(m_owner->m_metrics.itemWidth + m_owner->m_metrics.horizontalSpacing,
+                             m_owner->m_metrics.itemHeight + m_owner->m_metrics.verticalSpacing);
     }
     QPoint position = m_owner->getItemPosition(visualIndex);
     existing->setGeometry(position.x(), position.y(), m_owner->m_metrics.itemWidth,

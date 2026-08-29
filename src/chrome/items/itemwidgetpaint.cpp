@@ -267,6 +267,15 @@ void ItemWidget::setItemDimensions(int width, int height) {
   applyDimensions();
 }
 
+void ItemWidget::setGridPitch(int pitchWidth, int pitchHeight) {
+  if (m_gridPitchWidth == pitchWidth && m_gridPitchHeight == pitchHeight) {
+    return;
+  }
+  m_gridPitchWidth = pitchWidth;
+  m_gridPitchHeight = pitchHeight;
+  applyDimensions();
+}
+
 void ItemWidget::applyDimensions() {
   QString currentName = itemName;
   QString currentPath = filePath;
@@ -396,24 +405,26 @@ void ItemWidget::applyDimensions() {
   // single definition rather than a third hand-copy to drift out of.
   const bool shouldShowTitle = shouldPaintTitle();
 
-  // Three lines, so a long wrapped title never overlaps the art. RESERVED
-  // UNCONDITIONALLY, including when no title is drawn.
+  // Three lines, so a long wrapped title never overlaps the art. Reserved only
+  // when a title is actually drawn — hiding titles gives the band back to the
+  // artwork, which is what it is there for (Kartend-ari1x).
   //
-  // That looks like waste and was "fixed" once (2026-08-20) by reserving zero
-  // when titles are hidden, letting the square art grow into the freed height.
-  // It broke the grid badly on a real library — artwork drawn overlapping
-  // artwork, rows colliding — and was reverted within the hour.
+  // THIS WAS REVERTED ONCE, on 2026-08-20, after it broke a real library with
+  // artwork drawn overlapping artwork and rows colliding. Both explanations
+  // recorded at the time were wrong, and the correct one was the first, which
+  // had been retracted: the reporter's config DOES use negative grid spacing
+  // (horizontalSpacing = verticalSpacing = -80 on all 18 collections), and
+  // their cells are HEIGHT-limited, not width-limited. At 325x325 the numbers
+  // are availableWidth 285, availableHeight 226 -> art 226, against an
+  // effective tile pitch of 325 + (-80) = 245px. Freeing the band took the art
+  // to 277 and so 32px PAST the pitch on both axes — neighbouring tiles, not
+  // this widget's own box, which never leaves its cell.
   //
-  // The mechanism is NOT understood. An early guess (negative grid spacing)
-  // was wrong: the reporter had none. Do not re-attempt this without first
-  // reproducing the overlap and explaining it, because the failure is not
-  // where it looks like it should be: at the reporter's cell proportions the
-  // art was already WIDTH-limited (measured cellDeadMargin=10, i.e.
-  // availableWidth < availableHeight), so raising availableHeight should have
-  // changed nothing at all. Something else consumes the reservation.
+  // Hence the pitch clamp below. It is what makes freeing the band safe, and
+  // it must not be removed independently of this.
   const int textLines = 3;
   const int singleLineHeight = referenceFm.ascent() + referenceFm.descent();
-  const int reservedTextHeight = singleLineHeight * textLines;
+  const int reservedTextHeight = shouldShowTitle ? singleLineHeight * textLines : 0;
 
   // Doubled because ARTWORK_BACKDROP_INSET is a per-SIDE inset.
   constexpr int kArtworkInset = 2 * UIConstants::Widget::ARTWORK_BACKDROP_INSET;
@@ -421,6 +432,22 @@ void ItemWidget::applyDimensions() {
                         reservedTextHeight - kArtworkInset;
   int availableWidth = m_itemWidth - UIConstants::Widget::PADDING - kArtworkInset;
   int artworkSize = qMin(availableWidth, availableHeight);
+
+  // Clamp to what the GRID actually gives this tile. m_itemWidth/m_itemHeight
+  // are the cell box, but with negative spacing the drawn envelope per tile is
+  // narrower than its box — the neighbour's cell starts before this one ends.
+  // The widget cannot see that, so the layer that owns GridMetrics feeds it in
+  // via setGridPitch(). SPACING is held back as a visible gap so adjacent
+  // covers do not end up flush against each other.
+  //
+  // With zero or positive spacing the pitch is >= the cell, so this never
+  // binds and no ordinary configuration changes behaviour.
+  const int pitchLimit = qMin(m_gridPitchWidth > 0 ? m_gridPitchWidth : artworkSize,
+                              m_gridPitchHeight > 0 ? m_gridPitchHeight : artworkSize) -
+                         UIConstants::Widget::SPACING;
+  if (m_gridPitchWidth > 0 || m_gridPitchHeight > 0) {
+    artworkSize = qMin(artworkSize, qMax(1, pitchLimit));
+  }
   m_artworkSize = artworkSize;
 
   if (imageLabel) {

@@ -99,6 +99,13 @@ private slots:
   // store's actual-index space before classifying (subcollection / virtual
   // folder / media), mirroring rebuildCards' mapping.
   void itemActivated_mapsFilteredVisualToActual();
+
+  // Attract-mode carousel drift (Kartend-wmxwg)
+  void drift_isDriftableNeedsActiveCarouselWithRoomToMove();
+  void drift_pixelsConvertToCardsViaCardPitch();
+  void drift_commitsSelectionWhenANewCardBecomesNearestCentre();
+  void drift_reportsFalseAtEachEndAndClamps();
+  void drift_selectionCommitSnapsInsteadOfGliding();
 };
 
 void TestCoverFlowController::initTestCase() {
@@ -589,6 +596,175 @@ void TestCoverFlowController::itemActivated_mapsFilteredVisualToActual() {
   QCOMPARE(subSpy.count(), 2);
   QCOMPARE(subSpy.at(1).at(0).toInt(), 0);
   QCOMPARE(itemSpy.count(), 1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Attract-mode carousel drift (Kartend-wmxwg)
+//
+// Attract autoscroll drives the item scroll area's scrollbar, which Cover Flow
+// hides. driftBy() is the carousel's stand-in, and its contract is narrow:
+// convert pixels via the card pitch, keep the CANONICAL selection on the card
+// nearest to centre, and report the ends so attract can bounce.
+//
+// The selectItemByIndex → onSelectionChanged loop below is the real production
+// round trip in miniature: in the app that signal reaches SelectionManager,
+// whose selectionChanged comes back into onSelectionChanged as a synchronous
+// (Direct) call. Wiring it to itself here reproduces that without the manager
+// stack, and without it the "did the selection actually commit" assertions
+// would be measuring nothing.
+// ─────────────────────────────────────────────────────────────────────────────
+
+namespace {
+
+/// Harness with N cards and the selection round trip closed.
+struct DriftHarness {
+  explicit DriftHarness(int cards) : h(QString(), QString()) {
+    h.controller.ensureWidget();
+    QList<CoverFlowCardData> list;
+    list.reserve(cards);
+    for (int i = 0; i < cards; ++i) {
+      list.append(CoverFlowCardData{QStringLiteral("Card %1").arg(i), {}, {}});
+    }
+    h.controller.widget()->setCards(list);
+    QObject::connect(&h.controller, &CoverFlowController::selectItemByIndex, &h.controller,
+                     &CoverFlowController::onSelectionChanged);
+  }
+  CoverFlowWidget *w() const { return h.controller.widget(); }
+  /// Absolute carousel position — the coordinate driftBy() works in and
+  /// CoverFlowWidget::currentPositionF() paints from.
+  qreal pos() const { return w()->selectedIndex() + w()->selectionPositionF(); }
+  /// Pixels equivalent to @p cards of travel at the widget's current size.
+  qreal px(qreal cards) const { return cards * w()->cardPitchPx(); }
+
+  CoverFlowHarness h;
+};
+
+} // namespace
+
+void TestCoverFlowController::drift_isDriftableNeedsActiveCarouselWithRoomToMove() {
+  CoverFlowController bare;
+  QVERIFY(!bare.isDriftable()); // no context, no widget
+  QVERIFY(!bare.driftBy(10.0));
+
+  DriftHarness d(1);
+  // Active and widgeted, but a single card has nowhere to go — attract must
+  // decline to start rather than tick against a carousel that cannot move.
+  QVERIFY(d.h.controller.isActive());
+  QVERIFY(!d.h.controller.isDriftable());
+  QVERIFY(!d.h.controller.driftBy(d.px(1.0)));
+
+  DriftHarness many(6);
+  QVERIFY(many.h.controller.isDriftable());
+
+  // View type is still the gate: leaving Cover Flow makes the carousel
+  // undriftable even though the cards are still loaded.
+  many.h.context.config.viewType = ViewType::Grid;
+  QVERIFY(!many.h.controller.isDriftable());
+  QVERIFY(!many.h.controller.driftBy(many.px(1.0)));
+}
+
+void TestCoverFlowController::drift_pixelsConvertToCardsViaCardPitch() {
+  DriftHarness d(10);
+  QVERIFY(d.w()->cardPitchPx() > 0.0);
+
+  // A quarter card of travel stays inside card 0: nearest-to-centre is still
+  // card 0, so only the fractional offset moves.
+  QVERIFY(d.h.controller.driftBy(d.px(0.25)));
+  QCOMPARE(d.w()->selectedIndex(), 0);
+  QVERIFY(qAbs(d.w()->selectionPositionF() - 0.25) < 0.001);
+
+  // Drift accumulates rather than restarting from the selected card.
+  QVERIFY(d.h.controller.driftBy(d.px(0.2)));
+  QVERIFY(qAbs(d.pos() - 0.45) < 0.001);
+
+  // Sub-pixel speeds are representable — the carousel position is a qreal, so
+  // unlike the scrollbar path there is no integer accumulator to round them to
+  // a standstill.
+  const qreal before = d.pos();
+  QVERIFY(d.h.controller.driftBy(0.1));
+  QVERIFY(d.pos() > before);
+}
+
+void TestCoverFlowController::drift_commitsSelectionWhenANewCardBecomesNearestCentre() {
+  DriftHarness d(10);
+  QSignalSpy selectSpy(&d.h.controller, &CoverFlowController::selectItemByIndex);
+
+  // Just short of the half-card mark: card 0 is still the nearest to centre,
+  // so the selection must NOT move yet.
+  QVERIFY(d.h.controller.driftBy(d.px(0.49)));
+  QCOMPARE(selectSpy.count(), 0);
+  QCOMPARE(d.w()->selectedIndex(), 0);
+
+  // Past it: card 1 is now centred and owns the selection. Selection changing
+  // hands at the half-card mark is what keeps the centred card and the
+  // selected item the same card, which the carousel has no way to express
+  // otherwise — it has no "scrolled away from the selection" state.
+  QVERIFY(d.h.controller.driftBy(d.px(0.02)));
+  QCOMPARE(selectSpy.count(), 1);
+  QCOMPARE(selectSpy.at(0).at(0).toInt(), 1);
+  QCOMPARE(d.w()->selectedIndex(), 1);
+
+  // The absolute position is continuous across the hand-off — no visual jump.
+  QVERIFY(qAbs(d.pos() - 0.51) < 0.001);
+  QVERIFY(qAbs(d.w()->selectionPositionF() - (-0.49)) < 0.001);
+
+  // Backwards works the same way.
+  QVERIFY(d.h.controller.driftBy(d.px(-0.02)));
+  QCOMPARE(selectSpy.count(), 2);
+  QCOMPARE(selectSpy.at(1).at(0).toInt(), 0);
+}
+
+void TestCoverFlowController::drift_reportsFalseAtEachEndAndClamps() {
+  DriftHarness d(4);
+
+  // Overshooting the last card clamps there and reports the end — attract's
+  // cue to bounce, matching what nextScrollPosition reports for a scrollbar.
+  QVERIFY(!d.h.controller.driftBy(d.px(99.0)));
+  QCOMPARE(d.w()->selectedIndex(), 3);
+  QVERIFY(qAbs(d.pos() - 3.0) < 0.001);
+
+  // Still pinned, still reporting the end, rather than running off the list.
+  QVERIFY(!d.h.controller.driftBy(d.px(5.0)));
+  QCOMPARE(d.w()->selectedIndex(), 3);
+
+  // And symmetrically at the near end.
+  QVERIFY(!d.h.controller.driftBy(d.px(-99.0)));
+  QCOMPARE(d.w()->selectedIndex(), 0);
+  QVERIFY(qAbs(d.pos()) < 0.001);
+
+  // Away from both ends it reports "still room".
+  QVERIFY(d.h.controller.driftBy(d.px(1.0)));
+}
+
+void TestCoverFlowController::drift_selectionCommitSnapsInsteadOfGliding() {
+  DriftHarness d(10);
+  // The glide only runs on a VISIBLE widget (setSelectedIndex snaps otherwise),
+  // so the suppression this pins is only observable once shown.
+  d.h.host.resize(800, 600);
+  d.h.host.show();
+  if (!QTest::qWaitForWindowExposed(&d.h.host)) {
+    QSKIP("window never exposed; the glide path this test discriminates cannot run");
+  }
+  // ensureWidget() leaves the carousel hidden — applyVisibility is what shows
+  // it once Cover Flow is the active view.
+  d.h.controller.applyVisibility();
+  if (!d.w()->isVisible()) {
+    QSKIP("carousel not visible under this QPA; the glide path cannot run");
+  }
+
+  QVERIFY(d.h.controller.driftBy(d.px(0.6)));
+  QCOMPARE(d.w()->selectedIndex(), 1);
+  const qreal settled = d.w()->selectionPositionF();
+  QVERIFY(qAbs(settled - (-0.4)) < 0.001);
+
+  // A glide would be animating selectionPositionF from -1.0 back toward 0 over
+  // 240ms, overwriting the drift on every frame inside that window and leaving
+  // the carousel visually stuck. Snapped, the offset is untouched by the clock.
+  QTest::qWait(120);
+  QCOMPARE(d.w()->selectedIndex(), 1);
+  QVERIFY2(qAbs(d.w()->selectionPositionF() - settled) < 0.001,
+           "selectionPositionF moved on its own after a drift commit — the glide was not "
+           "suppressed, so it is fighting the drift and will stall the carousel");
 }
 
 QTEST_MAIN(TestCoverFlowController)

@@ -65,8 +65,13 @@ private:
   void resolveEntityId(const QStringList &queries, int index, const QString &fallbackId,
                        const QString &collectionType, bool preferCompany,
                        std::function<void(ErrorUtils::Result<QString>)> done);
+  /// @p callback is taken by const reference and copied at each lambda capture
+  /// below, rather than copied once more into the parameter itself
+  /// (performance-unnecessary-value-param). The continuations still each own a
+  /// copy, so nothing about their lifetime changes.
   void finishEntityWithData(const QString &name, const QString &scopeKey,
-                            const WikidataLogoParser::EntityData &data, DetailCallback callback);
+                            const WikidataLogoParser::EntityData &data,
+                            const DetailCallback &callback);
 
   CollectionAccessor m_collectionAccessor;
   std::function<bool()> m_isShellAccessor;

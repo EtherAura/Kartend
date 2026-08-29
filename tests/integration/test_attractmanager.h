@@ -35,6 +35,17 @@ private slots:
   void testSetSuspendedDoesNotStartAttract();
   void testFixtureExposesAttractManagerViaInteractionManager();
   void testWheelScrollCountsAsActivity();
+
+  // Cover Flow autoscroll (Kartend-wmxwg)
+  void testCoverFlowStartsAutoscrollWithNoScrollbarRange();
+  void testCoverFlowTickDriftsCarouselAtConfiguredSpeed();
+  void testCoverFlowDriftRunsUnderTheDrivingSelectionGuard();
+  void testCoverFlowDriftEndBouncesAndReversesDirection();
+  void testNonCoverFlowViewStillRefusesToStartWithoutScrollbarRange();
+  void testStoppingAttractSettlesTheCarousel();
+
+  // Kartend-k9utx
+  void testKeyboardSelectionPathIsWiredToActivityDetection();
 };
 
 #endif // KARTEND_TESTS_TEST_ATTRACTMANAGER_H

@@ -220,7 +220,12 @@ void AttractManager::startAttract() {
   const bool isHorizontal = scroll && scroll->getMetrics().isHorizontal;
   QScrollBar *bar = isHorizontal ? m_itemScrollArea->horizontalScrollBar()
                                  : m_itemScrollArea->verticalScrollBar();
-  const bool scrollable = bar && bar->maximum() > 0;
+  // Cover Flow hides the scroll area entirely and forces both bar policies off,
+  // so the scrollbar test below can never pass there — ask the carousel instead
+  // (Kartend-wmxwg). A one-card carousel reports false and falls through to the
+  // scrollbar test, which correctly declines to start.
+  const bool coverFlow = scroll && scroll->coverFlowDriftable();
+  const bool scrollable = coverFlow || (bar && bar->maximum() > 0);
   if (wantScroll && !scrollable && !wantAdvance) {
     // Wanted to scroll but content fits viewport, and advance is off too —
     // try again on the next idle cycle.
@@ -263,6 +268,17 @@ void AttractManager::stopAttract() {
   m_bouncePauseTimer.stop();
   m_advanceSelectionTimer.stop();
 
+  // Kartend-wmxwg: a Cover Flow drift stops on whatever sub-card position the
+  // last tick reached, so without this the carousel is left visibly between two
+  // cards — the selected card sitting off-centre with its neighbour crowding
+  // the middle — until the next selection change happens to re-centre it. The
+  // scrollbar views need no equivalent: their autoscroll leaves the viewport at
+  // a valid scroll offset, which is a place the user could have scrolled to
+  // themselves. A half-card carousel is not.
+  if (IGridLayoutScroll *scroll = m_ctx ? m_ctx->scrollGrid() : nullptr) {
+    scroll->settleCoverFlow();
+  }
+
   qCDebug(lcAttractManager) << "Attract mode stopped";
   emit attractStopped();
 }
@@ -289,7 +305,8 @@ void AttractManager::onScrollTick() {
   const bool isHorizontal = scroll && scroll->getMetrics().isHorizontal;
   QScrollBar *bar = isHorizontal ? m_itemScrollArea->horizontalScrollBar()
                                  : m_itemScrollArea->verticalScrollBar();
-  if (!bar) {
+  const bool coverFlow = scroll && scroll->coverFlowDriftable();
+  if (!bar && !coverFlow) {
     stopAttract();
     return;
   }
@@ -298,6 +315,29 @@ void AttractManager::onScrollTick() {
                                                   m_generalSettings->attract.attractModeScrollSpeed,
                                                   UIConstants::Attract::MAX_SCROLL_SPEED_PX)
                                          : UIConstants::Attract::DEFAULT_SCROLL_SPEED_PX;
+
+  // Cover Flow: drift the carousel instead of a scrollbar (Kartend-wmxwg). The
+  // speed setting stays in its documented unit — pixels of travel per tick —
+  // and the carousel converts it against its own card pitch, so the same
+  // setting reads at a comparable rate in both views. Sub-pixel speeds need no
+  // accumulator here because the carousel position is a qreal, not an int; the
+  // integer accumulator below exists only because QScrollBar::setValue is int.
+  if (coverFlow) {
+    // The drift carries the canonical selection with it, so it trips the same
+    // wire onAdvanceSelectionTick has to guard: SelectionManager::selectionChanged
+    // → InteractionManager::onActivityDetected would read an attract-driven move
+    // as user input and stop attract on its first tick. Same qScopeGuard reset
+    // for the same reason (Kartend-77ay: driftCoverFlow runs slots synchronously
+    // and arbitrarily deep, and a bare reset would be skipped if one threw).
+    m_drivingSelection = true;
+    const auto guard = qScopeGuard([this]() { m_drivingSelection = false; });
+    if (!scroll->driftCoverFlow(speed * m_scrollDirection)) {
+      m_scrollAccumulator = 0.0;
+      m_bouncePaused = true;
+      m_bouncePauseTimer.start(UIConstants::Attract::BOUNCE_PAUSE_MS);
+    }
+    return;
+  }
 
   const auto step = AttractHelpers::accumulateScrollDelta(m_scrollAccumulator, speed);
   m_scrollAccumulator = step.newAccumulator;

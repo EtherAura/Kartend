@@ -130,6 +130,9 @@ public:
   [[nodiscard]] HorizontalAlignment getCurrentAlignment() const;
   void applyFilter(const QString &searchText) override;
   void cleanupActiveWidgets() override;
+  [[nodiscard]] bool coverFlowDriftable() const override;
+  bool driftCoverFlow(qreal px) override;
+  void settleCoverFlow() override;
   void clearFilter() override;
   void showSearchLoadingOverlay() override;
   void hideSearchLoadingOverlay() override;

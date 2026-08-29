@@ -98,9 +98,25 @@ SHA-256, and stream the bytes back into the destination layout.
 `collection_config` round-trips a full `CollectionConfig` struct,
 including every leaf cluster (`CollectionBackground`,
 `GridLayoutPreferences`, `SidebarAppearance`, `LauncherProfile`,
-`ScraperOverrides`, etc.) — see
+`ScraperOverrides`, `CollectionTreeSettings`, `SystemIconSettings`,
+etc.) — see
 [Configuration Reference](../user/Configuration-Reference.md) for the
 field list.
+
+Adding a field to a cluster does **not** bump `format_version`: every
+reader defaults a missing key to the struct's own default, and ignores
+keys it does not know, so bundles stay readable in both directions. The
+version exists for changes that break that — a rename, a retype, or a
+new *top-level* field a reader must have.
+
+Two of those clusters carry values that become filesystem path
+components downstream, and the reader treats them as untrusted:
+`system_icon_name` and `system_icon_pack` are **identities** (a libretro
+system name and a pack directory name), not paths, and are resolved
+against whatever RetroArch the importing machine has. They are checked
+with `PathUtils::isSafePathComponent` on import and dropped if they
+carry a separator or traversal, which leaves the row without a glyph —
+the same outcome as naming a system the importer does not have.
 
 ### Entry header
 

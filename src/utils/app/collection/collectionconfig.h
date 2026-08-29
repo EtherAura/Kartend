@@ -380,6 +380,19 @@ struct CollectionConfig {
     // even when its launcherPath is empty.
     launcher.defaultLauncherIndex =
         std::clamp(launcher.defaultLauncherIndex, 0, launcher.launcherCount() - 1);
+    // Navigation-sidebar sizes (Kartend-0wri2). These were previously clamped
+    // ONLY in their persistence loaders, which was enough while the INI was
+    // their sole entry point; a .kart bundle now carries them too, so the
+    // bound belongs on the canonical clamp every importer already calls.
+    // Idempotent with the loaders, which keep their own clamps.
+    collectionTree.treeWidth =
+        std::clamp(collectionTree.treeWidth, CollectionTreeSettings::kMinWidth,
+                   CollectionTreeSettings::kMaxWidth);
+    collectionTree.treeIconSize =
+        std::clamp(collectionTree.treeIconSize, CollectionTreeSettings::kMinIconSize,
+                   CollectionTreeSettings::kMaxIconSize);
+    systemIcon.iconSize = std::clamp(systemIcon.iconSize, SystemIconSettings::kMinIconSize,
+                                     SystemIconSettings::kMaxIconSize);
   }
 };
 

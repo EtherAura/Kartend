@@ -181,6 +181,23 @@ enum class PathStatus {
                                            const QString &fallback,
                                            const QString &extraForbidden = QString());
 
+/// True for the MS-DOS device names Windows still reserves in every directory:
+/// CON, PRN, AUX, NUL, COM1-9, LPT1-9. Case-insensitive, because the reservation
+/// is — "nul", "NUL" and "Nul" all name the same device.
+///
+/// The caller passes the stem BEFORE the first dot, not the whole base name:
+/// Windows resolves "NUL.txt" to the device too, so the extension buys nothing.
+///
+/// Shared rather than private to sanitizeFileBaseName because it is the ONLY
+/// genuinely duplicated part of the tree's three name rules (Kartend-7abos).
+/// The rest legitimately differ: sanitizeFileBaseName prefixes "t_" onto a
+/// title-derived filename, kartwriter's artworkTypeFileStem does the same to an
+/// already-lowercased [a-z0-9_-] stem it built itself, and kartreader's
+/// isSegmentSafe REFUSES the name outright because it validates untrusted
+/// bundle input. Only the predicate — "is this a reserved device name" — is one
+/// fact, and it is the one that must not be able to drift.
+[[nodiscard]] bool isWindowsReservedStem(const QString &stem);
+
 } // namespace PathUtils
 
 #endif

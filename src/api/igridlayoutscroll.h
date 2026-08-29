@@ -49,6 +49,28 @@ public:
   /// Release every active widget back to the pool and clear the active set
   /// (view-preserving teardown; the data model stays intact).
   virtual void cleanupActiveWidgets() = 0;
+
+  /// True when Cover Flow is the active view and its carousel has somewhere to
+  /// go (more than one card). Attract mode's autoscroll drives the item scroll
+  /// area's scrollbar, which Cover Flow hides with both policies forced off, so
+  /// `bar->maximum() > 0` is always false there — this is the equivalent
+  /// "is there room to move" test for the carousel (Kartend-wmxwg).
+  [[nodiscard]] virtual bool coverFlowDriftable() const = 0;
+
+  /// Move the Cover Flow carousel by @p px pixels of horizontal travel, signed,
+  /// carrying the canonical selection with it. Returns false once the drift
+  /// reaches either end — the caller's cue to bounce, matching what
+  /// AttractHelpers::nextScrollPosition reports for a scrollbar. No-op
+  /// returning false when Cover Flow is not the active view.
+  virtual bool driftCoverFlow(qreal px) = 0;
+
+  /// Glide the Cover Flow carousel back onto its selected card, cancelling any
+  /// fractional offset a drift left behind. Called when attract stops, because
+  /// a drift halts on whatever sub-card position the last tick reached — which
+  /// leaves the selected card visibly off-centre until the next selection
+  /// change (Kartend-wmxwg). No-op when Cover Flow is not the active view or
+  /// the carousel is already centred.
+  virtual void settleCoverFlow() = 0;
 };
 
 #endif // IGRIDLAYOUTSCROLL_H

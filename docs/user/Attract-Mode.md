@@ -36,10 +36,14 @@ Two independent behaviors compose:
 Smoothly scrolls the viewport along the view's scroll axis: vertically
 in Grid and List, horizontally in Horizontal view.
 
-Cover Flow is the exception. Its carousel isn't backed by the scroll
-area attract drives — that area is hidden with both scrollbars forced
-off — so autoscroll has nothing to move there and does nothing. Use
-**advance selection** instead if you want a Cover Flow demo.
+Cover Flow works differently, because its carousel isn't backed by the
+scroll area attract drives — that area is hidden with both scrollbars
+forced off. There, autoscroll **drifts the carousel** instead: cards flow
+continuously through the centre slot, and the selection moves with them,
+changing to whichever card is nearest the centre. Scroll speed keeps its
+meaning — pixels of travel per tick — measured against the width one card
+travels through the centre, so the same setting reads at a comparable rate
+in every view.
 
 | Setting | INI key | Default | Description |
 |---------|---------|---------|-------------|
@@ -48,11 +52,14 @@ off — so autoscroll has nothing to move there and does nothing. Use
 
 Autoscroll is **sub-pixel** — speeds below 1.0 actually move at 1 px
 every N ticks, not at "1 px per tick floored to 0." Makes slow scrolls
-look smooth.
+look smooth. In Cover Flow there is no such rounding at all: the carousel
+position is continuous, so a slow speed drifts smoothly rather than
+stepping.
 
 The viewport bounces at the top/bottom (or left/right) of the scrollable
 range — direction reverses when it hits the end. The grid layout is
-unchanged; only the scroll offset moves.
+unchanged; only the scroll offset moves. The Cover Flow carousel bounces
+the same way, at the first and last card.
 
 ### Advance selection
 
@@ -138,7 +145,7 @@ required to keep attract out of the way.
 | Splash overlays | Boot splash plays first, then attract's idle timer starts. |
 | Search bar focus | No interaction. Attract has no knowledge of the search bar and will start with it focused, as long as the selection hasn't moved for the timeout. |
 | Sidebar visible | Sidebar updates as selection advances — useful as a "showroom" mode. |
-| Cover Flow view | Advance-selection works and rotates the carousel. **Autoscroll does not** — Cover Flow hides the scroll area that attract drives, so there is nothing for it to scroll. Enable advance-selection if you want motion in Cover Flow. |
+| Cover Flow view | Both work. Autoscroll drifts the carousel continuously and carries the selection with it; advance-selection jumps it a whole card at a time on its own timer. Running both means two things moving the same selection — pick one for Cover Flow. |
 | Hold-scroll | Attract stops on the first hold-scroll *step*, not at button-down — so there is a `clickHoldDelayMs` window where both are notionally live. |
 
 ## Recipes

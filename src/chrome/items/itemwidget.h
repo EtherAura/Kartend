@@ -86,6 +86,14 @@ public:
   [[nodiscard]] qreal pulseOpacity() const { return m_pulseOpacity; }
 
   void setItemDimensions(int width, int height);
+
+  /// The grid's per-tile PITCH (cell size + spacing) on each axis, which is not
+  /// the same thing as the cell size when spacing is negative: the neighbouring
+  /// tile then starts before this one's box ends. Artwork is clamped to it so a
+  /// cover can never grow into its neighbour (Kartend-ari1x). Pass 0 on an axis
+  /// to leave it unconstrained — the default, so widgets built outside the
+  /// virtual grid behave exactly as before.
+  void setGridPitch(int pitchWidth, int pitchHeight);
   void setFontSize(int fontSize);
   void setHideTitles(bool hide);
   void setHideSubcollectionTitles(bool hide);
@@ -109,9 +117,11 @@ public:
   [[nodiscard]] int artworkSize() const { return m_artworkSize; }
   int m_itemWidth;
   int m_itemHeight;
-  int m_artworkSize = 0;  // Computed artwork size for triangle indicator positioning
-  int m_fontSize = 12;    // Default font size
-  int m_cornerRadius = 0; // Corner radius for artwork clipping
+  int m_artworkSize = 0;     // Computed artwork size for triangle indicator positioning
+  int m_fontSize = 12;       // Default font size
+  int m_cornerRadius = 0;    // Corner radius for artwork clipping
+  int m_gridPitchWidth = 0;  ///< 0 = unconstrained; see setGridPitch
+  int m_gridPitchHeight = 0; ///< 0 = unconstrained; see setGridPitch
   bool m_hideTitles = false;
   bool m_hideSubcollectionTitles = false;
   bool m_hideSubfolderTitle = false;

@@ -399,6 +399,13 @@ kartend_add_test(NAME TitleCountsHelpers
 target_include_directories(test_titlecountshelpers PRIVATE
   ${SRC_DIR}/core
   ${CMAKE_CURRENT_SOURCE_DIR}/integration/mocks)
+# Kartend-rp0hk: the title's plural forms come from the compiled English
+# catalogue, exactly as they do in the app, so the test needs to find and
+# install it. Depending on the lrelease target keeps the .qm built before the
+# test runs rather than leaving the assertion to depend on build order.
+target_compile_definitions(test_titlecountshelpers PRIVATE
+  KARTEND_TEST_TRANSLATIONS_DIR="${KARTEND_TRANSLATION_BUILD_DIR}")
+add_dependencies(test_titlecountshelpers kartend)
 
 # ScrollEventHandler — scroll-event wiring + user-scroll activity tracking:
 # valueChanged forwarding (connect/disconnect/re-target lifecycle), slider
