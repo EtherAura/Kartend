@@ -386,11 +386,25 @@ void ItemWidget::applyDimensions() {
     m_artworkButton->hide();
   }
 
-  // Grid mode: restore standard margins
+  // Resolved BEFORE the layout margins and the artwork are sized, because both
+  // depend on it. The list-mode arm above already returned, so this is the grid
+  // answer either way — it shares shouldPaintTitle() so the rule has a single
+  // definition rather than a third hand-copy to drift out of.
+  const bool shouldShowTitle = shouldPaintTitle();
+
+  // Kartend-hxly2: the configured item size names the TILE THE USER SEES, so a
+  // cell with no caption in it hands its whole area to the artwork. Both the
+  // margin and the layout spacing exist to hold a caption block off the cell
+  // edge and off the artwork; with no caption there is nothing for either to
+  // separate, and charging for them anyway is what made "Item Width: 325" draw
+  // a 277px tile at best. An untitled tile therefore fills its cell exactly,
+  // and the gap between neighbours becomes the spacing the user configured
+  // rather than that plus 48px of invisible reservation.
+  const int gridMargin = shouldShowTitle ? UIConstants::Widget::MARGIN : 0;
+  const int gridSpacing = shouldShowTitle ? UIConstants::Widget::SPACING : 0;
   if (layout()) {
-    layout()->setContentsMargins(UIConstants::Widget::MARGIN, UIConstants::Widget::MARGIN,
-                                 UIConstants::Widget::MARGIN, UIConstants::Widget::MARGIN);
-    layout()->setSpacing(UIConstants::Widget::SPACING);
+    layout()->setContentsMargins(gridMargin, gridMargin, gridMargin, gridMargin);
+    layout()->setSpacing(gridSpacing);
   }
   // Use the current font size for layout calculations to ensure titles don't
   // overlap artwork But ensure we don't reserve less space than the default
@@ -398,12 +412,6 @@ void ItemWidget::applyDimensions() {
   QFont referenceFont = this->font();
   referenceFont.setPointSize(std::max(12, m_fontSize));
   QFontMetrics referenceFm(referenceFont);
-
-  // Resolved BEFORE the artwork is sized, because the text reservation
-  // depends on it. The list-mode arm above already returned, so this is the
-  // grid answer either way — it shares shouldPaintTitle() so the rule has a
-  // single definition rather than a third hand-copy to drift out of.
-  const bool shouldShowTitle = shouldPaintTitle();
 
   // Three lines, so a long wrapped title never overlaps the art. Reserved only
   // when a title is actually drawn — hiding titles gives the band back to the
@@ -426,11 +434,20 @@ void ItemWidget::applyDimensions() {
   const int singleLineHeight = referenceFm.ascent() + referenceFm.descent();
   const int reservedTextHeight = shouldShowTitle ? singleLineHeight * textLines : 0;
 
-  // Doubled because ARTWORK_BACKDROP_INSET is a per-SIDE inset.
-  constexpr int kArtworkInset = 2 * UIConstants::Widget::ARTWORK_BACKDROP_INSET;
-  int availableHeight = m_itemHeight - UIConstants::Widget::PADDING - UIConstants::Widget::SPACING -
-                        reservedTextHeight - kArtworkInset;
-  int availableWidth = m_itemWidth - UIConstants::Widget::PADDING - kArtworkInset;
+  // What the cell actually spends, rather than a hand-kept tally that drifts
+  // from it: the margins the layout was just given, plus — only when a caption
+  // is drawn — the artwork-to-label gap and the text band itself.
+  //
+  // The old arithmetic also subtracted Widget::PADDING (20px) on both axes.
+  // Nothing spends it. The layout's contents margins are set from Widget::MARGIN
+  // directly above, and ARTWORK_BACKDROP_INSET happens to equal that same
+  // MARGIN — so the two of them were double-counting the ONE margin the layout
+  // charges, and PADDING was a third helping on top. That is the bulk of the
+  // 48px a 325px tile was losing (Kartend-hxly2).
+  const int marginTotal = 2 * gridMargin;
+  int availableWidth = m_itemWidth - marginTotal;
+  int availableHeight =
+      m_itemHeight - marginTotal - (shouldShowTitle ? gridSpacing + reservedTextHeight : 0);
   int artworkSize = qMin(availableWidth, availableHeight);
 
   // Clamp to what the GRID actually gives this tile. m_itemWidth/m_itemHeight

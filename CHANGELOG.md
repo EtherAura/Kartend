@@ -245,6 +245,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **"Item Width: 325" now draws a 325px tile.** With titles hidden it
+  drew 277 at best, and 237 once tight spacing was in play — the cell
+  reserved room for a caption that was not being drawn, and counted the
+  same margin twice besides. An untitled tile now fills its cell, so the
+  number you type is the tile you get and the gap between tiles is the
+  spacing you set. Tiles with titles shown gain 20px of artwork from the
+  double-counting fix. Very tight spacing still shrinks tiles rather than
+  letting them collide.
+
 - **Covers no longer overlap their neighbours when grid spacing is
   negative and titles are hidden.** Tiles clamp their artwork to the
   spacing you actually set, but that clamp was only applied when a

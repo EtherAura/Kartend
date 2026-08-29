@@ -18,6 +18,7 @@
 // and no DB is touched.
 
 #include "itemwidget.h"
+#include "uiconstants/widget.h"
 
 #include <QApplication>
 #include <QLabel>
@@ -158,15 +159,6 @@ struct GridCell {
 };
 const QList<GridCell> kCells = {{200, 260}, {150, 300}, {260, 200}, {200, 200}, {300, 150}};
 
-constexpr int kHorizontalOverhead = 40; // PADDING + 2*ARTWORK_BACKDROP_INSET
-constexpr int kVerticalOverhead = 48;   // …plus SPACING
-
-/// The reserved text height, read off the widget instead of recomputed.
-/// Calibrated on a deliberately squat cell (300x150): 260px of available width
-/// against at most 102px of height, so height binds whether or not the band is
-/// reserved, and the difference between the two artwork sizes IS the band.
-int measuredTextReservation();
-
 ItemWidget *makeGridItem(ItemWidget &w, int cw, int ch, bool hide) {
   w.setItemName(QStringLiteral("A Reasonably Long Item Title Here"));
   w.setHideTitles(hide);
@@ -178,13 +170,6 @@ ItemWidget *makeGridItem(ItemWidget &w, int cw, int ch, bool hide) {
   return &w;
 }
 
-int measuredTextReservation() {
-  ItemWidget shown;
-  ItemWidget hidden;
-  makeGridItem(shown, 300, 150, false);
-  makeGridItem(hidden, 300, 150, true);
-  return hidden.artworkSize() - shown.artworkSize();
-}
 } // namespace
 
 void TestItemWidgetTitleVisibility::gridTextReservationIsUnconditional_data() {
@@ -199,35 +184,29 @@ void TestItemWidgetTitleVisibility::gridTextReservationIsUnconditional() {
   QFETCH(int, cw);
   QFETCH(int, ch);
 
-  const int reserved = measuredTextReservation();
-  QVERIFY2(reserved > 0, "no band is being reserved for the title at all");
-
   ItemWidget shown;
   ItemWidget hidden;
   makeGridItem(shown, cw, ch, false);
   makeGridItem(hidden, cw, ch, true);
 
-  // Which axis binds while the title IS drawn — that is the state the band has
-  // to be freed from.
-  const int availableWidth = cw - kHorizontalOverhead;
-  const int availableHeight = ch - kVerticalOverhead - reserved;
-  const bool widthLimited = availableWidth < availableHeight;
+  // Kartend-hxly2: an untitled tile IS its cell. The layout margin and the
+  // artwork-to-label spacing both exist to hold a caption off the cell edge and
+  // off the art, so with no caption drawn neither has anything left to
+  // separate and the whole cell goes to the artwork. This is what makes the
+  // configured item size the size the user actually sees.
+  //
+  // This supersedes the older expectation that a WIDTH-limited tile could not
+  // benefit from hiding its title. That held while the horizontal overhead was
+  // charged unconditionally; now that hiding the caption frees the margin on
+  // both axes, every tile grows.
+  QCOMPARE(hidden.artworkSize(), qMin(cw, ch));
+  QVERIFY2(hidden.artworkSize() > shown.artworkSize(),
+           "hiding the title did not hand the caption's space back to the artwork");
 
-  // Hiding the title gives its band back to the artwork on a HEIGHT-limited
-  // tile, which is the whole point of Kartend-ari1x. On a WIDTH-limited tile
-  // the width still binds, so nothing changes — the issue wrongly believed the
-  // reporter's tiles were in that second group.
-  if (widthLimited) {
-    QCOMPARE(hidden.artworkSize(), shown.artworkSize());
-  } else {
-    QVERIFY2(hidden.artworkSize() > shown.artworkSize(),
-             "hiding the title left the artwork the same size on a height-limited tile — the "
-             "reserved band is not being given back");
-  }
-  // Freeing the band can only ever grow the art, and never past the width,
-  // which no amount of freed height can relieve.
-  QVERIFY(hidden.artworkSize() >= shown.artworkSize());
-  QCOMPARE(hidden.artworkSize(), qMin(availableWidth, availableHeight + reserved));
+  // A titled tile still pays for exactly what it draws, and never more than the
+  // cell can hold.
+  QVERIFY(shown.artworkSize() > 0);
+  QVERIFY(shown.artworkSize() <= qMin(cw, ch));
 }
 
 // The regression that reverted this once (Kartend-ari1x). Negative grid spacing
@@ -271,10 +250,12 @@ void TestItemWidgetTitleVisibility::gridArtworkNeverExceedsTilePitch() {
                             .arg(hide)));
   }
 
-  // Positive or zero spacing must be untouched by the clamp: the pitch is then
-  // at least the cell, so it can never be the binding constraint and no
-  // ordinary configuration changes behaviour.
-  if (spacing >= 0) {
+  // The clamp holds back a visible gutter of Widget::SPACING, so it binds
+  // whenever the pitch is under cell + gutter. Since Kartend-hxly2 made an
+  // untitled tile fill its cell, that now includes zero and small positive
+  // spacings — below the gutter the tile shrinks to keep neighbours apart.
+  // Above it the clamp must not bind at all, which is what this pins.
+  if (spacing >= UIConstants::Widget::SPACING) {
     ItemWidget clamped;
     ItemWidget unclamped;
     for (ItemWidget *w : {&clamped, &unclamped}) {
