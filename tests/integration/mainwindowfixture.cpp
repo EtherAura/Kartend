@@ -154,6 +154,22 @@ MainWindowFixture::MainWindowFixture(const std::function<void()> &seedSandbox) {
   }
 
   m_window = std::make_unique<MainWindow>();
+
+  // Kartend-ud6q2: the creation-time collection-artwork fetch is a live
+  // NETWORK call. Appending to m_collections and calling
+  // rebuildHierarchyCache() is an ordinary thing for these tests to do, and
+  // it is exactly the trigger — so the feature turned most MainWindow tests
+  // into ones that talk to the internet. Caught by LeakSanitizer, which
+  // reported a libproxy leak inside QNetworkProxyFactory reached from
+  // HttpClient during TestNavigationManager; the request was happening in
+  // every other configuration too, only silently.
+  //
+  // Off here for the same reason this fixture sandboxes QStandardPaths and
+  // trips on writes that escape it: a test should not reach outside the
+  // process. Construction itself is safe either way (the first hierarchy
+  // rebuild only seeds the baseline), so this lands before anything can
+  // fire. A test that wants the behaviour re-enables it explicitly.
+  m_window->m_generalSettings.scraper.options.autoScrapeEntityArtOnCreate = false;
 }
 
 MainWindowFixture::~MainWindowFixture() {
