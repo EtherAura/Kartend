@@ -3,6 +3,7 @@
 
 #include "applicationcontext.h"
 #include "artworkutils.h"
+#include "gridlayoutcalculator.h"
 #include "iartworkmanager.h"
 #include "idatabasemanager.h"
 #include "itemwidget.h"
@@ -27,9 +28,14 @@ IDatabaseManager *ItemWidgetFactory::dbMgr() const {
   return m_ctx ? m_ctx->databaseManager() : nullptr;
 }
 
-void ItemWidgetFactory::setMetrics(int itemWidth, int itemHeight) {
-  m_itemWidth = itemWidth;
-  m_itemHeight = itemHeight;
+void ItemWidgetFactory::setMetrics(const GridMetrics &metrics) {
+  m_itemWidth = metrics.itemWidth;
+  m_itemHeight = metrics.itemHeight;
+  // The PITCH is what neighbours are actually spaced by, and it differs from
+  // the cell only when spacing is negative — which is exactly the case where
+  // artwork can grow into the next tile. See configureWidget.
+  m_gridPitchWidth = metrics.itemWidth + metrics.horizontalSpacing;
+  m_gridPitchHeight = metrics.itemHeight + metrics.verticalSpacing;
 }
 
 void ItemWidgetFactory::setFileData(const QStringList *filePaths,
@@ -88,6 +94,13 @@ void ItemWidgetFactory::configureBaseWidget(ItemWidget *widget) {
 
   widget->setCornerRadius(m_context.config.gridLayout.cornerRadius);
   widget->setItemDimensions(m_itemWidth, m_itemHeight);
+  // Kartend-rrv5z: arm the pitch clamp HERE, at the point every tile
+  // is built. It previously existed only on the scroll engine's reconfigure
+  // paths, so a tile was clamped only if a settings change happened to sweep it
+  // later; a freshly realised one had pitch 0 and grew unclamped. With titles
+  // hidden the reserved caption band is returned to the artwork, so under
+  // negative spacing that overflow is large enough to overlap the neighbour.
+  widget->setGridPitch(m_gridPitchWidth, m_gridPitchHeight);
   // Force artwork refresh after all configuration is set to ensure
   // corner radius and other settings are applied to the placeholder
   // Skip for list mode since artwork is hidden

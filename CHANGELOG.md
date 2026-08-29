@@ -245,6 +245,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Covers no longer overlap their neighbours when grid spacing is
+  negative and titles are hidden.** Tiles clamp their artwork to the
+  spacing you actually set, but that clamp was only applied when a
+  settings change swept an existing tile — a tile drawn for the first
+  time as you scrolled it into view was never clamped, so its cover grew
+  into the tile beside it. Every tile is now clamped from the moment it
+  is built.
+
 - **A collection with no artwork folder can now keep its logo.** Fetching
   a collection's info when it had no artwork directory of its own looked
   like it worked — the text arrived, nothing reported an error — but the

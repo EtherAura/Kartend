@@ -505,7 +505,7 @@ void ScrollManager::setupNormalVirtualScrolling() {
   if (m_widgetFactory) {
     m_widgetFactory->setParentWidget(m_virtualContainer);
     m_widgetFactory->setCollectionContext(m_context);
-    m_widgetFactory->setMetrics(m_metrics.itemWidth, m_metrics.itemHeight);
+    m_widgetFactory->setMetrics(m_metrics);
     m_widgetFactory->setFileData(&m_dataManager->filePaths(), &m_dataManager->fileNames());
     m_widgetFactory->setTotalItemCount(m_dataManager->fileCount());
     m_widgetFactory->setSubcollectionNameResolver(

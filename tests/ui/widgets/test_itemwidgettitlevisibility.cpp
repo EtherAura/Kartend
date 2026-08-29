@@ -37,6 +37,7 @@ private slots:
   void gridTextReservationIsUnconditional();
   void gridContentNeverOverflowsItsCell_data();
   void gridContentNeverOverflowsItsCell();
+  void hiddenTitleArtworkStaysWithinTilePitch();
   void gridArtworkNeverExceedsTilePitch_data();
   void gridArtworkNeverExceedsTilePitch();
 };
@@ -313,6 +314,36 @@ void TestItemWidgetTitleVisibility::gridContentNeverOverflowsItsCell() {
                             .arg(hide)));
     QVERIFY(w.imageLabel->geometry().right() < cw);
   }
+}
+
+void TestItemWidgetTitleVisibility::hiddenTitleArtworkStaysWithinTilePitch() {
+  // Kartend-rrv5z. gridArtworkNeverExceedsTilePitch above already proves the
+  // clamp WORKS once a pitch is set — including on the reporter's exact 325 /
+  // -80 config — which is precisely why the field bug was confusing: covers
+  // still overlapped on a 52,410-item grid. The clamp was never reached.
+  // ItemWidgetFactory built every tile without calling setGridPitch, so tiles
+  // were born with pitch 0, and only the scroll engine's reconfigure paths ever
+  // armed one. A tile was protected only if some later pass happened to sweep
+  // it; a freshly realised one was not.
+  //
+  // So what is worth pinning here is the other half of the contract — that 0
+  // really does mean UNCONSTRAINED, and is therefore never a safe state to
+  // leave a grid tile in. Hidden titles are what make the overflow big enough
+  // to see, since the reserved caption band goes back to the artwork.
+  constexpr int kCell = 325;
+  constexpr int kPitch = kCell - 80; // where the neighbouring tile starts
+
+  ItemWidget unarmed;
+  unarmed.setHideTitles(true);
+  unarmed.setItemDimensions(kCell, kCell);
+  QVERIFY2(
+      unarmed.artworkSize() > kPitch,
+      qPrintable(QStringLiteral("an unarmed tile sized %1 no longer overflows the %2px pitch. If "
+                                "the pitch now defaults to something safe, this test's premise is "
+                                "stale — revisit it rather than deleting it, because the factory "
+                                "arming the pitch is what this is guarding.")
+                     .arg(unarmed.artworkSize())
+                     .arg(kPitch)));
 }
 
 QTEST_MAIN(TestItemWidgetTitleVisibility)

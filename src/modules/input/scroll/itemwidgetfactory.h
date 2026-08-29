@@ -12,6 +12,7 @@ class QWidget;
 class IArtworkManager;
 class IDatabaseManager;
 class WidgetPoolManager;
+struct GridMetrics;
 #include "applicationcontext_fwd.h"
 
 namespace ItemWidgetFactoryHelpers {
@@ -120,7 +121,16 @@ public:
     // name for variable expansion) — drop the memo when the context changes.
     m_placeholderArtworkCache.clear();
   }
-  void setMetrics(int itemWidth, int itemHeight);
+  /// Cell size AND tile pitch for the widgets this factory hands out.
+  ///
+  /// Takes the whole GridMetrics rather than a width/height pair on purpose
+  /// (Kartend-rrv5z). The pitch clamp that stops artwork growing
+  /// into the neighbouring tile under NEGATIVE spacing was armed only by the
+  /// scroll engine's two reconfigure paths, so every tile the factory built —
+  /// which is every tile realised by scrolling one into view — was created
+  /// with pitch 0 and therefore unclamped. Passing the metrics as one value
+  /// means a caller cannot supply the cell size and forget the spacing.
+  void setMetrics(const GridMetrics &metrics);
 
   // Collections list for looking up collection names
   void setCollections(const QList<CollectionConfig> *collections) {
@@ -311,6 +321,8 @@ private:
   CollectionContext m_context;
   int m_itemWidth = 0;
   int m_itemHeight = 0;
+  int m_gridPitchWidth = 0;  ///< cell + spacing; see ItemWidget::setGridPitch
+  int m_gridPitchHeight = 0; ///< cell + spacing; see ItemWidget::setGridPitch
 
   SubcollectionNameResolver m_subcollectionNameResolver;
   const QStringList *m_filePaths = nullptr;

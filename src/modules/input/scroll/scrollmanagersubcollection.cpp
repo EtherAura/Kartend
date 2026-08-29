@@ -25,7 +25,7 @@ void ScrollManager::updateContextForSubcollection(int subcollectionIndex) {
   // itemWidth depends on viewport width
   if (m_widgetFactory) {
     m_widgetFactory->setCollectionContext(m_context);
-    m_widgetFactory->setMetrics(m_metrics.itemWidth, m_metrics.itemHeight);
+    m_widgetFactory->setMetrics(m_metrics);
   }
   positionVirtualContainer();
   updateVirtualView();

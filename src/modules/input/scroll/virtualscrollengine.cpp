@@ -381,8 +381,7 @@ void VirtualScrollEngine::handleLayoutChange() {
   // Update factory with new metrics before creating widgets
   // Critical for view type changes where item dimensions differ significantly
   if (m_owner->m_widgetFactory) {
-    m_owner->m_widgetFactory->setMetrics(m_owner->m_metrics.itemWidth,
-                                         m_owner->m_metrics.itemHeight);
+    m_owner->m_widgetFactory->setMetrics(m_owner->m_metrics);
   }
 
   positionVirtualContainer();
@@ -483,8 +482,7 @@ void VirtualScrollEngine::primeLayoutFor(const CollectionConfig &config) {
   // Update factory metrics after calculation - critical for list mode where
   // itemWidth depends on viewport width calculated in calculateVirtualMetrics()
   if (m_owner->m_widgetFactory) {
-    m_owner->m_widgetFactory->setMetrics(m_owner->m_metrics.itemWidth,
-                                         m_owner->m_metrics.itemHeight);
+    m_owner->m_widgetFactory->setMetrics(m_owner->m_metrics);
   }
   if (!m_owner->m_virtualContainer) {
     createVirtualContainer();
