@@ -10,6 +10,13 @@ kartend_add_test(NAME ScrapeJobGrouping
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# EntityJobBuilder tests (entity queue rules shared by the scraper dialog and
+# the silent creation-time fetch — Kartend-ud6q2)
+kartend_add_test(NAME EntityJobBuilder
+  SOURCES modules/scraper/test_entityjobbuilder.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # ConfigValidation tests (schema + cross-collection diagnostics)
 kartend_add_test(NAME ConfigValidation
   SOURCES utils/fs/test_configvalidation.cpp

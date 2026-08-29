@@ -21,6 +21,7 @@
 #include <QSlider>
 #include <QTimer>
 #include <QToolButton>
+#include <utility>
 
 #include "applicationmanager.h"
 #include "artworkmanager.h"
@@ -825,6 +826,39 @@ void MainWindow::rebuildHierarchyCache() {
   // playlist resyncs and reorders all land in one place.
   if (m_collectionTreeController) {
     m_collectionTreeController->rebuildTree();
+  }
+  autoScrapeNewCollectionArt();
+}
+
+void MainWindow::autoScrapeNewCollectionArt() {
+  // Recompute the identity set on every pass, gate or no gate: the baseline
+  // must keep tracking reality even while the setting is off, or turning it on
+  // later would read the whole existing library as newly created.
+  QSet<QString> current;
+  QList<int> created;
+  current.reserve(m_collections.size());
+  for (int i = 0; i < m_collections.size(); ++i) {
+    const CollectionConfig &cfg = m_collections[i];
+    if (cfg.isPlaylist) continue;
+    const QString uuid = CollectionUtils::computeCollectionUuid(cfg);
+    if (uuid.isEmpty()) continue;
+    current.insert(uuid);
+    if (!m_seenCollectionUuidsSeeded || m_seenCollectionUuids.contains(uuid)) continue;
+    // A collection's uuid is derived from its name + media directory, so a
+    // RENAME also produces an identity that was never seen before. Renaming is
+    // not creating, and re-fetching there would spend requests to replace art
+    // the collection already has. Only take collections with no art wired at
+    // all — which is what a genuinely new one looks like, and which also keeps
+    // this off a collection whose icon the user chose by hand.
+    if (!cfg.collectionIcon.isEmpty() || !cfg.background.headerLogoImage.isEmpty()) continue;
+    created.append(i);
+  }
+  m_seenCollectionUuids = std::move(current);
+  const bool wasSeeded = std::exchange(m_seenCollectionUuidsSeeded, true);
+  if (!wasSeeded || created.isEmpty()) return;
+  if (!m_generalSettings.scraper.options.autoScrapeEntityArtOnCreate) return;
+  if (m_scraperController) {
+    m_scraperController->startBackgroundEntityScrape(created);
   }
 }
 

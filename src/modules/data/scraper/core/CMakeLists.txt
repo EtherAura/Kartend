@@ -3,6 +3,7 @@ target_sources(kartend_data PRIVATE
   batchscraperunner_media.cpp
   batchscraperunner_watchdog.cpp
   batchscraperunner_worker.cpp
+  entityjobbuilder.cpp
   entityscrapecoordinator.cpp
   scrapelock.cpp
   scrapependingstate.cpp
@@ -17,6 +18,7 @@ target_sources(kartend_data PRIVATE
   scraperretrypolicy.cpp
   scrapedownloaddispatcher.cpp
   batchscraperunner.h
+  entityjobbuilder.h
   entityscrapecoordinator.h
   scrapelock.h
   scrapependingstate.h

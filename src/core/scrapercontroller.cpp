@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <memory>
+#include <utility>
 
 #include <QAbstractButton>
 #include <QApplication>
@@ -20,6 +21,7 @@
 #include <QString>
 #include <QStringList>
 #include <Qt>
+#include <QTimer>
 
 #include "applicationcontext.h"
 #include "artworkutils.h"
@@ -28,6 +30,7 @@
 #include "collection/typehelpers.h"
 #include "collection/validationhelpers.h"
 #include "detailspanemanager.h"
+#include "entityjobbuilder.h"
 #include "idatabasemanager.h"
 #include "interactionmanager.h"
 #include "itemwidget.h"
@@ -72,7 +75,15 @@ makeProviderBuilder(QList<CollectionConfig> *collections, GeneralSettings *gener
 ScraperController::ScraperController(QObject *parent)
     : QObject(parent), m_scraperService(std::make_unique<Scraper::ScraperService>(nullptr)) {
   connect(m_scraperService.get(), &Scraper::ScraperService::scrapeFinished, this,
-          [this](const Scraper::ScraperService::Summary &) { emit scrapeRunFinished(); });
+          [this](const Scraper::ScraperService::Summary &) {
+            emit scrapeRunFinished();
+            // Kartend-ud6q2: a creation-time fetch requested while this run was
+            // live has been waiting for the service to go idle. Drain on the
+            // next event-loop turn rather than here — startScrape re-entered
+            // from inside its own scrapeFinished emission would restart the
+            // state machine while the finishing run is still unwinding it.
+            QTimer::singleShot(0, this, [this]() { drainPendingBackgroundEntityScrape(); });
+          });
 }
 
 ScraperController::~ScraperController() = default;
@@ -135,6 +146,14 @@ ScrapeResultDialog *ScraperController::prepareScraperDialog() {
           if (nav && CollectionUtils::isValidIndex(curIdx, cols)) {
             nav->safeReloadCollection(curIdx);
           }
+          // Kartend-ud6q2: a creation-time entity fetch is silent by design.
+          // The dialog is bound to the shared service for as long as it
+          // exists, so it reports the end of a background run the user never
+          // started — everything above (fresh artwork cache, reloaded grid and
+          // sidebar) is still wanted, only the modal box is not. Cleared here
+          // rather than on scrapeFinished because that handler runs BEFORE the
+          // dialog re-emits, and would clear the flag before this reads it.
+          if (std::exchange(m_backgroundEntityRunActive, false)) return;
           QString text =
               tr("Scrape complete.\n\nScraped: %1\nSkipped: %2\nNot found: %3\nErrors: %4")
                   .arg(scraped)
@@ -180,8 +199,10 @@ ScrapeResultDialog *ScraperController::prepareScraperDialog() {
   sctx.collections = collections;
   sctx.ctx = appCtx;
   sctx.generalSettings = generalSettings;
-  sctx.providerBuilder =
-      ScraperControllerInternal::makeProviderBuilder(collections, generalSettings);
+  // One builder for both contexts: bindServiceContext pushes it into the
+  // long-lived service (so a resume on next launch can still build providers)
+  // and hands it back for the dialog's copy.
+  sctx.providerBuilder = bindServiceContext();
   sctx.applyResult = [this, collections,
                       generalSettings](int collectionIndex, const QString &filePath,
                                        const ScrapeResultDialog::Result &result) {
@@ -206,24 +227,39 @@ ScrapeResultDialog *ScraperController::prepareScraperDialog() {
     (void)Scraper::applyScrapedItem(innerDb, uuid, filePath, artworkDir, baseName, result.item,
                                     writes, rescrapeMode);
   };
-  // Configure the long-lived service (owned by this controller, constructed
-  // in the ctor) with the same builder so a resume on next launch can still
-  // build providers, then rebind dialog context + service through the
-  // dialog's single open-time entry point. bindForOpen is idempotent — no
-  // connection it (transitively) makes can stack across re-opens.
+  // Rebind dialog context + service through the dialog's single open-time
+  // entry point. bindForOpen is idempotent — no connection it (transitively)
+  // makes can stack across re-opens.
+  dialog->bindForOpen(sctx, m_scraperService.get());
+  return dialog;
+}
+
+std::function<std::shared_ptr<MetadataLookupProvider>(int)>
+ScraperController::bindServiceContext() {
+  QList<CollectionConfig> *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
+  if (!collections) return {};
+  GeneralSettings *generalSettings =
+      m_ctx.getGeneralSettings ? m_ctx.getGeneralSettings() : nullptr;
+  const ApplicationContext *appCtx =
+      m_ctx.getApplicationContext ? m_ctx.getApplicationContext() : nullptr;
+
   Scraper::ScraperService::Context srvCtx;
   srvCtx.ctx = appCtx;
   srvCtx.generalSettings = generalSettings;
   srvCtx.collections = collections;
-  srvCtx.providerBuilder = sctx.providerBuilder;
+  srvCtx.providerBuilder =
+      ScraperControllerInternal::makeProviderBuilder(collections, generalSettings);
   m_scraperService->setContext(srvCtx);
-  dialog->bindForOpen(sctx, m_scraperService.get());
-  return dialog;
+  return srvCtx.providerBuilder;
 }
 
 void ScraperController::openScraperDialog(int preCollectionIndex, const QString &preItemPath) {
   ScrapeResultDialog *dialog = prepareScraperDialog();
   if (!dialog) return;
+  // A run the user started themselves always reports its summary, even if a
+  // silent background fetch left the flag set (no dialog existed to consume
+  // it at the time).
+  m_backgroundEntityRunActive = false;
   dialog->startUnifiedScrape(preCollectionIndex, preItemPath);
   dialog->show();
   dialog->raise();
@@ -233,12 +269,101 @@ void ScraperController::openScraperDialog(int preCollectionIndex, const QString 
 void ScraperController::openEntityScraperDialog(int collectionIndex) {
   ScrapeResultDialog *dialog = prepareScraperDialog();
   if (!dialog) return;
+  m_backgroundEntityRunActive = false; // user-initiated: show its summary
   // Don't surface an empty dialog when the collection has no entity-capable
   // scraper — startEntityScrape shows the reason and returns false.
   if (!dialog->startEntityScrape(collectionIndex)) return;
   dialog->show();
   dialog->raise();
   dialog->activateWindow();
+}
+
+void ScraperController::startBackgroundEntityScrape(const QList<int> &collectionIndices) {
+  if (collectionIndices.isEmpty()) return;
+  for (int index : collectionIndices) {
+    if (index >= 0 && !m_pendingBackgroundEntityIndices.contains(index)) {
+      m_pendingBackgroundEntityIndices.append(index);
+    }
+  }
+  drainPendingBackgroundEntityScrape();
+}
+
+void ScraperController::drainPendingBackgroundEntityScrape() {
+  if (m_pendingBackgroundEntityIndices.isEmpty()) return;
+  if (!m_scraperService || m_scraperService->isActive()) return;
+  // Hold while a modal dialog is up. Two reasons, both load-bearing:
+  //
+  //  * The settings dialog emits collectionSaved for a new collection while
+  //    it is still open, so this fires mid-edit — and the collection list can
+  //    keep mutating under a live run.
+  //  * Its own creation-time "fetch collection info" opt-in (Kartend-445su)
+  //    launches a VISIBLE entity scrape when the dialog closes. Starting
+  //    first would make that explicit request collide with this implicit one
+  //    and greet the user with "a scrape is already running". Letting the
+  //    user's own request go first costs nothing: by the time this drains,
+  //    the art has landed and the re-check below drops the request.
+  if (QApplication::activeModalWidget()) {
+    if (!m_backgroundDrainRetryArmed) {
+      m_backgroundDrainRetryArmed = true;
+      // Polled rather than signal-driven: a modal can be closed from anywhere
+      // (settings, import wizard, a message box), and there is no one signal
+      // that means "the last modal went away" to hang this on.
+      QTimer::singleShot(kBackgroundDrainRetryMs, this, [this]() {
+        m_backgroundDrainRetryArmed = false;
+        drainPendingBackgroundEntityScrape();
+      });
+    }
+    return;
+  }
+  // No database, no persistence sink for the scraped metadata rows. Unlike
+  // the dialog paths this one has no window to warn through — and warning
+  // would break the silence anyway — so hold the request instead. The next
+  // drain (a later creation, or the end of another run) retries once the DB
+  // is up. Same "absent getter counts as no database" reading as
+  // prepareScraperDialog.
+  if (!(m_ctx.getDatabaseManager ? m_ctx.getDatabaseManager() : nullptr)) return;
+
+  QList<CollectionConfig> *collections = m_ctx.getCollections ? m_ctx.getCollections() : nullptr;
+  if (!collections) return;
+  const auto providerBuilder = bindServiceContext();
+  if (!providerBuilder) return;
+
+  // Take the whole pending set now: indices that build no jobs are dropped
+  // rather than retried forever, and a collection deleted between request and
+  // drain simply falls out of range.
+  const QList<int> indices = std::exchange(m_pendingBackgroundEntityIndices, {});
+  QList<Scraper::ScraperService::CollectionJob> queue;
+  for (int index : indices) {
+    if (!CollectionUtils::isValidIndex(index, collections)) continue;
+    const CollectionConfig &cfg = (*collections)[index];
+    // Re-checked here, not only when the request was made: anything that
+    // landed art meanwhile — the settings dialog's own opt-in fetch, a
+    // hand-picked icon, an earlier queued job for the same collection — makes
+    // this request redundant, and dropping it is how the implicit fetch stays
+    // out of the way of the explicit one.
+    if (!cfg.collectionIcon.isEmpty() || !cfg.background.headerLogoImage.isEmpty()) continue;
+    const QString expandedMediaDir = PathUtils::validateAndExpandPath(cfg.mediaDirectory, cfg.name);
+    const QString uuid = CollectionUtils::computeCollectionUuid(cfg.name, expandedMediaDir);
+    const QString artworkDir = PathUtils::validateAndExpandPath(cfg.artworkDirectory, cfg.name);
+    queue.append(Scraper::buildEntityJobs(*collections, index, uuid, artworkDir, providerBuilder));
+  }
+  if (queue.isEmpty()) return;
+
+  // Auto mode, all entity media, write metadata — the same shape the dialog's
+  // one-shot entity scrape uses, so the two routes land identical art.
+  m_backgroundEntityRunActive = true;
+  if (!m_scraperService->startScrape(queue, Scraper::ScraperService::Mode::Auto,
+                                     /*mediaFilter=*/{}, /*writeMetadata=*/true)) {
+    // Refused — the service went active between the idle check and here.
+    // Put the indices back, ahead of anything that arrived meanwhile, so the
+    // end of that run picks them up in request order.
+    m_backgroundEntityRunActive = false;
+    QList<int> restored = indices;
+    for (int index : std::as_const(m_pendingBackgroundEntityIndices)) {
+      if (!restored.contains(index)) restored.append(index);
+    }
+    m_pendingBackgroundEntityIndices = restored;
+  }
 }
 
 void ScraperController::promptResumePendingScrapeIfAny() {

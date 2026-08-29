@@ -27,6 +27,7 @@
 
 #include "applicationcontext.h"
 #include "batchprogressview.h"
+#include "entityjobbuilder.h"
 #include "mediatypecheckboxbuilder.h"
 #include "scraperesultselectionmodel.h"
 #include "scraperesultthumbnailloader.h"
@@ -515,48 +516,13 @@ void ScrapeResultDialogUnified::rescrapeFailedItems() {
 QList<Scraper::ScraperService::CollectionJob>
 ScrapeResultDialogUnified::buildEntityJobs(int collectionIndex, const QString &uuid,
                                            const QString &artworkDir) const {
-  QList<Scraper::ScraperService::CollectionJob> jobs;
-  if (!m_dlg->m_scraperCtx.collections || collectionIndex < 0 ||
-      collectionIndex >= m_dlg->m_scraperCtx.collections->size()) {
-    return jobs;
-  }
-  const CollectionConfig &cfg = (*m_dlg->m_scraperCtx.collections)[collectionIndex];
-  // A playlist is a synthesized config spanning whatever its rules match — it
-  // has no single platform to resolve, so an entity job could only ever land
-  // in the not-found bucket.
-  if (cfg.isPlaylist) {
-    return jobs;
-  }
-  auto provider = m_dlg->m_scraperCtx.providerBuilder
-                      ? m_dlg->m_scraperCtx.providerBuilder(collectionIndex)
-                      : nullptr;
-  if (!provider) {
-    return jobs;
-  }
-  QList<Scraper::ScrapeEntityType> types = provider->supportedEntities();
-  // Kartend-445su: collection/group data rides along with every entity
-  // launch. A provider that cannot scrape Collection entities itself
-  // (ScreenScraper is Platform-only) still gets a Collection job — the
-  // coordinator's capability routing dispatches it to the
-  // Wikidata/Wikipedia data provider.
-  if (!types.contains(Scraper::ScrapeEntityType::Collection)) {
-    types.append(Scraper::ScrapeEntityType::Collection);
-  }
-  for (Scraper::ScrapeEntityType type : types) {
-    if (type == Scraper::ScrapeEntityType::Game) continue; // Game is the per-item path
-    Scraper::ScraperService::CollectionJob job;
-    job.collectionIndex = collectionIndex;
-    job.collectionUuid = uuid;
-    job.collectionName = cfg.name;
-    job.artworkDir = artworkDir;
-    job.entity.type = type;
-    // Platform resolves its systemeid from an empty identity (override →
-    // autodetect); Collection/Category carry the collection uuid (Kartend-ckepd.1).
-    job.entity.identity = (type == Scraper::ScrapeEntityType::Platform) ? QString() : uuid;
-    job.entity.collectionIndex = collectionIndex;
-    jobs.append(job);
-  }
-  return jobs;
+  // Kartend-ud6q2: the rules moved to Scraper::buildEntityJobs so the
+  // background creation-time fetch (which has no dialog) enqueues exactly what
+  // this dialog does. Kept as a thin member because the call sites here
+  // already hold the dialog context rather than the collection list.
+  if (!m_dlg->m_scraperCtx.collections) return {};
+  return Scraper::buildEntityJobs(*m_dlg->m_scraperCtx.collections, collectionIndex, uuid,
+                                  artworkDir, m_dlg->m_scraperCtx.providerBuilder);
 }
 
 bool ScrapeResultDialogUnified::startEntityScrape(int collectionIndex) {

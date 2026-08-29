@@ -50,6 +50,18 @@ struct ScraperOptions {
   /// at creation persists the new state as the next default. Off out of
   /// the box: fetching is the user's opt-in.
   bool fetchCollectionInfoOnCreate = false;
+  /// Kartend-ud6q2: when a collection is CREATED (settings dialog add,
+  /// duplicate with a new identity, import wizard, launcher import) and it
+  /// resolves a scraper, fetch its platform/collection logo + background in
+  /// the background — no dialog, no separate user step — so the tree and
+  /// home icons populate as part of building the collection. Distinct from
+  /// fetchCollectionInfoOnCreate above, which is the create-dialog
+  /// CHECKBOX's remembered state and covers a single interactive creation;
+  /// this one is a standing preference covering every creation path.
+  /// On by default: the alternative is a collection that arrives with no
+  /// icon and no indication that one could be fetched. Off = the art is
+  /// only ever fetched when the user asks for it.
+  bool autoScrapeEntityArtOnCreate = true;
   // Refresh window (in days) used by the rescrape modes that
   // pre-filter the queue (Skip and FillMissing) to decide whether
   // an already-covered item should be re-scraped this run.

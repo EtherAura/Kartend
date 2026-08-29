@@ -12,6 +12,7 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -388,4 +389,76 @@ void TestScraperController::promptResume_autoResumeSkipsPromptAndOpensDialog() {
   QCOMPARE(dialogs.size(), 1);
   QVERIFY(dialogs.first()->isVisible());
   dialogs.first()->hide(); // keep the visible-instance refcount balanced
+}
+
+void TestScraperController::
+    backgroundEntityScrape_unscrapableRequestStartsNothingAndShowsNothing() {
+  SKIP_MODAL_WIDGET_ON_MACOS();
+  ControllerHarness h;
+
+  // A playlist (synthesized, no single platform to resolve) and a collection
+  // whose type claims no lookup provider. Neither builds an entity job, so
+  // there is nothing to run — and the creation-time path must say so by doing
+  // nothing rather than by surfacing the "no scraper is configured" box the
+  // right-click entity scrape shows.
+  CollectionConfig favorites;
+  favorites.name = QStringLiteral("Favorites");
+  favorites.isPlaylist = true;
+  CollectionConfig unscrapable;
+  unscrapable.name = QStringLiteral("Home Videos");
+  unscrapable.type = QStringLiteral("kartend-has-no-provider-for-this");
+  h.collections << favorites << unscrapable;
+
+  bool sawModal = false;
+  auto *watcher = new QTimer(&h.host);
+  watcher->setInterval(0);
+  QObject::connect(watcher, &QTimer::timeout, &h.host, [&]() {
+    if (auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+      sawModal = true;
+      box->close();
+    }
+  });
+  watcher->start();
+
+  h.controller.startBackgroundEntityScrape({0, 1});
+  // An empty request is inert too — no run, no crash on the empty queue.
+  h.controller.startBackgroundEntityScrape({});
+  QCoreApplication::processEvents();
+  watcher->stop();
+
+  QVERIFY2(!sawModal, "the creation-time fetch must never interrupt with a message box");
+  QVERIFY2(h.host.findChildren<ScrapeResultDialog *>().isEmpty(),
+           "the creation-time fetch must not construct the scraper dialog");
+}
+
+void TestScraperController::backgroundEntityScrape_withoutDatabaseHoldsInsteadOfWarning() {
+  SKIP_MODAL_WIDGET_ON_MACOS();
+  ControllerHarness h(/*withDatabase=*/false);
+
+  CollectionConfig films;
+  films.name = QStringLiteral("Films");
+  films.type = QStringLiteral("video");
+  h.collections << films;
+
+  // openScraperDialog pops "Database is not ready" here. The background path
+  // has no window to warn through and warning would break its silence, so it
+  // holds the request for a later drain instead.
+  bool sawModal = false;
+  auto *watcher = new QTimer(&h.host);
+  watcher->setInterval(0);
+  QObject::connect(watcher, &QTimer::timeout, &h.host, [&]() {
+    if (auto *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget())) {
+      sawModal = true;
+      box->close();
+    }
+  });
+  watcher->start();
+
+  h.controller.startBackgroundEntityScrape({0});
+  QCoreApplication::processEvents();
+  watcher->stop();
+
+  QVERIFY2(!sawModal, "a missing database must not surface a warning on the silent path");
+  QVERIFY2(h.host.findChildren<ScrapeResultDialog *>().isEmpty(),
+           "a missing database must not construct the scraper dialog");
 }

@@ -20,6 +20,7 @@
 
 #include <functional>
 #include <memory>
+#include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -115,6 +116,21 @@ public slots:
   /// dialog/service as openScraperDialog but skips the per-item grid.
   void openEntityScraperDialog(int collectionIndex);
 
+  /// Kartend-ud6q2: fetch entity art (platform / collection logo +
+  /// background) for @p collectionIndices with NO dialog on screen — the
+  /// creation-time path, so a newly built collection's tree and home icons
+  /// populate without the user asking. Silent by design: no progress window,
+  /// no completion box; the summary lands in the scrape log and failures are
+  /// routine (a collection whose platform cannot be resolved is a not-found,
+  /// not an error).
+  ///
+  /// The service is strictly one-run-at-a-time, so indices arriving while a
+  /// run is live are held and started when it ends rather than dropped —
+  /// creating collections during a scrape is exactly when this fires.
+  /// Collections that build no entity jobs (playlists, no configured scraper)
+  /// drop out silently; if nothing survives, no run starts.
+  void startBackgroundEntityScrape(const QList<int> &collectionIndices);
+
   /// Startup hook: if the on-disk pending-scrape state file is present
   /// (i.e. the previous run was interrupted mid-batch), prompt the user
   /// to Resume / Discard / Keep. Auto-resume short-circuits the prompt
@@ -127,7 +143,41 @@ private:
   /// isn't ready. The caller picks the start method and shows it.
   ScrapeResultDialog *prepareScraperDialog();
 
+  /// Push the live collections / settings / provider-builder closures into
+  /// the long-lived service and hand the builder back. Split out of
+  /// prepareScraperDialog so the background entity scrape can bind the
+  /// service without constructing a dialog it would never show. Returns an
+  /// empty std::function when the collection list isn't available.
+  std::function<std::shared_ptr<MetadataLookupProvider>(int)> bindServiceContext();
+
+  /// Start the held background entity queue if one is waiting and the service
+  /// is idle. Called after a run ends and after a fresh request arrives.
+  void drainPendingBackgroundEntityScrape();
+
+  /// How long to wait before re-attempting a drain that was held off by an
+  /// open modal dialog. Long enough not to spin behind a dialog the user is
+  /// reading, short enough that the artwork appears while they are still
+  /// looking at the collection they just made.
+  static constexpr int kBackgroundDrainRetryMs = 750;
+
   ScraperControllerContext m_ctx;
+
+  /// Collection indices waiting for the service to go idle so their entity
+  /// art can be fetched. A QList (not a QSet) because queue order is the
+  /// creation order the user sees the tree fill in. Deduped on insert.
+  QList<int> m_pendingBackgroundEntityIndices;
+
+  /// True while a run started by startBackgroundEntityScrape is in flight.
+  /// Consumed by the dialog's unifiedScrapeFinished handler to skip the modal
+  /// completion box: the dialog may have been constructed by an earlier
+  /// interactive open and stays bound to the shared service, so it reports
+  /// the end of a run the user never started. The post-run housekeeping
+  /// (artwork cache, grid + sidebar refresh) still runs — art landed.
+  bool m_backgroundEntityRunActive = false;
+
+  /// A modal-blocked drain retry is already scheduled — keeps repeated
+  /// requests behind one modal from stacking a timer each.
+  bool m_backgroundDrainRetryArmed = false;
 
   /// Long-lived ScraperService — survives dialog close so a background
   /// scrape keeps progressing after the user dismisses the window.

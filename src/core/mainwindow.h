@@ -15,6 +15,7 @@
 #include <QList>
 #include <QMainWindow>
 #include <QPair>
+#include <QSet>
 #include <QStringList>
 #include <QTimer>
 
@@ -132,6 +133,24 @@ public:
   void refreshTitleCounts();
   void updateWindowTitleForCollection(int collectionIndex) override;
   void rebuildHierarchyCache();
+
+  // Kartend-ud6q2: hand any collection that just came into existence to the
+  // scraper controller's silent entity-art fetch. Driven from
+  // rebuildHierarchyCache — every collection-list mutation funnels through
+  // there, so this covers the settings dialog, duplicate, the import wizard
+  // and launcher import without instrumenting each creation site.
+  void autoScrapeNewCollectionArt();
+
+  // Collection identities seen the last time autoScrapeNewCollectionArt ran.
+  // A uuid absent from this set is a collection that did not exist before.
+  // Playlists are excluded: resyncPlaylistCollections erases and re-appends
+  // every playlist row on each resync, so they would read as new forever.
+  QSet<QString> m_seenCollectionUuids;
+  // Whether m_seenCollectionUuids has been populated at least once. The first
+  // pass is the startup baseline — every collection in the config is "new"
+  // against an empty set, and scraping the whole library on launch is not
+  // what "when a collection is created" means.
+  bool m_seenCollectionUuidsSeeded = false;
 
   // Append a freshly-created collection, persist it, rebuild the hierarchy
   // cache, and (when navigate) switch to it. Single home for the

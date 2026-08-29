@@ -366,6 +366,24 @@ QGroupBox *ScraperSettingsPanel::buildBehaviorGroup() {
          "raised so the Live view + Cancel/Close buttons are reachable."));
   behaviorForm->addRow(QString(), m_autoResumeCheck);
 
+  // Auto entity-art fetch on collection creation (Kartend-ud6q2). On by
+  // default — a newly built collection otherwise arrives with no icon and
+  // nothing to say one could be fetched. Only collections that resolve a
+  // scraper and have no art wired yet are touched, so this never overwrites
+  // a hand-picked icon and never re-fetches on rename.
+  m_autoScrapeEntityArtCheck =
+      new QCheckBox(tr("Fetch collection artwork when a collection is created"), behaviorGroup);
+  m_autoScrapeEntityArtCheck->setToolTip(
+      tr("When a new collection is created — added here, duplicated, imported "
+         "from a .kart bundle, or picked up from an installed launcher — its "
+         "platform or collection logo and background are fetched in the "
+         "background, with no dialog, so the sidebar and home icons fill in as "
+         "part of building the collection.\n\n"
+         "Only collections that have a scraper configured and no artwork set "
+         "yet are fetched, so a hand-picked icon is never replaced. Failures "
+         "are silent; the details land in the scrape log."));
+  behaviorForm->addRow(QString(), m_autoScrapeEntityArtCheck);
+
   // Scrape logging toggle. Off by default — diagnostic logging has a
   // per-message disk-write cost, so it is opt-in for users debugging a
   // misbehaving or crashed scrape.
@@ -442,6 +460,15 @@ void ScraperSettingsPanel::connectChangeSignals() {
   // Auto-resume is a behaviour toggle independent of the speed/quality
   // preset; flipping it doesn't demote the preset to Custom.
   connect(m_autoResumeCheck, &QCheckBox::toggled, this, [this](bool) {
+    if (m_loading) return;
+    writeModel();
+    emit changed();
+  });
+
+  // Auto entity-art fetch is a behaviour toggle too — it governs WHEN a
+  // fetch happens, not how fast or how good it is, so it leaves the preset
+  // alone.
+  connect(m_autoScrapeEntityArtCheck, &QCheckBox::toggled, this, [this](bool) {
     if (m_loading) return;
     writeModel();
     emit changed();
@@ -621,6 +648,10 @@ void ScraperSettingsPanel::load() {
     QSignalBlocker b(m_autoResumeCheck);
     m_autoResumeCheck->setChecked(opts.scrapeAutoResume);
   }
+  if (m_autoScrapeEntityArtCheck) {
+    QSignalBlocker b(m_autoScrapeEntityArtCheck);
+    m_autoScrapeEntityArtCheck->setChecked(opts.autoScrapeEntityArtOnCreate);
+  }
   if (m_scrapeLoggingCheck) {
     QSignalBlocker b(m_scrapeLoggingCheck);
     m_scrapeLoggingCheck->setChecked(opts.scrapeLogging);
@@ -666,6 +697,9 @@ void ScraperSettingsPanel::writeModel() {
   }
   if (m_autoResumeCheck) {
     opts.scrapeAutoResume = m_autoResumeCheck->isChecked();
+  }
+  if (m_autoScrapeEntityArtCheck) {
+    opts.autoScrapeEntityArtOnCreate = m_autoScrapeEntityArtCheck->isChecked();
   }
   if (m_scrapeLoggingCheck) {
     opts.scrapeLogging = m_scrapeLoggingCheck->isChecked();

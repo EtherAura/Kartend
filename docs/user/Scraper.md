@@ -114,6 +114,31 @@ and (for ScreenScraper) the daily quota counter.
 Batch scrapes can be paused and resumed; closing the window keeps the
 scrape running in the background.
 
+### Collection artwork, fetched on creation
+
+Separate from item scraping, a collection has artwork of its own: a
+platform or collection logo and a background. When you create a
+collection — adding one in **Settings → Collections**, duplicating an
+existing one, importing a `.kart` bundle, or picking one up from an
+installed launcher — Kartend fetches that artwork in the background so
+the sidebar and home icons fill in as part of building the collection.
+
+This runs silently: no progress window and no completion box. A
+collection whose platform cannot be identified simply gets no artwork —
+that is a miss, not an error — and the details go to the
+[scrape log](#scrape-diagnostic-logging). Collections created while
+another scrape is running wait for it to finish.
+
+Only collections that resolve a scraper and have **no artwork set yet**
+are fetched, so an icon you chose by hand is never replaced. Renaming a
+collection does not re-fetch anything.
+
+Turn it off with **Fetch collection artwork when a collection is
+created** in **Settings → Scrapers**
+([`autoScrapeEntityArtOnCreate`](Configuration-Reference.md#scraperoptions--global-scraper-performance--behavior)),
+and fetch on demand instead with **Scrape collection info & artwork…**
+from a collection's right-click menu.
+
 ### Re-scrape policy
 
 The **Rescrape mode** in **Settings → Scrapers** controls what happens

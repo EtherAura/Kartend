@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **New collections arrive with their artwork already fetched.** Creating a
+  collection — adding one in settings, duplicating an existing one,
+  importing a `.kart` bundle, or picking one up from an installed
+  launcher — now fetches its logo and background in the background, with
+  no dialog and no separate step, so the sidebar and home icons fill in
+  as part of building the collection instead of staying blank until you
+  remember to ask. It is deliberately quiet: no progress window, no
+  completion box, and a collection whose platform cannot be identified is
+  a miss rather than an error, with the details in the scrape log. Only
+  collections that have a scraper configured and no artwork set yet are
+  touched, so a hand-picked icon is never replaced, and renaming a
+  collection does not re-fetch anything. Collections created while
+  another scrape is running wait for it to finish rather than being
+  dropped. The switch is "Fetch collection artwork when a collection is
+  created", on the scraper settings page, and it is on out of the box;
+  turning it off restores the previous behaviour of fetching only when
+  asked.
+
 - **The right stick reaches the toolbar on its own.** Flicking up while
   the grid or list has focus now hops straight to the toolbar — no more
   holding Select first — and flicking down from the toolbar drops back.

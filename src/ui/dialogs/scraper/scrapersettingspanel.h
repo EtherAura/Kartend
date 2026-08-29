@@ -72,6 +72,7 @@ private:
   /// launch (Kartend-1uvp). Off by default so first-time users see the
   /// modal Resume / Discard prompt and learn the recovery path.
   QCheckBox *m_autoResumeCheck = nullptr;
+  QCheckBox *m_autoScrapeEntityArtCheck = nullptr;
   /// Toggle for scrape diagnostic logging. Off by default; when on,
   /// scrape activity is written to `scrape.log` in the config dir for
   /// post-mortem diagnosis of a misbehaving or crashed scrape.

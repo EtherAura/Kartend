@@ -9,9 +9,10 @@
  * provider-builder seam (ScraperControllerInternal::makeProviderBuilder —
  * the MetadataProviderRegistry::claimLookupProvider path), the lazily
  * constructed / reused scraper dialog (including the QPointer cache
- * self-healing after an external dialog destruction), and every branch of
+ * self-healing after an external dialog destruction), every branch of
  * the startup resume prompt (no state / Keep / Discard / Resume /
- * auto-resume).
+ * auto-resume), and the silent creation-time entity fetch
+ * (startBackgroundEntityScrape — Kartend-ud6q2).
  */
 
 #ifndef KARTEND_TESTS_TEST_SCRAPERCONTROLLER_H
@@ -39,6 +40,9 @@ private slots:
   void promptResume_discardRemovesStateWithoutOpeningDialog();
   void promptResume_resumeConsumesStateAndOpensDialog();
   void promptResume_autoResumeSkipsPromptAndOpensDialog();
+
+  void backgroundEntityScrape_unscrapableRequestStartsNothingAndShowsNothing();
+  void backgroundEntityScrape_withoutDatabaseHoldsInsteadOfWarning();
 };
 
 #endif // KARTEND_TESTS_TEST_SCRAPERCONTROLLER_H

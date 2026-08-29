@@ -23,6 +23,8 @@ void loadOptions(QSettings &settings, ScraperOptions &opts) {
   opts.preferJpgOutput = settings.value(keys::kPreferJpgOutput, false).toBool();
   opts.fetchCollectionInfoOnCreate =
       settings.value(keys::kFetchCollectionInfoOnCreate, false).toBool();
+  opts.autoScrapeEntityArtOnCreate =
+      settings.value(keys::kAutoScrapeEntityArtOnCreate, true).toBool();
   opts.scrapeAutoResume = settings.value(keys::kScrapeAutoResume, false).toBool();
   opts.scrapeLogging = settings.value(keys::kScrapeLogging, false).toBool();
   opts.preferredScraperRegion =
@@ -59,6 +61,7 @@ void saveOptions(QSettings &settings, const ScraperOptions &opts) {
   settings.setValue(keys::kSkipRecentScrapeDays, opts.skipRecentScrapeDays);
   settings.setValue(keys::kPreferJpgOutput, opts.preferJpgOutput);
   settings.setValue(keys::kFetchCollectionInfoOnCreate, opts.fetchCollectionInfoOnCreate);
+  settings.setValue(keys::kAutoScrapeEntityArtOnCreate, opts.autoScrapeEntityArtOnCreate);
   settings.setValue(keys::kScrapeAutoResume, opts.scrapeAutoResume);
   settings.setValue(keys::kScrapeLogging, opts.scrapeLogging);
   settings.setValue(keys::kPreferredRegion, opts.preferredScraperRegion);
