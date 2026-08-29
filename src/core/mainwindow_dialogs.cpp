@@ -32,6 +32,7 @@
 #include "bindingvisualizerdialog.h"
 #include "collection/collectioncontext.h"
 #include "collection/presentationprofile.h"
+#include "collection/searchpreset.h"
 #include "collection/themepreset.h"
 #include "collection/typehelpers.h"
 #include "collection/validationhelpers.h"
@@ -54,6 +55,7 @@
 #include "presentationprofilesdialog.h"
 #include "scraperprovidersdialog.h"
 #include "scrollmanager.h"
+#include "searchpresetsdialog.h"
 #include "settingsdialogcontroller.h"
 #include "settingsutils.h"
 #include "ui_mainwindow.h"
@@ -610,6 +612,33 @@ void MainWindow::managePresentationProfilesInteractive() {
     if (saved.isError()) {
       QMessageBox::warning(this, tr("Presentation profiles — could not save"),
                            saved.error().message);
+    }
+  }
+}
+
+void MainWindow::manageSearchPresetsInteractive() {
+  // Kartend-w4knq. Same load → mutate-in-place → save-if-changed shape as
+  // managePresentationProfilesInteractive above; the registry lives beside
+  // kartend.cfg with the layout and presentation ones.
+  const QString registryPath = SettingsUtils::getSearchPresetsPath();
+  auto loaded = SearchPresetIO::loadRegistry(registryPath);
+  if (loaded.isError()) {
+    QMessageBox::warning(this, tr("Saved filters — could not load"), loaded.error().message);
+    return;
+  }
+  QList<SearchPreset> presets = loaded.value();
+  const QList<SearchPreset> original = presets;
+
+  SearchPresetsDialog dialog(this);
+  dialog.setRegistry(&presets, &m_generalSettings.view,
+                     m_searchBar ? m_searchBar->text() : QString(),
+                     [this](const SearchPreset &preset) { applySearchPreset(preset); });
+  dialog.exec();
+
+  if (presets != original) {
+    auto saved = SearchPresetIO::saveRegistry(presets, registryPath);
+    if (saved.isError()) {
+      QMessageBox::warning(this, tr("Saved filters — could not save"), saved.error().message);
     }
   }
 }

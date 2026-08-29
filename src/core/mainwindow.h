@@ -65,6 +65,7 @@ class CollectionTreeController;
 class DbEventsController;
 class DialogController;
 class SettingsDialogController;
+struct SearchPreset;
 struct SettingsDialogContext;
 struct DialogRunners;
 class ScraperController;
@@ -151,6 +152,14 @@ public:
   // against an empty set, and scraping the whole library on launch is not
   // what "when a collection is created" means.
   bool m_seenCollectionUuidsSeeded = false;
+
+  // Kartend-w4knq: apply a saved search preset — filter and sort fields onto
+  // ViewSettings, plus the search box text, which is deliberately NOT a
+  // ViewSettings field and so has to be restored separately. Lives here
+  // rather than in ToolbarController because finishing the job means syncing
+  // the View menu's sort radios and the filter popup and reloading the
+  // collection, and MainWindow is where those three already meet.
+  void applySearchPreset(const SearchPreset &preset);
 
   // Append a freshly-created collection, persist it, rebuild the hierarchy
   // cache, and (when navigate) switch to it. Single home for the
@@ -792,6 +801,12 @@ private:
   /// profile list, mutates it via the dialog buttons (save / apply /
   /// delete), and persists on close.
   void managePresentationProfilesInteractive();
+
+  /// Opens the saved-filter registry dialog (Kartend-w4knq). Same
+  /// load / mutate / persist-on-close shape as the profile registries;
+  /// Apply routes through applySearchPreset so the search box, the sort
+  /// radios and the filter popup all follow.
+  void manageSearchPresetsInteractive();
 
   /// Opens the read-only scraper provider registry dialog. Lists every
   /// built-in metadata provider with its categories, capabilities, and

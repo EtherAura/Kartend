@@ -21,7 +21,10 @@ this is also where Qt looks for `QSettings` files and similar.
 
 ```
 ~/.config/kartend/
-└── kartend.cfg
+├── kartend.cfg
+├── layout_profiles.json        (saved grid/list layouts)
+├── presentation_profiles.json  (attract, marquee, splash bundles)
+└── search_presets.json         (saved filters)
 ```
 
 INI format. The directory is created eagerly on first launch; the file
@@ -35,6 +38,13 @@ itself only appears on the first save, so a fresh install with no
 
 See [Configuration Reference](Configuration-Reference.md) for every
 key.
+
+The three `.json` files beside it are named-registry sidecars, each
+written only once you save your first entry: layout profiles and
+presentation profiles from the settings dialog, and
+[saved filters](Search-Sort-Filter.md#saved-filters) from the toolbar's
+filter dropdown. Deleting one loses those saved entries and nothing
+else.
 
 ### Backing up
 

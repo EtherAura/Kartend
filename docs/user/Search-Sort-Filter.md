@@ -304,6 +304,40 @@ There's no single "clear filters" button. To reset:
 A future "reset filters" affordance is on the wishlist; file a feature
 request if you'd like it.
 
+## Saved filters
+
+A query worth composing twice is worth keeping. A **saved filter** stores
+the search box's contents together with the state around it — sort mode,
+exclude-subfolders, the type filter, and hide-subcollection-tiles — under
+a name you choose.
+
+Everything lives in the toolbar's filter dropdown:
+
+| Entry | What it does |
+|-------|--------------|
+| **Save current filter as…** | Names the current search + sort + filter state and adds it to the list. Saving over an existing name asks first. |
+| *(your saved filters)* | Listed by name above the two commands. Picking one applies it. Hover to see its query. |
+| **Manage saved filters…** | A list with Save / Apply / Delete, showing each filter's query beside its name. |
+
+Applying a filter sets everything it captured: the search box text, the
+sort order (the **View → Sort** menu follows), and the filter selections
+in the dropdown itself.
+
+Saved filters are **global**, not per-collection — the same list is
+available whichever collection you're browsing. They're stored in
+`search_presets.json` beside `kartend.cfg` (see
+[File Locations](File-Locations.md)), so they survive upgrades and can be
+copied between machines.
+
+Two things worth knowing:
+
+- A filter can hold **no search text at all** — just a sort order and
+  filter selections. The manage dialog labels those "(filters and sort
+  only)".
+- Saved filters are not included in a `.kart` bundle. A bundle exports
+  one collection; a saved filter is a library-wide view state and can
+  refer to collection types the receiving library doesn't have.
+
 ## Recipes
 
 ### Find a specific item across many collections

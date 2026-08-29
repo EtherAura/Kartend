@@ -4,6 +4,7 @@ target_sources(kartend_ui PRIVATE
   errordialog.cpp
   firstrunwizard.cpp
   libraryonboardingwizard.cpp
+  searchpresetsdialog.cpp
   shortcutsdialog.cpp
   statisticsdialog.cpp
   bindingvisualizerdialog.h
@@ -11,6 +12,7 @@ target_sources(kartend_ui PRIVATE
   errordialog.h
   firstrunwizard.h
   libraryonboardingwizard.h
+  searchpresetsdialog.h
   shortcutsdialog.h
   statisticsdialog.h
 )

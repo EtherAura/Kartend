@@ -2,7 +2,10 @@
 #define TOOLBARCONTROLLER_H
 
 #include "collection/generalsettings.h"
+#include "collection/searchpreset.h"
+#include <functional>
 #include <QHash>
+#include <QList>
 #include <QObject>
 
 class ApplicationManager;
@@ -11,6 +14,7 @@ class ISettingsManager;
 class MainWindow;
 class QAction;
 class QLineEdit;
+class QMenu;
 class QToolButton;
 struct GeneralSettings;
 
@@ -36,6 +40,12 @@ public:
     QToolButton *homeButton = nullptr;
     QToolButton *collectionWarningBadge = nullptr;
     QLineEdit *searchBar = nullptr;
+    /// Opens the saved-filter manager (Kartend-w4knq). Supplied as a closure
+    /// rather than called on MainWindow directly because every other
+    /// *Interactive() dialog launcher is reached this way — see
+    /// MenuController's onPresentationProfiles — which is what keeps those
+    /// launchers private to MainWindow.
+    std::function<void()> onManageSearchPresets;
   };
 
   explicit ToolbarController(QObject *parent = nullptr);
@@ -105,6 +115,11 @@ public:
   /// title-exclusion patterns.
   void showTitleFilterEditor();
 
+  /// Drop the in-memory saved-filter cache so the next popup rebuild re-reads
+  /// the registry from disk. Called after the manage dialog closes, which may
+  /// have added or deleted presets behind this controller's back.
+  void invalidateSearchPresetCache();
+
   /// Search-mode QAction (lives inside the search QLineEdit). Exposed so the
   /// wiring pass can connect its triggered() signal to InteractionManager
   /// once that manager exists.
@@ -125,6 +140,7 @@ private:
   QToolButton *m_homeButton = nullptr;
   QToolButton *m_collectionWarningBadge = nullptr;
   QLineEdit *m_searchBar = nullptr;
+  std::function<void()> m_onManageSearchPresets;
 
   QAction *m_searchModeAction = nullptr;
   QAction *m_viewActionGrid = nullptr;
@@ -140,8 +156,24 @@ private:
   /// (Kartend-0zhz). Refilled on every rebuildFilterMenu(); cleared
   /// at the start of that rebuild so dangling QAction* keys can't
   /// outlive the parent QMenu.
-  enum class FilterRole { Type, TitleToggle, TitleEdit };
+  enum class FilterRole { Type, TitleToggle, TitleEdit, SavePreset, ApplyPreset, ManagePresets };
   QHash<QAction *, FilterRole> m_filterRoles;
+
+  /// Kartend-w4knq: append the saved-filter section to the filter popup —
+  /// one entry per preset, plus Save-current and Manage.
+  void appendSavedFilterSection(QMenu *menu);
+  /// Snapshot the live view state under a user-supplied name and persist it.
+  void saveCurrentSearchAsPreset();
+  /// Read the registry from disk on first use and cache it. The popup is
+  /// rebuilt on every collection switch, so re-reading each time would put a
+  /// file read on a path that has none today.
+  void ensureSearchPresetsLoaded();
+  /// Write the cache back to disk, warning through the main window on failure
+  /// — a preset the user named and did not get is worth saying out loud.
+  void persistSearchPresets();
+
+  QList<SearchPreset> m_searchPresets;
+  bool m_searchPresetsLoaded = false;
 };
 
 #endif // TOOLBARCONTROLLER_H

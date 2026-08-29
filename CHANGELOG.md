@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Filters worth composing twice can now be kept.** The toolbar's filter
+  dropdown gained **Save current filter as…**, a list of whatever you have
+  saved, and **Manage saved filters…**. A saved filter holds the search box's
+  contents together with the state around it — sort order,
+  exclude-subfolders, the type filter, hide-subcollection-tiles — so
+  "unplayed soundtracks, newest first" comes back by name instead of being
+  retyped. Applying one sets all of it, including the search box and the
+  View menu's sort selection, which the search box alone could not carry.
+  A filter can hold no search text at all and just be a sort-and-filter
+  arrangement. The list is global rather than per-collection, and lives in
+  `search_presets.json` beside the config file, so it survives upgrades and
+  can be copied between machines.
+
 - **Release downloads can now be checked against where they were built.**
   Every asset the release pipeline builds — the source tarball, the `.deb`,
   the Windows portable `.zip` and the Windows installer — now carries a

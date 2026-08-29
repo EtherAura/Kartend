@@ -367,6 +367,7 @@ void MainWindow::setupUIReferences() {
   tcSetup.homeButton = ui->homeButton;
   tcSetup.collectionWarningBadge = ui->collectionWarningBadge;
   tcSetup.searchBar = ui->searchBar;
+  tcSetup.onManageSearchPresets = [this]() { manageSearchPresetsInteractive(); };
   m_toolbarController->initialize(tcSetup);
   m_toolbarController->setupViewModeButton();
   m_toolbarController->setupSearchModeAction();

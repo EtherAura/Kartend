@@ -28,11 +28,13 @@
 #include "attractmanager.h"
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
+#include "collection/searchpreset.h"
 #include "collection/typehelpers.h"
 #include "collectionfilesystemwatcher.h"
 #include "detailpagemanager.h"
 #include "detailpageoverlay.h"
 #include "dialogcontroller.h"
+#include "errorpresentation.h"
 #include "eventmanager.h"
 #include "gridwidthdebouncer.h"
 #include "icachemanager.h"
@@ -828,6 +830,34 @@ void MainWindow::rebuildHierarchyCache() {
     m_collectionTreeController->rebuildTree();
   }
   autoScrapeNewCollectionArt();
+}
+
+void MainWindow::applySearchPreset(const SearchPreset &preset) {
+  // Filter + sort fields onto the live view settings, then persist — the same
+  // set-save-reload sequence the View menu's own sort actions run.
+  SearchPresetIO::applyTo(preset, m_generalSettings.view);
+  if (m_appManager->getSettingsManager()) {
+    ErrorPresentation::reportSaveResult(
+        m_appManager->getSettingsManager()->saveGeneralSettings(m_generalSettings),
+        "general settings", true);
+  }
+  // Every surface that shows a piece of this state has to be told, or the
+  // preset appears to have half-applied: the View menu's sort radios still
+  // point at the old mode, and the filter popup still checks the old type.
+  if (m_menuController) {
+    m_menuController->syncSortActions();
+  }
+  refreshFilterToolbar();
+  if (m_appManager->getNavigationManager() && m_currentCollectionIndex >= 0) {
+    m_appManager->getNavigationManager()->safeReloadCollection(m_currentCollectionIndex);
+  }
+  // Search text LAST, and separately: it is deliberately not a ViewSettings
+  // field, so applyTo above cannot carry it. Setting it after the reload means
+  // the debounced search runs against the freshly loaded collection, which is
+  // the same order a user typing into the box produces.
+  if (m_searchBar) {
+    m_searchBar->setText(preset.searchText);
+  }
 }
 
 void MainWindow::autoScrapeNewCollectionArt() {

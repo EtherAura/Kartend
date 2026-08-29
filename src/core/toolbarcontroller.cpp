@@ -19,13 +19,17 @@
 #include "settingsutils.h"
 #include "uiconstants/icons.h"
 
+#include <utility>
+
 #include <QAction>
 #include <QActionGroup>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -44,6 +48,7 @@ void ToolbarController::initialize(const Setup &setup) {
   m_homeButton = setup.homeButton;
   m_collectionWarningBadge = setup.collectionWarningBadge;
   m_searchBar = setup.searchBar;
+  m_onManageSearchPresets = setup.onManageSearchPresets;
 }
 
 ApplicationManager *ToolbarController::applicationManager() const {
@@ -309,6 +314,10 @@ void ToolbarController::refreshFilterToolbar() {
   QMenu *menu = m_filterButton->menu();
   if (!menu) {
     menu = new QMenu(m_filterButton);
+    // Saved-filter entries carry their query as a tooltip (Kartend-w4knq);
+    // QMenu suppresses action tooltips unless asked, so the names would be
+    // the only thing distinguishing two similar filters.
+    menu->setToolTipsVisible(true);
     m_filterButton->setMenu(menu);
     QObject::connect(menu, &QMenu::triggered, this, [this](QAction *action) {
       if (!action || !m_mainWindow) {
@@ -357,6 +366,37 @@ void ToolbarController::refreshFilterToolbar() {
         }
       } else if (role == FilterRole::TitleEdit) {
         showTitleFilterEditor();
+      } else if (role == FilterRole::SavePreset) {
+        saveCurrentSearchAsPreset();
+      } else if (role == FilterRole::ApplyPreset) {
+        // The action carries the preset's name rather than an index: the
+        // registry can be reordered by a save between this menu being built
+        // and being clicked, and a stale index would apply the wrong filter.
+        const QString name = action->data().toString();
+        ensureSearchPresetsLoaded();
+        // Resolved to a COPY before applying: applySearchPreset rebuilds this
+        // very menu, and anything that later made that rebuild re-read the
+        // registry would leave a reference into m_searchPresets dangling
+        // mid-call. Cheap struct; not worth the hazard.
+        SearchPreset match;
+        bool found = false;
+        for (const SearchPreset &preset : std::as_const(m_searchPresets)) {
+          if (preset.name.compare(name, Qt::CaseInsensitive) == 0) {
+            match = preset;
+            found = true;
+            break;
+          }
+        }
+        if (found) {
+          m_mainWindow->applySearchPreset(match);
+        }
+      } else if (role == FilterRole::ManagePresets) {
+        if (!m_onManageSearchPresets) return;
+        m_onManageSearchPresets();
+        // The dialog owns its own copy of the registry and persists on close,
+        // so this controller's cache is stale the moment it returns.
+        invalidateSearchPresetCache();
+        refreshFilterToolbar();
       }
     });
   } else {
@@ -440,6 +480,102 @@ void ToolbarController::refreshFilterToolbar() {
 
   QAction *editAction = menu->addAction(tr("Edit title patterns…"));
   m_filterRoles.insert(editAction, FilterRole::TitleEdit);
+
+  appendSavedFilterSection(menu);
+}
+
+void ToolbarController::appendSavedFilterSection(QMenu *menu) {
+  // Kartend-w4knq: the filter popup is where the state a preset captures
+  // already lives, so it is where saving and recalling it belongs.
+  if (!menu) return;
+  ensureSearchPresetsLoaded();
+
+  menu->addSeparator();
+
+  if (!m_searchPresets.isEmpty()) {
+    // Section label. A disabled action rather than a QMenu title so the entry
+    // list stays flat — a submenu would hide the presets behind another hover
+    // on the one popup the user opened specifically to change the filter.
+    QAction *label = menu->addAction(tr("Saved filters"));
+    label->setEnabled(false);
+    for (const SearchPreset &preset : std::as_const(m_searchPresets)) {
+      if (preset.name.trimmed().isEmpty()) continue;
+      QAction *action = menu->addAction(preset.name);
+      action->setData(preset.name);
+      // The query as a tooltip: the entry has to stay short enough to read as
+      // a menu row, but which of two similarly-named filters is which is
+      // exactly the question the query answers. Set explicitly even when
+      // there is no query — an unset QAction tooltip falls back to the
+      // action's own text, which would just repeat the name back at the user.
+      const QString query = preset.searchText.trimmed();
+      action->setToolTip(query.isEmpty() ? tr("Filters and sort only — no search text") : query);
+      m_filterRoles.insert(action, FilterRole::ApplyPreset);
+    }
+  }
+
+  QAction *saveAction = menu->addAction(tr("Save current filter as…"));
+  m_filterRoles.insert(saveAction, FilterRole::SavePreset);
+  QAction *manageAction = menu->addAction(tr("Manage saved filters…"));
+  m_filterRoles.insert(manageAction, FilterRole::ManagePresets);
+}
+
+void ToolbarController::ensureSearchPresetsLoaded() {
+  if (m_searchPresetsLoaded) return;
+  m_searchPresetsLoaded = true;
+  auto loaded = SearchPresetIO::loadRegistry(SettingsUtils::getSearchPresetsPath());
+  // A missing registry is the normal first-run state, and loadRegistry reports
+  // a genuine read/parse failure the same way. Neither is worth a modal while
+  // the user is opening a menu — the Manage dialog surfaces the real error
+  // when they go looking for their filters.
+  m_searchPresets = loaded.isError() ? QList<SearchPreset>{} : loaded.value();
+}
+
+void ToolbarController::invalidateSearchPresetCache() {
+  m_searchPresetsLoaded = false;
+  m_searchPresets.clear();
+}
+
+void ToolbarController::persistSearchPresets() {
+  auto saved = SearchPresetIO::saveRegistry(m_searchPresets, SettingsUtils::getSearchPresetsPath());
+  if (saved.isError()) {
+    QMessageBox::warning(m_mainWindow, tr("Saved filters — could not save"), saved.error().message);
+  }
+}
+
+void ToolbarController::saveCurrentSearchAsPreset() {
+  if (!m_mainWindow) return;
+  ensureSearchPresetsLoaded();
+
+  bool ok = false;
+  const QString name = QInputDialog::getText(m_mainWindow, tr("Save filter"), tr("Filter name:"),
+                                             QLineEdit::Normal, QString(), &ok);
+  if (!ok) return;
+  const QString trimmed = name.trimmed();
+  if (trimmed.isEmpty()) {
+    QMessageBox::warning(m_mainWindow, tr("Save filter"), tr("The filter name cannot be empty."));
+    return;
+  }
+  // addOrReplace is name-keyed and case-insensitive, so a clashing name
+  // replaces silently. Ask first — the registry has no undo.
+  for (const SearchPreset &existing : std::as_const(m_searchPresets)) {
+    if (existing.name.trimmed().compare(trimmed, Qt::CaseInsensitive) == 0) {
+      const auto choice = QMessageBox::question(
+          m_mainWindow, tr("Overwrite filter"),
+          tr("A saved filter named \"%1\" already exists. Overwrite it?").arg(trimmed),
+          QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+      if (choice != QMessageBox::Yes) return;
+      break;
+    }
+  }
+
+  // The search box's text is not a ViewSettings field, so it is captured
+  // separately here rather than falling out of the settings snapshot.
+  const QString searchText = m_searchBar ? m_searchBar->text() : QString();
+  const SearchPreset preset =
+      SearchPresetIO::fromViewSettings(m_mainWindow->m_generalSettings.view, searchText, trimmed);
+  m_searchPresets = SearchPresetIO::addOrReplace(m_searchPresets, preset);
+  persistSearchPresets();
+  refreshFilterToolbar();
 }
 
 void ToolbarController::showTitleFilterEditor() {

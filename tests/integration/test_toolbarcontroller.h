@@ -34,6 +34,7 @@ private slots:
 
   void refreshFilterToolbar_buildsTypeRadiosAndTitleEntries();
   void refreshFilterToolbar_staleTypeFilterFallsBackToAllTypes();
+  void refreshFilterToolbar_listsSavedFiltersFromTheRegistry();
   void titleFilterToggle_burstCoalescesIntoOneDebouncedSave();
 };
 

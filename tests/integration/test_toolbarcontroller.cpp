@@ -5,11 +5,13 @@
 #include "collection/generalsettings.h"
 #include "collection/launcherconfig.h"
 #include "collection/launcherpreset.h"
+#include "collection/searchpreset.h"
 #include "collectiontypes.h"
 #include "mainwindow.h"
 #include "mocks/mockedmainwindowfixture.h"
 #include "mocks/mocksettingsmanager.h"
 #include "pathutils.h"
+#include "settingsutils.h"
 #include "toolbarcontroller.h"
 #include "uiconstants/timing.h"
 
@@ -389,6 +391,67 @@ void TestToolbarController::refreshCollectionWarningBadge_brokenPresetBackedEntr
            "tooltip must name the preset's stored path (what would actually run)");
 }
 
+void TestToolbarController::refreshFilterToolbar_listsSavedFiltersFromTheRegistry() {
+  // Kartend-w4knq: saved filters are read from the on-disk registry and listed
+  // in the filter popup under a disabled section label, above Save/Manage.
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  win->m_collections = {}; // no type tags → no type-radio section to count past
+
+  SearchPreset unplayed;
+  unplayed.name = QStringLiteral("Unplayed soundtracks");
+  unplayed.searchText = QStringLiteral("played:false tag:soundtrack");
+  SearchPreset sortOnly;
+  sortOnly.name = QStringLiteral("Newest first");
+  // No searchText at all: a preset may be pure filter/sort state.
+  sortOnly.sortMode = SortMode::DateDescending;
+
+  const QString registryPath = SettingsUtils::getSearchPresetsPath();
+  auto written = SearchPresetIO::saveRegistry({unplayed, sortOnly}, registryPath);
+  QVERIFY2(!written.isError(), qPrintable(written.isError() ? written.error().message : QString()));
+
+  QWidget host;
+  auto *filterButton = new QToolButton(&host);
+  ToolbarController controller;
+  ToolbarController::Setup setup;
+  setup.mainWindow = win;
+  setup.filterButton = filterButton;
+  controller.initialize(setup);
+
+  controller.refreshFilterToolbar();
+
+  QMenu *menu = filterButton->menu();
+  QVERIFY(menu);
+  const auto actions = menu->actions();
+  // Title toggle, title editor, separator, "Saved filters" label, the two
+  // presets, Save current, Manage.
+  QCOMPARE(actions.size(), 8);
+  QCOMPARE(actions.at(0)->text(), QStringLiteral("Apply title patterns"));
+  QCOMPARE(actions.at(1)->text(), QStringLiteral("Edit title patterns…"));
+  QVERIFY(actions.at(2)->isSeparator());
+  QCOMPARE(actions.at(3)->text(), QStringLiteral("Saved filters"));
+  QVERIFY2(!actions.at(3)->isEnabled(), "the section label must not be clickable");
+  QCOMPARE(actions.at(4)->text(), QStringLiteral("Unplayed soundtracks"));
+  QCOMPARE(actions.at(5)->text(), QStringLiteral("Newest first"));
+  QCOMPARE(actions.at(6)->text(), QStringLiteral("Save current filter as…"));
+  QCOMPARE(actions.at(7)->text(), QStringLiteral("Manage saved filters…"));
+
+  // Entries are addressed by NAME, not by registry index — a save that
+  // reorders the registry between build and click must not apply the wrong
+  // filter.
+  QCOMPARE(actions.at(4)->data().toString(), QStringLiteral("Unplayed soundtracks"));
+  QCOMPARE(actions.at(5)->data().toString(), QStringLiteral("Newest first"));
+  // The query rides along as a tooltip so two similar names stay tellable
+  // apart. The queryless preset gets an explicit tooltip rather than none:
+  // an unset QAction tooltip falls back to the action's text, which would
+  // just repeat the name.
+  QCOMPARE(actions.at(4)->toolTip(), QStringLiteral("played:false tag:soundtrack"));
+  QCOMPARE(actions.at(5)->toolTip(), QStringLiteral("Filters and sort only — no search text"));
+  QVERIFY2(menu->toolTipsVisible(), "QMenu suppresses action tooltips unless asked");
+
+  QVERIFY(QFile::remove(registryPath));
+}
+
 void TestToolbarController::refreshFilterToolbar_buildsTypeRadiosAndTitleEntries() {
   KartendTest::MockedMainWindowFixture fixture;
   MainWindow *win = fixture.window();
@@ -418,15 +481,20 @@ void TestToolbarController::refreshFilterToolbar_buildsTypeRadiosAndTitleEntries
   QMenu *menu = filterButton->menu();
   QVERIFY(menu);
   // <All types>, Audio, Video (case-insensitive sort), separator, title
-  // toggle, title editor.
+  // toggle, title editor, then the saved-filter section (Kartend-w4knq):
+  // separator, Save current, Manage. No preset entries and no "Saved
+  // filters" label here — this fixture's registry is empty.
   const auto actions = menu->actions();
-  QCOMPARE(actions.size(), 6);
+  QCOMPARE(actions.size(), 9);
   QCOMPARE(actions.at(0)->text(), QStringLiteral("<All types>"));
   QCOMPARE(actions.at(1)->text(), QStringLiteral("Audio"));
   QCOMPARE(actions.at(2)->text(), QStringLiteral("Video"));
   QVERIFY(actions.at(3)->isSeparator());
   QCOMPARE(actions.at(4)->text(), QStringLiteral("Apply title patterns"));
   QCOMPARE(actions.at(5)->text(), QStringLiteral("Edit title patterns…"));
+  QVERIFY(actions.at(6)->isSeparator());
+  QCOMPARE(actions.at(7)->text(), QStringLiteral("Save current filter as…"));
+  QCOMPARE(actions.at(8)->text(), QStringLiteral("Manage saved filters…"));
 
   // The persisted type filter is reflected as the checked radio…
   QVERIFY(!actions.at(0)->isChecked());
@@ -437,7 +505,7 @@ void TestToolbarController::refreshFilterToolbar_buildsTypeRadiosAndTitleEntries
 
   // Refresh is a full rebuild, not an append — the action count is stable.
   controller.refreshFilterToolbar();
-  QCOMPARE(filterButton->menu()->actions().size(), 6);
+  QCOMPARE(filterButton->menu()->actions().size(), 9);
 }
 
 void TestToolbarController::refreshFilterToolbar_staleTypeFilterFallsBackToAllTypes() {
