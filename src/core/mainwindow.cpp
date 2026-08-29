@@ -261,6 +261,19 @@ void MainWindow::reapplyDerivedThemingFromSystemPalette() {
       sm->updateSearchBarPlaceholder();
     }
   }
+  // Kartend-94o7t: artwork cards bake the palette's Mid colour into their
+  // pixels on the worker, so tiles realised before a desktop colour change
+  // keep the previous palette's backdrop — repainting cannot fix pixels, only
+  // re-delivery can. hasStaleComposedArtwork now reports the palette
+  // mismatch, which opens addPendingArtwork's own re-delivery gate; this
+  // nudge makes the visible tiles take that path immediately instead of on
+  // the next scroll. The old card stays up until its replacement lands
+  // (composed off-thread against the new palette), so there is no flicker.
+  // Deliberately narrower than the reverted 86664f65 sweep, which forced
+  // onArtworkChanged and could only re-apply the same stale cards.
+  if (ArtworkManager *art = m_appManager->getArtworkManager()) {
+    art->scheduleViewportUpdate();
+  }
 }
 
 void MainWindow::onSystemThemeChanged() const {

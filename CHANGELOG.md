@@ -245,6 +245,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Switching KDE activities now recolours the item tiles in place.** The
+  toolbar, sidebars and details pane already followed the new colours, but
+  each tile's artwork card had the previous activity's backdrop baked into
+  its pixels when it was composed, so tiles kept the old colour until you
+  scrolled them away and back. Stale cards are now detected and quietly
+  re-composed against the new colours the moment the desktop changes.
+
+- **The selection ring now hugs the tile's edge when titles are hidden.**
+  It used to sit in the reserved caption band; now that a hidden-titles
+  tile is all artwork, the ring wraps the tile itself — same look list
+  rows have always had — and stays visible above the artwork.
+
 - **Grid spacing is now simply the gap between one tile and the next, in
   pixels, and can no longer be negative.** It used to be drawn on an
   unlabelled 0-150 scale where 100 meant "no gap", so a stored value of

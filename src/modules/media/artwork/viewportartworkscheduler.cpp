@@ -416,11 +416,17 @@ void ViewportArtworkScheduler::drainPendingApply() {
       // still the size it was composed for, set it straight through (no GUI
       // scale/composite). Otherwise (worker skipped it, or the tile resized
       // mid-flight) fall back to compositing the raw pixmap on the GUI thread.
-      if (!result.composedCard.isNull() &&
-          result.composedForSize == widget->artworkRenderSpec().labelSize) {
+      // Kartend-94o7t: also reject a card whose baked background no longer
+      // matches the tile's current spec — the palette changed while it was in
+      // flight. The raw-pixmap fallback composites on the GUI thread against
+      // the LIVE palette, so the tile is correct immediately instead of
+      // showing one stale frame and waiting for a second delivery.
+      const ItemWidget::ArtworkRenderSpec spec = widget->artworkRenderSpec();
+      if (!result.composedCard.isNull() && result.composedForSize == spec.labelSize &&
+          (!result.composedBackground.isValid() || result.composedBackground == spec.background)) {
         QPixmap card = QPixmap::fromImage(result.composedCard);
         card.setDevicePixelRatio(result.composedCard.devicePixelRatio());
-        widget->setComposedArtwork(card);
+        widget->setComposedArtwork(card, result.composedBackground);
       } else {
         widget->setArtworkPixmap(pixmap);
       }

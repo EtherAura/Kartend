@@ -22,6 +22,7 @@
 #include <memory>
 #include <QApplication>
 #include <QDateTime>
+#include <QPalette>
 #include <QPixmap>
 #include <QPointer>
 #include <QSemaphore>
@@ -82,6 +83,7 @@ private slots:
 
   // Stale-size composed card re-delivery -------------------------------------
   void testStaleComposedCard_triggersRedelivery();
+  void testPaletteStaleComposedCard_triggersRedelivery();
 
   // Pool-recycled widget re-delivery -----------------------------------------
   void testRecycledWidget_withStaleLoadedEntry_triggersRedelivery();
@@ -716,6 +718,63 @@ void TestArtworkManager::testStaleComposedCard_triggersRedelivery() {
   manager.addPendingArtwork(&widget, artPath);
   QVERIFY(!widget.hasStaleComposedArtwork());
   QVERIFY(manager.hasArtworkForWidget(&widget));
+}
+
+void TestArtworkManager::testPaletteStaleComposedCard_triggersRedelivery() {
+  // Kartend-94o7t: a composed card BAKES the palette's Mid colour into its
+  // pixels (artworkRenderSpec().background), so a desktop palette change —
+  // a KDE activity switch with per-activity accents, in the field report —
+  // strands the old colour on screen. Repainting re-applies the same pixmap,
+  // and the re-delivery gate used to see a loaded, size-correct card and
+  // skip it forever. A palette mismatch must count as staleness exactly the
+  // way a resize does; scrolling the tile out and back was the only cure.
+  const QString artPath = m_tempDir.path() + "/palette.png";
+  QPixmap onDisk(400, 400);
+  onDisk.fill(Qt::darkBlue);
+  QVERIFY(onDisk.save(artPath, "PNG"));
+
+  ArtworkManager manager;
+  wireSetup(&manager);
+  m_cache->cacheArtworkInMemoryOnly(artPath, onDisk);
+
+  ItemWidget widget;
+  widget.setFilePath(m_tempDir.path() + "/palette.rom");
+  widget.setItemDimensions(220, 280);
+  QVERIFY(widget.imageLabel);
+  const QSize labelSize = widget.imageLabel->size();
+  QVERIFY(!labelSize.isEmpty());
+
+  manager.addPendingArtwork(&widget, artPath);
+  QVERIFY(manager.hasArtworkForWidget(&widget));
+
+  // Worker delivery: a card composed against the "previous activity's"
+  // palette, its backdrop colour recorded alongside it.
+  QPixmap card(labelSize);
+  card.fill(Qt::blue);
+  widget.setComposedArtwork(card, widget.palette().color(QPalette::Mid));
+  QVERIFY(!widget.hasStaleComposedArtwork());
+  manager.addPendingArtwork(&widget, artPath); // loaded + fresh → dedup no-op
+  QVERIFY(!widget.hasStaleComposedArtwork());
+
+  // The activity switch: Mid changes under the widget.
+  QPalette switched = widget.palette();
+  switched.setColor(QPalette::Mid, QColor(200, 30, 60));
+  widget.setPalette(switched);
+  QVERIFY2(widget.hasStaleComposedArtwork(),
+           "a palette change must make a baked-background card stale");
+
+  // Re-delivery replaces it through the cache fast path (raw pixmap,
+  // recomposed on the GUI thread against the LIVE palette) and re-registers
+  // the widget as loaded and fresh.
+  manager.addPendingArtwork(&widget, artPath);
+  QVERIFY(!widget.hasStaleComposedArtwork());
+  QVERIFY(manager.hasArtworkForWidget(&widget));
+
+  // A delivery that does not say what it was composed with (invalid colour)
+  // must stay non-stale — unknown is not stale, or every legacy card would
+  // thrash through re-delivery on each pass.
+  widget.setComposedArtwork(card);
+  QVERIFY(!widget.hasStaleComposedArtwork());
 }
 
 void TestArtworkManager::testRecycledWidget_withStaleLoadedEntry_triggersRedelivery() {

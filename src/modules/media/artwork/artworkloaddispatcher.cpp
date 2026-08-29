@@ -264,15 +264,16 @@ processBatchOnWorker(const QList<ArtworkInfo> &batch, const std::atomic<quint64>
                                                   info.targetLabelSize.height(), dpr,
                                                   info.cornerRadius, info.backgroundColor);
     }
-    results.append(
-        ArtworkInfo::Result{.widget = info.mediaItem,
-                            .artworkPath = info.artworkPath,
-                            .artworkBaseName = QFileInfo(info.artworkPath).completeBaseName(),
-                            .widgetIdentity = info.widgetIdentity,
-                            .image = img,
-                            .composedCard = composed,
-                            .composedForSize = composed.isNull() ? QSize() : info.targetLabelSize,
-                            .loadedFromDiskCache = loadedFromDiskCache});
+    results.append(ArtworkInfo::Result{
+        .widget = info.mediaItem,
+        .artworkPath = info.artworkPath,
+        .artworkBaseName = QFileInfo(info.artworkPath).completeBaseName(),
+        .widgetIdentity = info.widgetIdentity,
+        .image = img,
+        .composedCard = composed,
+        .composedForSize = composed.isNull() ? QSize() : info.targetLabelSize,
+        .composedBackground = composed.isNull() ? QColor() : info.backgroundColor,
+        .loadedFromDiskCache = loadedFromDiskCache});
   }
   return results;
 }

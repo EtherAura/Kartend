@@ -22,6 +22,7 @@ class QPaintEvent;
 class QShowEvent;
 class QResizeEvent;
 class QPushButton;
+class QPainter;
 
 class ItemWidget : public QWidget {
   Q_OBJECT
@@ -35,6 +36,11 @@ class ItemWidget : public QWidget {
   // via setComposedArtwork) rather than raw artwork — onArtworkChanged then
   // sets it straight through instead of re-scaling + re-compositing.
   bool m_storedIsComposed = false;
+  // Kartend-94o7t: the backdrop colour baked into that card at compose time
+  // (invalid = unknown, e.g. a delivery predating this field). Read by
+  // hasStaleComposedArtwork so a palette change counts as staleness the same
+  // way a resize does.
+  QColor m_composedBackground;
 
 public:
   /// Kartend-63wg: the inputs onArtworkChanged uses to compose a tile's card,
@@ -72,7 +78,10 @@ public:
   /// Kartend-63wg: set an already-composed final card (corner-masked, sized to
   /// the artwork label) produced by the artwork worker. onArtworkChanged sets
   /// it straight onto the label with no further scale/composite.
-  void setComposedArtwork(const QPixmap &card);
+  /// composedBackground is the colour the worker baked into the card
+  /// (Result::composedBackground) — recorded so a later palette change can be
+  /// detected. Invalid means unknown, which is never treated as stale.
+  void setComposedArtwork(const QPixmap &card, const QColor &composedBackground = QColor());
   void setPlaceholderArtworkPixmap(const QPixmap &pixmap);
   virtual void setSelected(bool selected);
   void resetForReuse();
@@ -128,6 +137,10 @@ public:
   QLabel *imageLabel = nullptr;
   QLabel *nameLabel = nullptr;
   QWidget *triangleIndicator;
+  /// Kartend-f4hva: transparent full-tile child that paints the selection
+  /// ring ABOVE the artwork label. Null until the tile is first selected —
+  /// pooled tiles that are never selected pay nothing.
+  QWidget *m_selectionBorderOverlay = nullptr;
   void setAsSubcollection(int index, const QString &name);
   void setAsVirtualFolder(const QString &folderPath, const QString &displayName,
                           bool hideTitle = false);
@@ -145,6 +158,12 @@ public:
   [[nodiscard]] bool shouldPaintTitle() const;
   [[nodiscard]] const QString &virtualFolderPath() const { return m_virtualFolderPath; }
   void applyTitleTint();
+  /// One definition of the pulsing selection ring, shared by paintEvent
+  /// (list mode, where the row is not covered by a child) and
+  /// ItemWidgetSelectionRing (grid mode, where it must sit above the
+  /// full-bleed artwork label — Kartend-f4hva). No-op while unselected or
+  /// gliding; during a glide SelectionOverlayManager draws in the container.
+  void drawSelectionBorder(QPainter &painter);
   /// Colour for item TITLE TEXT: the palette text colour unless the
   /// accent tint is enabled. See titleTint() for the accent itself.
   static QColor titleTextColor();
@@ -315,6 +334,24 @@ private:
   void applyDeselectedUiEffects();
   void scheduleSelectionBorderUpdate();
   void applyDimensions();
+};
+
+/// Kartend-f4hva: the grid selection ring. A parent's paintEvent can never
+/// draw over its children, and with hidden titles the artwork label covers
+/// the whole tile (Kartend-hxly2) — so the ring is itself a child stacked
+/// above the label, the arrangement triangleIndicator already uses for the
+/// subcollection badge. Paint logic stays on ItemWidget::drawSelectionBorder;
+/// owner-local and ring-local coordinates coincide because the ring spans the
+/// tile.
+class ItemWidgetSelectionRing : public QWidget {
+public:
+  explicit ItemWidgetSelectionRing(ItemWidget *owner);
+
+protected:
+  void paintEvent(QPaintEvent *event) override;
+
+private:
+  ItemWidget *m_owner; ///< also the QObject parent; outlives this child
 };
 
 #endif // ITEMWIDGET_H

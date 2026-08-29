@@ -41,6 +41,57 @@ void ItemWidget::ensureTextMeasure(const QString &name, const QFont &font, int w
   m_textMeasureWidth = width;
 }
 
+// One definition of the pulsing selection ring — see the header note. The
+// glide check lives here so the ring overlay needs no scheduling of its own:
+// it can always repaint, and this draws nothing while the container's glide
+// overlay owns the ring.
+void ItemWidget::drawSelectionBorder(QPainter &painter) {
+  const bool canPaintSelection = m_isListMode || imageLabel;
+  if (!isSelectedState || !canPaintSelection || isGlideActive()) {
+    return;
+  }
+  painter.setRenderHint(QPainter::Antialiasing);
+
+  double alpha =
+      qBound(UIConstants::Animation::PULSE_OPACITY_LOW, static_cast<double>(m_pulseOpacity),
+             UIConstants::Animation::PULSE_OPACITY_HIGH);
+
+  // Use per-collection selection color if set, otherwise system highlight
+  QColor borderColor;
+  if (!s_selectionColor.isEmpty() && QColor::isValidColorName(s_selectionColor)) {
+    borderColor = QColor(s_selectionColor);
+  } else {
+    borderColor = palette().color(QPalette::Highlight);
+  }
+  borderColor.setAlphaF(alpha);
+
+  QPen pen(borderColor);
+  pen.setWidth(UIConstants::Widget::BORDER_WIDTH_SELECTION);
+  painter.setPen(pen);
+
+  painter.drawRoundedRect(computeSelectionBorderRect(), UIConstants::Widget::BORDER_RADIUS,
+                          UIConstants::Widget::BORDER_RADIUS);
+}
+
+ItemWidgetSelectionRing::ItemWidgetSelectionRing(ItemWidget *owner)
+    : QWidget(owner), m_owner(owner) {
+  // Purely visual: clicks fall through to the tile, and nothing fills the
+  // background — the ring is the only ink.
+  setAttribute(Qt::WA_TransparentForMouseEvents);
+  setAttribute(Qt::WA_NoSystemBackground);
+}
+
+void ItemWidgetSelectionRing::paintEvent(QPaintEvent *event) {
+  if (!event) {
+    return;
+  }
+  QPainter painter(this);
+  if (!painter.isActive()) {
+    return;
+  }
+  m_owner->drawSelectionBorder(painter);
+}
+
 // Renders the selection border with pulsing opacity when selected; suppressed
 // during glide animations
 void ItemWidget::paintEvent(QPaintEvent *event) {
@@ -87,33 +138,12 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
     painter.fillRect(rect(), rowColor);
   }
 
-  // Paint selection border when selected (grid mode needs imageLabel, list mode
-  // uses full widget)
-  bool canPaintSelection = m_isListMode || imageLabel;
-  if (isSelectedState && canPaintSelection && !glideActive) {
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    double alpha =
-        qBound(UIConstants::Animation::PULSE_OPACITY_LOW, static_cast<double>(m_pulseOpacity),
-               UIConstants::Animation::PULSE_OPACITY_HIGH);
-
-    // Use per-collection selection color if set, otherwise system highlight
-    QColor borderColor;
-    if (!s_selectionColor.isEmpty() && QColor::isValidColorName(s_selectionColor)) {
-      borderColor = QColor(s_selectionColor);
-    } else {
-      borderColor = palette().color(QPalette::Highlight);
-    }
-    borderColor.setAlphaF(alpha);
-
-    QPen pen(borderColor);
-    pen.setWidth(UIConstants::Widget::BORDER_WIDTH_SELECTION);
-    painter.setPen(pen);
-
-    // Use the centralized computation for the border rectangle
-    QRect borderRect = computeSelectionBorderRect();
-    painter.drawRoundedRect(borderRect, UIConstants::Widget::BORDER_RADIUS,
-                            UIConstants::Widget::BORDER_RADIUS);
+  // Kartend-f4hva: in grid mode the ring is painted by the
+  // m_selectionBorderOverlay child ABOVE the artwork label — anything drawn
+  // here would vanish under a full-bleed label. Only the list row, which no
+  // child covers, still paints its ring from the parent.
+  if (m_isListMode && !glideActive) {
+    drawSelectionBorder(painter);
   }
 
   // Paint title text with tint color - bypasses broken QLabel stylesheet in
@@ -280,6 +310,10 @@ void ItemWidget::applyDimensions() {
   QString currentName = itemName;
   QString currentPath = filePath;
   setFixedSize(m_itemWidth, m_itemHeight);
+  // Kartend-f4hva: the ring overlay always spans the whole tile.
+  if (m_selectionBorderOverlay) {
+    m_selectionBorderOverlay->setGeometry(0, 0, m_itemWidth, m_itemHeight);
+  }
 
   // List mode: horizontal layout with name, collection, and artwork icon
   if (m_isListMode) {

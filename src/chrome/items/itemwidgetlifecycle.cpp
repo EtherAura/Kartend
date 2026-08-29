@@ -51,11 +51,15 @@ void ItemWidget::resetForReuse() {
   itemName.clear();
   storedPixmap = QPixmap();   // Clear stored artwork
   m_storedIsComposed = false; // The cleared pixmap is no worker-composed card
+  m_composedBackground = QColor();
   m_placeholderArtworkPixmap = QPixmap();
   // Don't generate placeholder here - onArtworkChanged() will be called after
   // configuration and will generate the placeholder with correct dimensions
   if (triangleIndicator) {
     triangleIndicator->hide();
+  }
+  if (m_selectionBorderOverlay) {
+    m_selectionBorderOverlay->hide(); // re-shown by the next setSelected(true)
   }
   // Hide list mode elements
   if (m_collectionLabel) {
@@ -160,8 +164,10 @@ void ItemWidget::setArtworkPixmap(const QPixmap &pixmap) {
     return;
   }
 
-  // Kartend-63wg: raw artwork — onArtworkChanged still scales + composites it.
+  // Kartend-63wg: raw artwork — onArtworkChanged still scales + composites it,
+  // so it always renders against the LIVE palette; no baked colour to track.
   m_storedIsComposed = false;
+  m_composedBackground = QColor();
 
   bool shouldDefer = property(PropertyKeys::DeferArtworkUpdate).toBool();
   if (shouldDefer) {
@@ -186,12 +192,13 @@ void ItemWidget::setArtworkPixmap(const QPixmap &pixmap) {
 // Kartend-63wg: set a worker-composed final card. Mirrors setArtworkPixmap's
 // defer handling, but flags the stored pixmap as already-composed so
 // onArtworkChanged sets it straight onto the label (no scale/composite/mask).
-void ItemWidget::setComposedArtwork(const QPixmap &card) {
+void ItemWidget::setComposedArtwork(const QPixmap &card, const QColor &composedBackground) {
   if (!imageLabel) {
     return;
   }
 
   m_storedIsComposed = true;
+  m_composedBackground = composedBackground;
 
   bool shouldDefer = property(PropertyKeys::DeferArtworkUpdate).toBool();
   if (shouldDefer) {

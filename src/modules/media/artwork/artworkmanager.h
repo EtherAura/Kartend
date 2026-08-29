@@ -86,6 +86,12 @@ struct ArtworkInfo {
     /// when the widget wasn't laid out at dispatch; the GUI then composites.
     QImage composedCard;
     QSize composedForSize;
+    /// Kartend-94o7t: the backdrop colour the card was composed WITH. The
+    /// worker bakes it into the card's pixels, so a palette change after
+    /// compose leaves the old colour on screen unless the widget can tell the
+    /// card no longer matches — ItemWidget::hasStaleComposedArtwork compares
+    /// this against the live palette. Invalid when composedCard is null.
+    QColor composedBackground;
     bool loadedFromDiskCache = false;
   };
 };

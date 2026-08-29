@@ -39,6 +39,7 @@ private slots:
   void gridContentNeverOverflowsItsCell_data();
   void gridContentNeverOverflowsItsCell();
   void hiddenTitleArtworkStaysWithinTilePitch();
+  void selectionRingStaysInsideTheTile();
   void gridArtworkNeverExceedsTilePitch_data();
   void gridArtworkNeverExceedsTilePitch();
 };
@@ -326,6 +327,50 @@ void TestItemWidgetTitleVisibility::hiddenTitleArtworkStaysWithinTilePitch() {
                                 "arming the pitch is what this is guarding.")
                      .arg(unarmed.artworkSize())
                      .arg(kPitch)));
+}
+
+void TestItemWidgetTitleVisibility::selectionRingStaysInsideTheTile() {
+  // Kartend-f4hva. Once hidden titles let the artwork fill its whole cell
+  // (Kartend-hxly2), the selection ring — computed AROUND the artwork label —
+  // sat entirely outside the widget's paint bounds and clipped to nothing,
+  // and any clamped remnant was painted over by the full-bleed label child.
+  // Pin both halves of the fix: the rect stays inside the tile, and the ring
+  // exists as a child overlay stacked above the label.
+  QWidget host;
+  auto *tile = new ItemWidget(&host);
+  tile->setHideTitles(true);
+  tile->setItemDimensions(325, 325);
+  if (QLayout *box = tile->layout()) {
+    box->activate();
+  }
+  tile->setSelected(true);
+
+  const QRect ring = tile->selectionBorderRectInParent();
+  QVERIFY2(!ring.isEmpty(), "selection ring rect collapsed to nothing");
+  QVERIFY2(QRect(0, 0, 325, 325).contains(ring),
+           qPrintable(QStringLiteral("ring %1,%2 %3x%4 leaves the 325px tile — it will be "
+                                     "clipped invisible")
+                          .arg(ring.x())
+                          .arg(ring.y())
+                          .arg(ring.width())
+                          .arg(ring.height())));
+
+  QVERIFY2(tile->m_selectionBorderOverlay, "no ring overlay was created on selection");
+  QVERIFY2(tile->m_selectionBorderOverlay->isVisibleTo(tile),
+           "ring overlay exists but is not visible while selected");
+  tile->setSelected(false);
+  QVERIFY2(!tile->m_selectionBorderOverlay->isVisibleTo(tile),
+           "ring overlay still visible after deselection");
+
+  // A titles-shown tile keeps its around-the-artwork ring, still inside.
+  auto *titled = new ItemWidget(&host);
+  titled->setItemName(QStringLiteral("A Title"));
+  titled->setItemDimensions(325, 325);
+  if (QLayout *box = titled->layout()) {
+    box->activate();
+  }
+  titled->setSelected(true);
+  QVERIFY(QRect(0, 0, 325, 325).contains(titled->selectionBorderRectInParent()));
 }
 
 QTEST_MAIN(TestItemWidgetTitleVisibility)

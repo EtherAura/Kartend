@@ -404,6 +404,25 @@ void ItemWidget::setSelected(bool selected) {
   }
 
   isSelectedState = selected;
+  // Kartend-f4hva: the grid ring lives on a child overlay above the artwork
+  // label — see ItemWidgetSelectionRing. Created on first selection; the
+  // badge and title are re-raised so their stacking survives.
+  if (selected && !m_isListMode && !m_selectionBorderOverlay) {
+    auto *ring = new ItemWidgetSelectionRing(this);
+    ring->setGeometry(0, 0, m_itemWidth, m_itemHeight);
+    ring->raise();
+    if (nameLabel) {
+      nameLabel->raise();
+    }
+    if (triangleIndicator) {
+      triangleIndicator->raise();
+    }
+    m_selectionBorderOverlay = ring;
+    ring->show();
+  }
+  if (m_selectionBorderOverlay) {
+    m_selectionBorderOverlay->setVisible(selected && !m_isListMode);
+  }
   if (selected) {
     applySelectedUiEffects();
   } else {
@@ -447,7 +466,15 @@ auto ItemWidget::computeSelectionBorderRect() const -> QRect {
   const int right = imageRect.right() + UIConstants::CollectionIcon::ITEM_SPACING;
   const int bottom = imageRect.bottom() + UIConstants::CollectionIcon::ITEM_SPACING;
 
-  return {left, top, right - left, bottom - top};
+  // Kartend-f4hva: with hidden titles the label fills the whole cell
+  // (Kartend-hxly2), so the unclamped ring sits entirely outside the widget
+  // and clips to nothing. Clamp it inside the paint bounds with the half-pen
+  // inset — the Kartend-ylijk treatment list mode gets above. On a
+  // titles-shown tile the ring already fits and the intersection is a no-op,
+  // so that look is unchanged.
+  const int inset = UIConstants::Widget::BORDER_WIDTH_SELECTION / 2;
+  return QRect(left, top, right - left, bottom - top)
+      .intersected(rect().adjusted(inset, inset, -inset, -inset));
 }
 
 auto ItemWidget::selectionBorderRectInParent() const -> QRect {
@@ -494,9 +521,14 @@ void ItemWidget::applyDeselectedUiEffects() {
 void ItemWidget::scheduleSelectionBorderUpdate() {
   if (imageLabel) {
     const QRect borderRect = computeSelectionBorderRect();
-    update(borderRect.adjusted(
+    const QRect repaintRect = borderRect.adjusted(
         -UIConstants::Widget::BORDER_WIDTH_SELECTION, -UIConstants::Widget::BORDER_WIDTH_SELECTION,
-        UIConstants::Widget::BORDER_WIDTH_SELECTION, UIConstants::Widget::BORDER_WIDTH_SELECTION));
+        UIConstants::Widget::BORDER_WIDTH_SELECTION, UIConstants::Widget::BORDER_WIDTH_SELECTION);
+    update(repaintRect);
+    // Same coordinates: the ring overlay spans the tile (Kartend-f4hva).
+    if (m_selectionBorderOverlay) {
+      m_selectionBorderOverlay->update(repaintRect);
+    }
   } else {
     update();
   }
@@ -627,6 +659,15 @@ ItemWidget::ArtworkRenderSpec ItemWidget::artworkRenderSpec() const {
 bool ItemWidget::hasStaleComposedArtwork() const {
   if (!m_storedIsComposed || storedPixmap.isNull() || !imageLabel) {
     return false;
+  }
+  // Kartend-94o7t: the card's backdrop is baked into its pixels at compose
+  // time (artworkRenderSpec().background), so a palette change makes it stale
+  // exactly the way a resize does — it can only be rebuilt, never patched.
+  // Reporting it here is what opens addPendingArtwork's re-delivery gate.
+  // An invalid recorded colour means "unknown" (a delivery predating the
+  // field) and is never stale, so nothing thrashes.
+  if (m_composedBackground.isValid() && m_composedBackground != palette().color(QPalette::Mid)) {
+    return true;
   }
   // A worker-composed card is final (scaled, centered, corner-masked) and can
   // only be shown 1:1 — compare its logical size against the label it would
