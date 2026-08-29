@@ -245,6 +245,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Grid spacing is now simply the gap between one tile and the next, in
+  pixels, and can no longer be negative.** It used to be drawn on an
+  unlabelled 0-150 scale where 100 meant "no gap", so a stored value of
+  -80 appeared as "20" and read naturally as 20 pixels while actually
+  packing tiles closer together than their own size. Setting 20 now gives
+  a 20px gap, and 0 puts tiles edge to edge. Collections that used a
+  negative value are converted on load into the tile size and gap they
+  were really being drawn at, so **your grid keeps its column count and
+  its appearance** — but Item Width and Spacing will read differently in
+  the settings, because they now describe what you can actually see.
+
 - **The grid spacing fields now show the real value.** They were drawn
   on an unlabelled 0-150 scale where 100 meant zero spacing, so a stored
   gap of -80 was displayed as "20" and read naturally as 20 pixels. The

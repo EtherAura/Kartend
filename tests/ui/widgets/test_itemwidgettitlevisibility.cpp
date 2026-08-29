@@ -250,12 +250,13 @@ void TestItemWidgetTitleVisibility::gridArtworkNeverExceedsTilePitch() {
                             .arg(hide)));
   }
 
-  // The clamp holds back a visible gutter of Widget::SPACING, so it binds
-  // whenever the pitch is under cell + gutter. Since Kartend-hxly2 made an
-  // untitled tile fill its cell, that now includes zero and small positive
-  // spacings — below the gutter the tile shrinks to keep neighbours apart.
-  // Above it the clamp must not bind at all, which is what this pins.
-  if (spacing >= UIConstants::Widget::SPACING) {
+  // The clamp holds nothing back, so with spacing >= 0 the pitch is at least
+  // the cell and it can never be the binding constraint. Spacing cannot BE
+  // negative from the settings any more (Kartend-hxly2 floors it at 0, and
+  // clampValues migrates older configs), but the negative rows above are kept:
+  // setGridPitch takes a pitch rather than a spacing, so the guard is still
+  // reachable and still worth pinning.
+  if (spacing >= 0) {
     ItemWidget clamped;
     ItemWidget unclamped;
     for (ItemWidget *w : {&clamped, &unclamped}) {

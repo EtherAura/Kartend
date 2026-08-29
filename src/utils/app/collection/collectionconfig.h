@@ -38,6 +38,8 @@
 #include <uiconstants/grid.h>
 #include <uiconstants/item.h>
 #include <uiconstants/listview.h>
+#include <uiconstants/viewport.h>
+#include <uiconstants/widget.h>
 
 struct CollectionConfig {
   QString name;
@@ -345,6 +347,29 @@ struct CollectionConfig {
       gridLayout.gridHeightSidebarHidden =
           std::max(gridLayout.gridHeightSidebarHidden, UIConstants::Grid::MIN_WIDTH);
     }
+    // Kartend-hxly2: spacing is the GAP BETWEEN TILE EDGES and is never
+    // negative. Older configs stored negative values, which meant something
+    // quite different — the grid placed cells CLOSER than their own size, and
+    // the tile was then shrunk to keep it clear of its neighbour. The number in
+    // the box was neither the gap nor anything else the user could see.
+    //
+    // Such a config is migrated to the honest pair that renders identically
+    // rather than being flattened to zero: the tile the user was really seeing,
+    // and the gutter they were really getting. Pitch is preserved exactly
+    // (item + spacing is unchanged), so a migrated grid keeps its column count
+    // and its appearance. Flattening to 0 instead would silently loosen a
+    // tuned grid until its columns no longer fit the window.
+    //
+    // Runs BEFORE the item-size clamps below so the shifted sizes are bounded
+    // by them, and is idempotent: after it, spacing is >= 0 and it is a no-op.
+    if (gridLayout.horizontalSpacing < 0) {
+      gridLayout.itemWidth += gridLayout.horizontalSpacing - UIConstants::Widget::SPACING;
+      gridLayout.horizontalSpacing = UIConstants::Widget::SPACING;
+    }
+    if (gridLayout.verticalSpacing < 0) {
+      gridLayout.itemHeight += gridLayout.verticalSpacing - UIConstants::Widget::SPACING;
+      gridLayout.verticalSpacing = UIConstants::Widget::SPACING;
+    }
     gridLayout.itemWidth = std::clamp(gridLayout.itemWidth, UIConstants::Item::MIN_WIDTH,
                                       UIConstants::Item::MAX_WIDTH);
     gridLayout.itemHeight = std::clamp(gridLayout.itemHeight, UIConstants::Item::MIN_HEIGHT,
@@ -354,9 +379,12 @@ struct CollectionConfig {
     gridLayout.cornerRadius =
         std::clamp(gridLayout.cornerRadius, UIConstants::Item::MIN_CORNER_RADIUS,
                    UIConstants::Item::MAX_CORNER_RADIUS);
-    // Spacing can be negative for overlap effects
-    gridLayout.horizontalSpacing = std::clamp(gridLayout.horizontalSpacing, -100, 200);
-    gridLayout.verticalSpacing = std::clamp(gridLayout.verticalSpacing, -100, 200);
+    // Floor is SPACING_MIN (0) — see the migration above. The upper bound is
+    // left as it was so a hand-edited wide gap is not quietly reduced.
+    gridLayout.horizontalSpacing =
+        std::clamp(gridLayout.horizontalSpacing, UIConstants::Viewport::SPACING_MIN, 200);
+    gridLayout.verticalSpacing =
+        std::clamp(gridLayout.verticalSpacing, UIConstants::Viewport::SPACING_MIN, 200);
     // List mode settings
     listView.listFontSize = std::clamp(listView.listFontSize, UIConstants::Item::MIN_FONT_SIZE,
                                        UIConstants::Item::MAX_FONT_SIZE);

@@ -135,16 +135,22 @@ ValidationResult validateCollection(const CollectionConfig &config, int index, b
     result.addWarning(prefix +
                       "gridHeightSidebarHidden negative, will be clamped to 0 (no override)");
   }
-  // Spacing may be negative (overlap effects); clampValues() bounds it to
-  // [-100, 200], so warn only when outside that range — not on every
-  // negative value, which is legitimately allowed.
-  if (gl.horizontalSpacing < -100 || gl.horizontalSpacing > 200) {
+  // Spacing is the gap between tile edges and is never negative (Kartend-hxly2).
+  // A negative value is an older config rather than an error: clampValues()
+  // MIGRATES it, folding the overlap back into the item size so the grid keeps
+  // its appearance, so say that rather than threatening to clamp it away.
+  if (gl.horizontalSpacing < 0) {
     result.addWarning(prefix + "horizontalSpacing " + QString::number(gl.horizontalSpacing) +
-                      " outside -100..200, will be clamped");
+                      " is negative; it will be migrated into the item width, which keeps the "
+                      "layout unchanged");
   }
-  if (gl.verticalSpacing < -100 || gl.verticalSpacing > 200) {
+  if (gl.verticalSpacing < 0) {
     result.addWarning(prefix + "verticalSpacing " + QString::number(gl.verticalSpacing) +
-                      " outside -100..200, will be clamped");
+                      " is negative; it will be migrated into the item height, which keeps the "
+                      "layout unchanged");
+  }
+  if (gl.horizontalSpacing > 200 || gl.verticalSpacing > 200) {
+    result.addWarning(prefix + "grid spacing above 200 will be clamped");
   }
   if (gl.fontSize <= 0) {
     result.addWarning(prefix + "gridLayout.fontSize must be > 0, will be clamped to default");

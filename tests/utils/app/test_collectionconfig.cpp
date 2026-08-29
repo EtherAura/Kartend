@@ -15,6 +15,7 @@
 class TestCollectionConfig : public QObject {
   Q_OBJECT
 private slots:
+  void negativeSpacingMigratesWithoutMovingTheGrid();
   void defaultConfigsCompareEqual();
   void hideMissingArtworkDifferenceDetected();
   void scalarFieldDifferencesDetected();
@@ -88,6 +89,53 @@ void TestCollectionConfig::scalarFieldDifferencesDetected() {
         !(base == mutated),
         qPrintable(QStringLiteral("operator== ignores field: %1").arg(QLatin1String(cse.field))));
   }
+}
+
+void TestCollectionConfig::negativeSpacingMigratesWithoutMovingTheGrid() {
+  // Kartend-hxly2. Spacing is the gap between tile edges and cannot be
+  // negative. Configs predating that stored negative values meaning something
+  // else entirely — cells placed closer than their own size, with the tile then
+  // shrunk to clear its neighbour. The migration has to keep such a grid
+  // LOOKING the same, because these were tuned by eye to fit a window: pitch is
+  // what decides how many columns fit, so pitch is what must be preserved.
+  //
+  // Real reported config: 325px cells at -80, which rendered 237px tiles on a
+  // 245px pitch.
+  CollectionConfig cfg;
+  cfg.gridLayout.itemWidth = 325;
+  cfg.gridLayout.itemHeight = 325;
+  cfg.gridLayout.horizontalSpacing = -80;
+  cfg.gridLayout.verticalSpacing = -80;
+  const int pitchBeforeX = cfg.gridLayout.itemWidth + cfg.gridLayout.horizontalSpacing;
+  const int pitchBeforeY = cfg.gridLayout.itemHeight + cfg.gridLayout.verticalSpacing;
+
+  cfg.clampValues();
+
+  QVERIFY2(cfg.gridLayout.horizontalSpacing >= 0, "horizontal spacing left negative");
+  QVERIFY2(cfg.gridLayout.verticalSpacing >= 0, "vertical spacing left negative");
+  QCOMPARE(cfg.gridLayout.itemWidth + cfg.gridLayout.horizontalSpacing, pitchBeforeX);
+  QCOMPARE(cfg.gridLayout.itemHeight + cfg.gridLayout.verticalSpacing, pitchBeforeY);
+  QCOMPARE(cfg.gridLayout.itemWidth, 237);
+  QCOMPARE(cfg.gridLayout.horizontalSpacing, 8);
+
+  // Idempotent — clampValues runs on every load, import and preset apply, so a
+  // second pass must not shrink the grid again.
+  const GridLayoutPreferences once = cfg.gridLayout;
+  cfg.clampValues();
+  QCOMPARE(cfg.gridLayout.itemWidth, once.itemWidth);
+  QCOMPARE(cfg.gridLayout.itemHeight, once.itemHeight);
+  QCOMPARE(cfg.gridLayout.horizontalSpacing, once.horizontalSpacing);
+  QCOMPARE(cfg.gridLayout.verticalSpacing, once.verticalSpacing);
+
+  // A config that was already honest is untouched.
+  CollectionConfig fine;
+  fine.gridLayout.itemWidth = 300;
+  fine.gridLayout.itemHeight = 300;
+  fine.gridLayout.horizontalSpacing = 20;
+  fine.gridLayout.verticalSpacing = 20;
+  fine.clampValues();
+  QCOMPARE(fine.gridLayout.itemWidth, 300);
+  QCOMPARE(fine.gridLayout.horizontalSpacing, 20);
 }
 
 QTEST_MAIN(TestCollectionConfig)

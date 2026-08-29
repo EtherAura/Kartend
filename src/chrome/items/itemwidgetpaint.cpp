@@ -459,9 +459,13 @@ void ItemWidget::applyDimensions() {
   //
   // With zero or positive spacing the pitch is >= the cell, so this never
   // binds and no ordinary configuration changes behaviour.
+  // Clamped to the pitch ITSELF, holding nothing back. Spacing is the gap the
+  // user asked for (Kartend-hxly2), so subtracting a further gutter here would
+  // make a requested 0 render as 8 and every other value read 8 too small.
+  // With spacing >= 0 the pitch is at least the cell and this never binds; it
+  // stays as the guard that stops a tile ever crossing into its neighbour.
   const int pitchLimit = qMin(m_gridPitchWidth > 0 ? m_gridPitchWidth : artworkSize,
-                              m_gridPitchHeight > 0 ? m_gridPitchHeight : artworkSize) -
-                         UIConstants::Widget::SPACING;
+                              m_gridPitchHeight > 0 ? m_gridPitchHeight : artworkSize);
   if (m_gridPitchWidth > 0 || m_gridPitchHeight > 0) {
     artworkSize = qMin(artworkSize, qMax(1, pitchLimit));
   }
