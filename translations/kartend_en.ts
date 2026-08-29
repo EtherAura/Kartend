@@ -2148,6 +2148,17 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation>Jump to the synthetic Home view from any depth. Only honored when Use Home View is enabled.</translation>
     </message>
     <message>
+        <location line="+2"/>
+        <location line="+37"/>
+        <source>Toggle Collection Tree:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-37"/>
+        <source>Show or hide the collection tree panel in the navigation sidebar. Unbound by default; F6 is a reasonable choice.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+7"/>
         <source>Gamepad</source>
         <translation>Gamepad</translation>
@@ -2161,11 +2172,12 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <location line="+4"/>
         <location line="+8"/>
         <location line="+8"/>
+        <location line="+8"/>
         <source>Detect...</source>
         <translation>Detect...</translation>
     </message>
     <message>
-        <location line="-12"/>
+        <location line="-20"/>
         <source>Back Button:</source>
         <translation>Back Button:</translation>
     </message>
@@ -2173,6 +2185,11 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <location line="+8"/>
         <source>Toggle Details Pane:</source>
         <translation>Toggle Details Pane:</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Show or hide the collection tree panel in the navigation sidebar.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+8"/>
@@ -2210,7 +2227,7 @@ Kartend will now exit. Restart the application to apply the new configuration.</
         <translation>Modifier combined with middle-click on a grid/list item to cycle through its available artwork types. Plain middle-click stays bound to the media preview overlay.</translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/behavior/controlspanel.cpp" line="+191"/>
+        <location filename="../src/ui/dialogs/settings/behavior/controlspanel.cpp" line="+214"/>
         <source>Shift</source>
         <translation>Shift</translation>
     </message>
@@ -2514,7 +2531,7 @@ Please remove shell metacharacters, backslashes, or other special characters.</t
 <context>
     <name>CreateSmartPlaylistDialog</name>
     <message>
-        <location filename="../src/ui/dialogs/collection/createsmartplaylistdialog.cpp" line="+123"/>
+        <location filename="../src/ui/dialogs/collection/createsmartplaylistdialog.cpp" line="+31"/>
         <source>Smart Playlist</source>
         <translation>Smart Playlist</translation>
     </message>
@@ -2529,170 +2546,161 @@ Please remove shell metacharacters, backslashes, or other special characters.</t
         <translation>Name:</translation>
     </message>
     <message>
-        <location line="+6"/>
-        <source>Recently launched</source>
-        <translation>Recently launched</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Most played</source>
-        <translation>Most played</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Never launched</source>
-        <translation>Never launched</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>By extension</source>
-        <translation>By extension</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Has artwork</source>
-        <translation>Has artwork</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Recently added</source>
-        <translation>Recently added</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Pinned</source>
-        <translation>Pinned</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Hidden</source>
-        <translation>Hidden</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Continue later</source>
-        <translation>Continue later</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>By collection</source>
-        <translation>By collection</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Title contains…</source>
-        <translation>Title contains…</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Missing artwork</source>
-        <translation>Missing artwork</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Favorites</source>
-        <translation>Favorites</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Criterion:</source>
-        <translation>Criterion:</translation>
-    </message>
-    <message>
-        <location line="+12"/>
-        <location line="+8"/>
-        <source>Show top:</source>
-        <translation>Show top:</translation>
-    </message>
-    <message>
-        <location line="+8"/>
-        <source>Show first:</source>
-        <translation>Show first:</translation>
-    </message>
-    <message>
-        <location line="+8"/>
-        <source>e.g. mp4, mkv, webm</source>
-        <translation>e.g. mp4, mkv, webm</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Extensions:</source>
-        <translation>Extensions:</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Comma-separated. The leading dot is optional. Matches all items across all collections.</source>
-        <translation>Comma-separated. The leading dot is optional. Matches all items across all collections.</translation>
-    </message>
-    <message>
-        <location line="+12"/>
-        <source>Includes every item across every collection that has a real cover image (not the procedural placeholder).</source>
-        <translation>Includes every item across every collection that has a real cover image (not the procedural placeholder).</translation>
-    </message>
-    <message>
-        <location line="+17"/>
-        <source>Window:</source>
-        <translation>Window:</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Items added to your library within the last N days. The stamp is set the first time the scanner sees an item; re-scanning a known item does NOT reset it.</source>
-        <translation>Items added to your library within the last N days. The stamp is set the first time the scanner sees an item; re-scanning a known item does NOT reset it.</translation>
-    </message>
-    <message>
-        <location line="+22"/>
-        <source>Includes every item you&apos;ve pinned via the right-click menu. Pinned items aggregate across all collections.</source>
-        <translation>Includes every item you&apos;ve pinned via the right-click menu. Pinned items aggregate across all collections.</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>Includes every item you&apos;ve marked as hidden. Useful for reviewing or restoring items removed from the default browse view.</source>
-        <translation>Includes every item you&apos;ve marked as hidden. Useful for reviewing or restoring items removed from the default browse view.</translation>
-    </message>
-    <message>
-        <location line="+4"/>
-        <source>Includes every item you&apos;ve flagged as &apos;continue later&apos;. Useful for tracking items you&apos;ve started but haven&apos;t finished.</source>
-        <translation>Includes every item you&apos;ve flagged as &apos;continue later&apos;. Useful for tracking items you&apos;ve started but haven&apos;t finished.</translation>
-    </message>
-    <message>
-        <location line="+11"/>
-        <source>Pick a collection…</source>
-        <translation>Pick a collection…</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Collection:</source>
-        <translation>Collection:</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Includes every item in the selected source collection. Useful for aggregating one collection&apos;s items inside a playlist alongside others.</source>
-        <translation>Includes every item in the selected source collection. Useful for aggregating one collection&apos;s items inside a playlist alongside others.</translation>
-    </message>
-    <message>
-        <location line="+16"/>
-        <source>e.g. &apos;concert&apos; or &apos;Episode 1&apos;</source>
-        <translation>e.g. &apos;concert&apos; or &apos;Episode 1&apos;</translation>
-    </message>
-    <message>
-        <location line="+1"/>
-        <source>Title contains:</source>
-        <translation>Title contains:</translation>
-    </message>
-    <message>
-        <location line="+2"/>
-        <source>Matches items whose title contains the text above (case-insensitive for ASCII characters). Empty text matches nothing.</source>
-        <translation>Matches items whose title contains the text above (case-insensitive for ASCII characters). Empty text matches nothing.</translation>
-    </message>
-    <message>
         <location line="+9"/>
-        <source>Includes every item without a real cover image — useful as a to-scrape worklist.</source>
-        <translation>Includes every item without a real cover image — useful as a to-scrape worklist.</translation>
+        <source>Match:</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <location line="+3"/>
+        <location line="+2"/>
+        <source>all of the rules</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>any of the rules</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+19"/>
+        <source>Add rule</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+43"/>
+        <source>Remove</source>
+        <translation type="unfinished">Remove</translation>
+    </message>
+    <message>
+        <source>Recently launched</source>
+        <translation type="vanished">Recently launched</translation>
+    </message>
+    <message>
+        <source>Most played</source>
+        <translation type="vanished">Most played</translation>
+    </message>
+    <message>
+        <source>Never launched</source>
+        <translation type="vanished">Never launched</translation>
+    </message>
+    <message>
+        <source>By extension</source>
+        <translation type="vanished">By extension</translation>
+    </message>
+    <message>
+        <source>Has artwork</source>
+        <translation type="vanished">Has artwork</translation>
+    </message>
+    <message>
+        <source>Recently added</source>
+        <translation type="vanished">Recently added</translation>
+    </message>
+    <message>
+        <source>Pinned</source>
+        <translation type="vanished">Pinned</translation>
+    </message>
+    <message>
+        <source>Hidden</source>
+        <translation type="vanished">Hidden</translation>
+    </message>
+    <message>
+        <source>Continue later</source>
+        <translation type="vanished">Continue later</translation>
+    </message>
+    <message>
+        <source>By collection</source>
+        <translation type="vanished">By collection</translation>
+    </message>
+    <message>
+        <source>Title contains…</source>
+        <translation type="vanished">Title contains…</translation>
+    </message>
+    <message>
+        <source>Missing artwork</source>
+        <translation type="vanished">Missing artwork</translation>
+    </message>
+    <message>
+        <source>Favorites</source>
+        <translation type="vanished">Favorites</translation>
+    </message>
+    <message>
+        <source>Criterion:</source>
+        <translation type="vanished">Criterion:</translation>
+    </message>
+    <message>
+        <source>Show top:</source>
+        <translation type="vanished">Show top:</translation>
+    </message>
+    <message>
+        <source>Show first:</source>
+        <translation type="vanished">Show first:</translation>
+    </message>
+    <message>
+        <source>e.g. mp4, mkv, webm</source>
+        <translation type="vanished">e.g. mp4, mkv, webm</translation>
+    </message>
+    <message>
+        <source>Extensions:</source>
+        <translation type="vanished">Extensions:</translation>
+    </message>
+    <message>
+        <source>Comma-separated. The leading dot is optional. Matches all items across all collections.</source>
+        <translation type="vanished">Comma-separated. The leading dot is optional. Matches all items across all collections.</translation>
+    </message>
+    <message>
+        <source>Includes every item across every collection that has a real cover image (not the procedural placeholder).</source>
+        <translation type="vanished">Includes every item across every collection that has a real cover image (not the procedural placeholder).</translation>
+    </message>
+    <message>
+        <source>Window:</source>
+        <translation type="vanished">Window:</translation>
+    </message>
+    <message>
+        <source>Items added to your library within the last N days. The stamp is set the first time the scanner sees an item; re-scanning a known item does NOT reset it.</source>
+        <translation type="vanished">Items added to your library within the last N days. The stamp is set the first time the scanner sees an item; re-scanning a known item does NOT reset it.</translation>
+    </message>
+    <message>
+        <source>Includes every item you&apos;ve pinned via the right-click menu. Pinned items aggregate across all collections.</source>
+        <translation type="vanished">Includes every item you&apos;ve pinned via the right-click menu. Pinned items aggregate across all collections.</translation>
+    </message>
+    <message>
+        <source>Includes every item you&apos;ve marked as hidden. Useful for reviewing or restoring items removed from the default browse view.</source>
+        <translation type="vanished">Includes every item you&apos;ve marked as hidden. Useful for reviewing or restoring items removed from the default browse view.</translation>
+    </message>
+    <message>
+        <source>Includes every item you&apos;ve flagged as &apos;continue later&apos;. Useful for tracking items you&apos;ve started but haven&apos;t finished.</source>
+        <translation type="vanished">Includes every item you&apos;ve flagged as &apos;continue later&apos;. Useful for tracking items you&apos;ve started but haven&apos;t finished.</translation>
+    </message>
+    <message>
+        <source>Pick a collection…</source>
+        <translation type="vanished">Pick a collection…</translation>
+    </message>
+    <message>
+        <source>Collection:</source>
+        <translation type="vanished">Collection:</translation>
+    </message>
+    <message>
+        <source>Includes every item in the selected source collection. Useful for aggregating one collection&apos;s items inside a playlist alongside others.</source>
+        <translation type="vanished">Includes every item in the selected source collection. Useful for aggregating one collection&apos;s items inside a playlist alongside others.</translation>
+    </message>
+    <message>
+        <source>e.g. &apos;concert&apos; or &apos;Episode 1&apos;</source>
+        <translation type="vanished">e.g. &apos;concert&apos; or &apos;Episode 1&apos;</translation>
+    </message>
+    <message>
+        <source>Title contains:</source>
+        <translation type="vanished">Title contains:</translation>
+    </message>
+    <message>
+        <source>Matches items whose title contains the text above (case-insensitive for ASCII characters). Empty text matches nothing.</source>
+        <translation type="vanished">Matches items whose title contains the text above (case-insensitive for ASCII characters). Empty text matches nothing.</translation>
+    </message>
+    <message>
+        <source>Includes every item without a real cover image — useful as a to-scrape worklist.</source>
+        <translation type="vanished">Includes every item without a real cover image — useful as a to-scrape worklist.</translation>
+    </message>
+    <message>
         <source>Includes every item present in the Favorites playlist. Combine with another search to see your favorited subset by type or tag.</source>
-        <translation>Includes every item present in the Favorites playlist. Combine with another search to see your favorited subset by type or tag.</translation>
+        <translation type="vanished">Includes every item present in the Favorites playlist. Combine with another search to see your favorited subset by type or tag.</translation>
     </message>
 </context>
 <context>
@@ -5061,23 +5069,17 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation>Gamepad input is not available on this build/configuration.</translation>
     </message>
     <message>
-        <location line="+56"/>
-        <location line="+5"/>
-        <location line="+4"/>
+        <location line="+63"/>
         <source>Press button...</source>
         <translation>Press button...</translation>
     </message>
     <message>
-        <location line="-8"/>
-        <location line="+4"/>
-        <location line="+5"/>
+        <location line="+0"/>
         <source>Detect...</source>
         <translation>Detect...</translation>
     </message>
     <message>
-        <location line="+5"/>
-        <location line="+4"/>
-        <location line="+3"/>
+        <location line="+10"/>
         <source>Press any button</source>
         <translation>Press any button</translation>
     </message>
@@ -7498,7 +7500,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+5"/>
-        <location filename="../src/core/mainwindow_dialogs.cpp" line="+138"/>
+        <location filename="../src/core/mainwindow_dialogs.cpp" line="+140"/>
         <source>About</source>
         <translation>About</translation>
     </message>
@@ -7628,7 +7630,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation>Ctrl+4</translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow.cpp" line="+555"/>
+        <location filename="../src/core/mainwindow.cpp" line="+558"/>
         <source>Import Kart</source>
         <translation>Import Kart</translation>
     </message>
@@ -7781,6 +7783,16 @@ Will change:
         <translation>Presentation profiles — could not save</translation>
     </message>
     <message>
+        <location line="+13"/>
+        <source>Saved filters — could not load</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+15"/>
+        <source>Saved filters — could not save</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location filename="../src/core/mainwindow_toolbar.cpp" line="+36"/>
         <source>Zoom Text In</source>
         <translation>Zoom Text In</translation>
@@ -7806,7 +7818,7 @@ Will change:
         <translation>Pause/Resume Preview Video</translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow_managerwiring.cpp" line="+194"/>
+        <location filename="../src/core/mainwindow_managerwiring.cpp" line="+195"/>
         <source>Extracting Archive</source>
         <translation>Extracting Archive</translation>
     </message>
@@ -9507,7 +9519,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation>Collection: %1 — scraping: %2</translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/scraper/result/scraperesultdialogunified_runtime.cpp" line="+140"/>
+        <location filename="../src/ui/dialogs/scraper/result/scraperesultdialogunified_runtime.cpp" line="+141"/>
         <source>Collection: %1</source>
         <translation>Collection: %1</translation>
     </message>
@@ -9577,7 +9589,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation>Re-scrape failed items</translation>
     </message>
     <message>
-        <location line="+146"/>
+        <location line="+111"/>
         <location line="+17"/>
         <location line="+8"/>
         <source>Scrape collection info</source>
@@ -9636,19 +9648,19 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>ScraperController</name>
     <message>
-        <location filename="../src/core/scrapercontroller.cpp" line="+94"/>
-        <location line="+66"/>
+        <location filename="../src/core/scrapercontroller.cpp" line="+105"/>
+        <location line="+74"/>
         <location line="+7"/>
         <source>Scraper</source>
         <translation>Scraper</translation>
     </message>
     <message>
-        <location line="-73"/>
+        <location line="-81"/>
         <source>Database is not ready.</source>
         <translation>Database is not ready.</translation>
     </message>
     <message>
-        <location line="+45"/>
+        <location line="+53"/>
         <source>Scrape complete.
 
 Scraped: %1
@@ -9670,7 +9682,7 @@ Errors: %4</translation>
 %1</translation>
     </message>
     <message>
-        <location line="+144"/>
+        <location line="+250"/>
         <source>Resume scrape?</source>
         <translation>Resume scrape?</translation>
     </message>
@@ -10192,7 +10204,19 @@ Items without a readable scrape timestamp (sidecar-only imports, hand-edited ent
 • On: the queue resumes silently, and the Scraper window is raised so the Live view + Cancel/Close buttons are reachable.</translation>
     </message>
     <message>
-        <location line="+12"/>
+        <location line="+15"/>
+        <source>Fetch collection artwork when a collection is created</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>When a new collection is created — added here, duplicated, imported from a .kart bundle, or picked up from an installed launcher — its platform or collection logo and background are fetched in the background, with no dialog, so the sidebar and home icons fill in as part of building the collection.
+
+Only collections that have a scraper configured and no artwork set yet are fetched, so a hand-picked icon is never replaced. Failures are silent; the details land in the scrape log.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
         <source>Enable scrape logging</source>
         <translation>Enable scrape logging</translation>
     </message>
@@ -10212,7 +10236,7 @@ When on, scrape messages are written to:
 The file is size-capped; the previous run rolls over to scrape.log.old. Leave off for normal use.</translation>
     </message>
     <message>
-        <location line="+127"/>
+        <location line="+136"/>
         <source>Querying ScreenScraper…</source>
         <translation>Querying ScreenScraper…</translation>
     </message>
@@ -10268,6 +10292,80 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <location line="+3"/>
         <source>Search: All collections (click to cycle modes)</source>
         <translation>Search: All collections (click to cycle modes)</translation>
+    </message>
+</context>
+<context>
+    <name>SearchPresetsDialog</name>
+    <message>
+        <location filename="../src/ui/dialogs/searchpresetsdialog.cpp" line="+22"/>
+        <source>Saved filters</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>A saved filter keeps the search box&apos;s contents together with the sort order and filters around it, so a query worth composing twice — say &quot;played:false tag:soundtrack&quot; sorted by date — can be brought back by name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+13"/>
+        <source>Save current as…</source>
+        <translation type="unfinished">Save current as…</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Apply</source>
+        <translation type="unfinished">Apply</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Delete</source>
+        <translation type="unfinished">Delete</translation>
+    </message>
+    <message>
+        <location line="+41"/>
+        <source>(unnamed)</source>
+        <translation type="unfinished">(unnamed)</translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>  —  (filters and sort only)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+24"/>
+        <location line="+5"/>
+        <source>Save filter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-5"/>
+        <source>Filter name:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>The filter name cannot be empty.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Overwrite filter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>A saved filter named &quot;%1&quot; already exists. Overwrite it?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+25"/>
+        <source>Delete filter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Delete the saved filter &quot;%1&quot;? This can&apos;t be undone.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -10511,7 +10609,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation>Controls</translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+363"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+365"/>
         <source>deselecting</source>
         <translation>deselecting</translation>
     </message>
@@ -12058,6 +12156,175 @@ Please remove shell metacharacters, backslashes, or other special characters.</t
     </message>
 </context>
 <context>
+    <name>SmartRuleEditor</name>
+    <message>
+        <location filename="../src/ui/dialogs/collection/smartruleeditor.cpp" line="+140"/>
+        <source>Recently launched</source>
+        <translation type="unfinished">Recently launched</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Most played</source>
+        <translation type="unfinished">Most played</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Never launched</source>
+        <translation type="unfinished">Never launched</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>By extension</source>
+        <translation type="unfinished">By extension</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Has artwork</source>
+        <translation type="unfinished">Has artwork</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Recently added</source>
+        <translation type="unfinished">Recently added</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Pinned</source>
+        <translation type="unfinished">Pinned</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Hidden</source>
+        <translation type="unfinished">Hidden</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Continue later</source>
+        <translation type="unfinished">Continue later</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>By collection</source>
+        <translation type="unfinished">By collection</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Title contains…</source>
+        <translation type="unfinished">Title contains…</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Missing artwork</source>
+        <translation type="unfinished">Missing artwork</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Favorites</source>
+        <translation type="unfinished">Favorites</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Criterion:</source>
+        <translation type="unfinished">Criterion:</translation>
+    </message>
+    <message>
+        <location line="+11"/>
+        <location line="+8"/>
+        <source>Show top:</source>
+        <translation type="unfinished">Show top:</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Show first:</source>
+        <translation type="unfinished">Show first:</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>e.g. mp4, mkv, webm</source>
+        <translation type="unfinished">e.g. mp4, mkv, webm</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Extensions:</source>
+        <translation type="unfinished">Extensions:</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Comma-separated. The leading dot is optional. Matches all items across all collections.</source>
+        <translation type="unfinished">Comma-separated. The leading dot is optional. Matches all items across all collections.</translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Includes every item across every collection that has a real cover image (not the procedural placeholder).</source>
+        <translation type="unfinished">Includes every item across every collection that has a real cover image (not the procedural placeholder).</translation>
+    </message>
+    <message>
+        <location line="+17"/>
+        <source>Window:</source>
+        <translation type="unfinished">Window:</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Items added to your library within the last N days. The stamp is set the first time the scanner sees an item; re-scanning a known item does NOT reset it.</source>
+        <translation type="unfinished">Items added to your library within the last N days. The stamp is set the first time the scanner sees an item; re-scanning a known item does NOT reset it.</translation>
+    </message>
+    <message>
+        <location line="+23"/>
+        <source>Includes every item you&apos;ve pinned via the right-click menu. Pinned items aggregate across all collections.</source>
+        <translation type="unfinished">Includes every item you&apos;ve pinned via the right-click menu. Pinned items aggregate across all collections.</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Includes every item you&apos;ve marked as hidden. Useful for reviewing or restoring items removed from the default browse view.</source>
+        <translation type="unfinished">Includes every item you&apos;ve marked as hidden. Useful for reviewing or restoring items removed from the default browse view.</translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Includes every item you&apos;ve flagged as &apos;continue later&apos;. Useful for tracking items you&apos;ve started but haven&apos;t finished.</source>
+        <translation type="unfinished">Includes every item you&apos;ve flagged as &apos;continue later&apos;. Useful for tracking items you&apos;ve started but haven&apos;t finished.</translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Pick a collection…</source>
+        <translation type="unfinished">Pick a collection…</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Collection:</source>
+        <translation type="unfinished">Collection:</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Includes every item in the selected source collection. Useful for aggregating one collection&apos;s items inside a playlist alongside others.</source>
+        <translation type="unfinished">Includes every item in the selected source collection. Useful for aggregating one collection&apos;s items inside a playlist alongside others.</translation>
+    </message>
+    <message>
+        <location line="+16"/>
+        <source>e.g. &apos;concert&apos; or &apos;Episode 1&apos;</source>
+        <translation type="unfinished">e.g. &apos;concert&apos; or &apos;Episode 1&apos;</translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Title contains:</source>
+        <translation type="unfinished">Title contains:</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Matches items whose title contains the text above (case-insensitive for ASCII characters). Empty text matches nothing.</source>
+        <translation type="unfinished">Matches items whose title contains the text above (case-insensitive for ASCII characters). Empty text matches nothing.</translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <source>Includes every item without a real cover image — useful as a to-scrape worklist.</source>
+        <translation type="unfinished">Includes every item without a real cover image — useful as a to-scrape worklist.</translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Includes every item present in the Favorites playlist. Combine with another search to see your favorited subset by type or tag.</source>
+        <translation type="unfinished">Includes every item present in the Favorites playlist. Combine with another search to see your favorited subset by type or tag.</translation>
+    </message>
+</context>
+<context>
     <name>SplashOverlay</name>
     <message>
         <location filename="../src/ui/widgets/overlays/splashoverlay.cpp" line="+198"/>
@@ -12574,7 +12841,7 @@ Continue?</translation>
 <context>
     <name>ToolbarController</name>
     <message>
-        <location filename="../src/core/toolbarcontroller.cpp" line="+88"/>
+        <location filename="../src/core/toolbarcontroller.cpp" line="+93"/>
         <source>&amp;Grid</source>
         <translation>&amp;Grid</translation>
     </message>
@@ -12635,7 +12902,7 @@ Continue?</translation>
         <translation>Click to open Settings → Launchers.</translation>
     </message>
     <message>
-        <location line="+99"/>
+        <location line="+134"/>
         <source>&lt;All types&gt;</source>
         <translation>&lt;All types&gt;</translation>
     </message>
@@ -12651,6 +12918,57 @@ Continue?</translation>
     </message>
     <message>
         <location line="+18"/>
+        <source>Saved filters</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
+        <source>Filters and sort only — no search text</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>Save current filter as…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Manage saved filters…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+23"/>
+        <source>Saved filters — could not save</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+9"/>
+        <location line="+5"/>
+        <source>Save filter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="-5"/>
+        <source>Filter name:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
+        <source>The filter name cannot be empty.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Overwrite filter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>A saved filter named &quot;%1&quot; already exists. Overwrite it?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+31"/>
         <source>Filter — %1</source>
         <translation>Filter — %1</translation>
     </message>
@@ -12925,7 +13243,7 @@ Continue?</translation>
 <context>
     <name>kart::KartManager</name>
     <message>
-        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+666"/>
+        <location filename="../src/modules/data/kart/kartmanager.cpp" line="+671"/>
         <location line="+1"/>
         <location line="+7"/>
         <location line="+94"/>
@@ -12988,7 +13306,7 @@ Continue?</translation>
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/core/main.cpp" line="+295"/>
+        <location filename="../src/core/main.cpp" line="+319"/>
         <source>Kartend - Qt6/KDE multimedia collection launcher.</source>
         <translation>Kartend - Qt6/KDE multimedia collection launcher.</translation>
     </message>
