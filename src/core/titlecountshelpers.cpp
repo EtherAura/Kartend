@@ -109,8 +109,19 @@ QString subcollectionPart(int n) {
 /// singular. Only "is it exactly one" matters to English, and every other
 /// language's rule is applied by its own catalogue, not here.
 QString itemsCount(const QString &display, qint64 governing) {
-  return QCoreApplication::translate("TitleCountsHelpers", "(%1 Item(s))", nullptr,
-                                     governing == 1 ? 1 : 2)
+  // The plural count is hoisted into a named local rather than passed as a
+  // ternary. lupdate 6.4 — the version CI's qt6-l10n-tools ships, and so the
+  // version the translation-drift gate extracts with — SILENTLY DROPS a
+  // translate() whose numerus argument is an expression rather than a simple
+  // identifier or literal. No warning, no error: the message just never
+  // reaches the .ts, and the string is untranslatable in every catalogue.
+  // Proven by extracting both forms with 6.4.2 side by side; 6.11 handles
+  // either, which is why this survived a local seed refresh.
+  //
+  // The two %n siblings above were unaffected because they pass `n` straight
+  // through, so this looked like a %1-vs-%n difference rather than what it is.
+  const int pluralCount = governing == 1 ? 1 : 2;
+  return QCoreApplication::translate("TitleCountsHelpers", "(%1 Item(s))", nullptr, pluralCount)
       .arg(display);
 }
 
