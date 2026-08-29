@@ -57,6 +57,17 @@ bool ArtworkWidgetRegistry::hasArtworkFor(ItemWidget *widget) const {
   return m_widgetToPath.contains(widget);
 }
 
+QList<QPair<ItemWidget *, QString>> ArtworkWidgetRegistry::loadedEntries() const {
+  QList<QPair<ItemWidget *, QString>> out;
+  out.reserve(m_loaded.size());
+  for (const QPointer<ItemWidget> &widget : m_loaded) {
+    if (widget) {
+      out.append({widget.data(), m_widgetToPath.value(widget.data())});
+    }
+  }
+  return out;
+}
+
 QString ArtworkWidgetRegistry::pathFor(ItemWidget *widget) const {
   if (!widget) {
     return {};

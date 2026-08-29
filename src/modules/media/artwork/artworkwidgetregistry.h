@@ -43,6 +43,13 @@ public:
   [[nodiscard]] bool isLoaded(ItemWidget *widget) const;
   [[nodiscard]] bool hasArtworkFor(ItemWidget *widget) const;
   [[nodiscard]] QString pathFor(ItemWidget *widget) const;
+  /// Kartend-94o7t: snapshot of the widgets currently marked loaded, paired
+  /// with the artwork path each was loaded from (empty if unknown). For the
+  /// theme-change re-delivery sweep, which must walk loaded widgets and push
+  /// the palette-stale ones back through addPendingArtwork's gate — the
+  /// viewport scheduler only ever processes its PENDING queue, so a sweep
+  /// that enqueues nothing is a no-op by construction.
+  [[nodiscard]] QList<QPair<ItemWidget *, QString>> loadedEntries() const;
 
   /// Append @p info to the pending queue. Kartend-b8qe.3 added backpressure:
   /// coalesces with any existing entry for the same (widget, artworkPath)

@@ -181,6 +181,13 @@ public:
   void clearWidgetReferences() override;
   static QString findArtworkForFile(const QString &fileName, const QString &artworkDirectory);
   void scheduleViewportUpdate() override;
+  /// Kartend-94o7t: walk the loaded widgets and re-enqueue every one whose
+  /// composed card is stale (palette OR size) through addPendingArtwork,
+  /// whose gate clears the registry claim and re-delivers — cache fast path
+  /// first (GUI composite against the LIVE palette), worker pipeline
+  /// otherwise. Called by MainWindow on a system theme change; NOT part of
+  /// IArtworkManager, so test fakes stay untouched.
+  void redeliverPaletteStaleArtwork();
   void startSilentLoading();
   void startEarlyDentryPrewarm(int collectionIndex) override;
   void preloadArtworkForCollection();

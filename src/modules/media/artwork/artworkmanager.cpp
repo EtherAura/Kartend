@@ -252,6 +252,27 @@ auto ArtworkManager::hasArtworkForWidget(ItemWidget *widget) const -> bool {
 // Updates visible widgets' artwork based on viewport and suppression policy.
 // The pipeline lives in ViewportArtworkScheduler; this remains the public
 // IArtworkManager entry point.
+void ArtworkManager::redeliverPaletteStaleArtwork() {
+  // The scheduler's update pass reads ONLY the pending queue, so a theme
+  // change that enqueues nothing re-delivers nothing — the first version of
+  // this fix nudged scheduleViewportUpdate() alone and was a structural
+  // no-op. Enqueue the stale cards first, then let the pass run.
+  int redelivered = 0;
+  const QList<QPair<ItemWidget *, QString>> entries = m_widgetRegistry->loadedEntries();
+  for (const auto &entry : entries) {
+    ItemWidget *widget = entry.first;
+    if (widget && !entry.second.isEmpty() && widget->hasStaleComposedArtwork()) {
+      addPendingArtwork(widget, entry.second);
+      ++redelivered;
+    }
+  }
+  qCDebug(lcArtworkManager) << "redeliverPaletteStaleArtwork: redelivered=" << redelivered << "of"
+                            << entries.size();
+  if (redelivered > 0) {
+    scheduleViewportUpdate();
+  }
+}
+
 void ArtworkManager::updateViewportArtwork() {
   m_viewportScheduler->updateViewportArtwork();
 }

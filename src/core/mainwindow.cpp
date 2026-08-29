@@ -272,7 +272,7 @@ void MainWindow::reapplyDerivedThemingFromSystemPalette() {
   // Deliberately narrower than the reverted 86664f65 sweep, which forced
   // onArtworkChanged and could only re-apply the same stale cards.
   if (ArtworkManager *art = m_appManager->getArtworkManager()) {
-    art->scheduleViewportUpdate();
+    art->redeliverPaletteStaleArtwork();
   }
 }
 

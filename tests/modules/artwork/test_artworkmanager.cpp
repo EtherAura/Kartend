@@ -763,10 +763,15 @@ void TestArtworkManager::testPaletteStaleComposedCard_triggersRedelivery() {
   QVERIFY2(widget.hasStaleComposedArtwork(),
            "a palette change must make a baked-background card stale");
 
-  // Re-delivery replaces it through the cache fast path (raw pixmap,
-  // recomposed on the GUI thread against the LIVE palette) and re-registers
-  // the widget as loaded and fresh.
-  manager.addPendingArtwork(&widget, artPath);
+  // Re-delivery through the REAL theme-change entry point. The first version
+  // of this fix nudged scheduleViewportUpdate() alone and was a structural
+  // no-op — the viewport pass only reads the pending queue, and nothing had
+  // been enqueued; this test passed anyway because it called
+  // addPendingArtwork directly, validating the gate while never ringing the
+  // doorbell. Drive the sweep the app actually calls: it walks the loaded
+  // registry entries, pushes stale widgets through addPendingArtwork, and
+  // the cache fast path recomposes against the LIVE palette.
+  manager.redeliverPaletteStaleArtwork();
   QVERIFY(!widget.hasStaleComposedArtwork());
   QVERIFY(manager.hasArtworkForWidget(&widget));
 
