@@ -28,7 +28,7 @@ class GamepadCaptureController : public QObject {
   Q_DISABLE_COPY_MOVE(GamepadCaptureController)
 
 public:
-  enum class Target { None, Confirm, Back, ToggleSidebar };
+  enum class Target { None, Confirm, Back, ToggleSidebar, ToggleCollectionTree };
 
   /// Widget bag passed across the panel/controller boundary. Members may
   /// be null during the brief construction window before setWidgets() runs;
@@ -37,9 +37,11 @@ public:
     QLineEdit *confirmEdit = nullptr;
     QLineEdit *backEdit = nullptr;
     QLineEdit *toggleSidebarEdit = nullptr;
+    QLineEdit *toggleCollectionTreeEdit = nullptr;
     QPushButton *detectConfirmButton = nullptr;
     QPushButton *detectBackButton = nullptr;
     QPushButton *detectToggleSidebarButton = nullptr;
+    QPushButton *detectToggleCollectionTreeButton = nullptr;
     QCheckBox *useDpadCheckBox = nullptr;
     QCheckBox *useLeftStickCheckBox = nullptr;
   };

@@ -54,9 +54,11 @@ public:
   [[nodiscard]] QLineEdit *gamepadConfirmLineEdit() const;
   [[nodiscard]] QLineEdit *gamepadBackLineEdit() const;
   [[nodiscard]] QLineEdit *gamepadToggleSidebarLineEdit() const;
+  [[nodiscard]] QLineEdit *gamepadToggleCollectionTreeLineEdit() const;
   [[nodiscard]] QPushButton *detectConfirmButton() const;
   [[nodiscard]] QPushButton *detectBackButton() const;
   [[nodiscard]] QPushButton *detectToggleSidebarButton() const;
+  [[nodiscard]] QPushButton *detectToggleCollectionTreeButton() const;
   [[nodiscard]] QCheckBox *useDpadCheckBox() const;
   [[nodiscard]] QCheckBox *useLeftStickCheckBox() const;
 

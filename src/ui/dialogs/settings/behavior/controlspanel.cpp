@@ -48,6 +48,7 @@ void ControlsPanel::load() {
   setKeyEdit(ui->keyBackEdit, s->keybindings.keyBack);
   setKeyEdit(ui->keySearchEdit, s->keybindings.keySearch);
   setKeyEdit(ui->keyHomeViewEdit, s->keybindings.keyHomeView);
+  setKeyEdit(ui->keyToggleCollectionTreeEdit, s->keybindings.keyToggleCollectionTree);
 
   SettingsFormBinding::loadInto(ui->gamepadUseDpadCheckBox, s->gamepad.gamepadUseDpad);
   SettingsFormBinding::loadInto(ui->gamepadUseLeftStickCheckBox, s->gamepad.gamepadUseLeftStick);
@@ -57,6 +58,8 @@ void ControlsPanel::load() {
   SettingsFormBinding::loadInto(ui->gamepadBackButtonLineEdit, s->gamepad.gamepadBackButton);
   SettingsFormBinding::loadInto(ui->gamepadToggleSidebarButtonLineEdit,
                                 s->gamepad.gamepadToggleSidebarButton);
+  SettingsFormBinding::loadInto(ui->gamepadToggleCollectionTreeButtonLineEdit,
+                                s->gamepad.gamepadToggleCollectionTreeButton);
 
   {
     QSignalBlocker blocker(ui->artworkCycleModifierComboBox);
@@ -74,12 +77,17 @@ void ControlsPanel::installGamepadCaptureController(GamepadCaptureController *co
   ui->detectGamepadConfirmButtonButton->disconnect();
   ui->detectGamepadBackButtonButton->disconnect();
   ui->detectGamepadToggleSidebarButtonButton->disconnect();
+  ui->detectGamepadToggleCollectionTreeButtonButton->disconnect();
   connect(ui->detectGamepadConfirmButtonButton, &QPushButton::clicked, controller,
           [controller]() { controller->start(GamepadCaptureController::Target::Confirm); });
   connect(ui->detectGamepadBackButtonButton, &QPushButton::clicked, controller,
           [controller]() { controller->start(GamepadCaptureController::Target::Back); });
   connect(ui->detectGamepadToggleSidebarButtonButton, &QPushButton::clicked, controller,
           [controller]() { controller->start(GamepadCaptureController::Target::ToggleSidebar); });
+  connect(ui->detectGamepadToggleCollectionTreeButtonButton, &QPushButton::clicked, controller,
+          [controller]() {
+            controller->start(GamepadCaptureController::Target::ToggleCollectionTree);
+          });
 }
 
 QLineEdit *ControlsPanel::gamepadConfirmLineEdit() const {
@@ -91,6 +99,9 @@ QLineEdit *ControlsPanel::gamepadBackLineEdit() const {
 QLineEdit *ControlsPanel::gamepadToggleSidebarLineEdit() const {
   return ui->gamepadToggleSidebarButtonLineEdit;
 }
+QLineEdit *ControlsPanel::gamepadToggleCollectionTreeLineEdit() const {
+  return ui->gamepadToggleCollectionTreeButtonLineEdit;
+}
 QPushButton *ControlsPanel::detectConfirmButton() const {
   return ui->detectGamepadConfirmButtonButton;
 }
@@ -99,6 +110,9 @@ QPushButton *ControlsPanel::detectBackButton() const {
 }
 QPushButton *ControlsPanel::detectToggleSidebarButton() const {
   return ui->detectGamepadToggleSidebarButtonButton;
+}
+QPushButton *ControlsPanel::detectToggleCollectionTreeButton() const {
+  return ui->detectGamepadToggleCollectionTreeButtonButton;
 }
 QCheckBox *ControlsPanel::useDpadCheckBox() const {
   return ui->gamepadUseDpadCheckBox;
@@ -131,6 +145,9 @@ void ControlsPanel::save() {
   s->keybindings.keyBack = singleKey(ui->keyBackEdit, s->keybindings.keyBack);
   s->keybindings.keySearch = singleKey(ui->keySearchEdit, s->keybindings.keySearch);
   s->keybindings.keyHomeView = singleKey(ui->keyHomeViewEdit, 0);
+  // Kartend-3de0c: same 0 = unbound allowance as Home View — the collection
+  // tree toggle ships unbound, so clearing the field has to mean something.
+  s->keybindings.keyToggleCollectionTree = singleKey(ui->keyToggleCollectionTreeEdit, 0);
 
   s->gamepad.gamepadUseDpad = ui->gamepadUseDpadCheckBox->isChecked();
   s->gamepad.gamepadUseLeftStick = ui->gamepadUseLeftStickCheckBox->isChecked();
@@ -148,6 +165,10 @@ void ControlsPanel::save() {
   const QString toggleSidebar = ui->gamepadToggleSidebarButtonLineEdit->text().trimmed();
   if (!toggleSidebar.isEmpty()) {
     s->gamepad.gamepadToggleSidebarButton = toggleSidebar;
+  }
+  const QString toggleTree = ui->gamepadToggleCollectionTreeButtonLineEdit->text().trimmed();
+  if (!toggleTree.isEmpty()) {
+    s->gamepad.gamepadToggleCollectionTreeButton = toggleTree;
   }
 
   // Validate the combo's data is a known modifier; ignore stale entries
@@ -169,12 +190,14 @@ void ControlsPanel::save() {
 
 void ControlsPanel::connectChangeSignals() {
   for (auto *edit : {ui->keyNavUpEdit, ui->keyNavDownEdit, ui->keyNavLeftEdit, ui->keyNavRightEdit,
-                     ui->keyConfirmEdit, ui->keyBackEdit, ui->keySearchEdit, ui->keyHomeViewEdit}) {
+                     ui->keyConfirmEdit, ui->keyBackEdit, ui->keySearchEdit, ui->keyHomeViewEdit,
+                     ui->keyToggleCollectionTreeEdit}) {
     connect(edit, &QKeySequenceEdit::keySequenceChanged, this,
             [this](const QKeySequence &) { save(); });
   }
-  for (auto *edit : {ui->gamepadConfirmButtonLineEdit, ui->gamepadBackButtonLineEdit,
-                     ui->gamepadToggleSidebarButtonLineEdit}) {
+  for (auto *edit :
+       {ui->gamepadConfirmButtonLineEdit, ui->gamepadBackButtonLineEdit,
+        ui->gamepadToggleSidebarButtonLineEdit, ui->gamepadToggleCollectionTreeButtonLineEdit}) {
     connect(edit, &QLineEdit::textChanged, this, [this](const QString &) { save(); });
   }
   connect(ui->gamepadUseDpadCheckBox, &QCheckBox::toggled, this, [this](bool) { save(); });

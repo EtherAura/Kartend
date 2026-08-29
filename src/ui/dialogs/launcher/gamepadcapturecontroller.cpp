@@ -70,6 +70,8 @@ void GamepadCaptureController::onButtonPressed(const QString &buttonName) {
     m_bindings.backEdit->setText(buttonName);
   } else if (m_target == Target::ToggleSidebar && m_bindings.toggleSidebarEdit) {
     m_bindings.toggleSidebarEdit->setText(buttonName);
+  } else if (m_target == Target::ToggleCollectionTree && m_bindings.toggleCollectionTreeEdit) {
+    m_bindings.toggleCollectionTreeEdit->setText(buttonName);
   }
 
   stop();
@@ -80,37 +82,33 @@ void GamepadCaptureController::onButtonPressed(const QString &buttonName) {
 }
 
 void GamepadCaptureController::refreshUi() {
-  const bool capturingConfirm = (m_target == Target::Confirm);
-  const bool capturingBack = (m_target == Target::Back);
-  const bool capturingToggleSidebar = (m_target == Target::ToggleSidebar);
-  const bool capturingAny = capturingConfirm || capturingBack || capturingToggleSidebar;
+  const bool capturingAny = (m_target != Target::None);
 
-  if (m_bindings.detectConfirmButton) {
-    m_bindings.detectConfirmButton->setText(capturingConfirm ? tr("Press button...")
-                                                             : tr("Detect..."));
-    m_bindings.detectConfirmButton->setEnabled(!capturingBack && !capturingToggleSidebar);
-  }
-  if (m_bindings.detectBackButton) {
-    m_bindings.detectBackButton->setText(capturingBack ? tr("Press button...") : tr("Detect..."));
-    m_bindings.detectBackButton->setEnabled(!capturingConfirm && !capturingToggleSidebar);
-  }
-  if (m_bindings.detectToggleSidebarButton) {
-    m_bindings.detectToggleSidebarButton->setText(capturingToggleSidebar ? tr("Press button...")
-                                                                         : tr("Detect..."));
-    m_bindings.detectToggleSidebarButton->setEnabled(!capturingConfirm && !capturingBack);
-  }
+  // Kartend-3de0c: expressed per-target rather than as "not any of the
+  // others". The old pairwise form needed every button's condition rewritten
+  // each time a target was added, and a fourth would have made three of them
+  // wrong in a way nothing would catch. The rule was always the same: while a
+  // capture is live only its own button stays live, because clicking it again
+  // is how you cancel (start() toggles off on the same target).
+  const auto applyDetectButton = [&](QPushButton *button, Target target) {
+    if (!button) return;
+    const bool capturingThis = (m_target == target);
+    button->setText(capturingThis ? tr("Press button...") : tr("Detect..."));
+    button->setEnabled(!capturingAny || capturingThis);
+  };
+  applyDetectButton(m_bindings.detectConfirmButton, Target::Confirm);
+  applyDetectButton(m_bindings.detectBackButton, Target::Back);
+  applyDetectButton(m_bindings.detectToggleSidebarButton, Target::ToggleSidebar);
+  applyDetectButton(m_bindings.detectToggleCollectionTreeButton, Target::ToggleCollectionTree);
 
-  if (m_bindings.confirmEdit) {
-    m_bindings.confirmEdit->setPlaceholderText(capturingConfirm ? tr("Press any button")
-                                                                : QString());
-  }
-  if (m_bindings.backEdit) {
-    m_bindings.backEdit->setPlaceholderText(capturingBack ? tr("Press any button") : QString());
-  }
-  if (m_bindings.toggleSidebarEdit) {
-    m_bindings.toggleSidebarEdit->setPlaceholderText(capturingToggleSidebar ? tr("Press any button")
-                                                                            : QString());
-  }
+  const auto applyEditPlaceholder = [&](QLineEdit *edit, Target target) {
+    if (!edit) return;
+    edit->setPlaceholderText(m_target == target ? tr("Press any button") : QString());
+  };
+  applyEditPlaceholder(m_bindings.confirmEdit, Target::Confirm);
+  applyEditPlaceholder(m_bindings.backEdit, Target::Back);
+  applyEditPlaceholder(m_bindings.toggleSidebarEdit, Target::ToggleSidebar);
+  applyEditPlaceholder(m_bindings.toggleCollectionTreeEdit, Target::ToggleCollectionTree);
 
   // While capturing, prevent the sibling D-Pad / left-stick checkboxes
   // from being changed — toggling them mid-capture would be confusing

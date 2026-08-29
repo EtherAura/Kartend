@@ -31,6 +31,8 @@
       <item row="6" column="1"><widget class="QKeySequenceEdit" name="keySearchEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
       <item row="7" column="0"><widget class="QLabel" name="keyHomeViewLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Home View:</string></property><property name="toolTip"><string>Jump to the synthetic Home view from any depth. Only honored when Use Home View is enabled.</string></property></widget></item>
       <item row="7" column="1"><widget class="QKeySequenceEdit" name="keyHomeViewEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
+      <item row="8" column="0"><widget class="QLabel" name="keyToggleCollectionTreeLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Toggle Collection Tree:</string></property><property name="toolTip"><string>Show or hide the collection tree panel in the navigation sidebar. Unbound by default; F6 is a reasonable choice.</string></property></widget></item>
+      <item row="8" column="1"><widget class="QKeySequenceEdit" name="keyToggleCollectionTreeEdit"><property name="maximumWidth"><number>320</number></property></widget></item>
      </layout>
     </widget>
    </item>
@@ -66,9 +68,17 @@
         <item><spacer name="gamepadToggleSidebarButtonSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </item>
-      <item row="3" column="0" colspan="2"><widget class="QCheckBox" name="gamepadUseDpadCheckBox"><property name="text"><string>Use D-pad for navigation</string></property></widget></item>
-      <item row="4" column="0" colspan="2"><widget class="QCheckBox" name="gamepadUseLeftStickCheckBox"><property name="text"><string>Use left stick for navigation</string></property></widget></item>
-      <item row="5" column="0" colspan="2"><widget class="QCheckBox" name="gamepadRightStickSectionsCheckBox"><property name="toolTip"><string>Flick the right stick to move focus between the grid, toolbar, and sidebars. Holding Select with a direction does the same.</string></property><property name="text"><string>Right stick moves focus between sections</string></property></widget></item>
+      <item row="3" column="0"><widget class="QLabel" name="gamepadToggleCollectionTreeButtonLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Toggle Collection Tree:</string></property><property name="toolTip"><string>Show or hide the collection tree panel in the navigation sidebar.</string></property></widget></item>
+      <item row="3" column="1">
+       <layout class="QHBoxLayout" name="gamepadToggleCollectionTreeButtonLayout">
+        <item><widget class="QLineEdit" name="gamepadToggleCollectionTreeButtonLineEdit"><property name="maximumWidth"><number>320</number></property><property name="readOnly"><bool>true</bool></property></widget></item>
+        <item><widget class="QPushButton" name="detectGamepadToggleCollectionTreeButtonButton"><property name="text"><string>Detect...</string></property></widget></item>
+        <item><spacer name="gamepadToggleCollectionTreeButtonSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+       </layout>
+      </item>
+      <item row="4" column="0" colspan="2"><widget class="QCheckBox" name="gamepadUseDpadCheckBox"><property name="text"><string>Use D-pad for navigation</string></property></widget></item>
+      <item row="5" column="0" colspan="2"><widget class="QCheckBox" name="gamepadUseLeftStickCheckBox"><property name="text"><string>Use left stick for navigation</string></property></widget></item>
+      <item row="6" column="0" colspan="2"><widget class="QCheckBox" name="gamepadRightStickSectionsCheckBox"><property name="toolTip"><string>Flick the right stick to move focus between the grid, toolbar, and sidebars. Holding Select with a direction does the same.</string></property><property name="text"><string>Right stick moves focus between sections</string></property></widget></item>
      </layout>
     </widget>
    </item>

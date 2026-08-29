@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The collection tree's two bindings are settable without editing a
+  file.** Both already worked — a key to show or hide the navigation
+  sidebar, and a gamepad button for the same — but neither had a row in
+  the settings dialog, so the only way to change them was by hand in
+  `kartend.cfg`. Settings → Controls now carries *Toggle Collection Tree*
+  in both the keyboard and gamepad sections, the latter with the same
+  Detect… button the other gamepad bindings use. The keyboard one ships
+  unbound and can be cleared back to unbound, like Home View; the gamepad
+  one stays on L1.
+
 - **Filters worth composing twice can now be kept.** The toolbar's filter
   dropdown gained **Save current filter as…**, a list of whatever you have
   saved, and **Manage saved filters…**. A saved filter holds the search box's

@@ -339,9 +339,11 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
       ui->controlsPanel->gamepadConfirmLineEdit(),
       ui->controlsPanel->gamepadBackLineEdit(),
       ui->controlsPanel->gamepadToggleSidebarLineEdit(),
+      ui->controlsPanel->gamepadToggleCollectionTreeLineEdit(),
       ui->controlsPanel->detectConfirmButton(),
       ui->controlsPanel->detectBackButton(),
       ui->controlsPanel->detectToggleSidebarButton(),
+      ui->controlsPanel->detectToggleCollectionTreeButton(),
       ui->controlsPanel->useDpadCheckBox(),
       ui->controlsPanel->useLeftStickCheckBox(),
   });

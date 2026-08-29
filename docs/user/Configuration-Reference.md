@@ -113,6 +113,7 @@ key-capture widget so you don't need to look these up.
 | `keyJumpLast` | `Qt::Key_End` | Jump to last item. |
 | `keyItemDetails` | `Qt::Key_I` | Open the full-screen detail page. |
 | `keyHomeView` | `0` (unbound) | Jump directly to the Home view from any nesting depth. Only honored when `useHomeView` is enabled. Default unbound so upgrading installs don't pick up a surprise shortcut. |
+| `keyToggleCollectionTree` | `0` (unbound) | Show or hide the [collection tree](Sidebar-and-Details-Pane.md#the-other-sidebar-the-collection-tree) panel. Unbound by default for the same reason as `keyHomeView`; **View → Show Collection Tree** works regardless. |
 
 See [Input & Controls](Input-and-Controls.md#keyboard) for the user-
 facing names and rebinding workflow.

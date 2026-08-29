@@ -41,6 +41,7 @@ user-configurable; the mouse artwork-cycle modifier can be reassigned.
 | `F9` | Toggle sidebar / details pane (per-collection `sidebarVisible`) |
 | `F10` | Toggle menu bar (persistent, saved as `showMenuBar`) |
 | `F11` | Toggle fullscreen (persistent, saved as `fullscreen`) |
+| *(unbound)* | Toggle the [collection tree](Sidebar-and-Details-Pane.md#the-other-sidebar-the-collection-tree) — no default key; bind one under Settings Dialog → **Controls** → *Toggle Collection Tree* (`keyToggleCollectionTree`). **View → Show Collection Tree** works without a binding. |
 
 ### Search bar
 

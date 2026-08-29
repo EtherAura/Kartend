@@ -11,6 +11,10 @@ its tabs.
 > Settings Dialog → **Sidebar** tab. Persisted per-collection (visibility,
 > mode, position, styling, font).
 
+> **Looking for the other one?** The *navigation sidebar* — the collection
+> tree — is a different panel with its own settings. See
+> [the collection tree](#the-other-sidebar-the-collection-tree).
+
 ## Visibility
 
 - `F9` toggles the sidebar. The state is persisted as
@@ -25,7 +29,66 @@ so the carousel takes the full viewport. When you switch away from
 Cover Flow, your `sidebarVisible` preference returns. (The forced-hide
 flag is in-memory only — it doesn't overwrite the saved preference.)
 
+## The other sidebar: the collection tree
+
+Kartend has **two** sidebars and they are easy to confuse. The details
+pane described on this page shows *the selected item*. The **navigation
+sidebar** — the collection tree — shows *where you can go*: your
+collections and subcollections as an expandable tree, so you can jump
+between them without walking back up through the grid.
+
+It has its own settings, its own dock side, and its own toggle:
+
+| | Details pane | Collection tree |
+|---|---|---|
+| Shows | The selected item | Your collections |
+| Toggle | `F9` | **View → Show Collection Tree** |
+| Dock side | Any of four edges | Left or Right |
+| Settings | Settings Dialog → **Sidebar** tab | Same tab, its own group |
+
+**Toggling it.** There is no default keyboard shortcut — use **View →
+Show Collection Tree**, or bind one under Settings Dialog → **Controls**
+→ *Toggle Collection Tree*. On a gamepad it is **L1** by default,
+rebindable in the same place.
+
+**Per-collection, like everything else here.** Visibility, dock side,
+width, and every appearance option below are remembered per collection,
+so a games library can carry the tree while a film library does not.
+
+**Dock side** is **View → Collection Tree Position → Left / Right**, or
+the same tab in the settings dialog. Only left and right are offered —
+a tree of names wants height, and a horizontal dock would give it none.
+
+**Width** is set by dragging the panel's inner edge, and is clamped to
+140–600px so a hand-edited config cannot collapse it to nothing.
+
+**Layout options**, all in the settings dialog:
+
+| Option | What it does |
+|--------|--------------|
+| **Overlay / Expand** | Whether the panel floats above the grid or pushes it aside. Expand is the default. Overlay leaves the grid completely still when the panel opens. |
+| **Full-height / Below toolbar** | Whether the panel spans the whole window with the toolbar stopping at its edge, or sits under a full-width toolbar. Full-height is the default here — unlike the details pane. |
+| **Scrollbar** | Show / Auto-hide / Hide, same three choices as the details pane. |
+
+**Row appearance**:
+
+| Option | What it does |
+|--------|--------------|
+| **Row display** | *Text only* (default), *Icon and text*, or *Icon only* — what a row shows when it has artwork. Rows without artwork always show their name; a blank row would be unusable. |
+| **Icon size** | Row artwork edge length in pixels. |
+| **Icon style** | Normal, Monochrome (dark or light), or Tinted. Tinted is the default and recolours silhouette art to the row's text colour. |
+| **Branch lines** | Connector lines between parents and children. Off by default — the chevrons already carry the structure. |
+| **Scroll names that do not fit** | A narrow sidebar elides long platform names down to a shared prefix, hiding exactly the part that tells them apart. Two independent switches: scroll every clipped row (off by default — unprompted movement beside an artwork grid is intrusive), and scroll the row under the pointer (on by default, since pointing at a row is a deliberate "what is this?"). |
+
+Rows can also carry a small **system glyph** taken from a local
+RetroArch install — see [System icon](#system-icon-from-retroarch)
+below, which covers both sidebars.
+
 ## Modes: Overlay vs. Expand
+
+> The table below describes the **details pane**. The collection tree
+> has the same two modes, set separately — see
+> [the collection tree](#the-other-sidebar-the-collection-tree) above.
 
 | Mode | Behavior | INI value |
 |------|----------|-----------|
