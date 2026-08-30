@@ -420,6 +420,12 @@ private:
   bool m_startupTasksGated = false;
   bool m_pendingResync = false;
   bool m_pendingOrphanPurge = false;
+  // Re-entrancy guard for resyncPlaylistCollections (Kartend-e120j).
+  // ensureFavoritesPlaylist() emits playlistsChanged when it creates the
+  // reserved row, and that signal is wired back to the resync — without the
+  // guard the nested call and the outer call each append a Favorites config,
+  // duplicating it in every collection tree.
+  bool m_playlistResyncInProgress = false;
   // Guards connectDatabaseManager() — one-shot wiring whose non-UniqueConnection
   // and lambda edges would double-fire if it ever ran twice (Kartend-x8spn).
   bool m_databaseManagerConnected = false;

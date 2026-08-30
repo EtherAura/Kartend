@@ -28,6 +28,7 @@ set(INTEGRATION_TEST_SOURCES
   test_settingsdialog_scope.cpp
   test_applysettingsdialog.cpp
   test_applicationmanager_lifecycle.cpp
+  test_playlistresync.cpp
   test_navigationmanager.cpp
   test_interactionmanager.cpp
   test_eventmanager_detailspane.cpp
@@ -88,6 +89,7 @@ set(INTEGRATION_TEST_HEADERS
   test_kartmanager.h
   test_launchflow.h
   test_scanservice.h
+  test_playlistresync.h
   mocks/mockdatabasemanager.h
   mocks/mockedmainwindowfixture.h
   mocks/mocksettingsmanager.h
@@ -138,6 +140,7 @@ target_include_directories(test_integration PRIVATE
 # kSuites in test_main.cpp.
 set(INTEGRATION_TEST_CLASSES
   TestMainWindowSmoke
+  TestPlaylistResync
   TestMenuController
   TestDialogController
   TestScraperController

@@ -245,6 +245,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Favorites no longer appears twice in the collection trees after the
+  setup wizard.** On a brand-new profile, every surface that lists
+  collections — the navigation sidebar, the settings dialog, the
+  scraper's collection picker — showed two identical Favorites rows,
+  both backed by the same single playlist. The first playlist refresh
+  after the wizard created the built-in Favorites entry and then
+  reacted to its own creation signal by running again mid-flight, so
+  the row was added once by the nested pass and once by the original.
+  The refresh now ignores that re-entrant call; one Favorites, like it
+  says on the tin.
+
 - **Switching KDE activities now recolours the item tiles in place.** The
   toolbar, sidebars and details pane already followed the new colours, but
   each tile's artwork card had the previous activity's backdrop baked into

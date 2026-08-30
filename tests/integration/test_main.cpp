@@ -35,6 +35,7 @@
 #include "test_marqueecontroller.h"
 #include "test_menucontroller.h"
 #include "test_navigationmanager.h"
+#include "test_playlistresync.h"
 #include "test_scanservice.h"
 #include "test_scrapedialog_perf.h"
 #include "test_scrapercontroller.h"
@@ -92,6 +93,11 @@ const Suite kSuites[] = {
     {"TestMainWindowSmoke",
      [](int c, char **v) {
        TestMainWindowSmoke t;
+       return QTest::qExec(&t, c, v);
+     }},
+    {"TestPlaylistResync",
+     [](int c, char **v) {
+       TestPlaylistResync t;
        return QTest::qExec(&t, c, v);
      }},
     {"TestMenuController",

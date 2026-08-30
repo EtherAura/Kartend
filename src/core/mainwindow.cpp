@@ -16,6 +16,7 @@
 #include <QPixmapCache>
 #include <QPushButton>
 #include <QResizeEvent>
+#include <QScopeGuard>
 #include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -914,6 +915,17 @@ void MainWindow::resyncPlaylistCollections() {
     m_pendingResync = true;
     return;
   }
+  // Kartend-e120j: ensureFavoritesPlaylist() below emits playlistsChanged when
+  // it creates the reserved row, and that signal is wired straight back here —
+  // on a first run (where the wizard deferred the initial resync until after
+  // the wiring was live) the nested call and this one would each append a
+  // Favorites config. Dropping the nested call is safe: the outer pass
+  // re-reads loadAll() after the emit, so it already sees the new row.
+  if (m_playlistResyncInProgress) {
+    return;
+  }
+  m_playlistResyncInProgress = true;
+  const auto resyncGuard = qScopeGuard([this]() { m_playlistResyncInProgress = false; });
   // Strip any prior playlist-backed configs so a rename/delete in PlaylistManager
   // doesn't leave stale entries behind. INI-backed configs (isPlaylist=false)
   // are preserved verbatim because they're the canonical state — only the
