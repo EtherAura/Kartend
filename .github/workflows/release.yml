@@ -244,7 +244,7 @@ jobs:
         # publishes through action-gh-release, and letting the SBOM action
         # upload on its own would give the release two upload paths that could
         # disagree about what shipped.
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@aa80c8c5bd439a416a62804f2151ab38c671a638 # v0.24.1
         with:
           file: ${{ steps.deb.outputs.deb }}
           format: cyclonedx-json
@@ -572,7 +572,7 @@ jobs:
         #
         # Scans the directory rather than the .zip so the individual DLLs are
         # enumerated instead of one opaque archive entry.
-        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        uses: anchore/sbom-action@aa80c8c5bd439a416a62804f2151ab38c671a638 # v0.24.1
         with:
           path: dist/kartend
           format: cyclonedx-json
