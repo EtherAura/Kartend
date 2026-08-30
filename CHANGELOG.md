@@ -203,6 +203,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Empty states no longer decorate themselves with emoji.** "No items
+  found", "No collections yet", "This collection has no items", "No
+  media directory configured" and the empty search result used to carry
+  a mailbox, folder or magnifying-glass pictograph above the text. The
+  message and its hint now stand on their own.
+
 - **Attract mode now moves the Cover Flow carousel.** Autoscroll used to
   do nothing at all in Cover Flow: it drives the item scroll area's
   scrollbar, and Cover Flow hides that area with both scrollbars forced

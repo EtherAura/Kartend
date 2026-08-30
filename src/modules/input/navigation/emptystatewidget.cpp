@@ -178,12 +178,12 @@ void EmptyStateWidget::showSearchEmpty(const QString &query) {
   const QString trimmed = query.trimmed();
   const QString message =
       trimmed.isEmpty() ? tr("No matching items") : tr("No matches for \"%1\"").arg(trimmed);
-  showMessage(message, tr("Press Esc to clear the search."), QStringLiteral("🔍"));
+  showMessage(message, tr("Press Esc to clear the search."));
 }
 
 void EmptyStateWidget::showNoMediaDirectory() {
   showMessage(tr("No media directory configured"),
-              tr("Open Settings to choose a folder for this collection."), QStringLiteral("📁"));
+              tr("Open Settings to choose a folder for this collection."));
 }
 
 void EmptyStateWidget::showScanning(int current, int total) {

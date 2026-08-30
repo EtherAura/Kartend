@@ -311,8 +311,7 @@ void NavigationManager::loadRootView() {
 
   if (rootIndices.isEmpty() && m_loadingLabel) {
     m_loadingLabel->showMessage(tr("No collections yet"),
-                                tr("Add a collection in Settings to populate the home view."),
-                                QStringLiteral("📭"));
+                                tr("Add a collection in Settings to populate the home view."));
   }
 
   if (detailsPaneMgr()) {

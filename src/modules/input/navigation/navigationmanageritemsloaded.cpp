@@ -127,13 +127,12 @@ auto NavigationManager::handleEmptyContent() -> void {
         m_loadingLabel->showNoMediaDirectory();
       } else if (isSubcollectionOnly) {
         m_loadingLabel->showMessage(tr("This collection has no items"),
-                                    tr("Choose a child collection from the sidebar."),
-                                    QStringLiteral("📂"));
+                                    tr("Choose a child collection from the sidebar."));
       } else {
         const QString hint = collectionName.isEmpty()
                                  ? tr("Add files to the collection's media directory.")
                                  : tr("Add files to %1's media directory.").arg(collectionName);
-        m_loadingLabel->showMessage(tr("No items found"), hint, QStringLiteral("📭"));
+        m_loadingLabel->showMessage(tr("No items found"), hint);
       }
     }
     resumeItemsPageRendering();
