@@ -37,7 +37,7 @@
     <binary>kartend</binary>
   </provides>
   <releases>
-    <release version="0.0.19" date="2026-08-22">
+    <release version="0.0.19" date="2026-08-30">
       <description>
         <p>A collection tree, many more launchers, and a large performance pass:</p>
         <ul>

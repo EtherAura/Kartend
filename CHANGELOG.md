@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-08-30
+
 ### Added
 
 - **Smart playlists can be built from more than one rule.** The editor
@@ -683,8 +685,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   outside the row on every side. The header now occupies exactly its reserved
   height, and the stroke sits fully inside the row, so a selected first row
   shows all four edges.
-
-## [0.0.19] - 2026-08-22
 
 ### Added
 
