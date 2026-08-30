@@ -19,6 +19,18 @@ updates:
     labels:
       - "ci"
       - "dependencies"
+    # One PR per weekly sweep, not one per action. Split PRs mean split merge
+    # commits, and paired actions break in the gap between them: merging the
+    # codeql-action/init 4.37.9 bump ahead of its analyze twin left main's
+    # fa08572f with a mismatched pair, and its CodeQL run failed with "Loaded
+    # a configuration file for version '4.37.9', but running version
+    # '4.37.7'". No merge ORDER avoids that — one of the two intermediate
+    # states always exists — so the fix is for related bumps to land as a
+    # single commit.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
   # Python tooling for QR-code / image generation (.scripts/requirements.txt).
   # Pinned with == so Dependabot can track Pillow's steady CVE stream.
   - package-ecosystem: "pip"
