@@ -155,8 +155,15 @@ void MainWindow::appendCollectionAndPersist(const CollectionConfig &config, bool
   }
   rebuildHierarchyCache();
   if (navigate && m_appManager->getNavigationManager()) {
-    m_currentCollectionIndex = m_collections.size() - 1;
-    m_appManager->getNavigationManager()->showCollectionItems(m_currentCollectionIndex);
+    // Do NOT pre-set m_currentCollectionIndex here. showCollectionItems runs
+    // a boundary persist (persistCurrentSelection) BEFORE it switches, which
+    // snapshots the outgoing grid's viewport under the CURRENT index's
+    // session key — pre-pointing that index at the new collection filed the
+    // old collection's items under the new collection's key (each Setup
+    // Wizard run left session.json one collection behind). Navigation
+    // updates the shared index itself in prepareNonSharedNavigation.
+    m_appManager->getNavigationManager()->showCollectionItems(
+        static_cast<int>(m_collections.size()) - 1);
   }
 }
 

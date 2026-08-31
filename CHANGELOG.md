@@ -61,6 +61,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   titled "Currently scraping" is now "Latest result", which is what it
   actually shows.
 
+- **Session viewport snapshots are keyed to the right collection.**
+  Creating a collection through the wizards snapshotted the previous
+  collection's grid under the new collection's name in `session.json`,
+  so each wizard run left the session store one collection behind and a
+  restore could repopulate a collection's viewport with another
+  collection's items.
+
 ## [0.0.19] - 2026-08-30
 
 ### Added
