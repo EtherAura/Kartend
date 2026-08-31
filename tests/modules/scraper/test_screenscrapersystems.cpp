@@ -22,6 +22,7 @@ private slots:
   void autodetect_returnsMinusOneWhenNoMatch();
   void autodetect_normalizesExtensionPrefix();
   void autodetect_avoidsSubstringFalseMatchOnShortAliases();
+  void autodetect_prefersLongerAliasWhenScoresTie();
 };
 
 namespace {
@@ -127,6 +128,34 @@ void TestScreenScraperSystems::autodetect_avoidsSubstringFalseMatchOnShortAliase
   };
   QCOMPARE(
       ScreenScraperSystems::autodetect(QStringLiteral("My ABXY Stuff"), QString(), {}, catalog), 2);
+}
+
+void TestScreenScraperSystems::autodetect_prefersLongerAliasWhenScoresTie() {
+  // A collection named after the LONGER of two nested multi-word aliases
+  // ("alpha beta gamma" vs "alpha beta") matches both by substring at the
+  // same +2. Catalog order must NOT decide that tie — the longer matched
+  // alias is the more specific claim. This is the Game Boy Advance shape:
+  // with the base system first in the catalog, its shorter alias used to
+  // steal the collection.
+  const QList<ScreenScraperSystems::System> catalog = {
+      makeSystem(9, QStringLiteral("Base"), {}, {QStringLiteral("alpha beta")}),
+      makeSystem(12, QStringLiteral("Extended"), {}, {QStringLiteral("alpha beta gamma")}),
+  };
+  QCOMPARE(
+      ScreenScraperSystems::autodetect(QStringLiteral("Alpha Beta Gamma"), QString(), {}, catalog),
+      12);
+  // The base name keeps resolving to the base system: the extended alias is
+  // not a substring of "alpha beta", so there is no tie to break.
+  QCOMPARE(ScreenScraperSystems::autodetect(QStringLiteral("Alpha Beta"), QString(), {}, catalog),
+           9);
+  // Catalog order flipped: the longer alias must win from either position.
+  const QList<ScreenScraperSystems::System> flipped = {
+      makeSystem(12, QStringLiteral("Extended"), {}, {QStringLiteral("alpha beta gamma")}),
+      makeSystem(9, QStringLiteral("Base"), {}, {QStringLiteral("alpha beta")}),
+  };
+  QCOMPARE(
+      ScreenScraperSystems::autodetect(QStringLiteral("Alpha Beta Gamma"), QString(), {}, flipped),
+      12);
 }
 
 QTEST_MAIN(TestScreenScraperSystems)

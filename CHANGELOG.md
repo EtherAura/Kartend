@@ -24,6 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   one collection configured they now say "a new collection"; the true
   first run keeps the original wording.
 
+- **Collections named after an extended console resolve to the right
+  ScreenScraper system.** When a collection's name matched two nested
+  system aliases — "Game Boy" inside "Game Boy Advance" — catalog order
+  decided the tie, which could hand the collection's platform identity
+  (and its scraped platform artwork and metadata) to the base console.
+  The longer, more specific alias now wins the tie from either catalog
+  position.
+
 ## [0.0.19] - 2026-08-30
 
 ### Added

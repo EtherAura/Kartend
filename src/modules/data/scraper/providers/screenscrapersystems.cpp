@@ -66,13 +66,16 @@ int autodetect(const QString &collectionName, const QString &collectionType,
   const QString type = lower(collectionType);
 
   int bestScore = 0;
+  qsizetype bestAliasLen = 0;
   int bestId = -1;
   for (const auto &s : systems) {
     int score = 0;
+    qsizetype longestAliasMatch = 0;
     for (const QString &alias : s.aliases) {
       const QString a = lower(alias);
       if (aliasMatchesWord(name, a) || aliasMatchesWord(type, a)) {
         score += 2;
+        longestAliasMatch = qMax(longestAliasMatch, a.size());
       }
     }
     for (const QString &ext : s.extensions) {
@@ -80,10 +83,16 @@ int autodetect(const QString &collectionName, const QString &collectionType,
         score += 1;
       }
     }
-    // Strict ">": preserves first-match-wins on ties so the
-    // SS-supplied catalog ordering breaks ambiguities.
-    if (score > bestScore) {
+    // Strict ">": preserves first-match-wins on ties so the SS-supplied
+    // catalog ordering breaks ambiguities — EXCEPT when the tied systems both
+    // matched an alias, where the longer matched alias is the more specific
+    // claim and wins regardless of catalog order. A "Game Boy Advance"
+    // collection matches both the "game boy" alias (multi-word aliases match
+    // by substring) and the "game boy advance" alias at the same +2; catalog
+    // order would hand the collection to plain Game Boy.
+    if (score > bestScore || (score == bestScore && longestAliasMatch > bestAliasLen)) {
       bestScore = score;
+      bestAliasLen = longestAliasMatch;
       bestId = s.id;
     }
   }
