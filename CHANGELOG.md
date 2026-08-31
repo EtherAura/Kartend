@@ -32,6 +32,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The longer, more specific alias now wins the tie from either catalog
   position.
 
+- **Auto-accept scrapes no longer adopt ScreenScraper's "not a game"
+  placeholder titles.** Test suites and utility ROMs are filed there
+  under literal pseudo-titles like `ZZZ(notgame):#NONGAME`, and
+  auto-accept wrote that junk over a perfectly good filename-derived
+  display name. Such candidates are now treated as a provider miss in
+  auto-accept — the item keeps its local title and counts as "not
+  found". Entries flagged not-a-game that still carry a real title are
+  accepted as before, and interactive picking is unchanged.
+
 ## [0.0.19] - 2026-08-30
 
 ### Added

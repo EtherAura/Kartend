@@ -31,6 +31,7 @@
 #include <QFileInfo>
 #include <QLoggingCategory>
 #include <QPointer>
+#include <QRegularExpression>
 #include <QThread>
 #include <QTimer>
 
@@ -397,6 +398,17 @@ bool BatchScrapeRunner::skippedByToken(const std::shared_ptr<ItemState> &state) 
   return false;
 }
 
+bool BatchScrapeRunner::isPlaceholderCandidate(const Scraper::ScrapeCandidate &candidate) {
+  // ScreenScraper's non-game bucket titles: "ZZZ(notgame):#NONGAME" verbatim,
+  // or a ZZZ(notgame):-prefixed variant (spacing/case drift tolerated). The
+  // #NONGAME marker alone also counts — it is the bucket's sentinel and never
+  // part of a real title.
+  static const QRegularExpression nonGamePlaceholder(
+      QStringLiteral("^ZZZ\\s*\\(\\s*notgame\\s*\\)|#NONGAME"),
+      QRegularExpression::CaseInsensitiveOption);
+  return nonGamePlaceholder.match(candidate.displayName.trimmed()).hasMatch();
+}
+
 void BatchScrapeRunner::onLookupComplete(
     const std::shared_ptr<ItemState> &state,
     const ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> &result) {
@@ -406,7 +418,13 @@ void BatchScrapeRunner::onLookupComplete(
     recordError(state->path, result.error());
     return;
   }
-  const auto &candidates = result.value();
+  QList<Scraper::ScrapeCandidate> candidates = result.value();
+  // Drop "not a game" placeholder candidates before the auto-pick — adopting
+  // one would overwrite the filename-derived title with bucket junk (see
+  // isPlaceholderCandidate). Emptying the list this way lands in the
+  // not-found path below: for the item's local metadata that IS the right
+  // outcome — the provider has no real record to offer.
+  candidates.removeIf([](const Scraper::ScrapeCandidate &c) { return isPlaceholderCandidate(c); });
   if (candidates.isEmpty()) {
     // Kartend-e8aag: the provider ran and returned no match — the remote DB
     // has no entry for this item. A routine "not found", not a skip and not an

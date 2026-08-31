@@ -310,6 +310,18 @@ public:
   /// second, subtly-different streak length (Kartend-jjyst.15).
   static constexpr int kConsecutive429StopThreshold = 3;
 
+  /// True when @p candidate is a provider's "not a game" placeholder entry
+  /// rather than a real record: ScreenScraper files test/utility ROMs under
+  /// literal pseudo-titles ("ZZZ(notgame):#NONGAME" and ZZZ(notgame):-prefixed
+  /// variants). Auto-accept must not adopt that bucket junk over the
+  /// filename-derived display title, so onLookupComplete drops matching
+  /// candidates before the auto-pick and treats an all-placeholder list as a
+  /// provider miss. Matches on the pseudo-title only — an entry flagged
+  /// notgame that still carries a real title (named homebrew/utilities) stays
+  /// acceptable, and the interactive path is unaffected either way (the user
+  /// sees the pseudo-title and decides). Pure and public for tests.
+  [[nodiscard]] static bool isPlaceholderCandidate(const Scraper::ScrapeCandidate &candidate);
+
 private:
   /// Per-item state captured by the async callback chain. Each item's
   /// lookup → detail → media → apply path operates on its own

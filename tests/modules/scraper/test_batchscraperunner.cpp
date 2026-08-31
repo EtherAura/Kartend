@@ -319,6 +319,8 @@ private slots:
   void mediaFetchFailuresCountedInSummary();
   void mediaWriteFailuresCountedInSummary();
   void notFoundReportedSeparatelyFromErrors();
+  void isPlaceholderCandidateMatchesNonGameBucketTitlesOnly();
+  void placeholderCandidateCountsAsNotFoundInsteadOfScraping();
   void failureMessageIncludesStatusAndDetail();
   void failedPathsCapturedForErrorsOnly();
   void failedPathsRespectMaxReportedCap();
@@ -561,6 +563,54 @@ void TestBatchScrapeRunner::mediaWriteFailuresCountedInSummary() {
   QCOMPARE(summary.mediaWriteFailures, 1);
   const QString joined = summary.firstFailures.join(QLatin1Char('\n'));
   QVERIFY2(joined.contains(QStringLiteral("could not create")), qPrintable(joined));
+}
+
+void TestBatchScrapeRunner::isPlaceholderCandidateMatchesNonGameBucketTitlesOnly() {
+  const auto candidateTitled = [](const QString &title) {
+    Scraper::ScrapeCandidate c;
+    c.displayName = title;
+    return c;
+  };
+  // ScreenScraper's non-game bucket shapes, including spacing/case drift.
+  QVERIFY(Scraper::BatchScrapeRunner::isPlaceholderCandidate(
+      candidateTitled(QStringLiteral("ZZZ(notgame):#NONGAME"))));
+  QVERIFY(Scraper::BatchScrapeRunner::isPlaceholderCandidate(
+      candidateTitled(QStringLiteral("zzz(notgame):Test Cartridge"))));
+  QVERIFY(Scraper::BatchScrapeRunner::isPlaceholderCandidate(
+      candidateTitled(QStringLiteral("  ZZZ ( notgame ) : anything"))));
+  QVERIFY(Scraper::BatchScrapeRunner::isPlaceholderCandidate(
+      candidateTitled(QStringLiteral("Some Bucket #NONGAME"))));
+  // Real titles must never match — including ones that merely mention the
+  // word or carry a trailing ZZZ.
+  QVERIFY(!Scraper::BatchScrapeRunner::isPlaceholderCandidate(
+      candidateTitled(QStringLiteral("240p Test Suite"))));
+  QVERIFY(!Scraper::BatchScrapeRunner::isPlaceholderCandidate(
+      candidateTitled(QStringLiteral("Zelda ZZZ"))));
+  QVERIFY(!Scraper::BatchScrapeRunner::isPlaceholderCandidate(
+      candidateTitled(QStringLiteral("The Notgame Show"))));
+  QVERIFY(!Scraper::BatchScrapeRunner::isPlaceholderCandidate(candidateTitled(QString())));
+}
+
+void TestBatchScrapeRunner::placeholderCandidateCountsAsNotFoundInsteadOfScraping() {
+  // A lookup whose only candidate is ScreenScraper's "not a game" bucket
+  // pseudo-title must NOT be auto-accepted (it would overwrite the
+  // filename-derived title with 'ZZZ(notgame):#NONGAME'); the runner treats
+  // it as a provider miss. A sibling with a real title still scrapes.
+  auto stub = std::make_shared<StubProvider>();
+  stub->byQuery[QStringLiteral("240pee")] = makeMatch("9999", "ZZZ(notgame):#NONGAME");
+  stub->byQuery[QStringLiteral("Alpha")] = makeMatch("1", "Alpha (USA)");
+
+  const QStringList paths{QStringLiteral("/games/240pee.nes"), QStringLiteral("/games/Alpha.nes")};
+  Scraper::BatchScrapeRunner runner(nullptr, stub, QStringLiteral("uuid"), paths, QString());
+  runner.start();
+  const auto summary = waitForFinish(&runner);
+  QCOMPARE(summary.scraped, 1);  // Alpha only
+  QCOMPARE(summary.notFound, 1); // the placeholder-only item
+  QCOMPARE(summary.errors, 0);
+  QCOMPARE(summary.skipped, 0);
+  // A not-found is terminal — the item must leave the resume list rather
+  // than be re-offered (the placeholder won't improve on retry).
+  QVERIFY(!runner.remainingPaths().contains(QStringLiteral("/games/240pee.nes")));
 }
 
 void TestBatchScrapeRunner::failureMessageIncludesStatusAndDetail() {
