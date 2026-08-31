@@ -401,6 +401,19 @@ case "$ARG" in
     # runs. Verified 2026-08-05 on kernel 7.1.4-cachyos-optim: with the
     # profile relaxed a TSan probe binary runs clean, and the older
     # 'unexpected memory mapping' failure from the 7.1.2 era is gone.
+    #
+    # setarch x86_64 -R on the ctest step: kernel 7.2 moved the mmap layout
+    # again and the container's GCC 13.3 TSan runtime dies with 'FATAL:
+    # ThreadSanitizer: unexpected memory mapping' before main() on nearly
+    # every test even WITH the relaxed seccomp profile (the personality()
+    # call now succeeds but the resulting layout still isn't the one this
+    # libtsan expects). Disabling ASLR outright for the test processes via
+    # setarch gives the runtime the fixed layout it wants. Verified
+    # 2026-08-30 on 7.2.0-cachyos1-optim: probe binary then the full suite
+    # run clean under the wrapper. Harmless no-op on kernels where the
+    # layout was already acceptable, so it is applied unconditionally.
+    # History: 7.1.2 era both paths failed deterministically; 7.1.4 fixed
+    # by seccomp=unconfined alone; 7.2 additionally needs setarch -R.
     exec docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
       --security-opt seccomp=unconfined \
       -v "$(cd "$(dirname "$0")/.." && pwd):/src" kartend-ci bash -c '
@@ -418,7 +431,7 @@ case "$ARG" in
       # -LE benchmark matches every CI ctest invocation (Kartend-egd3a): the
       # QBENCHMARK suites only run in the nightly benchmark job, never under
       # sanitizers or the PR matrix.
-      QT_QPA_PLATFORM=offscreen TSAN_OPTIONS=halt_on_error=1:suppressions=$PWD/tests/suppressions/tsan.txt ctest --test-dir build/TSan --output-on-failure -LE benchmark
+      QT_QPA_PLATFORM=offscreen TSAN_OPTIONS=halt_on_error=1:suppressions=$PWD/tests/suppressions/tsan.txt setarch x86_64 -R ctest --test-dir build/TSan --output-on-failure -LE benchmark
     '
     ;;
 
