@@ -621,3 +621,77 @@ race:*DatabaseManager::purgeOrphanCollectionData*
 # ArtworkDispatcherCacheHandle::tryLoadFromDiskCache entry above.
 mutex:*DirectoryScanTask::run*
 mutex:*ScanService::walkDirectoriesParallel*
+
+# ── Suppression drift caught by the local container gate (2026-08-30) ────
+# Four more Group B StoredFunctionCall hand-off dispatch sites, surfaced by
+# ci-local.sh docker:tsan on a 24-core host (setarch -R era): nine suites
+# fail there while nightly-tsan stays green, because the 4-core CI runner
+# rarely hits the interleaving where the pooled worker's first read at
+# RunFunctionTaskBase<T>::run() entry beats the visibility of the GUI
+# thread's task allocation-write. A stash-differential proved all nine
+# pre-existing. Same rules as the block above: each entry anchors on the
+# DISPATCH SITE, never on RunFunctionTaskBase, so every other
+# QtConcurrent::run functor body stays visible to TSan.
+
+# Artwork preview overlay decode: startPreviewLoad QtConcurrent::runs a
+# lambda capturing artworkPath/maxWidth/maxHeight by value and publishes
+# only through the QFutureWatcher back on the GUI thread. Reached from the
+# details pane gallery (openPreviewForPath / openArtworkExpanded) and the
+# selection preview (ScrollManager/SelectionDisplayManager::
+# showPreviewAtPath), which is why five of the nine suites shared this one
+# shape.
+race:*ArtworkPreviewOverlay::startPreviewLoad*
+
+# Details pane primary-artwork decode: loadArtwork QtConcurrent::runs the
+# candidate walk (candidatePaths/baseName/artworkDirectory captured by
+# value) returning a {path, QImage} pair through the watcher. Reached from
+# DetailsPane::setMetadata / updateFileInfo on every sidebar refresh.
+race:*DetailsPaneArtwork::loadArtwork*
+
+# Cover Flow tile decode: startArtworkLoad QtConcurrent::runs
+# loadAndScale(path, target) (both captured by value); the QPixmap
+# conversion and cache insert happen in the watcher's finished handler on
+# the GUI thread.
+race:*CoverFlowWidget::startArtworkLoad*
+
+# Viewport batch decode: the worker lambda in dispatchBatch COPIES the
+# std::function batch handler (allocating its heap storage, including the
+# captured QPointer) and hands results to the GUI thread via
+# QMetaObject::invokeMethod(..., Qt::QueuedConnection); the main thread's
+# later read of that copy inside the queued call reports as racing the
+# worker's allocation because the event-loop hand-off rides QBasicMutex
+# futex fast paths TSan cannot see. Ordering is real: post happens after
+# the copy, delivery after the post. The QPointer dereference at the
+# ViewportArtworkScheduler completion lambda is the reported read, so both
+# ends of the pair are named here.
+race:*ArtworkLoadDispatcher::dispatchBatch*
+race:*ViewportArtworkScheduler::loadArtworkParallel*
+
+# Second round from the same gate run: halt_on_error=1 reveals one shape
+# per binary per run, so these five sat hidden behind the four above until
+# those were suppressed (the same one-report-at-a-time trap the triage
+# notes in this file's history warn about — this round was enumerated with
+# halt_on_error=0 in one pass, 79 reports collapsing to exactly these
+# sites). All are the identical hand-off: QtConcurrent::run of a lambda
+# capturing only value copies, publishing solely through a parented
+# QFutureWatcher (or QPixmap-from-result cache insert) back on the GUI
+# thread.
+
+# File-stat probe behind the details pane's File tab (QFileInfo off the
+# GUI thread; captures filePath by value).
+race:*DetailsPane::updateFileInfo*
+
+# Preview overlay gallery-strip thumb decode (captures path by value; icon
+# set in the watcher's finished handler).
+race:*ArtworkPreviewOverlay::rebuildGalleryStrip*
+
+# Details pane gallery thumb decode (ImageDecodeUtils::loadCapped(path)).
+race:*DetailsPaneGalleryView::rebuildThumbs*
+
+# Cover Flow gallery-strip thumb decode (path + size value copies; the
+# comment at the site already documents destruction safety).
+race:*CoverFlowGalleryStrip::thumbPixmap*
+
+# Cover Flow scaled-pixmap derivation: captures sourceImg (QImage, COW
+# with an atomic refcount) and targetSize by value.
+race:*CoverFlowWidget::requestScaledPixmap*
