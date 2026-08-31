@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The grid selection ring no longer sits on top of the cover art.**
+  With titles hidden a tile hands its whole cell to the artwork, so the
+  pulsing ring — which had to be drawn inside the tile — covered the
+  outer few pixels of the art on every edge that reached the tile
+  border. The ring is now drawn just outside the tile, in the grid gap
+  between items, so it frames the artwork instead of overlapping it.
+  Tiles that show a title are unaffected, since their art was already
+  inset.
+
 - **Dim hint text is readable on dark themes again.** The muted "hint"
   style used across dialogs took the theme's mid palette colour, which on
   dark themes lands nearly on the dialog background — the Setup Wizard's

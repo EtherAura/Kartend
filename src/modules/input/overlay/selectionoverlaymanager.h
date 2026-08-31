@@ -79,6 +79,9 @@ public:
   [[nodiscard]] static QRect overlayRectForPosition(const QPoint &pos, int itemWidth,
                                                     int itemHeight);
 
+  // Outer edge of the selection stroke band around a tile (Kartend-9gzkl)
+  [[nodiscard]] static int overlayInset();
+
 signals:
   // Emitted when glide animation finishes
   void animationFinished();

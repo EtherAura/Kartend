@@ -58,6 +58,18 @@ void ItemWidget::setListMode(bool listMode) {
   }
   m_isListMode = listMode;
 
+  // The ring is a grid-only container sibling (Kartend-9gzkl); a tile
+  // entering list mode while selected must not leave it floating at its old
+  // grid spot, and one returning to grid mode still selected must get it
+  // back — setSelected can't do either, it early-returns on an unchanged
+  // selection state.
+  if (m_selectionBorderOverlay) {
+    m_selectionBorderOverlay->setVisible(!listMode && isSelected() && !isHidden());
+    if (!listMode) {
+      syncSelectionRingGeometry();
+    }
+  }
+
   if (imageLabel) {
     imageLabel->setVisible(!listMode);
   }

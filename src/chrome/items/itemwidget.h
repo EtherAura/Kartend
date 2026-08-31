@@ -6,6 +6,7 @@
 #include <QFont>
 #include <QFrame>
 #include <QPixmap>
+#include <QPointer>
 #include <QPropertyAnimation>
 #include <QRect>
 #include <QSize>
@@ -137,10 +138,15 @@ public:
   QLabel *imageLabel = nullptr;
   QLabel *nameLabel = nullptr;
   QWidget *triangleIndicator;
-  /// Kartend-f4hva: transparent full-tile child that paints the selection
-  /// ring ABOVE the artwork label. Null until the tile is first selected —
-  /// pooled tiles that are never selected pay nothing.
-  QWidget *m_selectionBorderOverlay = nullptr;
+  /// Kartend-9gzkl: transparent SIBLING hosted by the tile's parent container,
+  /// positioned around the artwork so the stroke lands in the grid gap and
+  /// never on the art — a child of the tile would be clipped to the tile,
+  /// which is exactly what forced Kartend-f4hva to clamp the ring onto
+  /// full-bleed artwork. QPointer because the container owns it as a QObject
+  /// child and may tear it down first; ~ItemWidget deletes it when the tile
+  /// goes alone. Null until the tile is first selected — pooled tiles that
+  /// are never selected pay nothing.
+  QPointer<QWidget> m_selectionBorderOverlay;
   void setAsSubcollection(int index, const QString &name);
   void setAsVirtualFolder(const QString &folderPath, const QString &displayName,
                           bool hideTitle = false);
@@ -160,10 +166,17 @@ public:
   void applyTitleTint();
   /// One definition of the pulsing selection ring, shared by paintEvent
   /// (list mode, where the row is not covered by a child) and
-  /// ItemWidgetSelectionRing (grid mode, where it must sit above the
-  /// full-bleed artwork label — Kartend-f4hva). No-op while unselected or
-  /// gliding; during a glide SelectionOverlayManager draws in the container.
-  void drawSelectionBorder(QPainter &painter);
+  /// ItemWidgetSelectionRing (grid mode, where the overlay lives in the
+  /// container — Kartend-9gzkl). ringRect is the stroke's CENTER LINE in the
+  /// painter's coordinate space; the two callers paint in different spaces,
+  /// which is why the rect comes in rather than being computed here. No-op
+  /// while unselected or gliding; during a glide SelectionOverlayManager
+  /// draws in the container.
+  void drawSelectionBorder(QPainter &painter, const QRectF &ringRect);
+  /// Repositions the container-hosted ring overlay onto
+  /// selectionBorderRectInParent(). Safe to call at any time; no-op without
+  /// an overlay or in list mode.
+  void syncSelectionRingGeometry();
   /// Colour for item TITLE TEXT: the palette text colour unless the
   /// accent tint is enabled. See titleTint() for the accent itself.
   static QColor titleTextColor();
@@ -336,22 +349,25 @@ private:
   void applyDimensions();
 };
 
-/// Kartend-f4hva: the grid selection ring. A parent's paintEvent can never
-/// draw over its children, and with hidden titles the artwork label covers
-/// the whole tile (Kartend-hxly2) — so the ring is itself a child stacked
-/// above the label, the arrangement triangleIndicator already uses for the
-/// subcollection badge. Paint logic stays on ItemWidget::drawSelectionBorder;
-/// owner-local and ring-local coordinates coincide because the ring spans the
-/// tile.
+/// The grid selection ring, hosted by the tile's PARENT container as a
+/// transparent sibling positioned around the artwork (Kartend-9gzkl). Two
+/// clipping constraints force it up there: a parent's paintEvent can never
+/// draw over its children (Kartend-f4hva), and a child widget can never draw
+/// outside its parent — so with hidden titles, where the artwork fills the
+/// whole cell (Kartend-hxly2), a tile-hosted ring had nowhere to go but on
+/// top of the art. As a sibling it draws in the grid gap instead. It tracks
+/// the owner tile via an event filter (move/resize/show/hide/reparent); paint
+/// logic stays on ItemWidget::drawSelectionBorder.
 class ItemWidgetSelectionRing : public QWidget {
 public:
   explicit ItemWidgetSelectionRing(ItemWidget *owner);
+  bool eventFilter(QObject *watched, QEvent *event) override; // public in QObject
 
 protected:
   void paintEvent(QPaintEvent *event) override;
 
 private:
-  ItemWidget *m_owner; ///< also the QObject parent; outlives this child
+  ItemWidget *m_owner; ///< deletes this in ~ItemWidget; the container merely hosts it
 };
 
 #endif // ITEMWIDGET_H

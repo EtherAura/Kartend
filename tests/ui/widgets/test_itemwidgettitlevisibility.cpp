@@ -39,7 +39,7 @@ private slots:
   void gridContentNeverOverflowsItsCell_data();
   void gridContentNeverOverflowsItsCell();
   void hiddenTitleArtworkStaysWithinTilePitch();
-  void selectionRingStaysInsideTheTile();
+  void selectionRingStaysOffTheArtwork();
   void gridArtworkNeverExceedsTilePitch_data();
   void gridArtworkNeverExceedsTilePitch();
 };
@@ -329,13 +329,14 @@ void TestItemWidgetTitleVisibility::hiddenTitleArtworkStaysWithinTilePitch() {
                      .arg(kPitch)));
 }
 
-void TestItemWidgetTitleVisibility::selectionRingStaysInsideTheTile() {
-  // Kartend-f4hva. Once hidden titles let the artwork fill its whole cell
-  // (Kartend-hxly2), the selection ring — computed AROUND the artwork label —
-  // sat entirely outside the widget's paint bounds and clipped to nothing,
-  // and any clamped remnant was painted over by the full-bleed label child.
-  // Pin both halves of the fix: the rect stays inside the tile, and the ring
-  // exists as a child overlay stacked above the label.
+void TestItemWidgetTitleVisibility::selectionRingStaysOffTheArtwork() {
+  // Kartend-9gzkl, reversing Kartend-f4hva's clamp. With hidden titles the
+  // artwork fills its whole cell (Kartend-hxly2), so a ring clamped inside
+  // the tile's paint bounds was painted ON the outer band of the cover art.
+  // The ring now lives on a container-hosted SIBLING positioned around the
+  // artwork: leaving the tile is the point — the stroke lands in the grid
+  // gap. Pin the new contract: the stroke band never intersects the artwork
+  // label, and the overlay is parented to the container at exactly that band.
   QWidget host;
   auto *tile = new ItemWidget(&host);
   tile->setHideTitles(true);
@@ -347,22 +348,43 @@ void TestItemWidgetTitleVisibility::selectionRingStaysInsideTheTile() {
 
   const QRect ring = tile->selectionBorderRectInParent();
   QVERIFY2(!ring.isEmpty(), "selection ring rect collapsed to nothing");
-  QVERIFY2(QRect(0, 0, 325, 325).contains(ring),
-           qPrintable(QStringLiteral("ring %1,%2 %3x%4 leaves the 325px tile — it will be "
-                                     "clipped invisible")
+
+  // selectionBorderRectInParent names the OUTER edge of the stroke band; the
+  // band's inner hole must clear the artwork label on every side.
+  const int pen = UIConstants::Widget::BORDER_WIDTH_SELECTION;
+  const QRect hole = ring.adjusted(pen, pen, -pen, -pen);
+  const QRect art = tile->imageLabel->geometry().translated(tile->pos());
+  QVERIFY2(hole.contains(art),
+           qPrintable(QStringLiteral("stroke band %1,%2 %3x%4 overlaps the artwork %5,%6 %7x%8")
                           .arg(ring.x())
                           .arg(ring.y())
                           .arg(ring.width())
-                          .arg(ring.height())));
+                          .arg(ring.height())
+                          .arg(art.x())
+                          .arg(art.y())
+                          .arg(art.width())
+                          .arg(art.height())));
 
-  QVERIFY2(tile->m_selectionBorderOverlay, "no ring overlay was created on selection");
-  QVERIFY2(tile->m_selectionBorderOverlay->isVisibleTo(tile),
-           "ring overlay exists but is not visible while selected");
+  QWidget *overlay = tile->m_selectionBorderOverlay;
+  QVERIFY2(overlay, "no ring overlay was created on selection");
+  QCOMPARE(overlay->parentWidget(), &host);
+  QCOMPARE(overlay->geometry(), ring);
+  QVERIFY2(overlay->isVisibleTo(&host), "ring overlay exists but is not visible while selected");
+
+  // Mode flips bypass setSelected (it early-returns on an unchanged selection
+  // state), so setListMode must manage the ring itself: down in list mode —
+  // where it would float at its stale grid spot — and back up in grid mode.
+  tile->setListMode(true);
+  QVERIFY2(!overlay->isVisibleTo(&host), "grid ring still visible on a list row");
+  tile->setListMode(false);
+  QVERIFY2(overlay->isVisibleTo(&host), "ring not restored on returning to grid mode");
+
   tile->setSelected(false);
-  QVERIFY2(!tile->m_selectionBorderOverlay->isVisibleTo(tile),
-           "ring overlay still visible after deselection");
+  QVERIFY2(!overlay->isVisibleTo(&host), "ring overlay still visible after deselection");
 
-  // A titles-shown tile keeps its around-the-artwork ring, still inside.
+  // A titles-shown tile's art is inset by the layout margin, so its ring
+  // still fits inside the tile — the captionless full-bleed case is the only
+  // one that needs the gap.
   auto *titled = new ItemWidget(&host);
   titled->setItemName(QStringLiteral("A Title"));
   titled->setItemDimensions(325, 325);
@@ -370,7 +392,16 @@ void TestItemWidgetTitleVisibility::selectionRingStaysInsideTheTile() {
     box->activate();
   }
   titled->setSelected(true);
-  QVERIFY(QRect(0, 0, 325, 325).contains(titled->selectionBorderRectInParent()));
+  QVERIFY(QRect(titled->pos(), QSize(325, 325)).contains(titled->selectionBorderRectInParent()));
+
+  // A parentless tile has nowhere to host the ring — selection must not
+  // create a stray top-level window (or crash); the ring appears once the
+  // tile is adopted and re-selected.
+  ItemWidget orphan;
+  orphan.setHideTitles(true);
+  orphan.setItemDimensions(100, 100);
+  orphan.setSelected(true);
+  QVERIFY2(!orphan.m_selectionBorderOverlay, "a parentless tile must not create a top-level ring");
 }
 
 QTEST_MAIN(TestItemWidgetTitleVisibility)

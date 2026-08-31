@@ -169,6 +169,10 @@ ItemWidget::~ItemWidget() {
   }
   m_pulseDelayTimer.stop();
   storedPixmap = QPixmap();
+  // The ring is hosted by the parent container (Kartend-9gzkl), so it does
+  // not die with this widget's children — delete it here. QPointer covers the
+  // reverse order, where the container tears its own children down first.
+  delete m_selectionBorderOverlay;
 }
 
 // Compute title tint from highlight color with configurable
@@ -404,24 +408,19 @@ void ItemWidget::setSelected(bool selected) {
   }
 
   isSelectedState = selected;
-  // Kartend-f4hva: the grid ring lives on a child overlay above the artwork
-  // label — see ItemWidgetSelectionRing. Created on first selection; the
-  // badge and title are re-raised so their stacking survives.
-  if (selected && !m_isListMode && !m_selectionBorderOverlay) {
-    auto *ring = new ItemWidgetSelectionRing(this);
-    ring->setGeometry(0, 0, m_itemWidth, m_itemHeight);
-    ring->raise();
-    if (nameLabel) {
-      nameLabel->raise();
-    }
-    if (triangleIndicator) {
-      triangleIndicator->raise();
-    }
-    m_selectionBorderOverlay = ring;
-    ring->show();
+  // Kartend-9gzkl: the grid ring lives on a container-hosted sibling overlay
+  // positioned around the artwork — see ItemWidgetSelectionRing. Created on
+  // first selection, and only once the tile has a parent to host it (a
+  // parentless tile would make the ring a stray top-level window).
+  if (selected && !m_isListMode && !m_selectionBorderOverlay && parentWidget()) {
+    m_selectionBorderOverlay = new ItemWidgetSelectionRing(this);
+    syncSelectionRingGeometry();
   }
   if (m_selectionBorderOverlay) {
-    m_selectionBorderOverlay->setVisible(selected && !m_isListMode);
+    // isHidden() rather than isVisible(): an explicitly hidden tile (widget
+    // pool) must keep its ring down, but a tile that is merely under a
+    // not-yet-shown ancestor shares that ancestor with the ring and may show.
+    m_selectionBorderOverlay->setVisible(selected && !m_isListMode && !isHidden());
   }
   if (selected) {
     applySelectedUiEffects();
@@ -459,22 +458,17 @@ auto ItemWidget::computeSelectionBorderRect() const -> QRect {
   if (!imageLabel) {
     return {};
   }
-  const QRect imageRect = imageLabel->geometry();
 
-  const int left = imageRect.left() - UIConstants::CollectionIcon::ITEM_SPACING;
-  const int top = imageRect.top() - UIConstants::CollectionIcon::ITEM_SPACING;
-  const int right = imageRect.right() + UIConstants::CollectionIcon::ITEM_SPACING;
-  const int bottom = imageRect.bottom() + UIConstants::CollectionIcon::ITEM_SPACING;
-
-  // Kartend-f4hva: with hidden titles the label fills the whole cell
-  // (Kartend-hxly2), so the unclamped ring sits entirely outside the widget
-  // and clips to nothing. Clamp it inside the paint bounds with the half-pen
-  // inset — the Kartend-ylijk treatment list mode gets above. On a
-  // titles-shown tile the ring already fits and the intersection is a no-op,
-  // so that look is unchanged.
-  const int inset = UIConstants::Widget::BORDER_WIDTH_SELECTION / 2;
-  return QRect(left, top, right - left, bottom - top)
-      .intersected(rect().adjusted(inset, inset, -inset, -inset));
+  // Kartend-9gzkl: the stroke's CENTER LINE, ITEM_SPACING outside the artwork
+  // label, deliberately NOT clamped to the widget. With hidden titles the
+  // label fills the whole cell (Kartend-hxly2), so any stroke inside the tile
+  // necessarily crosses the art — Kartend-f4hva's intersect clamp here is
+  // exactly what painted the ring on top of the covers. The ring overlay that
+  // consumes this is hosted by the parent container and can draw in the grid
+  // gap, so leaving the tile is now the point, not a clipping bug.
+  return imageLabel->geometry().adjusted(
+      -UIConstants::CollectionIcon::ITEM_SPACING, -UIConstants::CollectionIcon::ITEM_SPACING,
+      UIConstants::CollectionIcon::ITEM_SPACING, UIConstants::CollectionIcon::ITEM_SPACING);
 }
 
 auto ItemWidget::selectionBorderRectInParent() const -> QRect {
@@ -482,14 +476,37 @@ auto ItemWidget::selectionBorderRectInParent() const -> QRect {
   if (!localRect.isValid()) {
     return {};
   }
+  // Grow the center-line rect by the half-pen so this names the OUTER edge of
+  // the stroke band. That is the geometry both container overlays want: the
+  // ring overlay paints its stroke inset by the same half-pen, and the glide
+  // overlay's stylesheet border draws inward from its geometry edge — so the
+  // two land on the identical band and the glide→pulse handoff is seamless.
+  const int half = UIConstants::Widget::BORDER_WIDTH_SELECTION / 2;
+  localRect.adjust(-half, -half, half, half);
   const QPoint topLeft = mapToParent(localRect.topLeft());
   const QPoint bottomRight = mapToParent(localRect.bottomRight());
   return QRect(topLeft, bottomRight);
 }
 
+void ItemWidget::syncSelectionRingGeometry() {
+  if (!m_selectionBorderOverlay || m_isListMode) {
+    return;
+  }
+  const QRect target = selectionBorderRectInParent();
+  if (target.isValid() && m_selectionBorderOverlay->geometry() != target) {
+    m_selectionBorderOverlay->setGeometry(target);
+  }
+}
+
 // Applies visual effects for selection state, preserving animation behavior
 void ItemWidget::applySelectedUiEffects() {
   raise();
+  // The ring is a sibling in the container, so the raise() above just put
+  // this tile over it — restack it on top (it is mouse-transparent).
+  if (m_selectionBorderOverlay) {
+    syncSelectionRingGeometry();
+    m_selectionBorderOverlay->raise();
+  }
   if (m_isSubcollection && (triangleIndicator)) {
     updateTriangleIndicator();
   }
@@ -517,20 +534,19 @@ void ItemWidget::applyDeselectedUiEffects() {
   }
 }
 
-// Schedules repaint of selection border region
+// Schedules repaint of selection border region. Grid mode repaints only the
+// container-hosted ring overlay — the tile itself has not painted the grid
+// ring since Kartend-f4hva. List mode still paints its ring in paintEvent.
 void ItemWidget::scheduleSelectionBorderUpdate() {
-  if (imageLabel) {
-    const QRect borderRect = computeSelectionBorderRect();
-    const QRect repaintRect = borderRect.adjusted(
-        -UIConstants::Widget::BORDER_WIDTH_SELECTION, -UIConstants::Widget::BORDER_WIDTH_SELECTION,
-        UIConstants::Widget::BORDER_WIDTH_SELECTION, UIConstants::Widget::BORDER_WIDTH_SELECTION);
-    update(repaintRect);
-    // Same coordinates: the ring overlay spans the tile (Kartend-f4hva).
-    if (m_selectionBorderOverlay) {
-      m_selectionBorderOverlay->update(repaintRect);
-    }
-  } else {
+  if (m_isListMode || !imageLabel) {
     update();
+    return;
+  }
+  if (m_selectionBorderOverlay) {
+    // Every pulse tick lands here, so the geometry self-heals within a frame
+    // even if a layout pass moved the artwork label without a tile event.
+    syncSelectionRingGeometry();
+    m_selectionBorderOverlay->update();
   }
 }
 

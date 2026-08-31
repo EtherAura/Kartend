@@ -277,12 +277,20 @@ auto SelectionOverlayManager::overlayRectForWidget(ItemWidget *widget) -> QRect 
     return {};
   }
 
-  const int inset = UIConstants::CollectionIcon::ITEM_SPACING;
-  return widgetRect.adjusted(-inset, -inset, inset, inset);
+  return widgetRect.adjusted(-overlayInset(), -overlayInset(), overlayInset(), overlayInset());
 }
 
 auto SelectionOverlayManager::overlayRectForPosition(const QPoint &pos, int itemWidth,
                                                      int itemHeight) -> QRect {
-  return OverlayHelpers::overlayRectForPosition(pos, itemWidth, itemHeight,
-                                                UIConstants::CollectionIcon::ITEM_SPACING);
+  return OverlayHelpers::overlayRectForPosition(pos, itemWidth, itemHeight, overlayInset());
+}
+
+auto SelectionOverlayManager::overlayInset() -> int {
+  // ITEM_SPACING to the stroke's center line plus the half-pen to its outer
+  // edge — the same band ItemWidget::selectionBorderRectInParent() names for
+  // a full-bleed tile (Kartend-9gzkl), so a glide whose endpoint is computed
+  // from a position instead of a realised widget lands where the persistent
+  // ring will actually draw.
+  return UIConstants::CollectionIcon::ITEM_SPACING +
+         UIConstants::Widget::BORDER_WIDTH_SELECTION / 2;
 }

@@ -9,6 +9,7 @@
 #include "uiconstants/listview.h"
 #include "uiconstants/widget.h"
 #include <algorithm>
+#include <QEvent>
 #include <QFont>
 #include <QFontMetrics>
 #include <QLabel>
@@ -45,9 +46,9 @@ void ItemWidget::ensureTextMeasure(const QString &name, const QFont &font, int w
 // glide check lives here so the ring overlay needs no scheduling of its own:
 // it can always repaint, and this draws nothing while the container's glide
 // overlay owns the ring.
-void ItemWidget::drawSelectionBorder(QPainter &painter) {
+void ItemWidget::drawSelectionBorder(QPainter &painter, const QRectF &ringRect) {
   const bool canPaintSelection = m_isListMode || imageLabel;
-  if (!isSelectedState || !canPaintSelection || isGlideActive()) {
+  if (!isSelectedState || !canPaintSelection || !ringRect.isValid() || isGlideActive()) {
     return;
   }
   painter.setRenderHint(QPainter::Antialiasing);
@@ -69,16 +70,60 @@ void ItemWidget::drawSelectionBorder(QPainter &painter) {
   pen.setWidth(UIConstants::Widget::BORDER_WIDTH_SELECTION);
   painter.setPen(pen);
 
-  painter.drawRoundedRect(computeSelectionBorderRect(), UIConstants::Widget::BORDER_RADIUS,
+  painter.drawRoundedRect(ringRect, UIConstants::Widget::BORDER_RADIUS,
                           UIConstants::Widget::BORDER_RADIUS);
 }
 
 ItemWidgetSelectionRing::ItemWidgetSelectionRing(ItemWidget *owner)
-    : QWidget(owner), m_owner(owner) {
-  // Purely visual: clicks fall through to the tile, and nothing fills the
-  // background — the ring is the only ink.
+    : QWidget(owner->parentWidget()), m_owner(owner) {
+  // Purely visual: clicks fall through to whatever is under the ring, and
+  // nothing fills the background — the ring is the only ink.
   setAttribute(Qt::WA_TransparentForMouseEvents);
   setAttribute(Qt::WA_NoSystemBackground);
+  // A container-hosted sibling does not move with the tile the way a child
+  // would, so shadow the owner's geometry/visibility through an event filter.
+  // The artwork label is watched too: the tile's layout can reposition it
+  // (and with it the ring's anchor) without the tile itself moving.
+  owner->installEventFilter(this);
+  if (owner->imageLabel) {
+    owner->imageLabel->installEventFilter(this);
+  }
+}
+
+bool ItemWidgetSelectionRing::eventFilter(QObject *watched, QEvent *event) {
+  switch (event->type()) {
+  case QEvent::Move:
+  case QEvent::Resize:
+    m_owner->syncSelectionRingGeometry();
+    break;
+  case QEvent::Hide:
+    if (watched == m_owner) {
+      hide();
+    }
+    break;
+  case QEvent::Show:
+    if (watched == m_owner && m_owner->isSelected() && !m_owner->isListMode()) {
+      m_owner->syncSelectionRingGeometry();
+      show();
+      raise();
+    }
+    break;
+  case QEvent::ParentChange:
+    // Follow the tile to its new container (widget-pool reshuffles); the
+    // setParent() hides this widget, so re-show when still selected.
+    if (watched == m_owner) {
+      setParent(m_owner->parentWidget());
+      if (m_owner->isSelected() && !m_owner->isListMode() && !m_owner->isHidden()) {
+        m_owner->syncSelectionRingGeometry();
+        show();
+        raise();
+      }
+    }
+    break;
+  default:
+    break;
+  }
+  return QWidget::eventFilter(watched, event);
 }
 
 void ItemWidgetSelectionRing::paintEvent(QPaintEvent *event) {
@@ -89,7 +134,11 @@ void ItemWidgetSelectionRing::paintEvent(QPaintEvent *event) {
   if (!painter.isActive()) {
     return;
   }
-  m_owner->drawSelectionBorder(painter);
+  // Local geometry IS the stroke band's outer rect
+  // (ItemWidget::selectionBorderRectInParent) — inset by the half-pen to hand
+  // drawSelectionBorder the stroke's center line.
+  const qreal half = UIConstants::Widget::BORDER_WIDTH_SELECTION / 2.0;
+  m_owner->drawSelectionBorder(painter, QRectF(rect()).adjusted(half, half, -half, -half));
 }
 
 // Renders the selection border with pulsing opacity when selected; suppressed
@@ -138,12 +187,12 @@ void ItemWidget::paintEvent(QPaintEvent *event) {
     painter.fillRect(rect(), rowColor);
   }
 
-  // Kartend-f4hva: in grid mode the ring is painted by the
-  // m_selectionBorderOverlay child ABOVE the artwork label — anything drawn
-  // here would vanish under a full-bleed label. Only the list row, which no
-  // child covers, still paints its ring from the parent.
+  // In grid mode the ring is painted by the container-hosted
+  // m_selectionBorderOverlay sibling (Kartend-9gzkl) — anything drawn here
+  // would vanish under a full-bleed label (Kartend-f4hva). Only the list row,
+  // which no child covers, still paints its ring from the parent.
   if (m_isListMode && !glideActive) {
-    drawSelectionBorder(painter);
+    drawSelectionBorder(painter, computeSelectionBorderRect());
   }
 
   // Paint title text with tint color - bypasses broken QLabel stylesheet in
@@ -310,10 +359,10 @@ void ItemWidget::applyDimensions() {
   QString currentName = itemName;
   QString currentPath = filePath;
   setFixedSize(m_itemWidth, m_itemHeight);
-  // Kartend-f4hva: the ring overlay always spans the whole tile.
-  if (m_selectionBorderOverlay) {
-    m_selectionBorderOverlay->setGeometry(0, 0, m_itemWidth, m_itemHeight);
-  }
+  // The artwork label's post-layout position also feeds the ring, but the
+  // label has not been laid out yet here — the ring's event filter on the
+  // label catches that move. This sync covers the paths where nothing moves.
+  syncSelectionRingGeometry();
 
   // List mode: horizontal layout with name, collection, and artwork icon
   if (m_isListMode) {
