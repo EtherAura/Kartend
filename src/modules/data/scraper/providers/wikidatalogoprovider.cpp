@@ -128,7 +128,7 @@ void WikidataLogoProvider::fetchEntity(const Scraper::EntityScrapeTarget &target
                 callback(dataResult.error());
                 return;
               }
-              const WikidataLogoParser::EntityData data = dataResult.value();
+              const WikidataLogoParser::EntityData &data = dataResult.value();
               if (data.logoFilename.isEmpty() && data.description.isEmpty() &&
                   data.manufacturerId.isEmpty() && data.enwikiTitle.isEmpty()) {
                 // The entity resolved but carries nothing usable — art OR
@@ -168,7 +168,7 @@ void WikidataLogoProvider::resolveEntityId(const QStringList &queries, int index
           done(r.error());
           return;
         }
-        const QList<WikidataLogoParser::SearchHit> hits = r.value();
+        const QList<WikidataLogoParser::SearchHit> &hits = r.value();
         const QString picked = WikidataLogoParser::pickEntityForCollection(
             hits, collectionType, queries.at(index), preferCompany);
         if (!picked.isEmpty()) {

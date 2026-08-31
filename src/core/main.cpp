@@ -388,7 +388,7 @@ extern "C" auto main(int argc, char *argv[]) -> int {
         }
         return 2;
       }
-      const QString src = srcResult.value();
+      const QString &src = srcResult.value();
       const QString rawDest =
           parser.isSet(toOption) ? parser.value(toOption) : (QDir::homePath() + "/imported-kart");
       auto destResult = PathUtils::expandAndValidateCliPath(rawDest, QStringLiteral("to"));
@@ -399,7 +399,7 @@ extern "C" auto main(int argc, char *argv[]) -> int {
         }
         return 2;
       }
-      const QString dest = destResult.value();
+      const QString &dest = destResult.value();
       kart::MergeChoice headlessChoice = kart::MergeChoice::Skip;
       if (parser.isSet(onConflictOption)) {
         const QString v = parser.value(onConflictOption).toLower();
@@ -448,7 +448,7 @@ extern "C" auto main(int argc, char *argv[]) -> int {
         }
         return 2;
       }
-      const QString outPath = outResult.value();
+      const QString &outPath = outResult.value();
       SettingsManager headlessSettings(nullptr, nullptr);
       QList<CollectionConfig> collections;
       headlessSettings.loadCollections(collections);

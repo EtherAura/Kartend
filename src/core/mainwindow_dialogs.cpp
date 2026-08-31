@@ -267,7 +267,7 @@ void MainWindow::importThemeInteractive() {
     QMessageBox::warning(this, tr("Import Theme — Failed"), imported.error().message);
     return;
   }
-  const ThemePreset preset = imported.value();
+  const ThemePreset &preset = imported.value();
   const CollectionConfig &target = m_collections[m_currentCollectionIndex];
   const QStringList changes = ThemePresetIO::describeChanges(preset, target);
 

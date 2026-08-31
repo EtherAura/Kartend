@@ -775,7 +775,7 @@ void KartManager::runImport(const QString &kartPath, const QString &destDir,
         Qt::QueuedConnection);
     return;
   }
-  const QString extractDest = destRes.value();
+  const QString &extractDest = destRes.value();
 
   // Un-parented and shared_ptr-owned on purpose — the worker task holds its
   // own reference so a timed-out teardown join can abandon it safely (see
