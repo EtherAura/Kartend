@@ -102,13 +102,16 @@ void ScrapeResultSelectionModel::applyCollectionCheckState(int collectionIndex, 
       m_itemSelectionByCollection[collectionIndex] =
           m_itemsCacheByCollection.value(collectionIndex);
     } else {
-      // Empty entry signals "include all" until the DB lookup lands;
-      // the rebuildItemsList call kicks the DB fetch which populates
-      // both caches once paths arrive. Without that fetch
-      // m_itemSelectionByCollection[idx] would stay empty and the
-      // Scrape button would silently no-op for this collection.
+      // Empty entry signals "include all" until the DB lookup lands; the
+      // prefetch populates both caches once paths arrive. Without that
+      // fetch m_itemSelectionByCollection[idx] would stay empty and the
+      // Scrape button would silently no-op for this collection. Prefetch
+      // ONLY — rebuilding the items pane from here would repoint the
+      // header/placeholder at this collection while the tree's current row
+      // (which gates the completion re-render) still names the one the
+      // user clicked, stranding the pane on "Loading items…" forever.
       m_itemSelectionByCollection.insert(collectionIndex, QStringList());
-      rebuildItemsList(collectionIndex);
+      fetchItemsIntoCache(collectionIndex);
     }
   } else {
     m_itemSelectionByCollection.remove(collectionIndex);
@@ -163,58 +166,13 @@ void ScrapeResultSelectionModel::rebuildItemsList(int collectionIndex) {
   m_itemsHeaderLabel->setText(tr("Items in '%1'").arg(cfg.name));
 
   // Fetch from DB on first display per session; cache for subsequent
-  // tree clicks. Fetch is async — populate cache from the response.
+  // tree clicks. Fetch is async — the completion handler re-renders when
+  // this collection is still the current row.
   if (!m_itemsCacheByCollection.contains(collectionIndex)) {
     m_itemsList->clear();
     auto *placeholder = new QListWidgetItem(tr("Loading items…"), m_itemsList);
     placeholder->setFlags(placeholder->flags() & ~Qt::ItemIsEnabled);
-    // Kartend-m02z: read DB through ctx instead of cached pointer.
-    auto *db = m_ctx ? m_ctx->databaseManager() : nullptr;
-    if (!db || !m_collections) return;
-    CollectionContext context;
-    context.config = cfg;
-    context.currentIndex = collectionIndex;
-    // Guard the model itself (the object whose members + injected widgets this
-    // async handler touches). The model is parented to the host dialog, so it
-    // dies with the dialog — and its borrowed widgets die with it too.
-    QPointer<ScrapeResultSelectionModel> guard(this);
-    auto *connHolder = new QObject(this);
-    QObject::connect(
-        db, &IDatabaseManager::itemsRangeLoaded, connHolder,
-        [guard, connHolder, collectionIndex](
-            int /*offset*/, const QStringList &filePaths, const QHash<QString, QString> &,
-            const QHash<QString, QString> &, const QHash<QString, QString> &,
-            const QHash<QString, int> &fileToCollectionIndex, int requestedCollectionIndex) {
-          // itemsRangeLoaded is a shared signal: when a parent collection is
-          // cascade-checked the dialog has one fetchItemsRange in flight per
-          // collection, and every connected handler sees every emission.
-          // Consume ONLY the result for the collection this fetch asked for —
-          // otherwise this collection's cache gets populated from another
-          // collection's items (the whole-parent-group over-count bug).
-          if (requestedCollectionIndex != collectionIndex) return;
-          connHolder->deleteLater();
-          if (guard.isNull()) return;
-          guard->m_itemsCacheByCollection[collectionIndex] = filePaths;
-          // Retain each item's owning-collection index so a
-          // scrape of a shell parent routes per item rather
-          // than dumping everything on the parent.
-          guard->m_itemOwnerByCollection[collectionIndex] = fileToCollectionIndex;
-          // If the collection was checked before items landed,
-          // populate the inclusion set with the full list now.
-          if (guard->m_itemSelectionByCollection.contains(collectionIndex) &&
-              guard->m_itemSelectionByCollection.value(collectionIndex).isEmpty()) {
-            guard->m_itemSelectionByCollection[collectionIndex] = filePaths;
-          }
-          // Only re-render if the user is still viewing this collection.
-          const auto *cur = guard->m_collectionTree->currentItem();
-          const int curIdx =
-              cur ? guard->m_treeItemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(cur), -1)
-                  : -1;
-          if (curIdx == collectionIndex) {
-            guard->rebuildItemsList(collectionIndex);
-          }
-        });
-    db->fetchItemsRange(context, *m_collections, 0, std::numeric_limits<int>::max(), QString());
+    fetchItemsIntoCache(collectionIndex);
     return;
   }
 
@@ -233,8 +191,15 @@ void ScrapeResultSelectionModel::rebuildItemsList(int collectionIndex) {
 
   QSignalBlocker b(m_itemsList);
   m_itemsList->clear();
+  const QHash<QString, QString> &names = m_itemNamesByCollection.value(collectionIndex);
   for (const QString &path : paths) {
-    auto *row = new QListWidgetItem(QFileInfo(path).fileName(), m_itemsList);
+    // Prefer the DB display name (what the grid shows); raw filename only
+    // for paths the fetch didn't name.
+    QString label = names.value(path);
+    if (label.isEmpty()) {
+      label = QFileInfo(path).fileName();
+    }
+    auto *row = new QListWidgetItem(label, m_itemsList);
     row->setFlags(row->flags() | Qt::ItemIsUserCheckable);
     row->setData(Qt::UserRole, path);
     if (!collectionChecked) {
@@ -244,6 +209,66 @@ void ScrapeResultSelectionModel::rebuildItemsList(int collectionIndex) {
       row->setCheckState(includedSet.contains(path) ? Qt::Checked : Qt::Unchecked);
     }
   }
+}
+
+void ScrapeResultSelectionModel::fetchItemsIntoCache(int collectionIndex) {
+  if (!m_collections || collectionIndex < 0 || collectionIndex >= m_collections->size()) {
+    return;
+  }
+  if (m_itemsCacheByCollection.contains(collectionIndex) ||
+      m_pendingItemFetches.contains(collectionIndex)) {
+    return;
+  }
+  // Kartend-m02z: read DB through ctx instead of cached pointer.
+  auto *db = m_ctx ? m_ctx->databaseManager() : nullptr;
+  if (!db) return;
+  m_pendingItemFetches.insert(collectionIndex);
+  CollectionContext context;
+  context.config = (*m_collections)[collectionIndex];
+  context.currentIndex = collectionIndex;
+  // Guard the model itself (the object whose members + injected widgets this
+  // async handler touches). The model is parented to the host dialog, so it
+  // dies with the dialog — and its borrowed widgets die with it too.
+  QPointer<ScrapeResultSelectionModel> guard(this);
+  auto *connHolder = new QObject(this);
+  QObject::connect(
+      db, &IDatabaseManager::itemsRangeLoaded, connHolder,
+      [guard, connHolder, collectionIndex](
+          int /*offset*/, const QStringList &filePaths, const QHash<QString, QString> &fileNames,
+          const QHash<QString, QString> &, const QHash<QString, QString> &,
+          const QHash<QString, int> &fileToCollectionIndex, int requestedCollectionIndex) {
+        // itemsRangeLoaded is a shared signal: when a parent collection is
+        // cascade-checked the dialog has one fetchItemsRange in flight per
+        // collection, and every connected handler sees every emission.
+        // Consume ONLY the result for the collection this fetch asked for —
+        // otherwise this collection's cache gets populated from another
+        // collection's items (the whole-parent-group over-count bug).
+        if (requestedCollectionIndex != collectionIndex) return;
+        connHolder->deleteLater();
+        if (guard.isNull()) return;
+        guard->m_pendingItemFetches.remove(collectionIndex);
+        guard->m_itemsCacheByCollection[collectionIndex] = filePaths;
+        guard->m_itemNamesByCollection[collectionIndex] = fileNames;
+        // Retain each item's owning-collection index so a
+        // scrape of a shell parent routes per item rather
+        // than dumping everything on the parent.
+        guard->m_itemOwnerByCollection[collectionIndex] = fileToCollectionIndex;
+        // If the collection was checked before items landed,
+        // populate the inclusion set with the full list now.
+        if (guard->m_itemSelectionByCollection.contains(collectionIndex) &&
+            guard->m_itemSelectionByCollection.value(collectionIndex).isEmpty()) {
+          guard->m_itemSelectionByCollection[collectionIndex] = filePaths;
+        }
+        // Only re-render if the user is still viewing this collection.
+        const auto *cur = guard->m_collectionTree->currentItem();
+        const int curIdx =
+            cur ? guard->m_treeItemToCollectionIndex.value(const_cast<QTreeWidgetItem *>(cur), -1)
+                : -1;
+        if (curIdx == collectionIndex) {
+          guard->rebuildItemsList(collectionIndex);
+        }
+      });
+  db->fetchItemsRange(context, *m_collections, 0, std::numeric_limits<int>::max(), QString());
 }
 
 void ScrapeResultSelectionModel::onItemCheckChanged(QListWidgetItem *item) {

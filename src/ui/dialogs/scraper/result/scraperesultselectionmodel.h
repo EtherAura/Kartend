@@ -15,6 +15,7 @@
 
 #include <QHash>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -86,6 +87,15 @@ public slots:
   void onItemCheckChanged(QListWidgetItem *item);
 
 private:
+  /// Dispatch the async DB items fetch for @p collectionIndex into the
+  /// caches, deduped by m_pendingItemFetches. Deliberately touches NO view
+  /// state: the checkbox path prefetches through here so checking a
+  /// collection can't hijack the items pane away from the row the user is
+  /// viewing (whose completion re-render would then never fire, leaving the
+  /// pane stuck on the loading placeholder). The completion handler
+  /// re-renders only when the fetched collection is the current tree row.
+  void fetchItemsIntoCache(int collectionIndex);
+
   // Injected view widgets (borrowed; owned by the host dialog). Null until
   // setView() — the model's methods run only after the unified panel is built.
   QTreeWidget *m_collectionTree = nullptr;
@@ -106,6 +116,13 @@ private:
   /// clicks a collection in the tree (or via DB fetch). Cached so
   /// re-clicking a collection doesn't re-hit the database.
   QHash<int, QStringList> m_itemsCacheByCollection;
+  /// Per-collection path → display name, from the same itemsRangeLoaded
+  /// fileNames payload the grid pipeline renders from. The items list used
+  /// to ignore it and show raw QFileInfo::fileName() ("240p Test
+  /// Suite.nes") while the grid showed the item's name — the list now
+  /// prefers this, falling back to the filename for paths the fetch didn't
+  /// name (e.g. the preCheckSingleItem seed).
+  QHash<int, QHash<QString, QString>> m_itemNamesByCollection;
   /// Per viewed-collection: item path → the collection index that
   /// actually owns that item. For a plain collection every item maps
   /// to the collection itself; for a "shell" parent that displays its
@@ -117,6 +134,10 @@ private:
   QHash<int, QHash<QString, int>> m_itemOwnerByCollection;
   /// Tree row → collection index map, populated when the tree is built.
   QHash<QTreeWidgetItem *, int> m_treeItemToCollectionIndex;
+  /// Collections with an items fetch in flight — keeps a row click while a
+  /// checkbox-triggered prefetch is pending from dispatching a duplicate
+  /// DB query (both would answer; the second write is wasted work).
+  QSet<int> m_pendingItemFetches;
 };
 
 #endif // SCRAPERESULTSELECTIONMODEL_H

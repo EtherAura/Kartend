@@ -77,6 +77,7 @@ private slots:
   void onItemCheckChangedRemovesOnUncheck();
   void setAllItemsCheckedTogglesEnabledRows();
   void uncheckingCollectionClearsItsSelection();
+  void checkingOtherCollectionDoesNotHijackItemsPane();
 
   // Real-SQLite: a real DatabaseManager pages seeded items via fetchItemsRange.
   void realDbFetchSeedsSelectionThenDedups();
@@ -207,6 +208,34 @@ void TestScrapeResultSelectionModel::uncheckingCollectionClearsItsSelection() {
   QVERIFY(!m_model->itemSelectionByCollection().contains(2));
 }
 
+void TestScrapeResultSelectionModel::checkingOtherCollectionDoesNotHijackItemsPane() {
+  // Regression: with collection C on screen, CHECKING collection A's box
+  // used to rebuild the items pane for A — repointing the header and
+  // replacing the list with the "Loading items…" placeholder — while the
+  // tree's current row stayed on C. The async completion only re-renders
+  // for the current row, so the placeholder never resolved and the pane
+  // was stuck for the rest of the session. Checking must seed A's
+  // inclusion state and prefetch, but leave the pane on C.
+  m_model->populateCollectionTree();
+  m_model->preCheckSingleItem(2, QStringLiteral("/m/c1.mp4"));
+  QCOMPARE(m_list->count(), 1); // pane shows collection C's row
+
+  QTreeWidgetItem *a = rowForIndex(m_tree, m_model, 0);
+  QVERIFY(a != nullptr);
+  a->setCheckState(0, Qt::Checked);
+  m_model->onCollectionCheckChanged(a, 0);
+
+  // Pane and header still belong to C — no placeholder, no header swap.
+  QCOMPARE(m_list->count(), 1);
+  QCOMPARE(m_list->item(0)->data(Qt::UserRole).toString(), QStringLiteral("/m/c1.mp4"));
+  QVERIFY(m_list->item(0)->flags() & Qt::ItemIsEnabled);
+  QVERIFY(m_header->text().contains(QStringLiteral("'C'")));
+  // A (and its cascade-checked child) still got their inclusion entries —
+  // the "include all once items land" sentinel.
+  QVERIFY(m_model->itemSelectionByCollection().contains(0));
+  QVERIFY(m_model->itemSelectionByCollection().contains(1));
+}
+
 void TestScrapeResultSelectionModel::realDbFetchSeedsSelectionThenDedups() {
   // End-to-end against a real SQLite DatabaseManager: checking a collection
   // drives the async fetchItemsRange, whose itemsRangeLoaded the model caches
@@ -299,6 +328,16 @@ void TestScrapeResultSelectionModel::realDbFetchSeedsSelectionThenDedups() {
   QCOMPARE(selected, expected);
   QCOMPARE(model.totalCheckedItemCount(), static_cast<int>(paths.size()));
   QCOMPARE(list.count(), static_cast<int>(paths.size()));
+
+  // Rows render the DB display name (what the grid shows), not the raw
+  // filename: the seeded name column holds the completeBaseName, so "a",
+  // never "a.mp4".
+  QStringList labels;
+  for (int i = 0; i < list.count(); ++i) {
+    labels << list.item(i)->text();
+  }
+  labels.sort();
+  QCOMPARE(labels, QStringList({QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")}));
 
   // Per-item dedup on a real row: uncheck removes it; re-check twice keeps one.
   QListWidgetItem *itemRow = list.item(0);

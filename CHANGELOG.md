@@ -41,6 +41,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   found". Entries flagged not-a-game that still carry a real title are
   accepted as before, and interactive picking is unchanged.
 
+- **The scraper dialog's items pane no longer gets stuck on "Loading
+  items…".** Ticking a collection's checkbox while viewing another
+  collection's items repointed the pane at the newly ticked collection
+  and left it on a loading placeholder that never resolved — for the
+  rest of the session. Ticking now loads the collection's items in the
+  background while the pane stays on the row being viewed. The pane
+  also shows each item's display name, as the grid does, instead of the
+  raw filename.
+
 ## [0.0.19] - 2026-08-30
 
 ### Added
