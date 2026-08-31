@@ -4954,7 +4954,7 @@ Please check that the file path is valid.</translation>
 <context>
     <name>FirstRunWizard</name>
     <message>
-        <location filename="../src/ui/dialogs/firstrunwizard.cpp" line="+35"/>
+        <location filename="../src/ui/dialogs/firstrunwizard.cpp" line="+36"/>
         <source>Welcome to Kartend</source>
         <translation>Welcome to Kartend</translation>
     </message>
@@ -4969,20 +4969,43 @@ Please check that the file path is valid.</translation>
         <translation>Let&apos;s get your library set up.</translation>
     </message>
     <message>
+        <location line="+7"/>
+        <source>The next step asks for one folder to scan as a new collection. </source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>The next step asks for one folder to scan as your first collection. </source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Kartend organizes media collections — videos, audio, reference documents, or anything else you keep in folders — and gives them a browseable grid with artwork, metadata, and quick launch actions.
+
+</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <location line="+5"/>
+        <source>You can add more, configure launchers, and tweak appearance later from the Settings dialog.
+
+Click Next to continue, or Cancel to skip — you can re-run this wizard any time from Help → Setup Wizard…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Kartend organizes media collections — videos, audio, reference documents, or anything else you keep in folders — and gives them a browseable grid with artwork, metadata, and quick launch actions.
 
 The next step asks for one folder to scan as your first collection. You can add more, configure launchers, and tweak appearance later from the Settings dialog.
 
 Click Next to continue, or Cancel to skip — you can re-run this wizard any time from Help → Setup Wizard…</source>
-        <translation>Kartend organizes media collections — videos, audio, reference documents, or anything else you keep in folders — and gives them a browseable grid with artwork, metadata, and quick launch actions.
+        <translation type="vanished">Kartend organizes media collections — videos, audio, reference documents, or anything else you keep in folders — and gives them a browseable grid with artwork, metadata, and quick launch actions.
 
 The next step asks for one folder to scan as your first collection. You can add more, configure launchers, and tweak appearance later from the Settings dialog.
 
 Click Next to continue, or Cancel to skip — you can re-run this wizard any time from Help → Setup Wizard…</translation>
     </message>
     <message>
-        <location line="+102"/>
+        <location line="+99"/>
         <source>All set</source>
         <translation>All set</translation>
     </message>
@@ -7638,7 +7661,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation>Ctrl+4</translation>
     </message>
     <message>
-        <location filename="../src/core/mainwindow.cpp" line="+558"/>
+        <location filename="../src/core/mainwindow.cpp" line="+572"/>
         <source>Import Kart</source>
         <translation>Import Kart</translation>
     </message>
@@ -7653,7 +7676,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation>&lt;h3&gt;%1 &lt;span style=&apos;font-size: medium; font-weight: normal;&apos;&gt;v%2&lt;/span&gt;&lt;/h3&gt;&lt;p&gt;Founded by %3&lt;/p&gt;&lt;p&gt;Build Date: %4&lt;/p&gt;</translation>
     </message>
     <message>
-        <location line="+58"/>
+        <location line="+65"/>
         <source>Create First Collection</source>
         <translation>Create First Collection</translation>
     </message>
@@ -7960,9 +7983,14 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>MediaFolderPage</name>
     <message>
-        <location filename="../src/ui/dialogs/firstrunwizard.cpp" line="-73"/>
+        <location filename="../src/ui/dialogs/firstrunwizard.cpp" line="-75"/>
         <source>Pick a media folder</source>
         <translation>Pick a media folder</translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Kartend will scan this folder as a new collection.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+1"/>
@@ -8317,7 +8345,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation>Choose a child collection from the sidebar.</translation>
     </message>
     <message>
-        <location line="+4"/>
+        <location line="+3"/>
         <source>Add files to the collection&apos;s media directory.</source>
         <translation>Add files to the collection&apos;s media directory.</translation>
     </message>
@@ -9452,9 +9480,13 @@ The app will still load, but please fix these — collections that share an iden
         <translation>Media preset:</translation>
     </message>
     <message>
-        <location line="+71"/>
+        <location line="+77"/>
+        <source>Latest result</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Currently scraping</source>
-        <translation>Currently scraping</translation>
+        <translation type="vanished">Currently scraping</translation>
     </message>
     <message>
         <location line="+20"/>
@@ -9537,7 +9569,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation>Collection: %1 — last scraped: %2</translation>
     </message>
     <message>
-        <location line="+90"/>
+        <location line="+96"/>
         <source>Scrape stopped — the provider&apos;s request quota is exhausted.</source>
         <translation>Scrape stopped — the provider&apos;s request quota is exhausted.</translation>
     </message>
@@ -9562,12 +9594,12 @@ The app will still load, but please fix these — collections that share an iden
         <translation>ScreenScraper: %1 / %2 requests today · resets %3</translation>
     </message>
     <message>
-        <location line="+59"/>
+        <location line="+52"/>
         <source>Items %1/%2 · Elapsed %3 · ETA %4 · %5</source>
         <translation>Items %1/%2 · Elapsed %3 · ETA %4 · %5</translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+20"/>
         <source>Scraped %1 items, %2 media  ·  Skipped %3  ·  Not found %4  ·  Errors %5</source>
         <translation>Scraped %1 items, %2 media  ·  Skipped %3  ·  Not found %4  ·  Errors %5</translation>
     </message>
@@ -9643,12 +9675,12 @@ The app will still load, but please fix these — collections that share an iden
         <translation>Select a collection to see its items.</translation>
     </message>
     <message>
-        <location line="+76"/>
+        <location line="+79"/>
         <source>Items in &apos;%1&apos;</source>
         <translation>Items in &apos;%1&apos;</translation>
     </message>
     <message>
-        <location line="+6"/>
+        <location line="+7"/>
         <source>Loading items…</source>
         <translation>Loading items…</translation>
     </message>
@@ -9656,26 +9688,25 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>ScraperController</name>
     <message>
-        <location filename="../src/core/scrapercontroller.cpp" line="+105"/>
-        <location line="+74"/>
+        <location filename="../src/core/scrapercontroller.cpp" line="+106"/>
+        <location line="+68"/>
         <location line="+7"/>
         <source>Scraper</source>
         <translation>Scraper</translation>
     </message>
     <message>
-        <location line="-81"/>
+        <location line="-75"/>
         <source>Database is not ready.</source>
         <translation>Database is not ready.</translation>
     </message>
     <message>
-        <location line="+53"/>
         <source>Scrape complete.
 
 Scraped: %1
 Skipped: %2
 Not found: %3
 Errors: %4</source>
-        <translation>Scrape complete.
+        <translation type="vanished">Scrape complete.
 
 Scraped: %1
 Skipped: %2
@@ -9683,14 +9714,13 @@ Not found: %3
 Errors: %4</translation>
     </message>
     <message>
-        <location line="+7"/>
         <source>First failures:
 %1</source>
-        <translation>First failures:
+        <translation type="vanished">First failures:
 %1</translation>
     </message>
     <message>
-        <location line="+251"/>
+        <location line="+305"/>
         <source>Resume scrape?</source>
         <translation>Resume scrape?</translation>
     </message>
