@@ -215,9 +215,11 @@ signals:
   /// Emitted after a unified-flow scrape completes (auto or
   /// interactive) so the caller can refresh the grid / details pane /
   /// artwork cache. Sent before the dialog closes itself; the caller
-  /// can show a summary box.
-  void unifiedScrapeFinished(int totalScraped, int totalSkipped, int totalErrors, int totalNotFound,
-                             const QStringList &firstFailures);
+  /// can show a summary box. Carries the run's full final Summary so the
+  /// caller's report draws from the same authoritative counts as the
+  /// dialog's own counts label — the previous five loose ints dropped the
+  /// media accounting entirely, leaving a zero-media run unexplained.
+  void unifiedScrapeFinished(const Scraper::ScraperService::Summary &summary);
 
 protected:
   /// In Unified mode we want X-click to behave like the Close button

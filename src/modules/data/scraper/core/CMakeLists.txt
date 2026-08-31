@@ -9,6 +9,7 @@ target_sources(kartend_data PRIVATE
   scrapependingstate.cpp
   scrapeskipdecision.cpp
   scraperservice.cpp
+  scrapesummaryformat.cpp
   scrapewriteworker.cpp
   scrapepersistence.cpp
   scrapeassetdedup.cpp
@@ -27,6 +28,7 @@ target_sources(kartend_data PRIVATE
   scrapedownloaddispatcher.h
   scrapeassetdedup.h
   scraperservice.h
+  scrapesummaryformat.h
   scrapewriteworker.h
   scrapepersistence.h
   scrapelogging.h

@@ -41,6 +41,7 @@
 #include "scrapepersistence.h"
 #include "scraperesultdialog.h"
 #include "scraperservice.h"
+#include "scrapesummaryformat.h"
 #include "scrollmanager.h"
 
 namespace ScraperControllerInternal {
@@ -123,8 +124,7 @@ ScrapeResultDialog *ScraperController::prepareScraperDialog() {
     // controller still gets its own summary / grid refresh.
     QObject::connect(
         m_scraperDialog, &ScrapeResultDialog::unifiedScrapeFinished, this,
-        [this](int scraped, int skipped, int errors, int notFound,
-               const QStringList &firstFailures) {
+        [this](const Scraper::ScraperService::Summary &summary) {
           DetailsPaneManager *dpm =
               m_ctx.getDetailsPaneManager ? m_ctx.getDetailsPaneManager() : nullptr;
           ScrollManager *scroll = m_ctx.getScrollManager ? m_ctx.getScrollManager() : nullptr;
@@ -154,16 +154,11 @@ ScrapeResultDialog *ScraperController::prepareScraperDialog() {
           // rather than on scrapeFinished because that handler runs BEFORE the
           // dialog re-emits, and would clear the flag before this reads it.
           if (std::exchange(m_backgroundEntityRunActive, false)) return;
-          QString text =
-              tr("Scrape complete.\n\nScraped: %1\nSkipped: %2\nNot found: %3\nErrors: %4")
-                  .arg(scraped)
-                  .arg(skipped)
-                  .arg(notFound)
-                  .arg(errors);
-          if (!firstFailures.isEmpty()) {
-            text += QStringLiteral("\n\n") +
-                    tr("First failures:\n%1").arg(firstFailures.join(QChar('\n')));
-          }
+          // Built from the run's final Summary — the same source as the
+          // dialog's counts label — so the two can never disagree, and the
+          // media outcome (written / failed / provider-offered-nothing) is
+          // always named rather than silently reading "0 media".
+          const QString text = Scraper::SummaryFormat::completionText(summary);
           QWidget *parentWindow = m_ctx.getParentWindow ? m_ctx.getParentWindow() : nullptr;
           // The unified scrape keeps running while its dialog is hidden, so
           // completion can land while the user is inside an unrelated modal

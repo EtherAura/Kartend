@@ -63,6 +63,7 @@
 #include "pathutils.h"
 #include "scraperesultdialog.h"
 #include "scraperservice.h"
+#include "scrapesummaryformat.h"
 
 using Scraper::ScraperService;
 
@@ -346,6 +347,8 @@ private slots:
   void errorDetailsRescrapeRebuildsEntityFailureAsEntityJob();
   void errorDetailsWithoutFailuresOmitsRescrapeButton();
   void quotaExhaustedFinishShowsResumeHint();
+  void finishRefreshesCountsLabelFromFinalSummary();
+  void completionTextNamesTheMediaOutcome();
   // Kartend-ckepd.6/.5: provider-aware entity-scrape launch (startEntityScrape).
   void startEntityScrapePlatformProviderEnqueuesPlatformJobEmptyIdentity();
   void startEntityScrapeCollectionProviderEnqueuesCollectionJobWithUuid();
@@ -803,8 +806,10 @@ void TestScrapeResultDialogUnified::interactiveApplyPersistsAdvancesAndStripsMet
   QCOMPARE(service.state(), ScraperService::State::Idle);
   QCOMPARE(service.summary().scraped, 2);
   QCOMPARE(finishedSpy.count(), 1);
-  QCOMPARE(finishedSpy.first().at(0).toInt(), 2); // totalScraped
-  QCOMPARE(finishedSpy.first().at(2).toInt(), 0); // totalErrors
+  const auto finishedSummary =
+      qvariant_cast<Scraper::ScraperService::Summary>(finishedSpy.first().at(0));
+  QCOMPARE(finishedSummary.scraped, 2);
+  QCOMPARE(finishedSummary.errors, 0);
   auto *scrapeButton = widgetWithText<QPushButton>(dlg, QStringLiteral("Scrape"));
   QVERIFY(scrapeButton);
   QVERIFY(scrapeButton->isVisibleTo(&dlg));
@@ -1095,6 +1100,95 @@ void TestScrapeResultDialogUnified::quotaExhaustedFinishShowsResumeHint() {
   QVERIFY(scrapeButton);
   QVERIFY(scrapeButton->isVisibleTo(&dlg));
   QVERIFY(scrapeButton->isEnabled());
+}
+
+void TestScrapeResultDialogUnified::finishRefreshesCountsLabelFromFinalSummary() {
+  // Regression: the counts label froze on the last live tick — the tick
+  // timer stops at finish and updateUnifiedProgressLabel bails once the
+  // service is idle — so it could disagree with the completion popup (fed
+  // from the final summary) by whatever landed in the run's last second.
+  // The finish handler must re-render the label from the same final
+  // summary the unifiedScrapeFinished signal carries.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QList<CollectionConfig> collections = makeCollections(tmp.path());
+  auto provider = std::make_shared<ScriptedProvider>();
+  provider->lookupMode = ScriptedProvider::LookupMode::Error; // 404 for notfound-named items
+
+  ScraperService service;
+  ScraperService::Context sctx;
+  sctx.collections = &collections;
+  sctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  service.setContext(sctx);
+
+  ScrapeResultDialog dlg(nullptr, {});
+  ScrapeResultDialog::ScraperContext dctx;
+  dctx.collections = &collections;
+  dctx.providerBuilder = sctx.providerBuilder;
+  dlg.setScraperContext(dctx);
+  dlg.setScraperService(&service);
+  dlg.startUnifiedScrape();
+  dlg.show();
+  QSignalSpy finishedSpy(&dlg, &ScrapeResultDialog::unifiedScrapeFinished);
+
+  // Two provider misses — both land in notFound, the last within the run's
+  // final instant (no live tick ever sees them).
+  service.startScrape(
+      {makeJob(0, collections[0].name,
+               {QStringLiteral("/m/notfound1.bin"), QStringLiteral("/m/notfound2.bin")})},
+      ScraperService::Mode::Interactive, {}, /*writeMetadata=*/true);
+  QTRY_COMPARE(finishedSpy.count(), 1);
+
+  const auto finalSummary =
+      qvariant_cast<Scraper::ScraperService::Summary>(finishedSpy.first().at(0));
+  const int finalNotFound = finalSummary.notFound;
+  QCOMPARE(finalNotFound, 2);
+  QLabel *counts = labelContaining(dlg, QStringLiteral("Not found"));
+  QVERIFY(counts);
+  QVERIFY2(
+      counts->text().contains(QStringLiteral("Not found %1").arg(finalNotFound)),
+      qPrintable(
+          QStringLiteral("counts label out of sync with final summary: %1").arg(counts->text())));
+}
+
+void TestScrapeResultDialogUnified::completionTextNamesTheMediaOutcome() {
+  // The completion box is built from the final Summary and must always name
+  // the media outcome — a metadata-only success used to read "0 media" with
+  // no reason anywhere (field report: every artwork type checked, zero
+  // media, zero errors, no explanation).
+  Scraper::ScraperService::Summary s;
+  s.scraped = 7;
+  s.notFound = 5;
+  s.errors = 2;
+
+  // Zero media, zero failures, metadata landed → the provider-offered-
+  // nothing wording, so it can't be misread as a download problem.
+  QString text = Scraper::SummaryFormat::completionText(s);
+  QVERIFY(text.contains(QStringLiteral("Scraped: 7")));
+  QVERIFY(text.contains(QStringLiteral("Not found: 5")));
+  QVERIFY(text.contains(QStringLiteral("Media written: 0")));
+  QVERIFY(text.contains(QStringLiteral("offered no media")));
+
+  // Recorded fetch/write failures → the failure counts, not the
+  // offered-nothing wording.
+  s.mediaFetchFailures = 3;
+  s.mediaWriteFailures = 1;
+  text = Scraper::SummaryFormat::completionText(s);
+  QVERIFY(text.contains(QStringLiteral("Media failures: 3 fetch, 1 write")));
+  QVERIFY(!text.contains(QStringLiteral("offered no media")));
+
+  // A healthy media run: written count, no failure or offered-nothing lines.
+  s.mediaFetchFailures = 0;
+  s.mediaWriteFailures = 0;
+  s.mediaWritten = 12;
+  s.firstFailures = {QStringLiteral("a.bin: boom")};
+  text = Scraper::SummaryFormat::completionText(s);
+  QVERIFY(text.contains(QStringLiteral("Media written: 12")));
+  QVERIFY(!text.contains(QStringLiteral("Media failures")));
+  QVERIFY(!text.contains(QStringLiteral("offered no media")));
+  QVERIFY(text.contains(QStringLiteral("a.bin: boom")));
 }
 
 void TestScrapeResultDialogUnified::

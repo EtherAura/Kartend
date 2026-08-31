@@ -50,6 +50,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   also shows each item's display name, as the grid does, instead of the
   raw filename.
 
+- **Scrape completion numbers agree with each other and account for
+  media.** The live counts line froze on its last mid-run update, so it
+  could disagree with the completion popup by whatever landed in the
+  run's final second; both now draw from the run's final summary. The
+  completion box also always names the media outcome — files written,
+  fetch/write failure counts, or a note that the provider offered no
+  media matching the selected artwork types — where a zero-media run
+  previously ended with no explanation at all. The live panel formerly
+  titled "Currently scraping" is now "Latest result", which is what it
+  actually shows.
+
 ## [0.0.19] - 2026-08-30
 
 ### Added

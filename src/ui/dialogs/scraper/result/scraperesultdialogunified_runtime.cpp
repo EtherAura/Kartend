@@ -247,12 +247,18 @@ void ScrapeResultDialogUnified::onServiceScrapeFinished(const Scraper::ScraperSe
   setUnifiedSetupEnabled(true);
   if (m_dlg->m_scrapeButton) m_dlg->m_scrapeButton->show();
   if (m_dlg->m_applyButton) m_dlg->m_applyButton->hide();
+  // Re-render the counts label from the FINAL summary: the live tick
+  // stopped above and updateUnifiedProgressLabel bails once the service is
+  // idle, so the label would otherwise keep the last mid-run tick's numbers
+  // and disagree with the completion popup (which reports these finals) by
+  // whatever landed in the run's last second — entity outcomes and
+  // not-found bursts at the queue tail especially.
+  setUnifiedCountsLabel(s);
   // setUnifiedSetupEnabled(true) hid the counts label, but when the run
   // recorded errors that label's "Errors N" link is the ONLY entry point to
   // the failure list and the re-queue affordance (Kartend-jjjo5) — and the
   // post-run idle state is precisely when a re-queue can actually start.
-  // Keep it visible (it still holds the final counts), same pattern as the
-  // quota re-show below.
+  // Keep it visible, same pattern as the quota re-show below.
   if (s.errors > 0) m_dlg->m_unifiedCountsLabel->show();
   // Quota-exhausted stop: setUnifiedSetupEnabled(true) hid the progress
   // label, but the user needs to see WHY the scrape ended early — and
@@ -275,7 +281,7 @@ void ScrapeResultDialogUnified::onServiceScrapeFinished(const Scraper::ScraperSe
     m_dlg->m_unifiedCurrentLabel->setText(msg);
     m_dlg->m_unifiedCurrentLabel->show();
   }
-  emit m_dlg->unifiedScrapeFinished(s.scraped, s.skipped, s.errors, s.notFound, s.firstFailures);
+  emit m_dlg->unifiedScrapeFinished(s);
 }
 
 void ScrapeResultDialogUnified::onServiceScrapePaused() {
@@ -306,17 +312,10 @@ void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
   int total = 0;
   int done = 0;
   qint64 startMs = 0;
-  int scraped = 0;
-  int skipped = 0;
-  int errors = 0;
   if (m_dlg->m_service && m_dlg->m_service->isActive()) {
     total = m_dlg->m_service->totalItems();
     done = m_dlg->m_service->itemsCompleted();
     startMs = m_dlg->m_service->startedAtUnixMs();
-    const auto s = m_dlg->m_service->summary();
-    scraped = s.scraped;
-    skipped = s.skipped;
-    errors = s.errors;
   }
   if (total <= 0) return;
   m_dlg->m_unifiedProgressBar->setRange(0, total);
@@ -355,21 +354,25 @@ void ScrapeResultDialogUnified::updateUnifiedProgressLabel() {
           .arg(done)
           .arg(total)
           .arg(ScrapeResultDialog::formatDuration(elapsedMs), etaStr, rateStr));
-  const int mediaWritten = m_dlg->m_service ? m_dlg->m_service->summary().mediaWritten : 0;
-  // Items the provider had no entry for (HTTP 404 / no match) — shown apart
-  // from Errors so an unmatched-but-fine library reads 0 errors (Kartend-e8aag).
-  const int notFound = m_dlg->m_service ? m_dlg->m_service->summary().notFound : 0;
-  // Render the error count as a clickable link when there are errors,
-  // so the user can open the recorded failure messages. Substituted
-  // into the %5 slot rather than baked into the tr() string so the
-  // translatable text stays markup-free.
+  if (m_dlg->m_service) {
+    setUnifiedCountsLabel(m_dlg->m_service->summary());
+  }
+}
+
+void ScrapeResultDialogUnified::setUnifiedCountsLabel(const Scraper::ScraperService::Summary &s) {
+  // "Not found" = items the provider had no entry for (HTTP 404 / no match)
+  // — shown apart from Errors so an unmatched-but-fine library reads 0
+  // errors (Kartend-e8aag). Render the error count as a clickable link when
+  // there are errors, so the user can open the recorded failure messages.
+  // Substituted into the %5 slot rather than baked into the tr() string so
+  // the translatable text stays markup-free.
   const QString errorsField =
-      errors > 0 ? QStringLiteral("<a href=\"kartend:scrape-errors\">%1</a>").arg(errors)
-                 : QString::number(errors);
+      s.errors > 0 ? QStringLiteral("<a href=\"kartend:scrape-errors\">%1</a>").arg(s.errors)
+                   : QString::number(s.errors);
   m_dlg->m_unifiedCountsLabel->setText(
       tr("Scraped %1 items, %2 media  ·  Skipped %3  ·  Not found %4  ·  Errors %5")
-          .arg(QString::number(scraped), QString::number(mediaWritten), QString::number(skipped),
-               QString::number(notFound), errorsField));
+          .arg(QString::number(s.scraped), QString::number(s.mediaWritten),
+               QString::number(s.skipped), QString::number(s.notFound), errorsField));
 }
 
 void ScrapeResultDialogUnified::showScrapeErrorDetails() {

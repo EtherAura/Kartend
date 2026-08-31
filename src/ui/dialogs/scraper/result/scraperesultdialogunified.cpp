@@ -444,7 +444,13 @@ QGroupBox *ScrapeResultDialogUnified::buildLiveMetadataPanel() {
   // AND every row has the same five-chip rhythm. Wide fields
   // (Description) span all value cols. Custom fields container
   // also spans the row.
-  m_dlg->m_liveMetadataGroup = new QGroupBox(tr("Currently scraping"), m_dlg->m_unifiedPage);
+  // "Latest result", not "Currently scraping": these fields are populated on
+  // COMPLETION (applyScrapedItemToLive), so during a stretch with no
+  // successful completions the panel legitimately holds the previous
+  // collection's last result — with entity jobs queued ahead of item jobs,
+  // even another collection's entity. Titling it "Currently scraping" made
+  // that read as the progress display lagging the queue.
+  m_dlg->m_liveMetadataGroup = new QGroupBox(tr("Latest result"), m_dlg->m_unifiedPage);
   // Kartend-kggn8: hand the ticker the group it animates instead of it reaching
   // back through a friend pointer.
   m_dlg->m_marqueeTicker->setLiveMetadataGroup(m_dlg->m_liveMetadataGroup);

@@ -104,6 +104,14 @@ public:
   void resetRunState();
   void setUnifiedSetupEnabled(bool enabled);
   void updateUnifiedProgressLabel();
+  /// Render @p s into the counts label. Split out of
+  /// updateUnifiedProgressLabel so onServiceScrapeFinished can re-render
+  /// from the FINAL summary: the live tick stops at finish and
+  /// updateUnifiedProgressLabel bails once the service is idle, so without
+  /// this the label freezes on the last mid-run tick and can disagree with
+  /// the completion popup (which reports the final numbers) by however
+  /// many outcomes landed in the run's last second.
+  void setUnifiedCountsLabel(const Scraper::ScraperService::Summary &s);
   void finishCurrentApply();
   void applyScrapedItemToLive(const Scraper::ScrapedItem &item);
   void populateCustomFields(const QHash<QString, QString> &fields);
