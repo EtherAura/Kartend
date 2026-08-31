@@ -38,7 +38,10 @@ public:
     CollectionConfig pickedConfig;
   };
 
-  explicit FirstRunWizard(QWidget *parent = nullptr);
+  /// @p hasExistingCollections varies the copy: the wizard doubles as the
+  /// advertised "add another collection" path (Help → Setup Wizard…), where
+  /// "your first collection" would be wrong.
+  explicit FirstRunWizard(bool hasExistingCollections, QWidget *parent = nullptr);
 
   [[nodiscard]] Result result() const { return m_result; }
 
@@ -48,6 +51,7 @@ private:
   void buildDonePage();
 
   Result m_result;
+  bool m_hasExistingCollections = false;
 };
 
 #endif // FIRSTRUNWIZARD_H

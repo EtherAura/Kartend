@@ -107,7 +107,9 @@ public:
     bool accepted = false;
     CollectionConfig pickedConfig;
   };
-  [[nodiscard]] FirstRunWizardResult runFirstRunWizard();
+  /// @p hasExistingCollections varies the wizard copy for the re-run path
+  /// (Help → Setup Wizard…), where "your first collection" would be wrong.
+  [[nodiscard]] FirstRunWizardResult runFirstRunWizard(bool hasExistingCollections);
 
   /// Returns the factory closure SettingsDialogController uses to
   /// construct + signal-wire SettingsDialog. The factory's body lives

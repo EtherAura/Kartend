@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   background up to a minimum contrast, and stay exactly as dim as before
   on themes where they were already legible.
 
+- **Re-running the Setup Wizard no longer promises "your first
+  collection."** The wizard doubles as the advertised way to add more
+  collections (Help → Setup Wizard…), but its welcome text and
+  folder-page subtitle read as if the library were empty. With at least
+  one collection configured they now say "a new collection"; the true
+  first run keeps the original wording.
+
 ## [0.0.19] - 2026-08-30
 
 ### Added

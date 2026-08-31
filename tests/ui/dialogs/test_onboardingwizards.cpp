@@ -26,6 +26,7 @@ private slots:
   void firstRun_mediaPageGatesNextOnRealDirectory();
   void firstRun_finishPopulatesTrimmedResult();
   void firstRun_cancelLeavesResultUnaccepted();
+  void firstRun_rerunCopyDropsFirstCollectionPhrasing();
   void onboarding_mediaPageGatesNextOnRealDirectory();
   void onboarding_finishBuildsConfigFromFields();
   void onboarding_typeComboOffersCanonicalPresets();
@@ -33,7 +34,7 @@ private slots:
 };
 
 void TestOnboardingWizards::firstRun_pagesSequence() {
-  FirstRunWizard wizard;
+  FirstRunWizard wizard(/*hasExistingCollections=*/false);
   wizard.restart();
   QCOMPARE(wizard.pageIds().size(), 3);
   QVERIFY(wizard.currentPage());
@@ -45,7 +46,7 @@ void TestOnboardingWizards::firstRun_pagesSequence() {
 }
 
 void TestOnboardingWizards::firstRun_mediaPageGatesNextOnRealDirectory() {
-  FirstRunWizard wizard;
+  FirstRunWizard wizard(/*hasExistingCollections=*/false);
   wizard.restart();
   wizard.next(); // welcome -> media page
   QWizardPage *media = wizard.currentPage();
@@ -71,7 +72,7 @@ void TestOnboardingWizards::firstRun_mediaPageGatesNextOnRealDirectory() {
 void TestOnboardingWizards::firstRun_finishPopulatesTrimmedResult() {
   QTemporaryDir dir;
   QVERIFY(dir.isValid());
-  FirstRunWizard wizard;
+  FirstRunWizard wizard(/*hasExistingCollections=*/false);
   wizard.restart();
   // Padded values: the accept handler owns the trim.
   wizard.setField(QStringLiteral("collectionName"), QStringLiteral("  Videos  "));
@@ -88,11 +89,38 @@ void TestOnboardingWizards::firstRun_finishPopulatesTrimmedResult() {
 }
 
 void TestOnboardingWizards::firstRun_cancelLeavesResultUnaccepted() {
-  FirstRunWizard wizard;
+  FirstRunWizard wizard(/*hasExistingCollections=*/false);
   wizard.restart();
   wizard.reject();
   QVERIFY(!wizard.result().accepted);
   QVERIFY(wizard.result().pickedConfig.mediaDirectory.isEmpty());
+}
+
+// The wizard doubles as the advertised add-another-collection path (Help →
+// Setup Wizard…); with collections already present, both the welcome pitch
+// and the folder-page subtitle must say "a new collection", never "your
+// first collection".
+void TestOnboardingWizards::firstRun_rerunCopyDropsFirstCollectionPhrasing() {
+  FirstRunWizard wizard(/*hasExistingCollections=*/true);
+  wizard.restart();
+
+  auto *welcomeBody = wizard.currentPage()->findChild<QLabel *>();
+  QVERIFY(welcomeBody);
+  QVERIFY(!welcomeBody->text().contains(QStringLiteral("first collection")));
+  QVERIFY(welcomeBody->text().contains(QStringLiteral("a new collection")));
+
+  wizard.next(); // welcome -> media page
+  QVERIFY(!wizard.currentPage()->subTitle().contains(QStringLiteral("first collection")));
+  QVERIFY(wizard.currentPage()->subTitle().contains(QStringLiteral("a new collection")));
+
+  // And the true first run keeps the original phrasing.
+  FirstRunWizard firstRun(/*hasExistingCollections=*/false);
+  firstRun.restart();
+  auto *firstBody = firstRun.currentPage()->findChild<QLabel *>();
+  QVERIFY(firstBody);
+  QVERIFY(firstBody->text().contains(QStringLiteral("your first collection")));
+  firstRun.next();
+  QVERIFY(firstRun.currentPage()->subTitle().contains(QStringLiteral("your first collection")));
 }
 
 void TestOnboardingWizards::onboarding_mediaPageGatesNextOnRealDirectory() {

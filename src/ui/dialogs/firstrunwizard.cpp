@@ -31,7 +31,8 @@ constexpr const char *FIELD_MEDIA_DIR = "mediaDirectory";
 
 } // namespace
 
-FirstRunWizard::FirstRunWizard(QWidget *parent) : QWizard(parent) {
+FirstRunWizard::FirstRunWizard(bool hasExistingCollections, QWidget *parent)
+    : QWizard(parent), m_hasExistingCollections(hasExistingCollections) {
   setWindowTitle(tr("Welcome to Kartend"));
   setWizardStyle(QWizard::ModernStyle);
   // Modern style suppresses the Cancel button by default; bring it back so
@@ -62,12 +63,16 @@ void FirstRunWizard::buildWelcomePage() {
   auto *layout = new QVBoxLayout(page);
   auto *body = new QLabel(page);
   body->setWordWrap(true);
+  const QString nextStep =
+      m_hasExistingCollections
+          ? tr("The next step asks for one folder to scan as a new collection. ")
+          : tr("The next step asks for one folder to scan as your first collection. ");
   body->setText(tr("Kartend organizes media collections — videos, audio, reference "
                    "documents, or anything else you keep in folders — and gives them a "
                    "browseable grid with artwork, metadata, and quick launch actions."
-                   "\n\n"
-                   "The next step asks for one folder to scan as your first collection. "
-                   "You can add more, configure launchers, and tweak appearance later "
+                   "\n\n") +
+                nextStep +
+                tr("You can add more, configure launchers, and tweak appearance later "
                    "from the Settings dialog."
                    "\n\n"
                    "Click Next to continue, or Cancel to skip — you can re-run this "
@@ -96,9 +101,11 @@ class MediaFolderPage : public QWizardPage {
   Q_DECLARE_TR_FUNCTIONS(MediaFolderPage)
 
 public:
-  explicit MediaFolderPage(QWidget *parent) : QWizardPage(parent) {
+  explicit MediaFolderPage(bool hasExistingCollections, QWidget *parent) : QWizardPage(parent) {
     setTitle(tr("Pick a media folder"));
-    setSubTitle(tr("Kartend will scan this folder as your first collection."));
+    setSubTitle(hasExistingCollections
+                    ? tr("Kartend will scan this folder as a new collection.")
+                    : tr("Kartend will scan this folder as your first collection."));
 
     auto *grid = new QGridLayout(this);
     grid->setColumnStretch(1, 1);
@@ -119,7 +126,7 @@ public:
 
     auto *hint = new QLabel(this);
     hint->setWordWrap(true);
-    hint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+    hint->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
     hint->setText(tr("The folder is scanned recursively. Subfolders become subcollections "
                      "you can browse into. Nothing is moved or modified — Kartend only reads "
                      "from the folder."));
@@ -159,7 +166,7 @@ public:
 } // namespace
 
 void FirstRunWizard::buildMediaFolderPage() {
-  addPage(new MediaFolderPage(this));
+  addPage(new MediaFolderPage(m_hasExistingCollections, this));
 }
 
 void FirstRunWizard::buildDonePage() {

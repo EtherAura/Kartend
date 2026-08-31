@@ -161,7 +161,7 @@ void MainWindow::appendCollectionAndPersist(const CollectionConfig &config, bool
 }
 
 void MainWindow::showFirstRunWizard() {
-  const auto result = m_dialogController->runFirstRunWizard();
+  const auto result = m_dialogController->runFirstRunWizard(!m_collections.isEmpty());
 
   if (result.accepted && !result.pickedConfig.mediaDirectory.isEmpty()) {
     // Mirrors the post-add sequence in promptCreateFirstCollectionInteractive.

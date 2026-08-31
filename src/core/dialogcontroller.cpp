@@ -137,8 +137,9 @@ DialogController::runArtworkLinksDialog(const ItemArtworkLinksInput &in) {
   return dialog.overrides();
 }
 
-DialogController::FirstRunWizardResult DialogController::runFirstRunWizard() {
-  FirstRunWizard wizard(m_parent);
+DialogController::FirstRunWizardResult
+DialogController::runFirstRunWizard(bool hasExistingCollections) {
+  FirstRunWizard wizard(hasExistingCollections, m_parent);
   wizard.exec();
   const auto result = wizard.result();
   return {result.accepted, result.pickedConfig};
