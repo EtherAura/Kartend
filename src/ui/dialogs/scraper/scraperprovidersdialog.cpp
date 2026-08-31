@@ -50,7 +50,7 @@ void ScraperProvidersDialog::setupUi() {
 
   auto *header = new QLabel(
       tr("Built-in metadata providers. Credentials are edited via Settings → Scrapers."), this);
-  header->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+  header->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
   header->setWordWrap(true);
   outer->addWidget(header);
 

@@ -28,7 +28,7 @@ void LayoutProfilesDialog::setupUi() {
          "Apply targets the current collection."),
       this);
   header->setWordWrap(true);
-  header->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+  header->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
   outer->addWidget(header);
 
   m_list = new QListWidget(this);

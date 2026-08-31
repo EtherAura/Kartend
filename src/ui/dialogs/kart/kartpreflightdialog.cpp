@@ -27,7 +27,7 @@ void KartPreflightDialog::setupUi(const KartPreflight::PreflightReport &report) 
                     "and merge; Cancel aborts without writing anything to disk."),
                  this);
   header->setWordWrap(true);
-  header->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+  header->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
   outer->addWidget(header);
 
   m_summaryLabel = new QLabel(this);

@@ -36,7 +36,7 @@ void ScraperCredentialsDialog::buildUi() {
                               "config file under the [Scrapers] section."),
                            this);
   intro->setWordWrap(true);
-  intro->setStyleSheet(UIConstants::Color::MUTED_TEXT);
+  intro->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet());
   root->addWidget(intro);
 
   // The panel live-mutates its model on every edit, so it edits a working

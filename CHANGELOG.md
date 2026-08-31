@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Dim hint text is readable on dark themes again.** The muted "hint"
+  style used across dialogs took the theme's mid palette colour, which on
+  dark themes lands nearly on the dialog background — the Setup Wizard's
+  folder-page note about recursive scanning was effectively invisible.
+  Muted labels now repair their colour against the actual window
+  background up to a minimum contrast, and stay exactly as dim as before
+  on themes where they were already legible.
+
 ## [0.0.19] - 2026-08-30
 
 ### Added

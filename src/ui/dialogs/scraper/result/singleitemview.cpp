@@ -82,10 +82,10 @@ SingleItemScrapeView::SingleItemScrapeView(QWidget *parent) : QWidget(parent) {
   m_detailStack = new QStackedWidget(rightContainer);
   auto *emptyLabel = new QLabel(tr("Pick a candidate from the list."), rightContainer);
   emptyLabel->setAlignment(Qt::AlignCenter);
-  emptyLabel->setStyleSheet(UIConstants::Color::MUTED_TEXT);
+  emptyLabel->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet());
   auto *loadingLabel = new QLabel(tr("Loading details…"), rightContainer);
   loadingLabel->setAlignment(Qt::AlignCenter);
-  loadingLabel->setStyleSheet(UIConstants::Color::MUTED_TEXT);
+  loadingLabel->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet());
   auto *detailContainer = new QWidget(rightContainer);
   auto *detailLayout = new QVBoxLayout(detailContainer);
   detailLayout->setContentsMargins(0, 0, 0, 0);

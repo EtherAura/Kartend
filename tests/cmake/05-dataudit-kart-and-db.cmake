@@ -229,6 +229,7 @@ kartend_add_test(NAME ColorContrast
 )
 target_include_directories(test_colorcontrast PRIVATE
   ${SRC_DIR}/utils/view
+  ${SRC_DIR}/utils
 )
 target_include_directories(test_kdecolorscheme PRIVATE
   ${SRC_DIR}/utils/app

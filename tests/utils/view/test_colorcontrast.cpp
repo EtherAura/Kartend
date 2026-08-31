@@ -7,7 +7,10 @@
 #include "colorcontrast.h"
 
 #include <QColor>
+#include <QPalette>
 #include <QTest>
+
+#include "uiconstants/color.h"
 
 namespace {
 
@@ -27,6 +30,7 @@ private slots:
   void ensureContrast_repairsAuditFindingsOnBothThemes();
   void ensureContrast_preservesHueSaturationAlpha();
   void ensureContrast_unreachableTargetReturnsPole();
+  void mutedLabelColor_meetsAaOnBothThemePolarities();
 };
 
 void TestColorContrast::relativeLuminance_anchorsBlackAndWhite() {
@@ -104,6 +108,39 @@ void TestColorContrast::ensureContrast_unreachableTargetReturnsPole() {
   int h = 0, s = 0, l = 0, a = 0;
   repaired.getHsl(&h, &s, &l, &a);
   QVERIFY(l == 0 || l == 255);
+}
+
+void TestColorContrast::mutedLabelColor_meetsAaOnBothThemePolarities() {
+  // The muted hint labels take palette(mid), which on dark themes lands
+  // nearly on the window colour (the Setup Wizard's recursive-scan hint was
+  // unreadable on Breeze Dark). mutedLabelColor must repair mid to the AA
+  // floor on both polarities while leaving an already-compliant mid alone.
+  const struct {
+    QColor mid;
+    QColor window;
+  } themes[] = {
+      // Dark: a mid barely above the window colour — the reported bug.
+      {QColor("#3f4447"), kBreezeDarkWindow},
+      // Light: a washed-out mid under the AA floor.
+      {QColor("#b6b8ba"), kBreezeLightWindow},
+  };
+  for (const auto &t : themes) {
+    QPalette palette;
+    palette.setColor(QPalette::Mid, t.mid);
+    palette.setColor(QPalette::Window, t.window);
+    const QColor muted = UIConstants::Color::mutedLabelColor(palette);
+    QVERIFY2(ColorContrast::contrastRatio(muted, t.window) >= ColorContrast::kAaNormalText,
+             qPrintable(QStringLiteral("mid %1 on %2 resolved to %3 at %4:1")
+                            .arg(t.mid.name(), t.window.name(), muted.name())
+                            .arg(ColorContrast::contrastRatio(muted, t.window))));
+  }
+
+  // A mid that already reads fine must pass through unchanged — the muted
+  // look is preserved on themes where it was never broken.
+  QPalette compliant;
+  compliant.setColor(QPalette::Mid, QColor("#5a5e62"));
+  compliant.setColor(QPalette::Window, QColor(Qt::white));
+  QCOMPARE(UIConstants::Color::mutedLabelColor(compliant).rgba(), QColor("#5a5e62").rgba());
 }
 
 QTEST_MAIN(TestColorContrast)

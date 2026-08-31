@@ -29,7 +29,7 @@ void VariantGroupingDialog::setupUi(const QList<VariantGrouping::VariantGroup> &
                               "accessible from the grid."),
                            this);
   intro->setWordWrap(true);
-  intro->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+  intro->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
   outer->addWidget(intro);
 
   m_summaryLabel = new QLabel(this);

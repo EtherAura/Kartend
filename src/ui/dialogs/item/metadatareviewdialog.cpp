@@ -19,7 +19,7 @@ void MetadataReviewDialog::setupUi() {
   auto *outer = new QVBoxLayout(this);
 
   m_progressLabel = new QLabel(this);
-  m_progressLabel->setStyleSheet(UIConstants::Color::MUTED_TEXT);
+  m_progressLabel->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet());
   outer->addWidget(m_progressLabel);
 
   m_headerLabel = new QLabel(this);
@@ -30,7 +30,7 @@ void MetadataReviewDialog::setupUi() {
   m_pathLabel = new QLabel(this);
   m_pathLabel->setWordWrap(true);
   m_pathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  m_pathLabel->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+  m_pathLabel->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
   outer->addWidget(m_pathLabel);
 
   m_missingLabel = new QLabel(this);

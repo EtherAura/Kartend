@@ -45,12 +45,26 @@ inline constexpr const char *VALIDATION_ERROR_FG = "#d05050";
   return bold ? style + QStringLiteral(" font-weight: bold;") : style;
 }
 
-/// Stylesheet for muted/secondary text. Uses the palette's mid role so it tracks
-/// the active theme. Centralized so restyling the ~26 dim palette(mid) labels is
-/// one edit instead of dozens of duplicated inline strings (Kartend-975p6).
-inline constexpr const char *MUTED_TEXT = "color: palette(mid);";
-/// Muted text with italic — the dim-italic "hint" label style used across dialogs.
-inline constexpr const char *MUTED_ITALIC_TEXT = "color: palette(mid); font-style: italic;";
+/// Colour for muted/secondary text: the palette's mid role, contrast-repaired
+/// against the window background. Raw palette(mid) lands nearly on the window
+/// colour on dark themes (Breeze Dark measured well under the 4.5:1 AA floor),
+/// which made the dim hint labels unreadable there; the repair keeps mid's
+/// muted intent on themes where it already reads and only brightens/darkens
+/// where it doesn't. Split from the stylesheet wrapper so tests can probe the
+/// arithmetic with an explicit palette.
+[[nodiscard]] inline QColor mutedLabelColor(const QPalette &palette) {
+  return ColorContrast::ensureContrast(palette.color(QPalette::Mid),
+                                       palette.color(QPalette::Window));
+}
+
+/// Stylesheet for muted/secondary text; `italic` selects the dim-italic "hint"
+/// label variant. Centralized so restyling the ~26 dim labels is one edit
+/// instead of dozens of duplicated inline strings (Kartend-975p6).
+[[nodiscard]] inline QString mutedLabelStyleSheet(bool italic = false) {
+  const QString style =
+      QStringLiteral("color: %1;").arg(mutedLabelColor(QGuiApplication::palette()).name());
+  return italic ? style + QStringLiteral(" font-style: italic;") : style;
+}
 } // namespace Color
 } // namespace UIConstants
 

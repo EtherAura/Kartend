@@ -34,7 +34,7 @@ void ArtworkWizardDialog::setupUi() {
 
   auto *outer = new QVBoxLayout(this);
   m_progressLabel = new QLabel(this);
-  m_progressLabel->setStyleSheet(UIConstants::Color::MUTED_TEXT);
+  m_progressLabel->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet());
   outer->addWidget(m_progressLabel);
 
   m_headerLabel = new QLabel(this);
@@ -45,7 +45,7 @@ void ArtworkWizardDialog::setupUi() {
   m_pathLabel = new QLabel(this);
   m_pathLabel->setWordWrap(true);
   m_pathLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  m_pathLabel->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+  m_pathLabel->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
   outer->addWidget(m_pathLabel);
 
   // Two-column body: candidate list left, larger preview right.
@@ -67,7 +67,7 @@ void ArtworkWizardDialog::setupUi() {
   m_emptyLabel = new QLabel(
       tr("No fuzzy-name matches in the artwork directory. Use Browse… to pick a file manually."),
       this);
-  m_emptyLabel->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+  m_emptyLabel->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
   m_emptyLabel->setWordWrap(true);
   m_emptyLabel->setVisible(false);
   outer->addWidget(m_emptyLabel);

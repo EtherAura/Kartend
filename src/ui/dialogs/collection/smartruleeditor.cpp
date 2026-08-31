@@ -191,7 +191,7 @@ void SmartRuleEditor::buildUI() {
                                "items across all collections."),
                             page);
     hint->setWordWrap(true);
-    hint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+    hint->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
     l->addRow(hint);
     m_paramsStack->insertWidget(PAGE_BY_EXTENSION, page);
   }
@@ -203,7 +203,7 @@ void SmartRuleEditor::buildUI() {
                                "real cover image (not the procedural placeholder)."),
                             page);
     note->setWordWrap(true);
-    note->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+    note->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
     l->addWidget(note);
     l->addStretch();
     m_paramsStack->insertWidget(PAGE_HAS_ARTWORK, page);
@@ -222,7 +222,7 @@ void SmartRuleEditor::buildUI() {
                                "re-scanning a known item does NOT reset it."),
                             page);
     hint->setWordWrap(true);
-    hint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+    hint->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
     l->addRow(hint);
     m_paramsStack->insertWidget(PAGE_BY_DATE_ADDED, page);
   }
@@ -235,7 +235,7 @@ void SmartRuleEditor::buildUI() {
     auto *l = new QVBoxLayout(page);
     auto *note = new QLabel(description, page);
     note->setWordWrap(true);
-    note->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+    note->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
     l->addWidget(note);
     l->addStretch();
     m_paramsStack->insertWidget(pageIndex, page);
@@ -263,7 +263,7 @@ void SmartRuleEditor::buildUI() {
                                "playlist alongside others."),
                             page);
     hint->setWordWrap(true);
-    hint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+    hint->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
     l->addRow(hint);
     m_paramsStack->insertWidget(PAGE_BY_COLLECTION, page);
   }
@@ -281,7 +281,7 @@ void SmartRuleEditor::buildUI() {
                       "for ASCII characters). Empty text matches nothing."),
                    page);
     hint->setWordWrap(true);
-    hint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+    hint->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
     l->addRow(hint);
     m_paramsStack->insertWidget(PAGE_BY_TITLE_SEARCH, page);
   }

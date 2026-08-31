@@ -56,7 +56,7 @@ void BulkEditDialog::setupUi() {
 
   m_parameterHint = new QLabel(this);
   m_parameterHint->setWordWrap(true);
-  m_parameterHint->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+  m_parameterHint->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
   outer->addWidget(m_parameterHint);
 
   auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel, this);

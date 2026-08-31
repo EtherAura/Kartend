@@ -112,7 +112,7 @@ void StatisticsDialog::setupUI() {
   // the user has runtime detection on so they don't see a redundant hint.
   m_runtimeNote = new QLabel(this);
   m_runtimeNote->setWordWrap(true);
-  m_runtimeNote->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+  m_runtimeNote->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
   m_runtimeNote->setText(
       tr("Time played is only tracked when Runtime Detection is enabled in Settings → "
          "General. Without it, launched items still count toward play count and last "
@@ -205,7 +205,7 @@ void StatisticsDialog::buildOverviewTab() {
   neverPlayedLayout->setContentsMargins(0, 0, 0, 0);
   neverPlayedLayout->setSpacing(8);
   m_neverPlayedSummary = new QLabel(neverPlayedTab);
-  m_neverPlayedSummary->setStyleSheet(UIConstants::Color::MUTED_TEXT);
+  m_neverPlayedSummary->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet());
   m_neverPlayedSummary->setWordWrap(true);
   neverPlayedLayout->addWidget(m_neverPlayedSummary);
   neverPlayedLayout->addWidget(m_neverPlayedTree, 1);
@@ -236,7 +236,7 @@ void StatisticsDialog::buildHistoryTab() {
   historyTopRow->addWidget(m_historyEnabledCheckBox);
   historyTopRow->addStretch();
   auto *countLabel = new QLabel(tr("Entries:"), historyTab);
-  countLabel->setStyleSheet(UIConstants::Color::MUTED_TEXT);
+  countLabel->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet());
   historyTopRow->addWidget(countLabel);
   m_historyCountValue = new QLabel(historyTab);
   QFont countFont = m_historyCountValue->font();
@@ -250,7 +250,7 @@ void StatisticsDialog::buildHistoryTab() {
   // on; toggling it doesn't reflow the layout.
   m_historyDisabledNote = new QLabel(historyTab);
   m_historyDisabledNote->setWordWrap(true);
-  m_historyDisabledNote->setStyleSheet(UIConstants::Color::MUTED_ITALIC_TEXT);
+  m_historyDisabledNote->setStyleSheet(UIConstants::Color::mutedLabelStyleSheet(/*italic=*/true));
   m_historyDisabledNote->setText(
       tr("History recording is currently off. Existing entries are still listed "
          "below but no new launches will be added."));
