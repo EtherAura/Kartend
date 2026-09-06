@@ -244,7 +244,7 @@ jobs:
         # publishes through action-gh-release, and letting the SBOM action
         # upload on its own would give the release two upload paths that could
         # disagree about what shipped.
-        uses: anchore/sbom-action@aa80c8c5bd439a416a62804f2151ab38c671a638 # v0.24.1
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           file: ${{ steps.deb.outputs.deb }}
           format: cyclonedx-json
@@ -282,7 +282,7 @@ jobs:
             Kartend-${{ steps.version.outputs.version }}-linux-x64.cdx.json
 
       - name: Publish release
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             ${{ steps.version.outputs.tarball }}
@@ -572,7 +572,7 @@ jobs:
         #
         # Scans the directory rather than the .zip so the individual DLLs are
         # enumerated instead of one opaque archive entry.
-        uses: anchore/sbom-action@aa80c8c5bd439a416a62804f2151ab38c671a638 # v0.24.1
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
         with:
           path: dist/kartend
           format: cyclonedx-json
@@ -606,7 +606,7 @@ jobs:
         # sha256 sidecars alongside. fail_on_unmatched_files keeps a
         # packaging bug from silently publishing a release without the
         # Windows assets.
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: |
             ${{ steps.package.outputs.zip }}
