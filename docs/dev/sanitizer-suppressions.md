@@ -215,6 +215,14 @@ clusters, each tracked by a closed-as-suppressed bd:
   A/B on a Qt bump. Group letter D is reserved by the in-flight
   Kartend-t9u0o branch.
 
+- **Kartend-64vja (2026-09-04)** — one call-site anchor,
+  `race:*EntityScrapeCoordinator::probeEntityMediaOnDisk*`, for the
+  Kartend-twq6j catalogue-hash disk probe's `QtConcurrent::run` hand-off:
+  the same three shapes as `ArtworkWizardDialog::renderCurrent` (task
+  first-read, and the pool-thread move of the two by-value captures),
+  enumerated in the kartend-ci container with `halt_on_error=0` — 21
+  reports, one site. Re-evaluate with Groups A/B on a Qt bump.
+
 Same code-review-only methodology as the LSan audit applied — the
 `--sanitize --tests` build needs Kartend-hx6l fixed before LSan/TSan
 can be re-run locally to verify each entry still fires.

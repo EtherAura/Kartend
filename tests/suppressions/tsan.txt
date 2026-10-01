@@ -695,3 +695,17 @@ race:*CoverFlowGalleryStrip::thumbPixmap*
 # Cover Flow scaled-pixmap derivation: captures sourceImg (QImage, COW
 # with an atomic refcount) and targetSize by value.
 race:*CoverFlowWidget::requestScaledPixmap*
+
+# EntityScrapeCoordinator::probeEntityMediaOnDisk's QtConcurrent::run
+# hand-off (Kartend-twq6j catalogue-hash disk probe) — the same trio as
+# ArtworkWizardDialog::renderCurrent above, enumerated exhaustively in the
+# kartend-ci container with halt_on_error=0 (21 reports, 3 shapes, one
+# site): the pool thread's first read at
+# RunFunctionTaskBase<ArtProvenance::FetchPlan>::run() vs the main-thread
+# task allocation, and the pool-thread move-construction of the two
+# by-value captures (QString artworkDir, QList<MediaAsset> assets —
+# QArrayDataPointer move-ctor) vs their main-thread copies. Anchored on
+# the call site; safe because the lambda is pure-local (value captures
+# only; the plan is published solely through a parented QFutureWatcher on
+# the GUI thread). Closed: Kartend-64vja
+race:*EntityScrapeCoordinator::probeEntityMediaOnDisk*
