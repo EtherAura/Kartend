@@ -170,6 +170,32 @@ private slots:
   void testExtractArchive_enforcesDecompressedSizeCap();
   void testExtractArchive_sizeCapKillsRunawayExtractor();
 
+  // Kartend-si0p5: disk-backed extraction root, and no fixed byte cap.
+  void testExtractArchive_defaultRootIsNotTemp();
+  void testExtractArchive_honoursConfiguredExtractionDir();
+  void testExtractArchive_noFixedCapWhenUnbounded();
+
+  // Kartend-2ygme: extracted media must not persist.
+  void testSweepStaleExtractions_clearsRootsButNotTheDirectoryItself();
+  // Kartend-ra8sf: retention period.
+  void testSweep_retentionKeepsFreshAndExpiresStale();
+  void testSweep_negativeRetentionKeepsEverything();
+  void testSweep_neverExpiresAnInUseExtraction();
+  void testTouchExtractionMarker_restartsTheClockWithoutLosingIdentity();
+  void testPlaylist_discsLiveUnderTheReclaimedDirectory();
+
+  // Kartend-ab8ri: multi-disc playlists listing archived members.
+  void testPlaylist_needsExtractionOnlyForArchivedMembers();
+  void testPlaylist_resolvesArchivedMembersToExtractedDiscs();
+  void testPlaylist_plainMembersPassThroughUnchanged();
+  void testPlaylist_resolvedPlaylistGetsItsOwnDirectory();
+
+  // Kartend-dmg5y: what a launch owns, and what it may therefore reclaim.
+  void testOwnedExtractionDir_mapsOnlyWhatTheExtractionCreated();
+  void testLaunchItem_unchangedPlaylistNeverReclaimsItsFolder();
+  void testLaunchItem_nestedArchiveReclaimsTheWholeEntry();
+  void testLaunchItem_refusedRelaunchKeepsTheRunningMedia();
+
   // Kartend-mkcak: cancellable worker-thread extraction.
   void testExtractArchive_preSetCancelReturnsCancelled();
   void testLaunchItem_cancelExtractionAbortsPendingLaunch();
@@ -274,6 +300,8 @@ void TestLaunchManager::cleanupTestCase() {
   QDir(extractionDirFor("kartend_collide")).removeRecursively();
   QDir(extractionDirFor("kartend_cap_pre")).removeRecursively();
   QDir(extractionDirFor("kartend_cap_post")).removeRecursively();
+  QDir(extractionDirFor("kartend_cfgdir")).removeRecursively();
+  QDir(extractionDirFor("kartend_uncapped")).removeRecursively();
   QDir(extractionDirFor("kartend_cap_runaway")).removeRecursively();
   QDir(extractionDirFor("kartend_cancel_pre")).removeRecursively();
   QDir(extractionDirFor("kartend_cancel_launch")).removeRecursively();
@@ -295,8 +323,12 @@ bool TestLaunchManager::extractorAvailable() {
 }
 
 QString TestLaunchManager::extractionDirFor(const QString &baseName) {
-  return QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
-         QStringLiteral("/kartend_extract/") + baseName;
+  // Must mirror launchmanagerarchive's resolveExtractionBase default
+  // (Kartend-si0p5): CacheLocation, NOT TempLocation. When this drifts, every
+  // "the extraction dir must not exist" assertion below passes vacuously
+  // because it is looking at a path nothing ever writes to.
+  return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) +
+         QStringLiteral("/extract/kartend_extract/") + baseName;
 }
 
 QString TestLaunchManager::makeZipFixture(const QString &baseName,
@@ -2126,6 +2158,726 @@ void TestLaunchManager::testExtractArchive_enforcesDecompressedSizeCap() {
   QVERIFY2(result.isError(), "extraction inflating past the cap must fail");
   QCOMPARE(result.error().code, ErrorUtils::ErrorCode::ResourceLimitExceeded);
   QVERIFY2(!QDir(extractionDir).exists(), "the over-cap extraction dir must be removed");
+}
+
+void TestLaunchManager::testExtractArchive_defaultRootIsNotTemp() {
+  // Kartend-si0p5: extraction must not default to TempLocation. On most Linux
+  // systems /tmp is tmpfs, so extracting a disc image there spends RAM — the
+  // hazard the old fixed 4 GiB cap was really working around, and the reason
+  // legitimate DVD images were being rejected.
+  const QString tempRoot = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+  QVERIFY2(!extractionDirFor(QStringLiteral("probe")).startsWith(tempRoot + QLatin1Char('/')),
+           "the default extraction root must be disk-backed, not TempLocation");
+}
+
+void TestLaunchManager::testExtractArchive_honoursConfiguredExtractionDir() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP(
+      "Kartend-dhhh6: single-threaded real-extractor test — extractArchiveToTemp forks an "
+      "external tool synchronously on the test thread, so there is no cross-thread state for a "
+      "non-forking seam to cover and the fork itself is the assertion. The launchItem worker-path "
+      "slots (failedStart/cancel/dtor) carry the seam-covered cross-thread coverage under TSan.");
+#endif
+  // Kartend-si0p5: an explicit extractionBaseDir wins over the default, so a
+  // user with a large library can point extraction at a roomier volume.
+  if (!extractorAvailable()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO-CONTENT")}};
+  const QString zip = makeZipFixture(QStringLiteral("kartend_cfgdir"), entries);
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+
+  auto result =
+      LaunchManager::extractArchiveToTemp(zip, ".iso", nullptr, /*maxBytes=*/-1, root->path());
+  QVERIFY2(!result.isError(),
+           qPrintable(result.isError() ? result.error().userFacingSummary() : QString()));
+  QVERIFY2(result.value().startsWith(root->path() + QLatin1Char('/')),
+           "the extracted file must live under the configured extraction dir");
+  QVERIFY2(!QDir(extractionDirFor(QStringLiteral("kartend_cfgdir"))).exists(),
+           "nothing may be written to the default root when one is configured");
+}
+
+void TestLaunchManager::testExtractArchive_noFixedCapWhenUnbounded() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP(
+      "Kartend-dhhh6: single-threaded real-extractor test — extractArchiveToTemp forks an "
+      "external tool synchronously on the test thread, so there is no cross-thread state for a "
+      "non-forking seam to cover and the fork itself is the assertion. The launchItem worker-path "
+      "slots (failedStart/cancel/dtor) carry the seam-covered cross-thread coverage under TSan.");
+#endif
+  // Kartend-si0p5 regression: with no explicit cap, extraction is bounded by
+  // free space rather than a compile-time byte count. The old 4 GiB constant
+  // rejected any archive whose *compressed* size exceeded it, which is how a
+  // 6.98 GiB PS2 DVD image ("Xenosaga Episode I") failed to launch. A fixture
+  // that size is impractical here, so this pins the mechanism instead: the
+  // unbounded path must apply no byte ceiling of its own, and an inflating
+  // payload that the old cap would have killed must now extract cleanly.
+  if (!extractorAvailable()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  // 8 MiB of zeros: compresses to almost nothing, inflates well past the
+  // 4 KiB cap the bounded tests above use.
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArray(8 * 1024 * 1024, '\0')}};
+  const QString zip = makeZipFixture(QStringLiteral("kartend_uncapped"), entries);
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+
+  auto result =
+      LaunchManager::extractArchiveToTemp(zip, ".iso", nullptr, /*maxBytes=*/-1, root->path());
+  QVERIFY2(!result.isError(),
+           qPrintable(result.isError() ? result.error().userFacingSummary() : QString()));
+  QCOMPARE(QFileInfo(result.value()).size(), qint64(8 * 1024 * 1024));
+
+  // Same fixture, same call, but bounded: proves the payload really would have
+  // tripped a byte cap, so the success above is the absence of one and not an
+  // artifact of the fixture being small.
+  QDir(root->path()).removeRecursively();
+  QDir().mkpath(root->path());
+  auto bounded =
+      LaunchManager::extractArchiveToTemp(zip, ".iso", nullptr, /*maxBytes=*/4096, root->path());
+  QVERIFY2(bounded.isError(), "the same payload must fail under an explicit cap");
+  QCOMPARE(bounded.error().code, ErrorUtils::ErrorCode::ResourceLimitExceeded);
+}
+
+void TestLaunchManager::testSweepStaleExtractions_clearsRootsButNotTheDirectoryItself() {
+  // Kartend-2ygme: a crash between spawn and child exit leaves an extraction
+  // no in-process hook can reclaim, so startup sweeps the roots. It must clear
+  // both roots and touch nothing else — a user may point extractionDirectory
+  // at a folder that already holds their own files.
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  const auto touch = [](const QString &path) {
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QFile f(path);
+    return f.open(QIODevice::WriteOnly) && (f.write("x") == 1) ? (f.close(), true) : false;
+  };
+
+  const QString orphanDisc = root->filePath(QStringLiteral("kartend_extract/SomeGame/disc.iso"));
+  const QString orphanPlaylist =
+      root->filePath(QStringLiteral("kartend_playlists/Release/Release.m3u"));
+  const QString bystander = root->filePath(QStringLiteral("my-own-file.txt"));
+  const QString bystanderDir = root->filePath(QStringLiteral("my-own-folder/keep.txt"));
+  QVERIFY(touch(orphanDisc));
+  QVERIFY(touch(orphanPlaylist));
+  QVERIFY(touch(bystander));
+  QVERIFY(touch(bystanderDir));
+
+  LaunchManager::sweepStaleExtractions(root->path(), /*retentionHours=*/0);
+
+  QVERIFY2(!QFileInfo::exists(orphanDisc), "a stale extraction must be swept");
+  QVERIFY2(!QFileInfo::exists(orphanPlaylist), "a stale resolved playlist must be swept");
+  QVERIFY2(QFileInfo::exists(bystander),
+           "the sweep must not touch unrelated files in the configured folder");
+  QVERIFY2(QFileInfo::exists(bystanderDir),
+           "the sweep must not touch unrelated folders in the configured folder");
+  QVERIFY2(QDir(root->path()).exists(), "the configured folder itself must survive");
+}
+
+namespace {
+// Plants an extraction dir with a .kartend-source marker aged `hoursAgo`, the
+// shape sweepStaleExtractions ages against.
+QString plantExtraction(const QString &root, const QString &name, int hoursAgo) {
+  const QString dir = root + QStringLiteral("/kartend_extract/") + name;
+  QDir().mkpath(dir);
+  QFile payload(dir + QStringLiteral("/disc.iso"));
+  if (!payload.open(QIODevice::WriteOnly)) {
+    return {};
+  }
+  payload.write("ISO");
+  payload.close();
+
+  const QString markerPath = dir + QStringLiteral("/.kartend-source");
+  QFile marker(markerPath);
+  if (!marker.open(QIODevice::WriteOnly)) {
+    return {};
+  }
+  marker.write("source-id");
+  // setFileTime acts on the OPEN descriptor, and the write above would
+  // otherwise stamp mtime as "now" — so flush first, then backdate, then
+  // close (close does not touch mtime).
+  marker.flush();
+  const bool aged =
+      marker.setFileTime(QDateTime::currentDateTime().addSecs(-qint64(hoursAgo) * 3600),
+                         QFileDevice::FileModificationTime);
+  marker.close();
+  if (!aged) {
+    return {};
+  }
+  return dir;
+}
+} // namespace
+
+void TestLaunchManager::testSweep_retentionKeepsFreshAndExpiresStale() {
+  // Kartend-ra8sf: the whole point of the setting — a title used inside the
+  // window survives so relaunching it skips extraction, one outside it goes.
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  const QString fresh = plantExtraction(root->path(), QStringLiteral("PlayedRecently"), 2);
+  const QString stale = plantExtraction(root->path(), QStringLiteral("TriedOnce"), 50);
+  QVERIFY(!fresh.isEmpty());
+  QVERIFY(!stale.isEmpty());
+
+  LaunchManager::sweepStaleExtractions(root->path(), /*retentionHours=*/24);
+
+  QVERIFY2(QFileInfo::exists(fresh), "an extraction inside its retention window must survive");
+  QVERIFY2(!QFileInfo::exists(stale), "an extraction past its retention window must be swept");
+}
+
+void TestLaunchManager::testSweep_negativeRetentionKeepsEverything() {
+  // Kartend-ra8sf: a negative retention is the explicit "I manage this folder"
+  // opt-out, so even a long-expired entry must be left alone.
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  const QString ancient = plantExtraction(root->path(), QStringLiteral("Ancient"), 24 * 365);
+  QVERIFY(!ancient.isEmpty());
+
+  LaunchManager::sweepStaleExtractions(root->path(), /*retentionHours=*/-1);
+  QVERIFY2(QFileInfo::exists(ancient), "a negative retention must never expire anything");
+}
+
+void TestLaunchManager::testSweep_neverExpiresAnInUseExtraction() {
+  // Kartend-ra8sf: a play session can outlast the retention period (24h
+  // retention, a 30h session). Expiring a running program's disc image out
+  // from under it is a hard crash — worse than keeping a stale folder — so the
+  // in-use exclusion must win over BOTH age and a zero retention.
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  const QString inUse = plantExtraction(root->path(), QStringLiteral("StillPlaying"), 100);
+  const QString idle = plantExtraction(root->path(), QStringLiteral("Idle"), 100);
+  QVERIFY(!inUse.isEmpty());
+  QVERIFY(!idle.isEmpty());
+
+  LaunchManager::sweepStaleExtractions(root->path(), /*retentionHours=*/24, {inUse});
+  QVERIFY2(QFileInfo::exists(inUse), "an in-use extraction must survive regardless of age");
+  QVERIFY2(!QFileInfo::exists(idle), "an idle expired extraction must still be swept");
+
+  // Zero retention is the aggressive setting, and must still respect in-use.
+  LaunchManager::sweepStaleExtractions(root->path(), /*retentionHours=*/0, {inUse});
+  QVERIFY2(QFileInfo::exists(inUse),
+           "zero retention must not delete media a running program is reading");
+}
+
+void TestLaunchManager::testTouchExtractionMarker_restartsTheClockWithoutLosingIdentity() {
+  // Kartend-ra8sf: the touch is what makes retention run from LAST USE. It must
+  // also preserve the marker's contents — blanking it would defeat the
+  // source-identity check (Kartend-nrykk) and force a needless re-extract.
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  const QString dir = plantExtraction(root->path(), QStringLiteral("Aged"), 50);
+  QVERIFY(!dir.isEmpty());
+  const QString markerPath = dir + QStringLiteral("/.kartend-source");
+
+  QFile before(markerPath);
+  QVERIFY(before.open(QIODevice::ReadOnly));
+  const QByteArray identityBefore = before.readAll();
+  before.close();
+
+  LaunchManager::touchExtractionMarker(dir);
+
+  QFile after(markerPath);
+  QVERIFY(after.open(QIODevice::ReadOnly));
+  QCOMPARE(after.readAll(), identityBefore);
+  after.close();
+
+  // The clock restarted, so a sweep that would have expired it now spares it.
+  LaunchManager::sweepStaleExtractions(root->path(), /*retentionHours=*/24);
+  QVERIFY2(QFileInfo::exists(dir), "touching the marker must restart the retention clock");
+}
+
+void TestLaunchManager::testPlaylist_discsLiveUnderTheReclaimedDirectory() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP(
+      "Kartend-dhhh6: single-threaded real-extractor test — extractArchiveToTemp forks an "
+      "external tool synchronously on the test thread, so there is no cross-thread state for a "
+      "non-forking seam to cover and the fork itself is the assertion. The launchItem worker-path "
+      "slots (failedStart/cancel/dtor) carry the seam-covered cross-thread coverage under TSan.");
+#endif
+  // Kartend-2ygme: a launch reclaims exactly its ownedExtractionDir(), so a
+  // multi-disc launch's discs must sit UNDER that directory. Extracting them to
+  // the shared per-archive root instead would leak the gigabytes and reclaim
+  // only the small playlist beside them.
+  if (!extractorAvailable()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  const QList<QPair<QString, QByteArray>> entries = {
+      {QStringLiteral("disc.iso"), QByteArray(2048, 'A')}};
+  const QString zip = makeZipFixture(QStringLiteral("kartend_reclaim_member"), entries);
+  if (zip.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+  const QString m3u = root->filePath(QStringLiteral("Reclaim.m3u"));
+  {
+    QFile f(m3u);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write((zip + QLatin1Char('\n')).toUtf8());
+    f.close();
+  }
+
+  auto result =
+      LaunchManager::resolvePlaylistForLaunch(m3u, QStringLiteral(".iso"), nullptr, root->path());
+  QVERIFY2(!result.isError(),
+           qPrintable(result.isError() ? result.error().userFacingSummary() : QString()));
+
+  // Read the disc path out of the resolved playlist before reclaiming.
+  QFile resolved(result.value());
+  QVERIFY(resolved.open(QIODevice::ReadOnly));
+  const QStringList lines =
+      QString::fromUtf8(resolved.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+  resolved.close();
+  QCOMPARE(lines.size(), 1);
+  const QString discPath = lines.first();
+  QVERIFY(QFileInfo::exists(discPath));
+
+  const QString reclaimDir = LaunchManager::ownedExtractionDir(result.value(), root->path());
+  QVERIFY2(!reclaimDir.isEmpty(), "a resolved playlist must map to a directory the launch owns");
+  QCOMPARE(reclaimDir, QFileInfo(QFileInfo(result.value()).absolutePath()).canonicalFilePath());
+  QVERIFY2(QFileInfo(discPath).canonicalFilePath().startsWith(reclaimDir + QLatin1Char('/')),
+           "the extracted disc must live under the directory finishLaunch reclaims");
+  // Kartend-dmg5y: the release carries its own last-use stamp, so the sweep
+  // ages it from its last launch rather than from the directory's creation.
+  QVERIFY2(QFileInfo::exists(reclaimDir + QStringLiteral("/.kartend-source")),
+           "a resolved release must carry the .kartend-source last-use marker");
+
+  // What finishLaunch does when the child exits.
+  QDir(reclaimDir).removeRecursively();
+  QVERIFY2(!QFileInfo::exists(discPath), "reclaiming the launch dir must take the discs with it");
+  QVERIFY2(!QFileInfo::exists(result.value()), "reclaiming the launch dir must take the playlist");
+}
+
+void TestLaunchManager::testPlaylist_needsExtractionOnlyForArchivedMembers() {
+  // Kartend-ab8ri: the GUI-thread predicate that decides whether a playlist
+  // launch has to detour through the extraction worker at all.
+  auto *dir = new QTemporaryDir();
+  QVERIFY(dir->isValid());
+  m_fixtureDirs.append(dir);
+
+  const auto writePlaylist = [&dir](const QString &name, const QString &body) {
+    const QString path = dir->filePath(name);
+    QFile f(path);
+    return f.open(QIODevice::WriteOnly) && f.write(body.toUtf8()) > 0 ? (f.close(), path)
+                                                                      : QString();
+  };
+
+  const QString archived =
+      writePlaylist(QStringLiteral("archived.m3u"),
+                    QStringLiteral("/roms/Game (Disc 1).zip\n/roms/Game (Disc 2).zip\n"));
+  QVERIFY(!archived.isEmpty());
+  QVERIFY2(LaunchManager::playlistNeedsExtraction(archived),
+           "a playlist of .zip members must route through extraction");
+
+  const QString plain =
+      writePlaylist(QStringLiteral("plain.m3u"),
+                    QStringLiteral("/roms/Game (Disc 1).cue\n/roms/Game (Disc 2).cue\n"));
+  QVERIFY(!plain.isEmpty());
+  QVERIFY2(!LaunchManager::playlistNeedsExtraction(plain),
+           "a playlist of plain disc images must launch directly, as it always did");
+
+  // Extended-m3u directives are not paths and must not be mistaken for one.
+  const QString extended =
+      writePlaylist(QStringLiteral("extended.m3u"),
+                    QStringLiteral("#EXTM3U\n#EXTINF:-1,Game\n\n/roms/Game (Disc 1).cue\n"));
+  QVERIFY(!extended.isEmpty());
+  QVERIFY2(!LaunchManager::playlistNeedsExtraction(extended),
+           "'#' directives and blank lines must be skipped, not treated as members");
+
+  auto entries = LaunchManager::readPlaylistEntries(extended);
+  QVERIFY(!entries.isError());
+  QCOMPARE(entries.value().size(), 1);
+
+  QVERIFY2(!LaunchManager::playlistNeedsExtraction(dir->filePath(QStringLiteral("game.zip"))),
+           "a non-playlist path is not a playlist");
+}
+
+void TestLaunchManager::testPlaylist_resolvesArchivedMembersToExtractedDiscs() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP(
+      "Kartend-dhhh6: single-threaded real-extractor test — extractArchiveToTemp forks an "
+      "external tool synchronously on the test thread, so there is no cross-thread state for a "
+      "non-forking seam to cover and the fork itself is the assertion. The launchItem worker-path "
+      "slots (failedStart/cancel/dtor) carry the seam-covered cross-thread coverage under TSan.");
+#endif
+  // Kartend-ab8ri end-to-end: the exact shape that stopped Xenogears from
+  // launching — a generated .m3u whose two members are .zip archives, each
+  // holding a .bin/.cue pair, on a collection with no extractedExtension set.
+  if (!extractorAvailable()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  QStringList discZips;
+  for (int disc = 1; disc <= 2; ++disc) {
+    const QString stem = QStringLiteral("kartend_md_disc%1").arg(disc);
+    const QList<QPair<QString, QByteArray>> entries = {
+        {stem + QStringLiteral(".bin"), QByteArray(4096, char('0' + disc))},
+        {stem + QStringLiteral(".cue"), QByteArrayLiteral("FILE \"disc.bin\" BINARY\n")}};
+    const QString zip = makeZipFixture(stem, entries);
+    if (zip.isEmpty()) {
+      KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+    }
+    discZips.append(zip);
+  }
+
+  const QString m3u = root->filePath(QStringLiteral("Release.m3u"));
+  {
+    QFile f(m3u);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write((discZips.join(QLatin1Char('\n')) + QLatin1Char('\n')).toUtf8());
+    f.close();
+  }
+  QVERIFY(LaunchManager::playlistNeedsExtraction(m3u));
+
+  // Empty targetExtension — exactly the reporting collection's config. The
+  // disc-image fallback must pick the .cue index over the .bin track.
+  auto result = LaunchManager::resolvePlaylistForLaunch(m3u, QString(), nullptr, root->path());
+  QVERIFY2(!result.isError(),
+           qPrintable(result.isError() ? result.error().userFacingSummary() : QString()));
+  QVERIFY2(result.value() != m3u, "the resolved playlist must not be the archive-listing original");
+
+  QFile resolved(result.value());
+  QVERIFY(resolved.open(QIODevice::ReadOnly));
+  const QStringList lines =
+      QString::fromUtf8(resolved.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+  resolved.close();
+
+  QCOMPARE(lines.size(), 2);
+  for (int i = 0; i < lines.size(); ++i) {
+    QVERIFY2(!LaunchManager::isArchiveFile(lines.at(i)),
+             "no resolved entry may still be an archive — that was the bug");
+    QVERIFY2(lines.at(i).endsWith(QStringLiteral(".cue")),
+             "the .cue index must win over the .bin track it references");
+    QVERIFY2(QFileInfo::exists(lines.at(i)), "every resolved entry must exist on disk");
+    // Disc order must survive the rewrite, or disc 2 boots first.
+    QVERIFY(lines.at(i).contains(QStringLiteral("disc%1").arg(i + 1)));
+  }
+}
+
+void TestLaunchManager::testPlaylist_plainMembersPassThroughUnchanged() {
+  // Kartend-ab8ri: a playlist that needs nothing must come back byte-identical
+  // — the launcher has to see exactly what it saw before this change.
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  const QString cue = root->filePath(QStringLiteral("Disc 1.cue"));
+  QFile cueFile(cue);
+  QVERIFY(cueFile.open(QIODevice::WriteOnly));
+  cueFile.write("FILE \"disc.bin\" BINARY\n");
+  cueFile.close();
+
+  // Relative entry: buildM3uContents writes members that sit beside the
+  // playlist relative, so resolution must be against the playlist's own dir.
+  const QString m3u = root->filePath(QStringLiteral("Release.m3u"));
+  QFile f(m3u);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("Disc 1.cue\n");
+  f.close();
+
+  auto entries = LaunchManager::readPlaylistEntries(m3u);
+  QVERIFY(!entries.isError());
+  QCOMPARE(entries.value().size(), 1);
+  QCOMPARE(entries.value().first(), QDir::cleanPath(cue));
+
+  auto result = LaunchManager::resolvePlaylistForLaunch(m3u, QString(), nullptr, root->path());
+  QVERIFY(!result.isError());
+  QCOMPARE(result.value(), m3u);
+}
+
+void TestLaunchManager::testPlaylist_resolvedPlaylistGetsItsOwnDirectory() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP(
+      "Kartend-dhhh6: single-threaded real-extractor test — extractArchiveToTemp forks an "
+      "external tool synchronously on the test thread, so there is no cross-thread state for a "
+      "non-forking seam to cover and the fork itself is the assertion. The launchItem worker-path "
+      "slots (failedStart/cancel/dtor) carry the seam-covered cross-thread coverage under TSan.");
+#endif
+  // Kartend-ab8ri: finishLaunch treats the launch file's PARENT directory as
+  // the disposable extraction dir and removeRecursively()s it when a launch
+  // fails to start. Two resolved playlists must therefore never share a parent,
+  // or one failed launch wipes the other release's playlist.
+  if (!extractorAvailable()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive extractor (7z/unzip/bsdtar) on PATH");
+  }
+  auto *root = new QTemporaryDir();
+  QVERIFY(root->isValid());
+  m_fixtureDirs.append(root);
+
+  const auto resolveFor = [&](const QString &releaseName) -> QString {
+    const QList<QPair<QString, QByteArray>> entries = {
+        {QStringLiteral("disc.iso"), QByteArrayLiteral("ISO")}};
+    const QString zip = makeZipFixture(releaseName + QStringLiteral("_member"), entries);
+    if (zip.isEmpty()) {
+      return {};
+    }
+    const QString m3u = root->filePath(releaseName + QStringLiteral(".m3u"));
+    QFile f(m3u);
+    if (!f.open(QIODevice::WriteOnly)) {
+      return {};
+    }
+    f.write((zip + QLatin1Char('\n')).toUtf8());
+    f.close();
+    auto r =
+        LaunchManager::resolvePlaylistForLaunch(m3u, QStringLiteral(".iso"), nullptr, root->path());
+    return r.isError() ? QString() : r.value();
+  };
+
+  const QString firstPlaylist = resolveFor(QStringLiteral("ReleaseA"));
+  if (firstPlaylist.isEmpty()) {
+    KARTEND_ARCHIVE_TOOL_SKIP("No archive-creation tool (zip/bsdtar/7z) on PATH");
+  }
+  const QString secondPlaylist = resolveFor(QStringLiteral("ReleaseB"));
+  QVERIFY(!secondPlaylist.isEmpty());
+
+  QVERIFY2(QFileInfo(firstPlaylist).absolutePath() != QFileInfo(secondPlaylist).absolutePath(),
+           "two resolved playlists must not share a parent directory");
+
+  // Simulate the failed-launch reclaim on the first release and prove the
+  // second survives it.
+  QDir(QFileInfo(firstPlaylist).absolutePath()).removeRecursively();
+  QVERIFY(!QFileInfo::exists(firstPlaylist));
+  QVERIFY2(QFileInfo::exists(secondPlaylist),
+           "reclaiming one release's playlist dir must not touch another's");
+}
+
+namespace {
+
+/// Non-forking extractor seam that "extracts" to a fixed @p out: creates the
+/// file (and its folders) unless @p create is false, then returns the path. No
+/// sleep — these Kartend-dmg5y cases are about what happens to the result.
+LaunchManager::ArchiveExtractFn extractorReturning(const QString &out, bool create = true) {
+  return [out, create](const QString &, const QString &,
+                       const std::atomic_bool *) -> ErrorUtils::Result<QString> {
+    if (create) {
+      QDir().mkpath(QFileInfo(out).absolutePath());
+      QFile f(out);
+      if (f.open(QIODevice::WriteOnly)) {
+        f.write("FAKE");
+        f.close();
+      }
+    }
+    return out;
+  };
+}
+
+bool writeTextFile(const QString &path, const QByteArray &body) {
+  QDir().mkpath(QFileInfo(path).absolutePath());
+  QFile f(path);
+  if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return false;
+  }
+  const bool ok = f.write(body) == body.size();
+  f.close();
+  return ok;
+}
+
+} // namespace
+
+void TestLaunchManager::testOwnedExtractionDir_mapsOnlyWhatTheExtractionCreated() {
+  // Kartend-dmg5y: every reclaim path removeRecursively()s this answer, so it
+  // must name the top-level entry the extraction created and nothing else.
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString base = root.filePath(QStringLiteral("base"));
+  const QString canonicalBase = [&]() {
+    QDir().mkpath(base);
+    return QFileInfo(base).canonicalFilePath();
+  }();
+
+  const QString nested = base + QStringLiteral("/kartend_extract/Game/Game (USA)/Game (USA).cue");
+  const QString flat = base + QStringLiteral("/kartend_extract/Flat/disc.iso");
+  const QString release = base + QStringLiteral("/kartend_playlists/Rel/Rel.m3u");
+  const QString perRun = base + QStringLiteral("/kartend_extract_AbC123/Name/disc.iso");
+  const QString strayInRoot = base + QStringLiteral("/kartend_extract/stray.iso");
+  const QString userFileUnderBase = base + QStringLiteral("/library/Game.m3u");
+  const QString outside = root.filePath(QStringLiteral("library/Game.m3u"));
+  for (const QString &p :
+       {nested, flat, release, perRun, strayInRoot, userFileUnderBase, outside}) {
+    QVERIFY2(writeTextFile(p, "x"), qPrintable(p));
+  }
+
+  // A disc image in a subfolder of the archive still belongs to the ENTRY —
+  // the unit the sweep ages and the in-use exclusion names.
+  QCOMPARE(LaunchManager::ownedExtractionDir(nested, base),
+           canonicalBase + QStringLiteral("/kartend_extract/Game"));
+  QCOMPARE(LaunchManager::ownedExtractionDir(flat, base),
+           canonicalBase + QStringLiteral("/kartend_extract/Flat"));
+  QCOMPARE(LaunchManager::ownedExtractionDir(release, base),
+           canonicalBase + QStringLiteral("/kartend_playlists/Rel"));
+  QCOMPARE(LaunchManager::ownedExtractionDir(perRun, base),
+           canonicalBase + QStringLiteral("/kartend_extract_AbC123"));
+
+  // Everything the extraction did not create owns nothing.
+  QVERIFY2(LaunchManager::ownedExtractionDir(strayInRoot, base).isEmpty(),
+           "a file directly in an extraction root is not inside any entry");
+  QVERIFY2(LaunchManager::ownedExtractionDir(userFileUnderBase, base).isEmpty(),
+           "a user's own folder under a configured base is not an extraction entry");
+  QVERIFY2(LaunchManager::ownedExtractionDir(outside, base).isEmpty(),
+           "a path outside the extraction root must never be owned");
+  QVERIFY2(
+      LaunchManager::ownedExtractionDir(base + QStringLiteral("/kartend_extract/Gone/x.iso"), base)
+          .isEmpty(),
+      "a path that does not exist cannot be proven inside the root");
+  QVERIFY(LaunchManager::ownedExtractionDir(QString(), base).isEmpty());
+}
+
+void TestLaunchManager::testLaunchItem_unchangedPlaylistNeverReclaimsItsFolder() {
+  // Kartend-dmg5y F1: resolvePlaylistForLaunch hands back the ORIGINAL
+  // playlist when no member turned out to be archived (the .m3u can change
+  // between the GUI-thread check and the worker's re-read). Deriving the
+  // reclaim dir from the launch file's parent then made the user's own
+  // library folder the "extraction", and the failed launch deleted it.
+  QTemporaryDir library;
+  QVERIFY(library.isValid());
+  const QString m3u = library.filePath(QStringLiteral("Game.m3u"));
+  const QString keep = library.filePath(QStringLiteral("Game (Disc 1).cue"));
+  QVERIFY(writeTextFile(m3u, "Game (Disc 1).zip\n")); // archived member → extraction branch
+  QVERIFY(writeTextFile(keep, "user data"));
+  QVERIFY(LaunchManager::playlistNeedsExtraction(m3u));
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Multi-disc Collection");
+  collection.launcher.launcherPath = m_tempExecutable;
+  collections.append(collection);
+
+  // Detached path (no ctx): its FailedToStart reclaim is unconditional.
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.collections = &collections;
+  manager.setupReferences(setup);
+  manager.setArchiveExtractorForTesting(extractorReturning(m3u, /*create=*/false));
+  manager.setLauncherSpawnerForTesting(KartendTest::fakeFailingLauncherSpawner());
+
+  QSignalSpy endedSpy(&manager, &LaunchManager::detachedSessionEnded);
+  manager.launchItem(m3u, 0);
+  // The failure handler — the reclaim under test — has run once this fires.
+  QTRY_COMPARE_WITH_TIMEOUT(endedSpy.count(), 1, 15000);
+
+  QVERIFY2(QDir(library.path()).exists(), "the user's library folder must survive");
+  QVERIFY2(QFileInfo::exists(m3u), "the user's playlist must survive");
+  QVERIFY2(QFileInfo::exists(keep), "the user's disc files must survive");
+}
+
+void TestLaunchManager::testLaunchItem_nestedArchiveReclaimsTheWholeEntry() {
+  // Kartend-dmg5y F2: an archive laid out as <folder>/<disc> puts the launch
+  // file one level below its extraction entry. The owned dir is the entry, so
+  // a failed launch reclaims all of it — not just the subfolder, which is what
+  // deriving it from the launch file's parent did.
+  const QString base = QStringLiteral("kartend_dmg5y_nested");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+  const QString zip = makeArchiveStub(base);
+  QVERIFY2(!zip.isEmpty(), "could not create the archive stub");
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Archive Collection");
+  collection.archive.extractArchives = true;
+  collection.archive.extractedExtension = QStringLiteral(".cue");
+  collection.launcher.launcherPath = m_tempExecutable;
+  collections.append(collection);
+
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.collections = &collections;
+  manager.setupReferences(setup);
+  manager.setArchiveExtractorForTesting(
+      extractorReturning(extractionDir + QStringLiteral("/Game (USA)/Game (USA).cue")));
+  manager.setLauncherSpawnerForTesting(KartendTest::fakeFailingLauncherSpawner());
+
+  QSignalSpy endedSpy(&manager, &LaunchManager::detachedSessionEnded);
+  manager.launchItem(zip, 0);
+  QTRY_COMPARE_WITH_TIMEOUT(endedSpy.count(), 1, 15000);
+
+  QVERIFY2(!QDir(extractionDir).exists(),
+           "a failed launch must reclaim the whole extraction entry, not only the subfolder "
+           "holding the disc image");
+}
+
+void TestLaunchManager::testLaunchItem_refusedRelaunchKeepsTheRunningMedia() {
+  // Kartend-dmg5y F3: relaunching the title that is already running hits the
+  // same per-archive cache entry and is refused by launchTracked. The refused
+  // launch used to overwrite, then clear, the running session's in-use entry
+  // and — through finishLaunch's reject guard — delete the very media the
+  // running program was reading.
+  const QString base = QStringLiteral("kartend_dmg5y_running");
+  const QString extractionDir = extractionDirFor(base);
+  QDir(extractionDir).removeRecursively();
+  // Two stubs so the second launch is not swallowed by the per-path
+  // double-launch debounce; both "extract" to one entry, as the same title
+  // would through the cache.
+  const QString first = makeArchiveStub(base + QStringLiteral("_a"));
+  const QString second = makeArchiveStub(base + QStringLiteral("_b"));
+  QVERIFY(!first.isEmpty() && !second.isEmpty());
+  const QString disc = extractionDir + QStringLiteral("/disc.iso");
+
+  QList<CollectionConfig> collections;
+  CollectionConfig collection;
+  collection.name = QStringLiteral("Archive Collection");
+  collection.archive.extractArchives = true;
+  collection.archive.extractedExtension = QStringLiteral(".iso");
+  collection.launcher.launcherPath = m_tempExecutable;
+  collections.append(collection);
+
+  GeneralSettings settings;
+  settings.runtimeDetection.runtimeDetectionEnabled = true;
+  // Zero retention: the sweep the second launch runs removes every entry
+  // that is not protected, so only the in-use bookkeeping keeps the media.
+  settings.launchers.extractionRetentionHours = 0;
+  ApplicationContext ctx;
+  ctx.collection.generalSettings = &settings;
+
+  LaunchManager manager;
+  LaunchManagerSetup setup;
+  setup.ctx = &ctx;
+  setup.collections = &collections;
+  manager.setupReferences(setup);
+  manager.setArchiveExtractorForTesting(extractorReturning(disc));
+  // A spawner that never reports back: the first tracked child stays "running".
+  manager.setLauncherSpawnerForTesting([](QProcess *, const QString &, const QStringList &) {});
+
+  QSignalSpy extractionFinishedSpy(&manager, &LaunchManager::extractionFinished);
+  manager.launchItem(first, 0);
+  QTRY_COMPARE_WITH_TIMEOUT(extractionFinishedSpy.count(), 1, 15000);
+  QVERIFY(manager.isRuntimeChildRunning());
+  const QString owned = QFileInfo(extractionDir).canonicalFilePath();
+  QCOMPARE(manager.activeExtractionDirsForTesting(), QStringList{owned});
+
+  manager.launchItem(second, 0);
+  QTRY_COMPARE_WITH_TIMEOUT(extractionFinishedSpy.count(), 2, 15000);
+
+  QVERIFY2(manager.isRuntimeChildRunning(), "the first session must still be running");
+  QCOMPARE(manager.activeExtractionDirsForTesting(), QStringList{owned});
+  QVERIFY2(QFileInfo::exists(disc), "the running session's media must survive a refused relaunch");
+  QDir(extractionDir).removeRecursively();
 }
 
 void TestLaunchManager::testExtractArchive_sizeCapKillsRunawayExtractor() {

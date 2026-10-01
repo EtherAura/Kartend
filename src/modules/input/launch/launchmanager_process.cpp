@@ -119,11 +119,24 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
                      tr("Another launched item appears to be running:\n%1").arg(m_detachedFilePath),
                      QStringLiteral("LaunchManager::launchDetachedWatched")));
     // The caller (finishLaunch) has already dismissed its extraction scope
-    // guard for this path, so the reject owns reclaiming the extracted dir.
-    if (!extractedDir.isEmpty()) {
+    // guard for this path, so the reject owns reclaiming the extracted dir —
+    // unless the running session is reading it, which is exactly the case
+    // when the title being refused is the one already running (same cache
+    // entry, Kartend-dmg5y).
+    if (!extractedDir.isEmpty() && !isExtractionDirInUse(extractedDir)) {
       QDir(extractedDir).removeRecursively();
     }
     return false;
+  }
+
+  // Kartend-ra8sf: mark the extraction in use for the session, so a sweep
+  // triggered by a later launch cannot expire media this child is reading.
+  // Registered only past the reject above (a refused launch owns nothing), and
+  // before the spawn, whose FailedToStart can arrive synchronously and must
+  // find the entry to remove. A list, not a slot: detached children can
+  // outlive their watch windows side by side (Kartend-dmg5y).
+  if (!extractedDir.isEmpty()) {
+    m_detachedExtractedDirs.append(extractedDir);
   }
 
   auto *child = new QProcess(this);
@@ -140,9 +153,28 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
   // wins; the loser becomes a no-op.
   auto settled = std::make_shared<bool>(false);
 
+  // Captured by value (no `this`): the post-window branch orphans the child so
+  // it outlives this manager, and the reclaim wired there must stay valid.
+  const int retentionHours =
+      m_generalSettings ? m_generalSettings->launchers.extractionRetentionHours : 0;
   auto reclaimExtraction = [extractedDir]() {
-    if (!extractedDir.isEmpty()) {
+    if (extractedDir.isEmpty()) {
+      return;
+    }
+    // Kartend-ra8sf: an early failure never used the media, so it is dropped
+    // regardless of retention — keeping a copy nothing ever read would be
+    // paying the disk cost for no cache benefit. A clean exit under a non-zero
+    // retention takes the touch path instead (see the finished handler).
+    QDir(extractedDir).removeRecursively();
+  };
+  auto releaseExtraction = [extractedDir, retentionHours]() {
+    if (extractedDir.isEmpty()) {
+      return;
+    }
+    if (retentionHours == 0) {
       QDir(extractedDir).removeRecursively();
+    } else {
+      touchExtractionMarker(extractedDir);
     }
   };
 
@@ -152,44 +184,73 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
   window->setSingleShot(true);
   window->setInterval(kEarlyFailureWindowMs);
 
-  connect(window, &QTimer::timeout, this,
-          [this, settled, originalFilePath, collectionUuid, child]() {
-            if (*settled) {
-              return;
-            }
-            *settled = true;
-            // Survived the window with the spawn intact → genuine launch.
-            // Record it once, then forget the child: drop our slots so a later
-            // exit is silent, and let the QProcess self-delete when it ends.
-            recordSuccessfulLaunch(originalFilePath, collectionUuid);
-            child->disconnect();
-            // Sever QObject ownership NOW: left parented to this manager, the
-            // child would be destroyed in ~LaunchManager at frontend shutdown,
-            // and ~QProcess kills a still-running process — closing the
-            // frontend must not terminate the user's program mid-session
-            // (the historical startDetached contract). Track the orphan so
-            // the destructor can reap it if it exits before we do.
-            child->setParent(nullptr);
-            m_survivedDetachedChildren.removeAll(nullptr);
-            m_survivedDetachedChildren.append(child);
-            connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), child,
-                    [child](int, QProcess::ExitStatus) { child->deleteLater(); });
-            // Kartend-3232r.1: re-arm the balanced detachedSessionEnded for
-            // the child's REAL exit — the attract/gamepad suspend wiring
-            // waits on it. Contexted on `this` (unlike the deleteLater above,
-            // which must survive us): the orphan outlives the manager at
-            // shutdown, and a `this` capture firing then would dangle.
-            connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-                    [this, child, originalFilePath](int, QProcess::ExitStatus) {
-                      if (m_activeDetachedChild == child) {
-                        m_detachedSessionActive = false;
-                        emit detachedSessionEnded(originalFilePath);
-                      }
-                    });
-          });
+  connect(
+      window, &QTimer::timeout, this,
+      [this, settled, originalFilePath, collectionUuid, child, extractedDir, releaseExtraction]() {
+        if (*settled) {
+          return;
+        }
+        *settled = true;
+        // Survived the window with the spawn intact → genuine launch.
+        // Record it once, then forget the child: drop our slots so a later
+        // exit is silent, and let the QProcess self-delete when it ends.
+        recordSuccessfulLaunch(originalFilePath, collectionUuid);
+        child->disconnect();
+        // Sever QObject ownership NOW: left parented to this manager, the
+        // child would be destroyed in ~LaunchManager at frontend shutdown,
+        // and ~QProcess kills a still-running process — closing the
+        // frontend must not terminate the user's program mid-session
+        // (the historical startDetached contract). Track the orphan so
+        // the destructor can reap it if it exits before we do.
+        child->setParent(nullptr);
+        m_survivedDetachedChildren.removeAll(nullptr);
+        m_survivedDetachedChildren.append(child);
+        // Set once the manager-side handler below has released the media,
+        // so the orphan-safe fallback after it does not release it twice.
+        auto released = std::make_shared<bool>(false);
+        // Kartend-3232r.1: re-arm the balanced detachedSessionEnded for
+        // the child's REAL exit — the attract/gamepad suspend wiring
+        // waits on it. Contexted on `this` (unlike the deleteLater below,
+        // which must survive us): the orphan outlives the manager at
+        // shutdown, and a `this` capture firing then would dangle.
+        //
+        // Kartend-dmg5y: connected FIRST, so that while we are alive it is
+        // this handler — the one that can see the other live sessions —
+        // that retires the in-use entry and releases the media, sparing
+        // it when another session is reading the same cache entry.
+        connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+                [this, child, originalFilePath, extractedDir, releaseExtraction,
+                 released](int, QProcess::ExitStatus) {
+                  m_detachedExtractedDirs.removeOne(extractedDir);
+                  if (!isExtractionDirInUse(extractedDir)) {
+                    releaseExtraction();
+                  }
+                  *released = true;
+                  if (m_activeDetachedChild == child) {
+                    m_detachedSessionActive = false;
+                    emit detachedSessionEnded(originalFilePath);
+                  }
+                });
+        connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), child,
+                [child, releaseExtraction, released](int, QProcess::ExitStatus) {
+                  // Kartend-2ygme: reclaim the extracted media at the
+                  // child's REAL exit. Contexted on `child` (like the
+                  // deleteLater it sits beside) rather than on `this`:
+                  // this branch has deliberately orphaned the child so it
+                  // survives frontend shutdown, and a `this`-contexted
+                  // slot would simply never run in that case. The lambda
+                  // captures only a QString and a flag, so it is safe
+                  // without us; while we are alive the handler above has
+                  // already done the release.
+                  if (!*released) {
+                    releaseExtraction();
+                  }
+                  child->deleteLater();
+                });
+      });
 
   connect(child, &QProcess::errorOccurred, this,
-          [this, settled, child, cmd, launcherPath, originalFilePath,
+          [this, settled, child, cmd, launcherPath, originalFilePath, extractedDir,
            reclaimExtraction](QProcess::ProcessError error) {
             if (*settled) {
               return;
@@ -209,7 +270,12 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
                   nullptr,
                   ErrorContext::critical(ErrorCode::UnknownError, errorMsg,
                                          QStringLiteral("LaunchManager::launchDetachedWatched")));
-              reclaimExtraction();
+              // Retire this launch's in-use entry, then reclaim unless another
+              // session is reading the same cache entry (Kartend-dmg5y).
+              m_detachedExtractedDirs.removeOne(extractedDir);
+              if (!isExtractionDirInUse(extractedDir)) {
+                reclaimExtraction();
+              }
               // Balanced ended for the suspend wiring (started was emitted
               // just before the spawn call). Guarded so a superseded child
               // can't close a newer session's pair.
@@ -222,7 +288,7 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
           });
 
   connect(child, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-          [this, settled, child, originalFilePath, collectionUuid,
+          [this, settled, child, originalFilePath, collectionUuid, extractedDir,
            reclaimExtraction](int exitCode, QProcess::ExitStatus status) {
             if (*settled) {
               return;
@@ -242,8 +308,14 @@ bool LaunchManager::launchDetachedWatched(const QString &launcherPath, const Lau
                                    .arg(exitCode)
                                    .arg(originalFilePath),
                                QStringLiteral("LaunchManager::launchDetachedWatched")));
-              reclaimExtraction();
+              m_detachedExtractedDirs.removeOne(extractedDir);
+              if (!isExtractionDirInUse(extractedDir)) {
+                reclaimExtraction();
+              }
             } else {
+              // A clean exit this fast keeps its in-use entry: a launcher that
+              // hands off to another process and returns 0 may leave that
+              // process reading the media (see m_detachedExtractedDirs).
               recordSuccessfulLaunch(originalFilePath, collectionUuid);
             }
             // Balanced ended for the suspend wiring; guarded so a superseded
@@ -290,6 +362,12 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
   m_trackedFilePath = filePath;
   m_trackedCollectionUuid = collectionUuid;
   m_trackedStartTime = QDateTime();
+  // Kartend-ra8sf: mark the extraction in use for the session, so a sweep
+  // triggered by a later launch cannot expire media this child is reading.
+  // Only now, past the single-child rejection above: a refused launch owns no
+  // session, and setting this before the check overwrote — and then cleared —
+  // the running child's entry (Kartend-dmg5y). Cleared by `cleanup` below.
+  m_trackedExtractedDir = extractedDir;
 
   // Detach the child from Kartend's stdio so a busy launcher doesn't fill
   // our pipes (and to avoid blocking on closed channels at exit).
@@ -316,9 +394,29 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
   // QProcess emits exactly one of finished() or errorOccurred()-with-FailedToStart
   // before the object is safe to delete. Funnel both through a single cleanup
   // lambda so the UI always sees a balanced started/finished pair.
-  auto cleanup = [this, child, filePath]() {
+  const int retentionHours =
+      m_generalSettings ? m_generalSettings->launchers.extractionRetentionHours : 0;
+  auto cleanup = [this, child, filePath, extractedDir, retentionHours]() {
     if (m_trackedChild != child) {
       return; // Already cleaned up.
+    }
+    // Kartend-2ygme / Kartend-ra8sf: the child is done with the extracted
+    // media. Under a zero retention that means deleting it now; otherwise the
+    // marker's mtime — refreshed on every reuse — starts its retention clock
+    // and a later sweep expires it. This funnel covers both terminal outcomes
+    // (finished and FailedToStart), so it is the one place that sees every
+    // tracked exit.
+    //
+    // Retire our in-use entry first, so the check below sees only OTHER live
+    // sessions: a detached one reading the same cache entry keeps it
+    // (Kartend-dmg5y). Once cleared, a later sweep may consider it for expiry.
+    m_trackedExtractedDir.clear();
+    if (!extractedDir.isEmpty() && !isExtractionDirInUse(extractedDir)) {
+      if (retentionHours == 0) {
+        QDir(extractedDir).removeRecursively();
+      } else {
+        touchExtractionMarker(extractedDir);
+      }
     }
     // record the session duration before clearing the tracked
     // state. Skip when the child never reached `started` (FailedToStart) —
@@ -363,11 +461,15 @@ bool LaunchManager::launchTracked(const QString &launcherPath, const LaunchComma
   // dir was orphaned. By-value capture detaches the QString from the
   // reference param, which dies before the lambda fires.
   if (!extractedDir.isEmpty()) {
-    connect(child, &QProcess::errorOccurred, this, [extractedDir](QProcess::ProcessError error) {
-      if (error == QProcess::FailedToStart) {
-        QDir(extractedDir).removeRecursively();
-      }
-    });
+    connect(child, &QProcess::errorOccurred, this,
+            [this, extractedDir](QProcess::ProcessError error) {
+              // `cleanup` (connected above, so already run) has retired our own
+              // in-use entry; what remains is another live session reading
+              // the same cache entry, whose media must survive our failure.
+              if (error == QProcess::FailedToStart && !isExtractionDirInUse(extractedDir)) {
+                QDir(extractedDir).removeRecursively();
+              }
+            });
   }
 
   // See the detached-start path above: pin CWD to the launcher's own

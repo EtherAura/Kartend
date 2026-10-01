@@ -292,8 +292,7 @@ ErrorUtils::Result<ExtractResult> Extractor::extractTo(const QString &kartPath,
   // below bound each entry individually, but a crafted bundle can still exhaust
   // inodes (millions of tiny entries) or disk (many near-max entries) in
   // aggregate. Track entry count and cumulative written bytes and abort cleanly
-  // once either crosses its ceiling, mirroring archiverepack's kMaxEntries and
-  // launchmanagerarchive's cumulative MAX_EXTRACTION_BYTES.
+  // once either crosses its ceiling, mirroring archiverepack's kMaxEntries.
   quint64 entryCount = 0;
   quint64 totalExtractedBytes = 0;
   // Kartend-qbfk1: one entry must not overwrite another within the same

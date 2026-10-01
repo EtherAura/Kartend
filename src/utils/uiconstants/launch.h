@@ -12,6 +12,12 @@ namespace Launch {
 /// a temp extraction directory. Bounds work and limits the blast radius if
 /// a malicious archive contains deeply nested or symlinked structures.
 inline constexpr int MAX_EXTRACTION_DEPTH = 16;
+/// Ceiling on entries read from a generated multi-disc playlist, and on the
+/// playlist's own size (Kartend-ab8ri). A real release is a handful of discs;
+/// these only stop a corrupt or hand-edited .m3u from driving an unbounded
+/// number of extractions.
+inline constexpr int MAX_PLAYLIST_ENTRIES = 64;
+inline constexpr long long MAX_PLAYLIST_BYTES = 1LL * 1024 * 1024;
 /// Hard ceiling on the number of files inspected while scanning an
 /// extraction directory for a target extension.
 inline constexpr int MAX_EXTRACTION_FILES_INSPECTED = 50000;
@@ -23,13 +29,27 @@ inline constexpr int MIN_HISTORY_MAX_ENTRIES = 10;
 /// Maximum configurable launch-history cap. Bounds the per-launch trim
 /// query so the journal can't grow unbounded.
 inline constexpr int MAX_HISTORY_MAX_ENTRIES = 50000;
-/// Hard ceiling on cumulative decompressed bytes written by a launch-time
-/// archive extraction (Kartend-ijglg). TMPDIR is tmpfs on most Linux
-/// systems, so an unbounded extraction (a zip bomb inside an imported
-/// archive) is a RAM/OOM DoS, not just a disk-space leak. 4 GiB comfortably
-/// covers real media archives (dual-layer DVD images) while staying well
-/// below typical tmpfs limits (half of RAM).
-inline constexpr long long MAX_EXTRACTION_BYTES = 4LL * 1024 * 1024 * 1024;
+/// Free space that must remain on the extraction volume. The watchdog aborts
+/// the extraction when available space falls below this, so a runaway archive
+/// cannot fill the disk out from under the rest of the system.
+///
+/// This replaced a fixed 4 GiB cumulative-byte cap (Kartend-si0p5). That cap
+/// was introduced (Kartend-ijglg) to stop a decompression bomb from
+/// exhausting RAM, on the reasoning that extraction targets TMPDIR and TMPDIR
+/// is tmpfs. Two things were wrong with it:
+///
+///   - The bound was below legitimate content. A dual-layer DVD image is
+///     8.5 GB, over twice the cap, so real disc images were rejected outright.
+///   - The threat it named did not reach this code. Untrusted .kart bundles
+///     are unpacked by KartReader::extractTo, under its own far more generous
+///     KartFormat::MAX_TOTAL_EXTRACTED_BYTES. What this cap actually gated was
+///     the user launching their own media from their own library.
+///
+/// The genuine hazard was never the byte count but the destination: extracting
+/// into tmpfs spends RAM. Extraction now targets a disk-backed directory
+/// (LauncherSettings::extractionDirectory) and is bounded by free space on
+/// that volume, which is the resource actually at stake.
+inline constexpr long long EXTRACTION_FREE_SPACE_MARGIN_BYTES = 2LL * 1024 * 1024 * 1024;
 /// Poll interval for the extraction watchdog loop. Each tick re-checks the
 /// cancellation flag and the decompressed-size cap, so this bounds both the
 /// cancel latency and the cap-overshoot window.

@@ -46,9 +46,10 @@ inline constexpr quint64 MAX_ENTRY_SIZE = 8ull * 1024ull * 1024ull * 1024ull;
 // inode-exhaustion ceiling is recognizable across extractors.
 //
 // MAX_TOTAL_EXTRACTED_BYTES is a deliberately generous sanity backstop, NOT a
-// tight quota: a legitimate .kart can carry an entire media collection, so this
-// sits well above launchmanagerarchive's per-launch MAX_EXTRACTION_BYTES (4 GiB)
-// — it exists only to stop a runaway/abusive bundle from filling the disk.
+// tight quota: a legitimate .kart can carry an entire media collection — it
+// exists only to stop a runaway/abusive bundle from filling the disk. This is
+// the bound that covers untrusted bundles; launch-time archive extraction is a
+// separate path with its own free-space bound (Kartend-si0p5).
 inline constexpr quint64 MAX_ENTRY_COUNT = 200000;
 
 inline constexpr quint64 MAX_TOTAL_EXTRACTED_BYTES = 2048ull * 1024ull * 1024ull * 1024ull;

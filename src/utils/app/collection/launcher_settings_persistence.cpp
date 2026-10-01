@@ -9,10 +9,15 @@ namespace LauncherSettingsPersistence {
 
 void loadScalars(QSettings &settings, LauncherSettings &opts) {
   opts.retroarchConfigPath = settings.value(keys::kRetroarchConfigPath, QString()).toString();
+  opts.extractionDirectory = settings.value(keys::kExtractionDirectory, QString()).toString();
+  opts.extractionRetentionHours =
+      settings.value(keys::kExtractionRetentionHours, opts.extractionRetentionHours).toInt();
 }
 
 void saveScalars(QSettings &settings, const LauncherSettings &opts) {
   settings.setValue(keys::kRetroarchConfigPath, opts.retroarchConfigPath);
+  settings.setValue(keys::kExtractionDirectory, opts.extractionDirectory);
+  settings.setValue(keys::kExtractionRetentionHours, opts.extractionRetentionHours);
 }
 
 void loadPresets(QSettings &settings, LauncherSettings &opts, const PathSanitizer &sanitize) {

@@ -28,6 +28,8 @@ GeneralSettingsPanel::GeneralSettingsPanel(QWidget *parent)
           &GeneralSettingsPanel::onBrowseRetroarchConfig);
   connect(ui->browseQuarantineDefaultButton, &QPushButton::clicked, this,
           &GeneralSettingsPanel::onBrowseQuarantineDefault);
+  connect(ui->browseExtractionDirButton, &QPushButton::clicked, this,
+          &GeneralSettingsPanel::onBrowseExtractionDir);
 
   connectChangeSignals();
 }
@@ -53,6 +55,9 @@ void GeneralSettingsPanel::load() {
   SettingsFormBinding::loadInto(ui->startupVideoEnabledCheckBox, s->startup.startupVideoEnabled);
   SettingsFormBinding::loadInto(ui->startupVideoPathLineEdit, s->startup.startupVideoPath);
   SettingsFormBinding::loadInto(ui->retroarchConfigLineEdit, s->launchers.retroarchConfigPath);
+  SettingsFormBinding::loadInto(ui->extractionDirLineEdit, s->launchers.extractionDirectory);
+  SettingsFormBinding::loadInto(ui->extractionRetentionSpinBox,
+                                s->launchers.extractionRetentionHours);
   SettingsFormBinding::loadInto(ui->quarantineDefaultDirLineEdit,
                                 s->scraper.options.quarantineDefaultDir);
 
@@ -132,6 +137,14 @@ void GeneralSettingsPanel::onBrowseRetroarchConfig() {
   }
 }
 
+void GeneralSettingsPanel::onBrowseExtractionDir() {
+  const QString dir = QFileDialog::getExistingDirectory(
+      this, tr("Select archive extraction folder"), QDir::homePath());
+  if (!dir.isEmpty()) {
+    ui->extractionDirLineEdit->setText(dir);
+  }
+}
+
 void GeneralSettingsPanel::onBrowseQuarantineDefault() {
   const QString dir = QFileDialog::getExistingDirectory(
       this, tr("Select default quarantine folder"), QDir::homePath());
@@ -153,6 +166,8 @@ void GeneralSettingsPanel::save() {
   s->startup.startupVideoEnabled = ui->startupVideoEnabledCheckBox->isChecked();
   s->startup.startupVideoPath = ui->startupVideoPathLineEdit->text();
   s->launchers.retroarchConfigPath = ui->retroarchConfigLineEdit->text();
+  s->launchers.extractionDirectory = ui->extractionDirLineEdit->text();
+  s->launchers.extractionRetentionHours = ui->extractionRetentionSpinBox->value();
   s->scraper.options.quarantineDefaultDir = ui->quarantineDefaultDirLineEdit->text();
 
   // Selection & Display
@@ -203,6 +218,9 @@ void GeneralSettingsPanel::connectChangeSignals() {
           [this](const QString &) { save(); });
   connect(ui->retroarchConfigLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { save(); });
+  connect(ui->extractionDirLineEdit, &QLineEdit::textChanged, this,
+          [this](const QString &) { save(); });
+  connect(ui->extractionRetentionSpinBox, &QSpinBox::valueChanged, this, [this](int) { save(); });
   connect(ui->quarantineDefaultDirLineEdit, &QLineEdit::textChanged, this,
           [this](const QString &) { save(); });
 

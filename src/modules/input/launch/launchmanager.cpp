@@ -71,6 +71,13 @@ void LaunchManager::setupReferences(const LaunchManagerSetup &setup) {
   m_collections = setup.getCollections();
   if (m_ctx) {
     m_generalSettings = m_ctx->collection.generalSettings;
+    // Kartend-2ygme / Kartend-ra8sf: expire extractions left by a previous run
+    // — both orphans a crash stranded and entries that have outlived their
+    // retention. This is the earliest point the configured directory is known,
+    // and no launch can be in flight yet, so the in-use list is empty.
+    sweepStaleExtractions(
+        m_generalSettings ? m_generalSettings->launchers.extractionDirectory : QString(),
+        m_generalSettings ? m_generalSettings->launchers.extractionRetentionHours : 0);
   }
   m_onLaunched = setup.onLaunched;
   m_onPlaySessionEnded = setup.onPlaySessionEnded;
@@ -369,6 +376,20 @@ void LaunchManager::launchItem(const QString &filePath, int collectionIndex, int
     return;
   }
 
+  // Kartend-ab8ri: a collapsed multi-disc item launches its generated .m3u.
+  // That is not an archive, so the branch above cannot fire for it — yet its
+  // members may well be archives, in which case the launcher gets a playlist
+  // of .zip paths it cannot open. Deliberately NOT gated on extractArchives:
+  // that flag describes archives the user launches directly, and it is
+  // structurally incapable of applying to a playlist, so honouring it here
+  // would leave collapsed releases broken with no setting that fixes them.
+  if (playlistNeedsExtraction(filePath)) {
+    qCDebug(lcLaunchManager) << "Multi-disc playlist with archived members:" << filePath;
+    startExtractionAndLaunch(filePath, archiveOptions.extractedExtension, launcher, collectionName,
+                             collectionUuid);
+    return;
+  }
+
   finishLaunch(launcher, collectionName, filePath, filePath, QString(), collectionUuid);
 }
 
@@ -396,13 +417,21 @@ void LaunchManager::startExtractionAndLaunch(const QString &filePath,
   m_extractionCancel = std::make_shared<std::atomic_bool>(false);
   const std::shared_ptr<std::atomic_bool> cancelFlag = m_extractionCancel;
 
+  // Kartend-si0p5: resolve the configured extraction root here, on the GUI
+  // thread, and capture it by value — m_generalSettings must not be read from
+  // the worker. The completion handler needs the same root to work out which
+  // directory the launch owns (Kartend-dmg5y), so it is fixed once, up front.
+  const QString extractionDir =
+      m_generalSettings ? m_generalSettings->launchers.extractionDirectory : QString();
+
   // Codebase-standard worker pattern (see coverflowwidget_artwork.cpp):
   // QtConcurrent::run + a QFutureWatcher parented to this manager delivers
   // the result back on the GUI thread; the connection dies with us, so the
   // continuation can safely touch members.
   auto *watcher = new QFutureWatcher<ErrorUtils::Result<QString>>(this);
   connect(watcher, &QFutureWatcher<ErrorUtils::Result<QString>>::finished, this,
-          [this, watcher, cancelFlag, launcher, collectionName, collectionUuid, filePath]() {
+          [this, watcher, cancelFlag, launcher, collectionName, collectionUuid, filePath,
+           extractionDir]() {
             watcher->deleteLater();
             const ErrorUtils::Result<QString> result = watcher->result();
             m_extractionActive = false;
@@ -422,8 +451,14 @@ void LaunchManager::startExtractionAndLaunch(const QString &filePath,
             }
             const QString &launchFilePath = result.value();
             qCDebug(lcLaunchManager) << "Launching extracted file:" << launchFilePath;
+            // Kartend-dmg5y: the directory this launch owns — and every reclaim
+            // path will removeRecursively() — is the top-level entry the
+            // extraction created, never simply the launch file's parent. The
+            // parent is a subfolder when the disc image sits inside a folder in
+            // the archive (the in-use exclusion then misses it), and it is the
+            // user's own library folder when a playlist resolves unchanged.
             finishLaunch(launcher, collectionName, filePath, launchFilePath,
-                         QFileInfo(launchFilePath).absolutePath(), collectionUuid);
+                         ownedExtractionDir(launchFilePath, extractionDir), collectionUuid);
           });
 
   emit extractionStarted(filePath, QFileInfo(filePath).completeBaseName());
@@ -431,13 +466,27 @@ void LaunchManager::startExtractionAndLaunch(const QString &filePath,
   // on the worker) so the cancel-atomic / QFutureWatcher concurrency can run
   // under ThreadSanitizer without forking an extractor child. The seam is
   // captured by value so the worker holds its own copy. Null in production.
-  m_extractionFuture =
-      QtConcurrent::run([filePath, targetExtension, cancelFlag, extractor = m_archiveExtractor]() {
-        if (extractor) {
-          return extractor(filePath, targetExtension, cancelFlag.get());
-        }
-        return extractArchiveToTemp(filePath, targetExtension, cancelFlag.get());
-      });
+
+  // Kartend-ra8sf: expire what it is now safe to expire, before adding to the
+  // folder. Startup alone is not enough — a frontend left running for weeks
+  // would never age anything out. This runs HERE, on the GUI thread, rather
+  // than in the worker precisely because the in-use exclusion needs the
+  // running launches' dirs, which are manager state.
+  sweepStaleExtractions(
+      extractionDir, m_generalSettings ? m_generalSettings->launchers.extractionRetentionHours : 0,
+      activeExtractionDirs());
+  m_extractionFuture = QtConcurrent::run([filePath, targetExtension, cancelFlag, extractionDir,
+                                          extractor = m_archiveExtractor]() {
+    if (extractor) {
+      return extractor(filePath, targetExtension, cancelFlag.get());
+    }
+    // Kartend-ab8ri: a playlist resolves its members (each through the normal
+    // extraction path); anything else is a single archive.
+    if (isPlaylistFile(filePath)) {
+      return resolvePlaylistForLaunch(filePath, targetExtension, cancelFlag.get(), extractionDir);
+    }
+    return extractArchiveToTemp(filePath, targetExtension, cancelFlag.get(), -1, extractionDir);
+  });
   watcher->setFuture(m_extractionFuture);
 }
 
@@ -454,8 +503,13 @@ void LaunchManager::finishLaunch(const LauncherConfig &launcher, const QString &
   // launch path; any earlier return below (validation failure, missing
   // launcher binary, failed startDetached) removes the extracted directory so
   // /tmp does not accumulate orphaned archive contents.
-  auto cleanupExtraction = qScopeGuard([extractedDir]() {
-    if (!extractedDir.isEmpty()) {
+  //
+  // Kartend-dmg5y: except when a running launch is reading from that same
+  // directory. Relaunching the title that is already running hits the same
+  // per-archive cache entry, and launchTracked refuses the second launch —
+  // reclaiming here would then delete the running program's media.
+  auto cleanupExtraction = qScopeGuard([this, extractedDir]() {
+    if (!extractedDir.isEmpty() && !isExtractionDirInUse(extractedDir)) {
       QDir(extractedDir).removeRecursively();
     }
   });
@@ -503,6 +557,9 @@ void LaunchManager::finishLaunch(const LauncherConfig &launcher, const QString &
   // behind a "Now Playing" overlay. Otherwise fall back to the historical
   // detached launch which leaves Kartend ignorant of the child lifetime.
   if (runtimeDetectionEnabled()) {
+    // launchTracked marks the extraction in use (Kartend-ra8sf) once it has
+    // actually taken the child — not here, where a refused launch would
+    // overwrite the running child's entry and then clear it (Kartend-dmg5y).
     if (launchTracked(launcherPath, cmd, launchFilePath, originalFilePath, extractedDir,
                       collectionUuid)) {
       // The child reads the extracted file while it runs, so the scope guard
@@ -515,7 +572,8 @@ void LaunchManager::finishLaunch(const LauncherConfig &launcher, const QString &
       return;
     }
     // launchTracked already showed a message box on failure to start; the
-    // scope guard reclaims the extracted dir on this reject path.
+    // scope guard reclaims the extracted dir on this reject path unless the
+    // running launch is using it.
     return;
   }
 

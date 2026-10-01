@@ -50,6 +50,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Kartend keeps its record of what it wrote in a small `provenance.json`
   file inside each collection's `_shared` art folder.
 
+- **Archives are unpacked to a disk folder instead of the system temp
+  directory.** On most Linux systems the temp directory lives in RAM, so
+  unpacking a disc image there consumed several gigabytes of memory. A
+  new **Archive Extraction Folder** setting (Settings → General) chooses
+  where extraction happens; leaving it empty uses a folder in the cache
+  directory. Point it at a drive with room for the largest image you
+  launch.
+
+- **Unpacked archives are cleaned up on a retention period.** Previously
+  a successful launch left its extracted copy behind indefinitely — only
+  failed launches cleaned up after themselves. A new **Keep Unpacked
+  Files For** setting (Settings → General) controls this, defaulting to
+  24 hours: relaunch a title within the window and it starts instantly
+  instead of unpacking again, and the clock restarts each time you play,
+  so what you actually use stays ready while one-offs age out. Set it to
+  0 to delete as soon as you close the program, or "Keep forever" to
+  manage the folder yourself. Anything stranded by a crash is cleared at
+  the next startup, and media a running program is still reading is
+  never removed.
+
 ### Fixed
 
 - **Platform-art download failures now show up in the scrape summary.** A
@@ -77,6 +97,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a new collection can pick up artwork a sibling collection already
   has instead of fetching it again. Choosing *Overwrite* still
   re-downloads everything, exactly as before — that is what it is for.
+
+- **Large disc images launch again.** Launch-time archive extraction
+  refused any archive over 4 GiB, so DVD-sized images — a dual-layer DVD
+  is 8.5 GB — were rejected outright with a size-limit error, and titles
+  that compressed under the limit could still fail once their image was
+  unpacked. Extraction is now bounded by free space on the destination
+  drive rather than a fixed size.
+
+- **Multi-disc releases whose discs are archived now launch.** A release
+  collapsed into a single item is launched through a generated playlist,
+  and that playlist listed the discs exactly as they sit on disk. When
+  the discs were archives, the emulator was handed a playlist of .zip
+  files it could not open — and because the playlist itself is not an
+  archive, enabling "Extract archives" on the collection did not help.
+  Archived discs are now unpacked and the playlist rewritten to point at
+  them.
 
 - **The grid selection ring no longer sits on top of the cover art.**
   With titles hidden a tile hands its whole cell to the artwork, so the

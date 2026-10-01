@@ -53,6 +53,7 @@ private slots:
   void onBrowseStartupVideo();
   void onBrowseRetroarchConfig();
   void onBrowseQuarantineDefault();
+  void onBrowseExtractionDir();
 
 private:
   void connectChangeSignals();

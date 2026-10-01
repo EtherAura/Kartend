@@ -15,9 +15,11 @@
 #include <QProcess>
 #include <QScopeGuard>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QString>
 #include <QTemporaryDir>
 
+#include <algorithm>
 #include <atomic>
 #include <optional>
 
@@ -35,13 +37,20 @@ using ErrorUtils::ErrorContext;
 using ErrorUtils::Result;
 
 namespace {
-// Kartend-ijglg: true when the extraction dir's cumulative file size exceeds
-// maxBytes — the decompressed-size watchdog's measurement. Also trips on an
-// absurd entry count (a many-tiny-files bomb costs inodes and scan time
-// rather than bytes, and would otherwise make this walk itself the DoS).
+// What the extraction watchdog found when it last looked at the output dir.
+enum class WatchdogTrip { None, SizeExceeded, TooManyFiles };
+
+// Kartend-ijglg / Kartend-si0p5: walk the extraction dir and report whether it
+// has outgrown its bounds. `maxBytes` is an explicit cumulative-byte cap; pass
+// a negative value for no byte cap, in which case only the entry count is
+// checked (free space is watched separately, and far more cheaply, by
+// volumeSpaceExhausted). The entry-count trip stands on its own regardless: a
+// many-tiny-files bomb costs inodes and scan time rather than bytes, and would
+// otherwise make this walk itself the DoS.
+//
 // NoSymLinks: a symlink consumes no meaningful space and following one could
 // double-count or escape the extraction root.
-bool extractionSizeExceeds(const QString &directory, qint64 maxBytes) {
+WatchdogTrip inspectExtraction(const QString &directory, qint64 maxBytes) {
   qint64 total = 0;
   int inspected = 0;
   QDirIterator it(directory,
@@ -50,15 +59,88 @@ bool extractionSizeExceeds(const QString &directory, qint64 maxBytes) {
                   QDirIterator::Subdirectories);
   while (it.hasNext()) {
     it.next();
-    total += it.fileInfo().size();
-    if (total > maxBytes) {
-      return true;
+    if (maxBytes >= 0) {
+      total += it.fileInfo().size();
+      if (total > maxBytes) {
+        return WatchdogTrip::SizeExceeded;
+      }
     }
     if (++inspected > UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED) {
-      return true;
+      return WatchdogTrip::TooManyFiles;
     }
   }
-  return false;
+  return WatchdogTrip::None;
+}
+
+// Kartend-si0p5: true when the extraction volume has less than the safety
+// margin left. This is the bound that replaced the fixed byte cap — it costs
+// one statfs rather than a tree walk, and it tracks the resource actually at
+// stake (space on the destination volume) rather than a guess made at compile
+// time.
+//
+// An unreadable/unmounted volume returns false: we cannot prove the extraction
+// is unsafe, and refusing every launch because QStorageInfo could not answer
+// would be worse than the risk. The post-extraction check and the extractor's
+// own write errors still catch a genuinely full disk.
+bool volumeSpaceExhausted(const QString &directory) {
+  const QStorageInfo info(directory);
+  if (!info.isValid() || !info.isReady()) {
+    return false;
+  }
+  return info.bytesAvailable() < UIConstants::Launch::EXTRACTION_FREE_SPACE_MARGIN_BYTES;
+}
+
+// Bytes an extraction may write to @p directory before it would breach the
+// free-space margin. Negative when the volume cannot be queried, meaning
+// "unbounded" to callers.
+qint64 spaceAvailableForExtraction(const QString &directory) {
+  const QStorageInfo info(directory);
+  if (!info.isValid() || !info.isReady()) {
+    return -1;
+  }
+  return info.bytesAvailable() - UIConstants::Launch::EXTRACTION_FREE_SPACE_MARGIN_BYTES;
+}
+
+// Kartend-ab8ri: preference order for locating a disc image inside a member
+// archive when the collection sets no explicit extractedExtension. Index files
+// (.cue, .gdi) win over the tracks they reference, matching
+// findFileWithExtension's earlier-extension-wins contract.
+//
+// A collapsed multi-disc item needs this because extractedExtension is a
+// property the user sets for archives they launch directly; a release can be
+// collapsed without that ever being filled in (and on the reporting user's
+// PlayStation collection it was empty).
+QString defaultDiscExtensions() {
+  return QStringLiteral(".cue,.gdi,.chd,.iso,.pbp,.img,.bin");
+}
+
+// Kartend-si0p5: the directory launch-time extraction writes into.
+//
+// Deliberately NOT TempLocation. On most Linux systems /tmp is tmpfs, so
+// extracting a disc image there spends gigabytes of RAM — the hazard the old
+// byte cap was really working around. An explicit user setting overrides the
+// default so large libraries can be pointed at a roomier volume.
+//
+// Contents here are bounded, not permanent: an extraction survives at most
+// LauncherSettings::extractionRetentionHours past its last use (Kartend-ra8sf),
+// and sweepStaleExtractions enforces that at startup and before each new
+// extraction.
+QString resolveExtractionBase(const QString &configuredDir) {
+  const QString configured = configuredDir.trimmed();
+  if (!configured.isEmpty()) {
+    return configured;
+  }
+  return QStandardPaths::writableLocation(QStandardPaths::CacheLocation) +
+         QStringLiteral("/extract");
+}
+
+// One spelling per directory for identity comparisons: an in-use path may
+// reach a comparison spelled differently (symlinked extraction dir, trailing
+// slash) from the entry it is compared against. Canonical when the path
+// exists; a cleaned path otherwise, so a just-deleted dir still compares.
+QString comparablePath(const QString &path) {
+  const QString canonical = QFileInfo(path).canonicalFilePath();
+  return canonical.isEmpty() ? QDir::cleanPath(path) : canonical;
 }
 } // namespace
 
@@ -71,7 +153,8 @@ bool LaunchManager::isArchiveFile(const QString &filePath) {
 
 auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QString &targetExtension,
                                          const std::atomic_bool *cancelRequested,
-                                         qint64 maxDecompressedBytes)
+                                         qint64 maxDecompressedBytes,
+                                         const QString &extractionBaseDir)
     -> ErrorUtils::Result<QString> {
   // Validate archivePath at the same gate as media files in
   // buildLaunchCommand. QProcess argument lists prevent shell injection, but
@@ -82,20 +165,13 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
     return archiveValidation.error();
   }
 
-  const qint64 maxBytes = maxDecompressedBytes < 0
-                              ? static_cast<qint64>(UIConstants::Launch::MAX_EXTRACTION_BYTES)
-                              : maxDecompressedBytes;
-
-  // Kartend-ijglg: bound the *input* before any disk work. Compression can
-  // only inflate the payload, so an archive whose on-disk size already
-  // exceeds the decompressed-size cap can never legitimately extract within
-  // it — reject without spawning an extractor.
-  if (QFileInfo(archivePath).size() > maxBytes) {
-    return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
-                               "Archive is larger than the extraction size limit",
-                               "LaunchManager::extractArchiveToTemp")
-        .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(maxBytes));
-  }
+  // Kartend-si0p5: a negative maxDecompressedBytes means "no fixed byte cap" —
+  // the extraction is bounded by free space on the destination volume instead
+  // (see EXTRACTION_FREE_SPACE_MARGIN_BYTES). A caller may still pass an
+  // explicit cap; tests use that to exercise the watchdog without needing
+  // multi-GiB fixtures.
+  const qint64 explicitCap = maxDecompressedBytes;
+  const bool hasExplicitCap = explicitCap >= 0;
 
   // Honour a cancellation that raced ahead of the worker actually starting.
   if (cancelRequested && cancelRequested->load()) {
@@ -104,19 +180,25 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
         .withDetails(archivePath);
   }
 
-  // Create a persistent temp directory for extractions
-  // Using a subdirectory in the standard temp location that won't auto-delete
-  QString tempBasePath = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+  // Disk-backed extraction root (Kartend-si0p5) — see resolveExtractionBase.
+  const QString tempBasePath = resolveExtractionBase(extractionBaseDir);
   QString extractDir = tempBasePath + "/kartend_extract";
 
-  // Kartend-qubev: the persistent cache base sits under a world-writable temp
-  // root, so on a shared host a co-resident user could pre-create
-  // kartend_extract/ (and a crafted per-archive subdir) and have the cache-hit
-  // branch serve their payload. Guard it: create the base owner-only (0700)
+  // Kartend-qubev: the cache base may sit under a world-writable root — that
+  // was always true of the old TempLocation default, and stays possible now
+  // that the user can point extractionDirectory anywhere (Kartend-si0p5). On a
+  // shared host a co-resident user could pre-create kartend_extract/ (and a
+  // crafted per-archive subdir) and have the cache-hit branch serve their
+  // payload. Guard it: create the base owner-only (0700)
   // when it's ours to make, and refuse to trust a pre-existing base that isn't
   // private to us. A hijacked base falls back to an unguessable per-run
-  // QTemporaryDir — we still launch, just without cross-run caching, and never
-  // serve another user's content.
+  // QTemporaryDir — we still launch, and never serve another user's content.
+  //
+  // The cache-hit branch below is now a narrow one: Kartend-2ygme reclaims each
+  // launch's extraction when its child exits, so a hit only occurs where a
+  // previous reclaim did not complete. It is retained because that window is
+  // exactly when serving the wrong archive's content (Kartend-nrykk) would be
+  // possible, and the marker is what rules it out.
   constexpr QFileDevice::Permissions kOwnerOnly =
       QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
 
@@ -158,9 +240,41 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
           .withDetails(perRunRoot->errorString());
     }
     // Persist past this scope: the launcher opens the extracted file after we
-    // return. The OS reclaims the temp root at reboot.
+    // return. finishLaunch reclaims it when the child exits (Kartend-2ygme).
     perRunRoot->setAutoRemove(false);
     extractDir = perRunRoot->path();
+  }
+
+  // Kartend-ijglg / Kartend-si0p5: bound the *input* before any disk work.
+  // Compression can only inflate the payload, so an archive whose on-disk size
+  // already exceeds what we are willing (or able) to write can never
+  // legitimately extract within that bound — reject without spawning an
+  // extractor. Runs after the root is resolved because the default bound is a
+  // property of the destination volume.
+  const qint64 archiveSize = QFileInfo(archivePath).size();
+  if (hasExplicitCap) {
+    if (archiveSize > explicitCap) {
+      return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                 "Archive is larger than the extraction size limit",
+                                 "LaunchManager::extractArchiveToTemp")
+          .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(explicitCap));
+    }
+  } else {
+    // Negative headroom means the volume could not be queried — treat as
+    // unbounded rather than blocking the launch on a missing answer.
+    const qint64 headroom = spaceAvailableForExtraction(extractDir);
+    if (headroom >= 0 && archiveSize > headroom) {
+      return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                 "Not enough free space to extract this archive",
+                                 "LaunchManager::extractArchiveToTemp")
+          .withDetails(QString("%1 needs at least %2 bytes but only %3 are usable in %4 "
+                               "(a %5-byte margin is reserved)")
+                           .arg(archivePath)
+                           .arg(archiveSize)
+                           .arg(headroom)
+                           .arg(extractDir)
+                           .arg(UIConstants::Launch::EXTRACTION_FREE_SPACE_MARGIN_BYTES));
+    }
   }
 
   // Per-archive extraction dir, keyed on completeBaseName(). Two distinct
@@ -191,6 +305,14 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
     }
     QString existingFile = findFileWithExtension(uniqueDir, targetExtension);
     if (!existingFile.isEmpty() && cachedSourceId == sourceId) {
+      // Kartend-ra8sf: restart the retention clock. The marker's mtime is what
+      // sweepStaleExtractions ages against, so touching it here is what makes
+      // retention run from LAST USE rather than from extraction — a title
+      // played regularly stays warm, one tried once ages out.
+      if (QFile touch(markerPath); touch.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        touch.write(sourceId.toUtf8());
+        touch.close();
+      }
       qCDebug(lcLaunchManager) << "Using cached extraction:" << existingFile;
       return existingFile;
     }
@@ -316,15 +438,31 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
     // overall timeout.
     QElapsedTimer extractionClock;
     extractionClock.start();
-    enum class Abort { None, Cancelled, SizeExceeded, TimedOut };
+    enum class Abort { None, Cancelled, SizeExceeded, TooManyFiles, DiskFull, TimedOut };
     Abort abort = Abort::None;
     while (!process.waitForFinished(UIConstants::Launch::EXTRACTION_WATCHDOG_POLL_MS)) {
       if (cancelRequested && cancelRequested->load()) {
         abort = Abort::Cancelled;
         break;
       }
-      if (extractionSizeExceeds(uniqueDir, maxBytes)) {
+      switch (inspectExtraction(uniqueDir, hasExplicitCap ? explicitCap : -1)) {
+      case WatchdogTrip::SizeExceeded:
         abort = Abort::SizeExceeded;
+        break;
+      case WatchdogTrip::TooManyFiles:
+        abort = Abort::TooManyFiles;
+        break;
+      case WatchdogTrip::None:
+        break;
+      }
+      if (abort != Abort::None) {
+        break;
+      }
+      // Kartend-si0p5: the default bound. One statfs per poll, versus the tree
+      // walk above — and it catches space consumed by anything else on the
+      // volume too, not just this extraction.
+      if (!hasExplicitCap && volumeSpaceExhausted(extractDir)) {
+        abort = Abort::DiskFull;
         break;
       }
       if (extractionClock.elapsed() >= UIConstants::Launch::EXTRACTION_TIMEOUT_MS) {
@@ -348,7 +486,21 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
         return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
                                    "Archive extraction exceeded the decompressed size limit",
                                    "LaunchManager::extractArchiveToTemp")
-            .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(maxBytes));
+            .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(explicitCap));
+      case Abort::TooManyFiles:
+        return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                   "Archive contains too many files to extract safely",
+                                   "LaunchManager::extractArchiveToTemp")
+            .withDetails(QString("%1 (limit: %2 entries)")
+                             .arg(archivePath)
+                             .arg(UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED));
+      case Abort::DiskFull:
+        return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                   "Ran out of free space while extracting this archive",
+                                   "LaunchManager::extractArchiveToTemp")
+            .withDetails(QString("%1 (extracting into %2; a %3-byte margin is reserved)")
+                             .arg(archivePath, extractDir)
+                             .arg(UIConstants::Launch::EXTRACTION_FREE_SPACE_MARGIN_BYTES));
       case Abort::TimedOut:
       default:
         return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction timed out",
@@ -376,13 +528,31 @@ auto LaunchManager::extractArchiveToTemp(const QString &archivePath, const QStri
   }
 
   // Kartend-ijglg: a fast extraction can finish inside the first poll window
-  // without the watchdog ever running — re-check the final size so the cap
-  // holds unconditionally.
-  if (extractionSizeExceeds(uniqueDir, maxBytes)) {
+  // without the watchdog ever running — re-check unconditionally so the bounds
+  // hold regardless of how quickly the extractor returned.
+  switch (inspectExtraction(uniqueDir, hasExplicitCap ? explicitCap : -1)) {
+  case WatchdogTrip::SizeExceeded:
     return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
                                "Archive extraction exceeded the decompressed size limit",
                                "LaunchManager::extractArchiveToTemp")
-        .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(maxBytes));
+        .withDetails(QString("%1 (limit: %2 bytes)").arg(archivePath).arg(explicitCap));
+  case WatchdogTrip::TooManyFiles:
+    return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                               "Archive contains too many files to extract safely",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(QString("%1 (limit: %2 entries)")
+                         .arg(archivePath)
+                         .arg(UIConstants::Launch::MAX_EXTRACTION_FILES_INSPECTED));
+  case WatchdogTrip::None:
+    break;
+  }
+  if (!hasExplicitCap && volumeSpaceExhausted(extractDir)) {
+    return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                               "Ran out of free space while extracting this archive",
+                               "LaunchManager::extractArchiveToTemp")
+        .withDetails(QString("%1 (extracting into %2; a %3-byte margin is reserved)")
+                         .arg(archivePath, extractDir)
+                         .arg(UIConstants::Launch::EXTRACTION_FREE_SPACE_MARGIN_BYTES));
   }
 
   // Find the file with the target extension
@@ -501,4 +671,335 @@ QString LaunchManager::findFileWithExtension(const QString &directory, const QSt
     }
   }
   return bestPath;
+}
+
+// ============================================================================
+// Multi-disc playlists (Kartend-ab8ri)
+// ============================================================================
+
+bool LaunchManager::isPlaylistFile(const QString &filePath) {
+  return filePath.endsWith(QStringLiteral(".m3u"), Qt::CaseInsensitive) ||
+         filePath.endsWith(QStringLiteral(".m3u8"), Qt::CaseInsensitive);
+}
+
+auto LaunchManager::readPlaylistEntries(const QString &playlistPath)
+    -> ErrorUtils::Result<QStringList> {
+  QFileInfo info(playlistPath);
+  if (info.size() > UIConstants::Launch::MAX_PLAYLIST_BYTES) {
+    return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                               "Playlist file is implausibly large",
+                               "LaunchManager::readPlaylistEntries")
+        .withDetails(QString("%1 (%2 bytes)").arg(playlistPath).arg(info.size()));
+  }
+  QFile file(playlistPath);
+  if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    return ErrorContext::error(ErrorCode::FileNotFound, "Could not read playlist",
+                               "LaunchManager::readPlaylistEntries")
+        .withDetails(QString("%1: %2").arg(playlistPath, file.errorString()));
+  }
+  const QByteArray raw = file.readAll();
+  file.close();
+
+  // buildM3uContents writes paths relative when they sit directly under the
+  // playlist's own directory, so relative entries resolve against that dir —
+  // not the process CWD.
+  const QDir baseDir = info.absoluteDir();
+  QStringList entries;
+  const QList<QByteArray> lines = raw.split('\n');
+  for (const QByteArray &rawLine : lines) {
+    const QString line = QString::fromUtf8(rawLine).trimmed();
+    // '#' opens an extended-m3u directive (#EXTM3U, #EXTINF) — never a path.
+    if (line.isEmpty() || line.startsWith(QLatin1Char('#'))) {
+      continue;
+    }
+    entries.append(QDir::isAbsolutePath(line) ? QDir::cleanPath(line)
+                                              : QDir::cleanPath(baseDir.absoluteFilePath(line)));
+    if (entries.size() > UIConstants::Launch::MAX_PLAYLIST_ENTRIES) {
+      return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                 "Playlist lists more entries than a release can plausibly have",
+                                 "LaunchManager::readPlaylistEntries")
+          .withDetails(QString("%1 (limit: %2)")
+                           .arg(playlistPath)
+                           .arg(UIConstants::Launch::MAX_PLAYLIST_ENTRIES));
+    }
+  }
+  return entries;
+}
+
+bool LaunchManager::playlistNeedsExtraction(const QString &playlistPath) {
+  if (!isPlaylistFile(playlistPath)) {
+    return false;
+  }
+  const auto entries = readPlaylistEntries(playlistPath);
+  if (entries.isError()) {
+    // Let the launch proceed and fail visibly downstream rather than silently
+    // swallowing a malformed playlist here.
+    return false;
+  }
+  return std::any_of(entries.value().cbegin(), entries.value().cend(),
+                     [](const QString &e) { return isArchiveFile(e); });
+}
+
+auto LaunchManager::resolvePlaylistForLaunch(const QString &playlistPath,
+                                             const QString &targetExtension,
+                                             const std::atomic_bool *cancelRequested,
+                                             const QString &extractionBaseDir)
+    -> ErrorUtils::Result<QString> {
+  // Kartend-ab8ri: a collapsed multi-disc item's launch path is the generated
+  // .m3u, which is not itself an archive — so launchItem's extraction branch
+  // never fires and the launcher was handed a playlist of .zip paths it cannot
+  // open. Unpack the archived members here and hand over a playlist that
+  // points at real disc images.
+  auto entriesResult = readPlaylistEntries(playlistPath);
+  if (entriesResult.isError()) {
+    return entriesResult.error();
+  }
+  // Result::value() returns const T&, and entriesResult outlives this scope,
+  // so bind rather than copy the list (performance-unnecessary-copy-initialization).
+  const QStringList &entries = entriesResult.value();
+  if (entries.isEmpty()) {
+    return ErrorContext::error(ErrorCode::FileNotFound, "Playlist is empty",
+                               "LaunchManager::resolvePlaylistForLaunch")
+        .withDetails(playlistPath);
+  }
+
+  // Extension preference for locating a disc image inside each member archive.
+  // The collection's extractedExtension wins when set; a collapsed release can
+  // exist without one, so fall back to the disc-image list.
+  const QString memberExtension =
+      targetExtension.trimmed().isEmpty() ? defaultDiscExtensions() : targetExtension;
+
+  // Kartend-2ygme: every byte this launch produces — the rewritten playlist AND
+  // the discs it points at — must live under ONE directory, because a launch
+  // reclaims exactly its ownedExtractionDir() — here kartend_playlists/<release>
+  // — when the child exits.
+  // Extracting members to the shared per-archive root instead would leak the
+  // discs (the actual gigabytes) on every multi-disc launch while reclaiming
+  // only the small playlist beside them.
+  const QString base = resolveExtractionBase(extractionBaseDir);
+  const QString releaseName = QFileInfo(playlistPath).completeBaseName();
+  const QString releaseDir = base + QStringLiteral("/kartend_playlists/") + releaseName;
+  const QString memberBase = releaseDir + QStringLiteral("/discs");
+
+  QStringList resolved;
+  resolved.reserve(entries.size());
+  for (const QString &entry : entries) {
+    if (cancelRequested && cancelRequested->load()) {
+      return ErrorContext::error(ErrorCode::OperationCancelled, "Archive extraction cancelled",
+                                 "LaunchManager::resolvePlaylistForLaunch")
+          .withDetails(playlistPath);
+    }
+    if (!isArchiveFile(entry)) {
+      // A plain disc image passes through untouched.
+      resolved.append(entry);
+      continue;
+    }
+    // Each member goes through the normal extraction path, so it inherits the
+    // per-archive cache, the safety scan and the free-space bound. Re-launching
+    // a collapsed release therefore does not re-extract every disc.
+    auto extracted = extractArchiveToTemp(entry, memberExtension, cancelRequested, -1, memberBase);
+    if (extracted.isError()) {
+      return extracted.error();
+    }
+    resolved.append(extracted.value());
+  }
+
+  // Nothing was archived — hand back the original playlist untouched so the
+  // launcher sees exactly what it saw before.
+  if (resolved == entries) {
+    return playlistPath;
+  }
+
+  // The rewritten playlist sits at the top of the per-release directory, with
+  // the discs it references in discs/ beneath it.
+  //
+  // That boundary is load-bearing twice over. ownedExtractionDir() maps this
+  // playlist to kartend_playlists/<release>, which finishLaunch then
+  // removeRecursively()s both when a launch fails to start and when the child
+  // exits (Kartend-2ygme, Kartend-dmg5y), so this directory defines exactly
+  // what one launch owns: sharing it between releases would let one launch
+  // delete another's playlist, and putting the discs outside it would leak
+  // them. (A playlist returned unchanged above lies outside every extraction
+  // root, so it owns nothing and nothing is ever reclaimed for it.)
+  if (!QDir().mkpath(releaseDir)) {
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to create playlist directory",
+                               "LaunchManager::resolvePlaylistForLaunch")
+        .withDetails(releaseDir);
+  }
+  const QString outPath = releaseDir + QLatin1Char('/') + releaseName + QStringLiteral(".m3u");
+  QFile out(outPath);
+  if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to write resolved playlist",
+                               "LaunchManager::resolvePlaylistForLaunch")
+        .withDetails(QString("%1: %2").arg(outPath, out.errorString()));
+  }
+  // Absolute paths, LF endings, trailing newline — the shape
+  // MultiDisc::buildM3uContents produces and every launcher parses.
+  const QByteArray body = (resolved.join(QLatin1Char('\n')) + QLatin1Char('\n')).toUtf8();
+  if (out.write(body) != body.size()) {
+    out.close();
+    QFile::remove(outPath);
+    return ErrorContext::error(ErrorCode::FileWriteError, "Failed to write resolved playlist",
+                               "LaunchManager::resolvePlaylistForLaunch")
+        .withDetails(outPath);
+  }
+  out.close();
+
+  // Kartend-dmg5y: give the release its own .kartend-source, the last-use stamp
+  // the sweep ages entries by and touchExtractionMarker refreshes on exit.
+  // Without it the sweep fell back to the directory's mtime, which rewriting
+  // the playlist in place never moves — so a release played daily still
+  // expired a retention period after its FIRST launch. Rewritten on every
+  // resolve, so the clock also restarts at each launch. Best-effort, like the
+  // per-archive marker: a missing one only costs a re-extraction.
+  QFile releaseMarker(releaseDir + QStringLiteral("/.kartend-source"));
+  if (releaseMarker.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    releaseMarker.write(QFileInfo(playlistPath).absoluteFilePath().toUtf8());
+    releaseMarker.close();
+  }
+
+  qCDebug(lcLaunchManager) << "Resolved multi-disc playlist" << playlistPath << "->" << outPath;
+  return outPath;
+}
+
+void LaunchManager::sweepStaleExtractions(const QString &extractionBaseDir, int retentionHours,
+                                          const QStringList &inUseDirs) {
+  // Kartend-2ygme / Kartend-ra8sf: bound how long extracted media survives.
+  //
+  // Two things have to be caught here. A crash, SIGKILL or power loss between
+  // spawn and child exit leaves an extraction no in-process hook can reclaim.
+  // And under a non-zero retention nothing deletes on exit at all — ageing out
+  // is the only thing keeping the folder from growing without limit.
+  //
+  // Scoped to the two roots this file creates, never to the configured
+  // directory itself: a user may well point extractionDirectory at a folder
+  // holding other things, and wiping it wholesale would destroy their data.
+  if (retentionHours < 0) {
+    return; // Never expire — the user reclaims the folder themselves.
+  }
+
+  const QString base = resolveExtractionBase(extractionBaseDir);
+  // Canonicalise the exclusions once: an in-use path may reach us spelled
+  // differently (symlinked extraction dir, trailing slash) than the entry we
+  // are about to compare it against.
+  QStringList protectedDirs;
+  protectedDirs.reserve(inUseDirs.size());
+  for (const QString &d : inUseDirs) {
+    if (!d.isEmpty()) {
+      protectedDirs.append(comparablePath(d));
+    }
+  }
+
+  const QDateTime cutoff =
+      QDateTime::currentDateTimeUtc().addSecs(-static_cast<qint64>(retentionHours) * 3600);
+
+  for (const QString &sub :
+       {QStringLiteral("/kartend_extract"), QStringLiteral("/kartend_playlists")}) {
+    QDir root(base + sub);
+    if (!root.exists()) {
+      continue;
+    }
+    const QStringList entries =
+        root.entryList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks);
+    for (const QString &name : entries) {
+      const QString path = root.absoluteFilePath(name);
+
+      // Never expire an extraction a running program is reading from. A play
+      // session can outlast the retention period (24h retention, a 30h
+      // session), and pulling the disc image out from under a running emulator
+      // is a hard crash — the one outcome worse than keeping a stale folder.
+      if (protectedDirs.contains(comparablePath(path))) {
+        continue;
+      }
+
+      // retentionHours == 0 means "no grace period": everything found here is
+      // by definition finished with (the in-use dirs were excluded above), so
+      // there is no timestamp worth consulting.
+      if (retentionHours > 0) {
+        // The .kartend-source marker doubles as the last-use stamp — it is
+        // rewritten on a cache hit, so the clock runs from last use rather
+        // than from extraction. A directory with no marker (a partial or
+        // pre-marker extraction) falls back to the directory's own mtime.
+        const QFileInfo marker(path + QStringLiteral("/.kartend-source"));
+        const QDateTime lastUsed = marker.exists() ? marker.lastModified().toUTC()
+                                                   : QFileInfo(path).lastModified().toUTC();
+        if (lastUsed > cutoff) {
+          continue; // Still within its retention window.
+        }
+      }
+
+      if (QDir(path).removeRecursively()) {
+        qCDebug(lcLaunchManager) << "Swept expired extraction" << path;
+      } else {
+        qCWarning(lcLaunchManager) << "Could not sweep expired extraction" << path;
+      }
+    }
+  }
+}
+
+QString LaunchManager::ownedExtractionDir(const QString &launchFilePath,
+                                          const QString &extractionBaseDir) {
+  // Kartend-dmg5y: every reclaim path removeRecursively()s what this returns,
+  // so it answers only for paths the extraction itself created and returns
+  // empty for anything else. Canonical on both sides, so a symlinked cache
+  // directory or a `..` in the launch path cannot steer the answer outside
+  // the extraction root.
+  if (launchFilePath.isEmpty()) {
+    return {};
+  }
+  const QString base = QFileInfo(resolveExtractionBase(extractionBaseDir)).canonicalFilePath();
+  const QString file = QFileInfo(launchFilePath).canonicalFilePath();
+  if (base.isEmpty() || file.isEmpty()) {
+    return {};
+  }
+  const QString rel = QDir(base).relativeFilePath(file);
+  if (rel.isEmpty() || rel.startsWith(QLatin1String("..")) || QDir::isAbsolutePath(rel)) {
+    return {}; // outside the extraction root altogether
+  }
+  // <root>/<entry>/…/<file>: the launch file must sit INSIDE an entry. The
+  // entry — not the file's own folder, which may be a subfolder the archive
+  // carried — is the unit the sweep ages and the in-use exclusion names.
+  const QStringList parts = rel.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+  if (parts.size() < 3) {
+    return {};
+  }
+  if (parts.at(0) == QLatin1String("kartend_extract") ||
+      parts.at(0) == QLatin1String("kartend_playlists")) {
+    return QDir(base).filePath(parts.at(0) + QLatin1Char('/') + parts.at(1));
+  }
+  // A per-run root (the Kartend-qubev fallback for an untrusted shared base)
+  // holds exactly one launch, so the root itself is what that launch owns.
+  if (parts.at(0).startsWith(QLatin1String("kartend_extract_"))) {
+    return QDir(base).filePath(parts.at(0));
+  }
+  return {};
+}
+
+bool LaunchManager::isExtractionDirInUse(const QString &dir) const {
+  if (dir.isEmpty()) {
+    return false;
+  }
+  const QString target = comparablePath(dir);
+  const QStringList active = activeExtractionDirs();
+  return std::any_of(active.cbegin(), active.cend(), [&target](const QString &d) {
+    return !d.isEmpty() && comparablePath(d) == target;
+  });
+}
+
+void LaunchManager::touchExtractionMarker(const QString &extractionDir) {
+  // Kartend-ra8sf: sweepStaleExtractions ages entries by this marker's mtime,
+  // so rewriting it is what makes retention run from LAST USE. Rewriting the
+  // existing contents rather than truncating keeps the source-identity check
+  // (Kartend-nrykk) intact — an empty marker would force a needless re-extract.
+  const QString markerPath = extractionDir + QStringLiteral("/.kartend-source");
+  QFile marker(markerPath);
+  if (!marker.open(QIODevice::ReadOnly)) {
+    return; // No marker (partial extraction); the dir mtime is the fallback.
+  }
+  const QByteArray sourceId = marker.readAll();
+  marker.close();
+  if (marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    marker.write(sourceId);
+    marker.close();
+  }
 }

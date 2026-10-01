@@ -44,8 +44,23 @@
         <item><spacer name="retroarchConfigSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
        </layout>
       </item>
-      <item row="5" column="0" colspan="2"><widget class="QCheckBox" name="useHomeViewCheckBox"><property name="text"><string>Use Home view at startup</string></property><property name="toolTip"><string>Open a synthetic Home view at startup that shows one tile per root collection. Overrides Startup Collection when no specific collection is selected. Back from any root-level collection returns here.</string></property></widget></item>
-      <item row="6" column="0" colspan="2"><widget class="QCheckBox" name="startupVideoEnabledCheckBox"><property name="text"><string>Play startup video</string></property><property name="toolTip"><string>Play a configurable video on application launch. Skippable via any key or click.</string></property></widget></item>
+      <item row="5" column="0"><widget class="QLabel" name="extractionDirLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Archive Extraction Folder:</string></property></widget></item>
+      <item row="5" column="1">
+       <layout class="QHBoxLayout" name="extractionDirLayout">
+        <item><widget class="QLineEdit" name="extractionDirLineEdit"><property name="maximumWidth"><number>320</number></property><property name="toolTip"><string>Where archives are unpacked when a collection has &quot;Extract archives&quot; enabled. Extraction is limited by free space on this folder's drive, so point it at a roomy disk for large disc images. Empty uses a default folder in the cache directory. How long unpacked files are kept is set below.</string></property></widget></item>
+        <item><widget class="QPushButton" name="browseExtractionDirButton"><property name="text"><string>Browse</string></property></widget></item>
+        <item><spacer name="extractionDirSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+       </layout>
+      </item>
+      <item row="6" column="0"><widget class="QLabel" name="extractionRetentionLabel"><property name="minimumSize"><size><width>200</width><height>0</height></size></property><property name="text"><string>Keep Unpacked Files For:</string></property></widget></item>
+      <item row="6" column="1">
+       <layout class="QHBoxLayout" name="extractionRetentionLayout">
+        <item><widget class="QSpinBox" name="extractionRetentionSpinBox"><property name="maximumWidth"><number>140</number></property><property name="minimum"><number>-1</number></property><property name="maximum"><number>8760</number></property><property name="suffix"><string> hours</string></property><property name="specialValueText"><string>Keep forever</string></property><property name="toolTip"><string>How long unpacked archives are kept after you close the program that used them. Re-launching within this window skips unpacking, which for a large disc image saves several gigabytes of disk work. 0 deletes immediately on exit; -1 (&quot;Keep forever&quot;) never expires and leaves the folder for you to clear. The clock restarts each time you launch a title.</string></property></widget></item>
+        <item><spacer name="extractionRetentionSpacer"><property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property><property name="sizeHint" stdset="0"><size><width>0</width><height>0</height></size></property></spacer></item>
+       </layout>
+      </item>
+      <item row="7" column="0" colspan="2"><widget class="QCheckBox" name="useHomeViewCheckBox"><property name="text"><string>Use Home view at startup</string></property><property name="toolTip"><string>Open a synthetic Home view at startup that shows one tile per root collection. Overrides Startup Collection when no specific collection is selected. Back from any root-level collection returns here.</string></property></widget></item>
+      <item row="8" column="0" colspan="2"><widget class="QCheckBox" name="startupVideoEnabledCheckBox"><property name="text"><string>Play startup video</string></property><property name="toolTip"><string>Play a configurable video on application launch. Skippable via any key or click.</string></property></widget></item>
      </layout>
     </widget>
    </item>

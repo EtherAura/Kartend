@@ -169,20 +169,106 @@ public:
   /// Blocking — launchItem() runs it on a QtConcurrent worker thread
   /// (Kartend-mkcak); only tests call it synchronously. `cancelRequested`
   /// (optional) is polled by the extraction watchdog: setting it kills the
-  /// extractor child and returns OperationCancelled. `maxDecompressedBytes`
-  /// bounds the cumulative bytes written to the extraction dir
-  /// (Kartend-ijglg); pass a negative value (the default) to use
-  /// UIConstants::Launch::MAX_EXTRACTION_BYTES. Exceeding the cap kills the
-  /// extractor and returns ResourceLimitExceeded; every abort path removes
-  /// the partial extraction dir.
+  /// extractor child and returns OperationCancelled.
+  ///
+  /// `maxDecompressedBytes` imposes an explicit cumulative-byte cap. Pass a
+  /// negative value (the default) for the production bound: free space on the
+  /// destination volume, less
+  /// UIConstants::Launch::EXTRACTION_FREE_SPACE_MARGIN_BYTES (Kartend-si0p5).
+  /// Tests pass a small explicit cap to exercise the watchdog without
+  /// multi-GiB fixtures.
+  ///
+  /// `extractionBaseDir` is where extraction writes; empty (the default)
+  /// resolves to LauncherSettings::extractionDirectory's default under
+  /// QStandardPaths::CacheLocation. Deliberately not TempLocation — see
+  /// uiconstants/launch.h.
+  ///
+  /// Breaching any bound kills the extractor and returns
+  /// ResourceLimitExceeded; every abort path removes the partial extraction
+  /// dir.
   [[nodiscard]] static ErrorUtils::Result<QString>
   extractArchiveToTemp(const QString &archivePath, const QString &targetExtension,
                        const std::atomic_bool *cancelRequested = nullptr,
-                       qint64 maxDecompressedBytes = -1);
+                       qint64 maxDecompressedBytes = -1,
+                       const QString &extractionBaseDir = QString());
 
   /// Finds a file with the given extension in a directory (recursive)
   [[nodiscard]] static QString findFileWithExtension(const QString &directory,
                                                      const QString &extension);
+
+  /// Removes expired extractions under @p extractionBaseDir (empty = the
+  /// default root). Call at startup and before each extraction
+  /// (Kartend-2ygme, Kartend-ra8sf).
+  ///
+  /// @p retentionHours mirrors LauncherSettings::extractionRetentionHours:
+  /// negative sweeps nothing, 0 removes every entry not currently in use, and
+  /// a positive value removes entries whose last use is older than that many
+  /// hours. Scoped to the two roots this module creates, never to the
+  /// configured directory itself — the user may point extractionDirectory at a
+  /// folder holding other things.
+  ///
+  /// @p inUseDirs are never removed regardless of age. Passing the running
+  /// launches' extraction dirs is REQUIRED when a launch may be in flight: a
+  /// play session can outlast the retention period, and expiring a running
+  /// program's media out from under it is a hard crash.
+  static void sweepStaleExtractions(const QString &extractionBaseDir = QString(),
+                                    int retentionHours = 0, const QStringList &inUseDirs = {});
+
+  /// Restarts an extraction's retention clock by rewriting its source marker
+  /// (Kartend-ra8sf). Best-effort: a missing marker just means the sweep falls
+  /// back to the directory's own mtime.
+  static void touchExtractionMarker(const QString &extractionDir);
+
+  /// The directory a launch owns — and may therefore reclaim — for the file an
+  /// extraction produced (Kartend-dmg5y). That is the top-level entry the
+  /// extraction created under the extraction root: `kartend_extract/<entry>`,
+  /// `kartend_playlists/<release>`, or a per-run `kartend_extract_XXXXXX` root.
+  /// Empty when @p launchFilePath does not lie inside one of those, so a caller
+  /// handed a path the extraction did not create never deletes anything.
+  ///
+  /// Deliberately NOT the launch file's parent: an archive whose disc image
+  /// sits in a subfolder would make that the owned dir, which the sweep's
+  /// in-use exclusion then fails to match, and a playlist returned unchanged
+  /// would make it the user's own library folder.
+  [[nodiscard]] static QString ownedExtractionDir(const QString &launchFilePath,
+                                                  const QString &extractionBaseDir = QString());
+
+  /// True for an .m3u/.m3u8 playlist path.
+  [[nodiscard]] static bool isPlaylistFile(const QString &filePath);
+
+  /// Absolute paths listed by a playlist, in order. Blank lines and extended-
+  /// m3u '#' directives are skipped; relative entries resolve against the
+  /// playlist's own directory (which is how MultiDisc::buildM3uContents writes
+  /// members that sit beside it). Bounded by MAX_PLAYLIST_ENTRIES /
+  /// MAX_PLAYLIST_BYTES.
+  [[nodiscard]] static ErrorUtils::Result<QStringList>
+  readPlaylistEntries(const QString &playlistPath);
+
+  /// True when @p playlistPath is a playlist listing at least one archive, and
+  /// so needs resolvePlaylistForLaunch before a launcher can open it. Cheap
+  /// enough for the GUI thread: one bounded read of a small text file.
+  [[nodiscard]] static bool playlistNeedsExtraction(const QString &playlistPath);
+
+  /// Extracts a playlist's archived members and returns a rewritten playlist
+  /// pointing at the extracted discs (Kartend-ab8ri).
+  ///
+  /// A collapsed multi-disc item's launch path is the generated .m3u. That is
+  /// not itself an archive, so launchItem's extraction branch never fires and
+  /// the launcher would be handed a playlist of .zip paths — which is why
+  /// collapsed releases did not launch, regardless of the collection's
+  /// extractArchives flag.
+  ///
+  /// Members that are already plain disc images pass through untouched, and a
+  /// playlist with no archived members is returned unchanged. Each archived
+  /// member goes through extractArchiveToTemp, so the per-archive cache, the
+  /// safety scan and the free-space bound all apply. `targetExtension` may be
+  /// empty, in which case a disc-image preference list is used.
+  ///
+  /// Blocking — runs on the extraction worker, like extractArchiveToTemp.
+  [[nodiscard]] static ErrorUtils::Result<QString>
+  resolvePlaylistForLaunch(const QString &playlistPath, const QString &targetExtension,
+                           const std::atomic_bool *cancelRequested = nullptr,
+                           const QString &extractionBaseDir = QString());
 
   /// True while a runtime-tracked child process is currently running.
   /// Always false when runtime detection is disabled.
@@ -242,6 +328,13 @@ public:
   /// kDoubleLaunchGuardMs) is assertable without exposing the map itself.
   [[nodiscard]] int debounceEntryCountForTesting() const {
     return static_cast<int>(m_lastLaunchTimes.size());
+  }
+
+  /// Test-only: the extraction dirs the sweep currently treats as in use, so
+  /// the Kartend-dmg5y bookkeeping (a refused launch must not clear the
+  /// running one's entry) is assertable without exposing the members.
+  [[nodiscard]] QStringList activeExtractionDirsForTesting() const {
+    return activeExtractionDirs();
   }
 
 signals:
@@ -349,6 +442,38 @@ private:
   /// drain after requesting cancellation.
   bool m_extractionActive = false;
   QString m_extractionFilePath;
+  // Kartend-ra8sf: extraction dirs a launched program is currently reading
+  // from. sweepStaleExtractions must never expire these — a play session can
+  // outlast the retention period, and deleting a running program's media is a
+  // hard crash. One tracked child at a time (launchTracked refuses a second),
+  // so one string; set only once launchTracked has taken the child, so a
+  // refused launch cannot overwrite — and then clear — the running one's entry
+  // (Kartend-dmg5y).
+  //
+  // Detached children are not exclusive — several can survive their watch
+  // windows at once — so they need a list (Kartend-dmg5y). An entry leaves it
+  // on an early failure or at the child's real exit while we are alive to see
+  // it. A child that exits cleanly inside the watch window keeps its entry on
+  // purpose: a launcher that hands off to another process and returns 0 may
+  // leave that process reading the media.
+  QString m_trackedExtractedDir;
+  QStringList m_detachedExtractedDirs;
+
+  /// The extraction dirs currently in use, for sweepStaleExtractions.
+  [[nodiscard]] QStringList activeExtractionDirs() const {
+    QStringList dirs = m_detachedExtractedDirs;
+    if (!m_trackedExtractedDir.isEmpty()) {
+      dirs << m_trackedExtractedDir;
+    }
+    return dirs;
+  }
+
+  /// True when @p dir is (canonically) one of activeExtractionDirs(). Every
+  /// reclaim that can run while another launch is live consults this first:
+  /// relaunching the running title hits the same per-archive cache entry, so
+  /// the refused or failed second launch would otherwise delete the media the
+  /// first one is reading (Kartend-dmg5y).
+  [[nodiscard]] bool isExtractionDirInUse(const QString &dir) const;
   std::shared_ptr<std::atomic_bool> m_extractionCancel;
   QFuture<ErrorUtils::Result<QString>> m_extractionFuture;
 

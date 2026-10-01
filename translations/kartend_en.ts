@@ -5133,12 +5133,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation>Collection to open on startup. &quot;(Default)&quot; opens the first root collection.</translation>
     </message>
     <message>
-        <location line="+27"/>
+        <location line="+42"/>
         <source>Open a synthetic Home view at startup that shows one tile per root collection. Overrides Startup Collection when no specific collection is selected. Back from any root-level collection returns here.</source>
         <translation>Open a synthetic Home view at startup that shows one tile per root collection. Overrides Startup Collection when no specific collection is selected. Back from any root-level collection returns here.</translation>
     </message>
     <message>
-        <location line="-26"/>
+        <location line="-41"/>
         <source>Home View Label:</source>
         <translation>Home View Label:</translation>
     </message>
@@ -5166,7 +5166,8 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <location line="+1"/>
         <location line="+8"/>
         <location line="+8"/>
-        <location line="+21"/>
+        <location line="+8"/>
+        <location line="+28"/>
         <source>Browse</source>
         <translation>Browse</translation>
     </message>
@@ -5176,12 +5177,37 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation>Play a configurable video on application launch. Skippable via any key or click.</translation>
     </message>
     <message>
-        <location line="-14"/>
+        <location line="-29"/>
         <source>Absolute path to the video file played on launch (e.g. .mp4, .webm). Empty disables the feature regardless of the checkbox above.</source>
         <translation>Absolute path to the video file played on launch (e.g. .mp4, .webm). Empty disables the feature regardless of the checkbox above.</translation>
     </message>
     <message>
-        <location line="+39"/>
+        <location line="+13"/>
+        <source>Archive Extraction Folder:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Keep Unpacked Files For:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source> hours</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Keep forever</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>How long unpacked archives are kept after you close the program that used them. Re-launching within this window skips unpacking, which for a large disc image saves several gigabytes of disk work. 0 deletes immediately on exit; -1 (&quot;Keep forever&quot;) never expires and leaves the folder for you to clear. The clock restarts each time you launch a title.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+30"/>
         <source>Selection &amp; Display</source>
         <translation>Selection &amp; Display</translation>
     </message>
@@ -5313,7 +5339,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation>Keyboard Repeat Delay:</translation>
     </message>
     <message>
-        <location line="-73"/>
+        <location line="-88"/>
         <source>Startup Video File:</source>
         <translation>Startup Video File:</translation>
     </message>
@@ -5328,7 +5354,12 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation>Optional path to a retroarch.cfg file or a libretro core directory, used to list installed cores in the collection Core picker. Empty auto-detects the standard RetroArch config location.</translation>
     </message>
     <message>
-        <location line="+5"/>
+        <location line="+8"/>
+        <source>Where archives are unpacked when a collection has &quot;Extract archives&quot; enabled. Extraction is limited by free space on this folder&apos;s drive, so point it at a roomy disk for large disc images. Empty uses a default folder in the cache directory. How long unpacked files are kept is set below.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+12"/>
         <source>Use Home view at startup</source>
         <translation>Use Home view at startup</translation>
     </message>
@@ -5464,7 +5495,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation>How long to wait for a single video thumbnail to decode before giving up. Increase on slow systems where legitimate videos miss the default 4s window. Range: 1000–30000 ms.</translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/behavior/generalsettingspanel.cpp" line="+97"/>
+        <location filename="../src/ui/dialogs/settings/behavior/generalsettingspanel.cpp" line="+102"/>
         <source>(Default)</source>
         <translation>(Default)</translation>
     </message>
@@ -5497,6 +5528,11 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <location line="+1"/>
         <source>RetroArch config (*.cfg);;All Files (*)</source>
         <translation>RetroArch config (*.cfg);;All Files (*)</translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Select archive extraction folder</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+8"/>
@@ -6201,19 +6237,19 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 <context>
     <name>LaunchManager</name>
     <message>
-        <location filename="../src/modules/input/launch/launchmanager.cpp" line="+269"/>
+        <location filename="../src/modules/input/launch/launchmanager.cpp" line="+276"/>
         <source>Invalid collection specified.</source>
         <translation>Invalid collection specified.</translation>
     </message>
     <message>
-        <location line="+118"/>
+        <location line="+132"/>
         <source>Another archive is currently being extracted:
 %1</source>
         <translation>Another archive is currently being extracted:
 %1</translation>
     </message>
     <message>
-        <location line="+109"/>
+        <location line="+142"/>
         <source>Launcher is no longer accessible or executable:
 %1</source>
         <translation>Launcher is no longer accessible or executable:
@@ -6227,21 +6263,21 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
 %1</translation>
     </message>
     <message>
-        <location line="+122"/>
+        <location line="+188"/>
         <source>The launcher started but exited immediately (code %1).
 %2</source>
         <translation>The launcher started but exited immediately (code %1).
 %2</translation>
     </message>
     <message>
-        <location line="+42"/>
+        <location line="+48"/>
         <source>Another tracked item is currently running:
 %1</source>
         <translation>Another tracked item is currently running:
 %1</translation>
     </message>
     <message>
-        <location line="+69"/>
+        <location line="+95"/>
         <source>Failed to start tracked launcher:
 %1</source>
         <translation>Failed to start tracked launcher:
@@ -10677,7 +10713,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation>Controls</translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+369"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+370"/>
         <source>deselecting</source>
         <translation>deselecting</translation>
     </message>
