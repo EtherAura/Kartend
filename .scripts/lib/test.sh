@@ -50,7 +50,18 @@ run_ctest() {
   # guarantee as root_dir above. Known flakes under -j + host load: the
   # DatabaseManager and QueryManagerCrossCollectionCount integration tests —
   # re-run one isolated before assuming a regression.
-  ctest --test-dir "$dir" --output-on-failure -LE benchmark -j "$build_jobs"
+  #
+  # QT_QPA_PLATFORM matches CI's test ENVIRONMENT the same way -LE benchmark
+  # matches its flags: every ctest step in .github/workflows/build.yml sets
+  # offscreen. Without it a local run on a desktop session opens a real
+  # Wayland/X11 connection, and under --sanitize LeakSanitizer then reports
+  # libwayland-client's own allocations as leaks — a spurious red that lands on
+  # whichever GUI test happens to connect first, so it reads as a flaky
+  # multi-test failure rather than one third-party leak (Kartend-ujs74).
+  # Overridable: export QT_QPA_PLATFORM=wayland (or xcb) to actually watch a
+  # GUI test run.
+  QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}" \
+    ctest --test-dir "$dir" --output-on-failure -LE benchmark -j "$build_jobs"
 }
 
 # Run `cmake --install` and transparently elevate with sudo when the install
