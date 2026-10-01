@@ -18,6 +18,7 @@
 #include "collection/generalsettings.h"
 #include "entityscrapecoordinator.h"
 #include "metadatalookupprovider.h"
+#include "scrapeartprovenance.h"
 #include "scrapelock.h"
 #include "scrapepersistence.h"
 #include "scrapertypes.h"
@@ -461,6 +462,9 @@ private:
   /// finished entries on each dispatch; the destructor flips the cancel token
   /// and drains this list with a bounded wait.
   QList<QFuture<Scraper::MediaWriteResult>> m_inFlightEntityWrites;
+  /// In-flight catalogue-hash disk probes (Kartend-twq6j), drained the same
+  /// way. They capture values only, so abandoning one past the budget is safe.
+  QList<QFuture<Scraper::ArtProvenance::FetchPlan>> m_inFlightEntityProbes;
   /// Entity-flow engine (see the friend declaration above). Value member, so
   /// its lifetime is exactly this service's — async callbacks guard on a
   /// QPointer to the service and re-enter through this member.

@@ -24,7 +24,9 @@ QStringList sharedAssetProbePaths(const Scraper::MediaAsset &asset, const QStrin
   // scrapepersistence defaults to png for images; if a previous scrape used
   // outputformat=jpg or SS served webp, we'd still find it here.
   QStringList out;
-  for (const char *ext : {"png", "jpg", "jpeg", "webp"}) {
+  // svg too: ScreenScraper serves vector logos and extensionForAsset keeps the
+  // suffix, so a written .svg has to be findable here as well (Kartend-twq6j).
+  for (const char *ext : {"png", "jpg", "jpeg", "webp", "svg"}) {
     out.append(
         QDir(dir).filePath(scopePrefix + asset.scopeKey + QLatin1Char('.') + QLatin1String(ext)));
   }

@@ -70,6 +70,12 @@ ScraperService::~ScraperService() {
     }
     if (!future.isFinished()) abandoned = true;
   }
+  for (auto &future : m_inFlightEntityProbes) {
+    while (!future.isFinished() && !deadline.hasExpired()) {
+      QThread::msleep(10);
+    }
+    if (!future.isFinished()) abandoned = true;
+  }
   if (abandoned) {
     qCWarning(lcScraperService)
         << "entity media writes did not drain in" << kEntityWriteDrainBudgetMs

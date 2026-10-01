@@ -93,6 +93,30 @@ private:
   void persistEntityMetadata(const Scraper::ScrapedItem &item,
                              const Scraper::EntityScrapeTarget &target,
                              const QString &collectionUuid, const QString &artPath);
+  /// Everything the media fan-out needs once the entity fetch has delivered
+  /// its item. Captured as a value so the Kartend-twq6j disk probe can run
+  /// off-thread first and hand the same job on to fanOutEntityMedia.
+  struct EntityMediaJob {
+    std::shared_ptr<MetadataLookupProvider> provider;
+    quint64 generation = 0;
+    Scraper::ScrapedItem item;
+    QString artworkDir;
+    int collectionIndex = -1;
+    QString collectionUuid;
+    QString collectionName;
+    Scraper::EntityScrapeTarget entityTarget;
+    QString baseName;
+    Scraper::RescrapeMode rescrapeMode = Scraper::RescrapeMode::Overwrite;
+  };
+  /// Kartend-twq6j: hash the assets already under `_shared/` against the
+  /// catalogue's checksums on the thread pool, then fan out only the fetches
+  /// the plan still needs (or settle the job from disk when it needs none).
+  void probeEntityMediaOnDisk(const EntityMediaJob &mj);
+  /// Fetch @p toFetch in parallel and hand the delivered bytes to
+  /// dispatchEntityMediaWrite; @p preResolved carries the files the probe
+  /// settled without a request so they are wired and counted like skips.
+  void fanOutEntityMedia(const EntityMediaJob &mj, const QList<Scraper::MediaAsset> &toFetch,
+                         const Scraper::MediaWriteResult &preResolved);
   /// File-I/O phase of an entity scrape: run writeMediaFiles on the global
   /// QThreadPool (mirroring BatchScrapeRunner's media-write phase) so a slow
   /// or wedged mount can't block the GUI thread, guarded by the per-run
@@ -102,7 +126,8 @@ private:
                                 int collectionIndex, const QString &artworkDir,
                                 const QString &baseName,
                                 const QList<Scraper::PendingMediaWrite> &writes,
-                                Scraper::RescrapeMode rescrapeMode, quint64 generation);
+                                Scraper::RescrapeMode rescrapeMode, quint64 generation,
+                                const Scraper::MediaWriteResult &preResolved);
   /// Main-thread continuation of dispatchEntityMediaWrite: book the write
   /// result, wire the config art, and advance the queue.
   void onEntityMediaWriteFinished(const Scraper::ScrapedItem &item, const QString &collectionUuid,

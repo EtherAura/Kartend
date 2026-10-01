@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
@@ -510,6 +511,9 @@ void TestScreenScraperProvider::fetchEntity_catalogEmitsEveryStillImageTypeRoleN
     m.token = QLatin1String(token);
     m.region = QStringLiteral("wor");
     m.video = video;
+    // Catalogue checksum, in the upper-case form SS uses on the wire.
+    m.md5 = QString::fromLatin1(
+        QCryptographicHash::hash(QByteArray(type), QCryptographicHash::Md5).toHex().toUpper());
     return m;
   };
   sys.media = {media("wheel", "wheel(wor)"), media("icon", "icon(wor)"),
@@ -544,6 +548,12 @@ void TestScreenScraperProvider::fetchEntity_catalogEmitsEveryStillImageTypeRoleN
       QCOMPARE(asset.entityRole, Scraper::EntityArtRole::None);
       QCOMPARE(asset.scopeKey, QStringLiteral("42"));
     }
+    // Kartend-twq6j: every catalogue-driven asset — table-wired (wheel) and
+    // extra (icon) alike — carries the catalogue's md5, lowercased, so the
+    // re-scrape probe can compare it against the file on disk.
+    const QString expectedMd5 = QString::fromLatin1(
+        QCryptographicHash::hash(asset.type.toLatin1(), QCryptographicHash::Md5).toHex());
+    QCOMPARE(asset.catalogMd5, expectedMd5);
   }
   QVERIFY(QFile::remove(cachePath));
 }

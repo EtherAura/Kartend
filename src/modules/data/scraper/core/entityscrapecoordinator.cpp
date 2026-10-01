@@ -23,6 +23,7 @@
 #include "collection/typehelpers.h"
 #include "isettingsmanager.h"
 #include "pathutils.h"
+#include "scrapeartprovenance.h"
 #include "scraperservice.h"
 #include "screenscrapercompanyregistry.h"
 #include "wikidatalogoprovider.h"
@@ -277,12 +278,127 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
   // works — use the systemeid.
   const QString baseName =
       job.entity.identity.isEmpty() ? QStringLiteral("platform") : job.entity.identity;
-  const QString collectionUuid = job.collectionUuid;
-  const QString collectionName = job.collectionName;
-  const QString entityIdentity = job.entity.identity;
+  EntityMediaJob mj;
+  mj.provider = provider;
+  mj.generation = generation;
+  mj.item = item;
+  mj.artworkDir = artworkDir;
+  mj.collectionIndex = collectionIndex;
+  mj.collectionUuid = job.collectionUuid;
+  mj.collectionName = job.collectionName;
+  mj.entityTarget = job.entity;
+  mj.baseName = baseName;
+  mj.rescrapeMode = rescrapeMode;
+  // Kartend-twq6j: unless the user asked for a full refresh, ask the disk
+  // first. The catalogue publishes a checksum per asset, so "unchanged" is
+  // decidable without the download — a re-scrape of a system whose art is
+  // already current used to transfer ~4.8 MB to write nothing. Overwrite is
+  // the one mode that exists to refetch, so it bypasses the probe entirely.
+  const bool anyCatalogHash =
+      std::any_of(item.media.cbegin(), item.media.cend(),
+                  [](const Scraper::MediaAsset &a) { return !a.catalogMd5.isEmpty(); });
+  if (rescrapeMode == Scraper::RescrapeMode::Overwrite || !anyCatalogHash || artworkDir.isEmpty()) {
+    fanOutEntityMedia(mj, item.media, Scraper::MediaWriteResult{});
+    return;
+  }
+  probeEntityMediaOnDisk(mj);
+}
+
+void EntityScrapeCoordinator::probeEntityMediaOnDisk(const EntityMediaJob &mj) {
+  // Same shape as dispatchEntityMediaWrite: pool task + watcher continuation +
+  // step watchdog, with the two racing on a shared done flag. The task
+  // captures values only (never `this`), so abandoning it is safe.
+  auto *watcher = new QFutureWatcher<Scraper::ArtProvenance::FetchPlan>(m_svc);
+  QPointer<ScraperService> self(m_svc);
+  auto probeDone = std::make_shared<bool>(false);
+  auto *watchdog = new QTimer(m_svc);
+  watchdog->setSingleShot(true);
+  QObject::connect(watchdog, &QTimer::timeout, m_svc, [self, watchdog, probeDone, mj]() {
+    watchdog->deleteLater();
+    if (self.isNull() || *probeDone) return;
+    *probeDone = true;
+    if (self->m_runGeneration != mj.generation) return;
+    if (self->m_state != ScraperService::State::RunningAuto &&
+        self->m_state != ScraperService::State::RunningInteractive)
+      return;
+    if (self->m_queueCursor >= self->m_queue.size()) return;
+    // Storage too slow to even hash a few files: fall back to fetching every
+    // asset, which is exactly what a run without the probe did. The write's
+    // own watchdog then decides whether the item errors.
+    qCWarning(lcEntityScrape) << "platform art disk probe for" << mj.collectionName << "exceeded"
+                              << BatchScrapeRunner::stepWatchdogMs()
+                              << "ms; fetching every asset instead";
+    self->m_entityCoordinator.fanOutEntityMedia(mj, mj.item.media, Scraper::MediaWriteResult{});
+  });
+  QObject::connect(watcher, &QFutureWatcher<Scraper::ArtProvenance::FetchPlan>::finished, m_svc,
+                   [self, watcher, probeDone, mj]() {
+                     watcher->deleteLater();
+                     if (self.isNull() || *probeDone) return;
+                     *probeDone = true;
+                     if (self->m_runGeneration != mj.generation) return;
+                     if (self->m_state != ScraperService::State::RunningAuto &&
+                         self->m_state != ScraperService::State::RunningInteractive)
+                       return;
+                     if (self->m_queueCursor >= self->m_queue.size()) return;
+                     const Scraper::ArtProvenance::FetchPlan plan = watcher->result();
+                     // Files settled from disk ride into the write continuation as skips:
+                     // they still wire the config (Kartend-jjyst.5) and count as
+                     // up to date in the summary (Kartend-lqfox).
+                     Scraper::MediaWriteResult pre;
+                     pre.existingPaths = plan.upToDatePaths + plan.keptLocalPaths;
+                     pre.mediaSkipped = static_cast<int>(pre.existingPaths.size());
+                     if (!plan.keptLocalPaths.isEmpty()) {
+                       qCInfo(lcEntityScrape)
+                           << "keeping" << plan.keptLocalPaths.size()
+                           << "hand-replaced platform art file(s) for" << mj.collectionName;
+                     }
+                     qCInfo(lcEntityScrape) << "platform art for" << mj.collectionName << ":"
+                                            << plan.upToDatePaths.size() << "up to date on disk,"
+                                            << plan.fetch.size() << "to fetch";
+                     if (plan.fetch.isEmpty()) {
+                       // Nothing to download — settle the job exactly as a write that
+                       // skipped everything would: config wiring, metadata row, counters,
+                       // advance.
+                       self->m_entityCoordinator.onEntityMediaWriteFinished(
+                           mj.item, mj.collectionUuid, mj.collectionIndex, pre);
+                       return;
+                     }
+                     self->m_entityCoordinator.fanOutEntityMedia(mj, plan.fetch, pre);
+                   });
+  m_svc->m_inFlightEntityProbes.removeIf(
+      [](const QFuture<Scraper::ArtProvenance::FetchPlan> &f) { return f.isFinished(); });
+  const QFuture<Scraper::ArtProvenance::FetchPlan> probe =
+      QtConcurrent::run([assets = mj.item.media, artworkDir = mj.artworkDir]() {
+        Scraper::ArtProvenance::FetchPlan plan =
+            Scraper::ArtProvenance::planFetches(assets, artworkDir);
+        // A catalogue match proves the bytes are the provider's — record them
+        // so a later catalogue change reads as "ours, refresh" rather than
+        // "the user's, keep" (see scrapeartprovenance.h). Failure is logged
+        // inside and costs only that future distinction.
+        (void)Scraper::ArtProvenance::recordHashes(artworkDir, plan.confirmed);
+        return plan;
+      });
+  m_svc->m_inFlightEntityProbes.append(probe);
+  watcher->setFuture(probe);
+  watchdog->start(BatchScrapeRunner::stepWatchdogMs());
+}
+
+void EntityScrapeCoordinator::fanOutEntityMedia(const EntityMediaJob &mj,
+                                                const QList<Scraper::MediaAsset> &toFetch,
+                                                const Scraper::MediaWriteResult &preResolved) {
+  const std::shared_ptr<MetadataLookupProvider> provider = mj.provider;
+  const quint64 generation = mj.generation;
+  const Scraper::ScrapedItem item = mj.item;
+  const QString artworkDir = mj.artworkDir;
+  const int collectionIndex = mj.collectionIndex;
+  const Scraper::RescrapeMode rescrapeMode = mj.rescrapeMode;
+  const QString baseName = mj.baseName;
+  const QString collectionUuid = mj.collectionUuid;
+  const QString collectionName = mj.collectionName;
+  const QString entityIdentity = mj.entityTarget.identity;
   // Full entity target so an all-media-failed job re-queues AS an entity (the
   // identity string alone can't rebuild the job — needs type + collectionIndex).
-  const Scraper::EntityScrapeTarget entityTarget = job.entity;
+  const Scraper::EntityScrapeTarget entityTarget = mj.entityTarget;
   struct MediaAgg {
     int pending = 0;
     QList<Scraper::PendingMediaWrite> writes;
@@ -298,115 +414,117 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
     bool rateLimit429Stop = false;
   };
   auto agg = std::make_shared<MediaAgg>();
-  agg->pending = static_cast<int>(item.media.size());
+  agg->pending = static_cast<int>(toFetch.size());
   QPointer<ScraperService> self(m_svc);
-  for (const auto &asset : item.media) {
-    provider->fetchMediaBytes(asset.url, [self, provider, generation, item, asset, agg, artworkDir,
-                                          collectionIndex, collectionUuid, collectionName,
-                                          entityIdentity, entityTarget, baseName,
-                                          rescrapeMode](const ErrorUtils::Result<QByteArray> &r) {
-      if (self.isNull() || self->m_runGeneration != generation) return;
-      if (r.isOk() && !r.value().isEmpty()) {
-        // A delivered asset ends any consecutive-429 run (Kartend-jjyst.15).
-        self->m_consecutive429Count = 0;
-        Scraper::PendingMediaWrite w;
-        w.asset = asset;
-        w.bytes = r.value();
-        agg->writes.append(w);
-      } else {
-        // A dropped fetch must be visible in the aggregate, not silently
-        // swallowed — otherwise an all-failed job (auth error, quota,
-        // wrong endpoint params) reports success with zero art.
-        ++agg->failures;
-        if (r.isError()) {
-          const auto &err = r.error();
-          if (agg->firstFailureSummary.isEmpty()) {
-            agg->firstFailureSummary = err.userFacingSummary();
+  for (const auto &asset : toFetch) {
+    provider->fetchMediaBytes(
+        asset.url,
+        [self, provider, generation, item, asset, agg, artworkDir, collectionIndex, collectionUuid,
+         collectionName, entityIdentity, entityTarget, baseName, rescrapeMode, preResolved,
+         toFetchCount = toFetch.size()](const ErrorUtils::Result<QByteArray> &r) {
+          if (self.isNull() || self->m_runGeneration != generation) return;
+          if (r.isOk() && !r.value().isEmpty()) {
+            // A delivered asset ends any consecutive-429 run (Kartend-jjyst.15).
+            self->m_consecutive429Count = 0;
+            Scraper::PendingMediaWrite w;
+            w.asset = asset;
+            w.bytes = r.value();
+            agg->writes.append(w);
+          } else {
+            // A dropped fetch must be visible in the aggregate, not silently
+            // swallowed — otherwise an all-failed job (auth error, quota,
+            // wrong endpoint params) reports success with zero art.
+            ++agg->failures;
+            if (r.isError()) {
+              const auto &err = r.error();
+              if (agg->firstFailureSummary.isEmpty()) {
+                agg->firstFailureSummary = err.userFacingSummary();
+              }
+              if (provider && provider->isQuotaExhausted(err)) {
+                agg->quotaHit = true;
+              } else if (err.httpStatus == 429 && self->noteRateLimited429()) {
+                // Media CDNs are the realistic 429 source; a streak across the
+                // fan-out escalates to the same settle-time stop as a quota hit
+                // (Kartend-jjyst.15).
+                agg->rateLimit429Stop = true;
+              }
+            } else if (agg->firstFailureSummary.isEmpty()) {
+              agg->firstFailureSummary = QStringLiteral("empty media response");
+            }
           }
-          if (provider && provider->isQuotaExhausted(err)) {
-            agg->quotaHit = true;
-          } else if (err.httpStatus == 429 && self->noteRateLimited429()) {
-            // Media CDNs are the realistic 429 source; a streak across the
-            // fan-out escalates to the same settle-time stop as a quota hit
-            // (Kartend-jjyst.15).
-            agg->rateLimit429Stop = true;
+          if (--agg->pending > 0) return;
+          // Last asset out — settle the job.
+          if (self->m_state != ScraperService::State::RunningAuto &&
+              self->m_state != ScraperService::State::RunningInteractive)
+            return;
+          if (self->m_queueCursor >= self->m_queue.size()) return;
+          if (agg->quotaHit) {
+            // Unlike a game item (whose metadata/DB row already landed, so the
+            // runner keeps partial assets), an entity job is atomic and cheap
+            // to retry — one fetch. Leave it queued as the resume point rather
+            // than consuming it with whatever art beat the quota to the door.
+            qCWarning(lcEntityScrape)
+                << "platform media fetch for" << collectionName
+                << "hit provider quota — stopping the queue with a resume point";
+            self->stopForQuotaExhaustion();
+            return;
           }
-        } else if (agg->firstFailureSummary.isEmpty()) {
-          agg->firstFailureSummary = QStringLiteral("empty media response");
-        }
-      }
-      if (--agg->pending > 0) return;
-      // Last asset out — settle the job.
-      if (self->m_state != ScraperService::State::RunningAuto &&
-          self->m_state != ScraperService::State::RunningInteractive)
-        return;
-      if (self->m_queueCursor >= self->m_queue.size()) return;
-      if (agg->quotaHit) {
-        // Unlike a game item (whose metadata/DB row already landed, so the
-        // runner keeps partial assets), an entity job is atomic and cheap
-        // to retry — one fetch. Leave it queued as the resume point rather
-        // than consuming it with whatever art beat the quota to the door.
-        qCWarning(lcEntityScrape) << "platform media fetch for" << collectionName
-                                  << "hit provider quota — stopping the queue with a resume point";
-        self->stopForQuotaExhaustion();
-        return;
-      }
-      if (agg->rateLimit429Stop) {
-        // Same reasoning as the quota stop above: the job is atomic and cheap
-        // to retry, so leave it queued as the resume point instead of erroring
-        // it against a limiter that isn't letting up (Kartend-jjyst.15).
-        qCWarning(lcEntityScrape) << "platform media fetches for" << collectionName
-                                  << "hit repeated HTTP 429 rate limits — stopping the queue "
-                                     "with a resume point";
-        self->stopForQuotaExhaustion();
-        return;
-      }
-      // Fold the job's dropped fetches into the run counter the completion
-      // summary reads. Until now they lived only in this aggregate: an
-      // all-failed job ticked `errors`, a partly-failed one only logged, and
-      // neither reached mediaFetchFailures — so a platform scrape whose art
-      // downloads failed reported "Media written: 0" with no failure line
-      // (Kartend-lqfox). Booked here, after the quota / 429 returns above,
-      // so a job left queued as a resume point is not charged before it
-      // actually settles.
-      self->m_summary.mediaFetchFailures += agg->failures;
-      if (agg->writes.isEmpty() && agg->failures > 0) {
-        // Every media fetch failed — that's an errored entity (the whole
-        // point of a platform scrape is the art), not a success.
-        ++self->m_summary.errors;
-        if (self->m_summary.firstFailures.size() < kMaxReportedFailures) {
-          self->m_summary.firstFailures.append(
-              QStringLiteral("%1: platform art download failed: %2")
-                  .arg(collectionName, agg->firstFailureSummary));
-        }
-        if (self->m_summary.failedItems.size() < kMaxReportedFailures) {
-          self->m_summary.failedItems.append(
-              {collectionIndex, entityIdentity, collectionUuid, /*isEntity=*/true, entityTarget});
-        }
-        self->m_entityCoordinator.finishEntityItem();
-        return;
-      }
-      if (agg->failures > 0) {
-        qCWarning(lcEntityScrape) << agg->failures << "of" << item.media.size()
-                                  << "platform media fetches failed for" << collectionName
-                                  << "— writing the assets that succeeded";
-        // A partial loss is still a loss the user should be able to read
-        // about, same as the per-item runner's bounded diagnosis.
-        if (self->m_summary.firstFailures.size() < kMaxReportedFailures) {
-          self->m_summary.firstFailures.append(
-              QStringLiteral("%1: %2 of %3 platform art downloads failed: %4")
-                  .arg(collectionName)
-                  .arg(agg->failures)
-                  .arg(item.media.size())
-                  .arg(agg->firstFailureSummary));
-        }
-      }
-      // Write off the GUI thread (Kartend-blfub); the watcher continuation
-      // books the summary, wires the config, and advances the queue.
-      self->m_entityCoordinator.dispatchEntityMediaWrite(item, collectionUuid, collectionIndex,
-                                                         artworkDir, baseName, agg->writes,
-                                                         rescrapeMode, generation);
-    });
+          if (agg->rateLimit429Stop) {
+            // Same reasoning as the quota stop above: the job is atomic and cheap
+            // to retry, so leave it queued as the resume point instead of erroring
+            // it against a limiter that isn't letting up (Kartend-jjyst.15).
+            qCWarning(lcEntityScrape) << "platform media fetches for" << collectionName
+                                      << "hit repeated HTTP 429 rate limits — stopping the queue "
+                                         "with a resume point";
+            self->stopForQuotaExhaustion();
+            return;
+          }
+          // Fold the job's dropped fetches into the run counter the completion
+          // summary reads. Until now they lived only in this aggregate: an
+          // all-failed job ticked `errors`, a partly-failed one only logged, and
+          // neither reached mediaFetchFailures — so a platform scrape whose art
+          // downloads failed reported "Media written: 0" with no failure line
+          // (Kartend-lqfox). Booked here, after the quota / 429 returns above,
+          // so a job left queued as a resume point is not charged before it
+          // actually settles.
+          self->m_summary.mediaFetchFailures += agg->failures;
+          if (agg->writes.isEmpty() && agg->failures > 0) {
+            // Every media fetch failed — that's an errored entity (the whole
+            // point of a platform scrape is the art), not a success.
+            ++self->m_summary.errors;
+            if (self->m_summary.firstFailures.size() < kMaxReportedFailures) {
+              self->m_summary.firstFailures.append(
+                  QStringLiteral("%1: platform art download failed: %2")
+                      .arg(collectionName, agg->firstFailureSummary));
+            }
+            if (self->m_summary.failedItems.size() < kMaxReportedFailures) {
+              self->m_summary.failedItems.append({collectionIndex, entityIdentity, collectionUuid,
+                                                  /*isEntity=*/true, entityTarget});
+            }
+            self->m_entityCoordinator.finishEntityItem();
+            return;
+          }
+          if (agg->failures > 0) {
+            qCWarning(lcEntityScrape)
+                << agg->failures << "of" << toFetchCount << "platform media fetches failed for"
+                << collectionName << "— writing the assets that succeeded";
+            // A partial loss is still a loss the user should be able to read
+            // about, same as the per-item runner's bounded diagnosis.
+            if (self->m_summary.firstFailures.size() < kMaxReportedFailures) {
+              self->m_summary.firstFailures.append(
+                  QStringLiteral("%1: %2 of %3 platform art downloads failed: %4")
+                      .arg(collectionName)
+                      .arg(agg->failures)
+                      .arg(toFetchCount)
+                      .arg(agg->firstFailureSummary));
+            }
+          }
+          // Write off the GUI thread (Kartend-blfub); the watcher continuation
+          // books the summary, wires the config, and advances the queue.
+          self->m_entityCoordinator.dispatchEntityMediaWrite(item, collectionUuid, collectionIndex,
+                                                             artworkDir, baseName, agg->writes,
+                                                             rescrapeMode, generation, preResolved);
+        });
   }
 }
 
@@ -414,7 +532,7 @@ void EntityScrapeCoordinator::dispatchEntityMediaWrite(
     const Scraper::ScrapedItem &item, const QString &collectionUuid, int collectionIndex,
     const QString &artworkDir, const QString &baseName,
     const QList<Scraper::PendingMediaWrite> &writes, Scraper::RescrapeMode rescrapeMode,
-    quint64 generation) {
+    quint64 generation, const Scraper::MediaWriteResult &preResolved) {
   // Mirror BatchScrapeRunner's file-I/O phase: writeMediaFiles (write + fsync
   // inside atomicWriteFile) runs on the global QThreadPool so slow/wedged/
   // network storage can't freeze the window mid-scrape, and the shared cancel
@@ -465,11 +583,20 @@ void EntityScrapeCoordinator::dispatchEntityMediaWrite(
   // Prune settled futures so the drain list stays O(in-flight).
   m_svc->m_inFlightEntityWrites.removeIf(
       [](const QFuture<Scraper::MediaWriteResult> &f) { return f.isFinished(); });
-  const QFuture<Scraper::MediaWriteResult> writeFuture = QtConcurrent::run(
-      [artworkDir, baseName, writes, rescrapeMode, cancel = m_svc->m_entityWriteCancel]() {
+  const QFuture<Scraper::MediaWriteResult> writeFuture =
+      QtConcurrent::run([artworkDir, baseName, writes, rescrapeMode, preResolved,
+                         cancel = m_svc->m_entityWriteCancel]() {
         // Cancelled while queued (pool saturated): skip the writes entirely.
         if (cancel->load(std::memory_order_acquire)) return Scraper::MediaWriteResult{};
-        return Scraper::writeMediaFiles(artworkDir, baseName, writes, rescrapeMode, cancel);
+        Scraper::MediaWriteResult r =
+            Scraper::writeMediaFiles(artworkDir, baseName, writes, rescrapeMode, cancel);
+        // Kartend-twq6j: what the disk probe settled before fetching rides
+        // along so the config wiring and the up-to-date count see it, and the
+        // files just written get their hash recorded for the next re-scrape.
+        r.mediaSkipped += preResolved.mediaSkipped;
+        r.existingPaths += preResolved.existingPaths;
+        (void)Scraper::ArtProvenance::recordWrittenFiles(artworkDir, r.writtenPaths);
+        return r;
       });
   m_svc->m_inFlightEntityWrites.append(writeFuture);
   watcher->setFuture(writeFuture);

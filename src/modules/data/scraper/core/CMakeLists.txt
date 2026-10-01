@@ -13,6 +13,7 @@ target_sources(kartend_data PRIVATE
   scrapewriteworker.cpp
   scrapepersistence.cpp
   scrapeassetdedup.cpp
+  scrapeartprovenance.cpp
   scrapelogging.cpp
   bundledcredentials.cpp
   httpclient.cpp
@@ -27,6 +28,7 @@ target_sources(kartend_data PRIVATE
   scraperretrypolicy.h
   scrapedownloaddispatcher.h
   scrapeassetdedup.h
+  scrapeartprovenance.h
   scraperservice.h
   scrapesummaryformat.h
   scrapewriteworker.h

@@ -21,6 +21,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keep warning through the banner rather than asking a question with only
   one answer.
 
+### Changed
+
+- **Re-scraping platform art no longer downloads files that haven't
+  changed.** ScreenScraper publishes a checksum for every piece of platform
+  art, so a re-scrape now compares the file already on disk against it and
+  skips the download when they match. Previously every asset was fetched in
+  full just to discover it was identical — around 5 MB per system, every
+  time. Art you replaced by hand is recognised, because it matches neither
+  the server's checksum nor the one Kartend recorded when it wrote the
+  file, and is left alone; art Kartend wrote that the server has since
+  updated is refreshed. Choosing *Overwrite* still re-downloads everything.
+  Kartend keeps its record of what it wrote in a small `provenance.json`
+  file inside each collection's `_shared` art folder.
+
 ### Fixed
 
 - **Platform-art download failures now show up in the scrape summary.** A

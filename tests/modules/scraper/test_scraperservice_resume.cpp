@@ -5,6 +5,7 @@
 
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -30,6 +31,7 @@
 #include "collection/generalsettings.h"
 #include "collection/typehelpers.h"
 #include "metadatalookupprovider.h"
+#include "scrapeartprovenance.h"
 #include "scrapependingstate.h"
 #include "scraperservice.h"
 
@@ -95,7 +97,11 @@ public:
   /// URLs whose fetch fails with an HTTP 500 while the rest still answer from
   /// mediaBytes — the partly-failed job shape (Kartend-lqfox summary tests).
   QSet<QUrl> failingUrls;
+  /// Every URL handed to fetchMediaBytes, in call order — the Kartend-twq6j
+  /// tests assert on which requests were NOT made.
+  QList<QUrl> fetchedUrls;
   void fetchMediaBytes(const QUrl &url, MediaCallback cb) override {
+    fetchedUrls.append(url);
     if (mediaSink) {
       mediaSink->media = std::move(cb);
       return;
@@ -187,6 +193,10 @@ private slots:
   void entityAllMediaFetchesFailedCountsError();
   void entityPartialMediaFetchFailureCountedInSummary();
   void entityMediaWriteFailureCountedInSummary();
+  void entityScrapeSkipsFetchWhenDiskMatchesCatalogHash();
+  void entityScrapeRefetchesOwnFileWhenCatalogMoved();
+  void entityScrapeKeepsHandReplacedArt();
+  void entityScrapeOverwriteBypassesCatalogHash();
   void resumeReresolvesCollectionIndexByUuid();
   void resumeDropsJobWhoseUuidNoLongerResolves();
   void failedItemsRoundTripThroughPendingState();
@@ -1703,6 +1713,261 @@ void TestScraperServiceResume::entityMediaWriteFailureCountedInSummary() {
   const QString joined = service.summary().firstFailures.join(QLatin1Char('\n'));
   QVERIFY2(joined.contains(QStringLiteral("SNES: ")), qPrintable(joined));
   QVERIFY2(joined.contains(QStringLiteral("could not create")), qPrintable(joined));
+}
+
+namespace {
+QString md5Hex(const QByteArray &bytes) {
+  return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Md5).toHex());
+}
+bool writeBytes(const QString &path, const QByteArray &bytes) {
+  if (!QDir().mkpath(QFileInfo(path).absolutePath())) return false;
+  QFile f(path);
+  return f.open(QIODevice::WriteOnly) && f.write(bytes) == bytes.size();
+}
+QByteArray readBytes(const QString &path) {
+  QFile f(path);
+  return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+}
+Scraper::MediaAsset platformArt(const QString &type, Scraper::EntityArtRole role,
+                                const QByteArray &catalogBytes) {
+  Scraper::MediaAsset a;
+  a.type = type;
+  a.scope = Scraper::MediaScope::Platform;
+  a.scopeKey = QStringLiteral("4");
+  a.url = QUrl(QStringLiteral("https://example.test/%1.png").arg(type));
+  a.entityRole = role;
+  a.catalogMd5 = md5Hex(catalogBytes);
+  return a;
+}
+} // namespace
+
+void TestScraperServiceResume::entityScrapeSkipsFetchWhenDiskMatchesCatalogHash() {
+  // Kartend-twq6j: a platform re-scrape used to download every asset just to
+  // byte-compare it. With the catalogue's checksum on the asset, a file that
+  // already matches is settled from disk — no request — and still wired into
+  // the config and counted as up to date; the asset that is missing is
+  // fetched as before.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QByteArray wheelBytes("\x89PNG\x0d\x0a"
+                              "wheel-on-disk");
+  const QByteArray bgBytes("\x89PNG\x0d\x0a"
+                           "bg-from-server");
+  const QString wheelPath =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/wheel/platform_4.png"));
+  QVERIFY(writeBytes(wheelPath, wheelBytes));
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("SNES");
+  const auto wheel = platformArt(QStringLiteral("wheel"), Scraper::EntityArtRole::Logo, wheelBytes);
+  const auto bg =
+      platformArt(QStringLiteral("illustration"), Scraper::EntityArtRole::Background, bgBytes);
+  item.media = {wheel, bg};
+  provider->entityResult = item;
+  provider->mediaBytes.insert(wheel.url, QByteArray("SHOULD-NOT-BE-FETCHED"));
+  provider->mediaBytes.insert(bg.url, bgBytes);
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections;
+  GeneralSettings settings;
+  settings.scraper.options.rescrapeMode = ScraperRescrapeMode::UpdateChanged;
+  ctx.generalSettings = &settings;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("SNES");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QCOMPARE(provider->fetchedUrls, QList<QUrl>{bg.url}); // the wheel was never requested
+  QCOMPARE(service.summary().mediaWritten, 1);
+  QCOMPARE(service.summary().mediaUpToDate, 1);
+  QCOMPARE(service.summary().errors, 0);
+  QCOMPARE(readBytes(wheelPath), wheelBytes);
+  // Both land in the config: the settled-from-disk logo and the fetched bg.
+  QCOMPARE(collections[0].background.headerLogoImage, wheelPath);
+  QCOMPARE(collections[0].collectionIcon, wheelPath);
+  const QString bgPath =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/illustration/platform_4.png"));
+  QCOMPARE(collections[0].background.backgroundImage, bgPath);
+  // Provenance now knows both files as Kartend's: the match confirmed the
+  // wheel, the write recorded the background.
+  const auto recorded = Scraper::ArtProvenance::loadRecordedHashes(tmp.path());
+  QCOMPARE(recorded.value(QStringLiteral("wheel/platform_4.png")), md5Hex(wheelBytes));
+  QCOMPARE(recorded.value(QStringLiteral("illustration/platform_4.png")), md5Hex(bgBytes));
+}
+
+void TestScraperServiceResume::entityScrapeRefetchesOwnFileWhenCatalogMoved() {
+  // Kartend-twq6j: the file on disk is what Kartend wrote last time (the
+  // record says so) and the catalogue now advertises different bytes — that
+  // is a genuine upstream change, so the asset is re-fetched and rewritten.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QByteArray oldBytes("\x89PNG\x0d\x0a"
+                            "old-wheel");
+  const QByteArray newBytes("\x89PNG\x0d\x0a"
+                            "new-wheel");
+  const QString wheelPath =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/wheel/platform_4.png"));
+  QVERIFY(writeBytes(wheelPath, oldBytes));
+  QVERIFY(Scraper::ArtProvenance::recordHashes(
+      tmp.path(), {{QStringLiteral("wheel/platform_4.png"), md5Hex(oldBytes)}}));
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("SNES");
+  const auto wheel = platformArt(QStringLiteral("wheel"), Scraper::EntityArtRole::Logo, newBytes);
+  item.media = {wheel};
+  provider->entityResult = item;
+  provider->mediaBytes.insert(wheel.url, newBytes);
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections;
+  GeneralSettings settings;
+  settings.scraper.options.rescrapeMode =
+      ScraperRescrapeMode::FillMissing; // upgraded for entity art
+  ctx.generalSettings = &settings;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("SNES");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QCOMPARE(provider->fetchedUrls, QList<QUrl>{wheel.url});
+  QCOMPARE(service.summary().mediaWritten, 1);
+  QCOMPARE(service.summary().mediaUpToDate, 0);
+  QCOMPARE(readBytes(wheelPath), newBytes);
+  QCOMPARE(collections[0].background.headerLogoImage, wheelPath);
+  QCOMPARE(Scraper::ArtProvenance::loadRecordedHashes(tmp.path())
+               .value(QStringLiteral("wheel/platform_4.png")),
+           md5Hex(newBytes));
+}
+
+void TestScraperServiceResume::entityScrapeKeepsHandReplacedArt() {
+  // Kartend-twq6j (user decision): a file matching neither the catalogue nor
+  // Kartend's own record is the user's hand-replaced art. It is neither
+  // fetched nor overwritten, and it still wires the config.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QByteArray userBytes("\x89PNG\x0d\x0a"
+                             "my-own-wheel");
+  const QByteArray serverBytes("\x89PNG\x0d\x0a"
+                               "server-wheel");
+  const QString wheelPath =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/wheel/platform_4.png"));
+  QVERIFY(writeBytes(wheelPath, userBytes));
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("SNES");
+  const auto wheel =
+      platformArt(QStringLiteral("wheel"), Scraper::EntityArtRole::Logo, serverBytes);
+  item.media = {wheel};
+  provider->entityResult = item;
+  provider->mediaBytes.insert(wheel.url, serverBytes);
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections;
+  GeneralSettings settings;
+  settings.scraper.options.rescrapeMode = ScraperRescrapeMode::UpdateChanged;
+  ctx.generalSettings = &settings;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("SNES");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QVERIFY(provider->fetchedUrls.isEmpty());
+  QCOMPARE(service.summary().mediaWritten, 0);
+  QCOMPARE(service.summary().mediaUpToDate, 1);
+  QCOMPARE(service.summary().errors, 0);
+  QCOMPARE(readBytes(wheelPath), userBytes);
+  QCOMPARE(collections[0].background.headerLogoImage, wheelPath);
+  // Not claimed as Kartend's: the record stays empty.
+  QVERIFY(Scraper::ArtProvenance::loadRecordedHashes(tmp.path()).isEmpty());
+}
+
+void TestScraperServiceResume::entityScrapeOverwriteBypassesCatalogHash() {
+  // Kartend-twq6j: Overwrite exists to refetch. A file that matches the
+  // catalogue is still requested and rewritten — the probe never runs.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QByteArray bytes("\x89PNG\x0d\x0a"
+                         "wheel");
+  const QString wheelPath =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/wheel/platform_4.png"));
+  QVERIFY(writeBytes(wheelPath, bytes));
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("SNES");
+  const auto wheel = platformArt(QStringLiteral("wheel"), Scraper::EntityArtRole::Logo, bytes);
+  item.media = {wheel};
+  provider->entityResult = item;
+  provider->mediaBytes.insert(wheel.url, bytes);
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections;
+  GeneralSettings settings;
+  settings.scraper.options.rescrapeMode = ScraperRescrapeMode::Overwrite;
+  ctx.generalSettings = &settings;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("SNES");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QCOMPARE(provider->fetchedUrls, QList<QUrl>{wheel.url});
+  QCOMPARE(service.summary().mediaWritten, 1);
+  QCOMPARE(service.summary().mediaUpToDate, 0);
 }
 
 void TestScraperServiceResume::resumeReresolvesCollectionIndexByUuid() {

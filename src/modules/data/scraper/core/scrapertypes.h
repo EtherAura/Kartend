@@ -141,6 +141,13 @@ struct MediaAsset {
   /// User-visible label for the result dialog ("Front cover", "Box art").
   QString label;
   QUrl url;
+  /// Lowercase hex MD5 of the bytes the provider serves for `url`, when its
+  /// catalogue publishes one (ScreenScraper's systemesListe does for every
+  /// platform asset). Empty when unknown. A re-scrape compares it against the
+  /// file already on disk and skips the media-host request outright when they
+  /// match, instead of downloading the asset to discover it was unchanged
+  /// (Kartend-twq6j).
+  QString catalogMd5;
   /// Scope of the asset — `Game` is the default and means per-game
   /// storage; `Group`/`Company` route the asset into `_shared/` and
   /// let the dialog skip duplicate downloads across games. Providers

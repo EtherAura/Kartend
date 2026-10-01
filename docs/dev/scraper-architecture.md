@@ -188,6 +188,15 @@ that target a whole platform / collection / category rather than one ROM
   `Collection` (collection uuid) both route to `_shared/<type>/<prefix><scopeKey>`
   via `sharedScopePrefix()`; `EntityArtRole` (`Logo` → `headerLogoImage` /
   `collectionIcon`, `Background` → `backgroundImage`) wires them into config.
+- **Catalogue-hash skip + provenance** (`Kartend-twq6j`): before fetching
+  platform art, `EntityScrapeCoordinator::probeEntityMediaOnDisk()` runs
+  `Scraper::ArtProvenance::planFetches()` on the thread pool (same watchdog
+  contract as the write). Per asset: on-disk MD5 == `MediaAsset::catalogMd5`
+  (from `systemesListe`) → settled from disk, no request, still wired;
+  on-disk MD5 == the entry in `_shared/provenance.json` (what Kartend last
+  wrote) but ≠ catalogue → re-fetched; matches neither → the user's file,
+  kept. `RescrapeMode::Overwrite` bypasses the probe. The record is updated
+  after every write (`recordWrittenFiles`) and for confirmed matches.
 - **ScreenScraper platform provider**: `fetchEntity()` uses `systemesListe`
   (catalog) + `mediaSysteme.php` (media tokens). The systemeid comes from the
   target's identity when the caller already resolved it (e.g. a re-queued

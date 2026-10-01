@@ -408,10 +408,12 @@ void ScreenScraperProvider::fetchEntity(const Scraper::EntityScrapeTarget &targe
         for (const auto &mt : kPlatformMediaTypes) {
           const QString apiToken = QString::fromLatin1(mt.apiToken);
           QString mediaToken;
+          QString catalogMd5;
           if (haveCatalog) {
             const auto *entry = bestCatalogMedia(*sys, apiToken, preferredRegion, localeRegion);
             if (!entry) continue; // this system has no such art — don't spend a request
             mediaToken = entry->token;
+            catalogMd5 = entry->md5.toLower();
           } else {
             // Pre-catalog form: the world tag the builder used to append itself.
             mediaToken = apiToken + QStringLiteral("(wor)");
@@ -423,6 +425,9 @@ void ScreenScraperProvider::fetchEntity(const Scraper::EntityScrapeTarget &targe
           asset.entityRolePriority = mt.rolePriority;
           asset.url =
               ScreenScraperUrls::buildSystemeMediaUrl(creds, systemeid, mediaToken, hasUser);
+          // The catalogue's checksum of the served bytes lets a re-scrape skip
+          // the request when the file on disk already matches (Kartend-twq6j).
+          asset.catalogMd5 = catalogMd5;
           // Platform-scoped → persisted to the collection's _shared art dir as
           // `_shared/<type>/platform_<systemeid>.<ext>` (Kartend-ckepd.3). The
           // systemeid is numeric, so it is a safe path component.
@@ -458,6 +463,7 @@ void ScreenScraperProvider::fetchEntity(const Scraper::EntityScrapeTarget &targe
             extra.entityRolePriority = 0;
             extra.url =
                 ScreenScraperUrls::buildSystemeMediaUrl(creds, systemeid, entry->token, hasUser);
+            extra.catalogMd5 = entry->md5.toLower();
             extra.scope = Scraper::MediaScope::Platform;
             extra.scopeKey = QString::number(systemeid);
             item.media.append(extra);

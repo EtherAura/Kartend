@@ -74,8 +74,11 @@ void TestScrapeAssetDedup::sharedProbe_emptyInputsYieldNothing() {
 void TestScrapeAssetDedup::sharedProbe_groupAndCompanyPrefixes() {
   const QStringList group =
       sharedAssetProbePaths(makeAsset("box", Scraper::MediaScope::Group, "g1"), "/art");
-  QCOMPARE(group.size(), 4); // png/jpg/jpeg/webp
+  QCOMPARE(group.size(), 5); // png/jpg/jpeg/webp/svg
   QVERIFY(group.first().contains("/art/_shared/box/group_g1.png"));
+  // svg last: ScreenScraper serves vector logos and the writer keeps the
+  // suffix, so the Kartend-twq6j disk probe has to be able to find them.
+  QVERIFY(group.last().contains("/art/_shared/box/group_g1.svg"));
 
   const QStringList company =
       sharedAssetProbePaths(makeAsset("box", Scraper::MediaScope::Company, "c9"), "/art");

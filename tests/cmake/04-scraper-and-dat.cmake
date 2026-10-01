@@ -124,6 +124,14 @@ kartend_add_test(NAME ScrapeAssetDedup
   LINK kartend_data kartend_api kartend_utils
 )
 
+# ScrapeArtProvenance — the `_shared/provenance.json` record of what Kartend
+# wrote, and the pure catalogue-hash fetch plan a platform re-scrape runs
+# before touching the network (Kartend-twq6j). Temp dirs only, no service.
+kartend_add_test(NAME ScrapeArtProvenance
+  SOURCES modules/scraper/test_scrapeartprovenance.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # ScraperRetryPolicy — pure transient-classification + backoff math for the
 # bounded jeuInfos retry (Kartend-1rtrt). No network: the provider's
 # timer-driven re-dispatch consumes these decisions.
