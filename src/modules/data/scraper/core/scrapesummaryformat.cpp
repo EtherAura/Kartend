@@ -25,11 +25,24 @@ QString completionText(const ScraperService::Summary &summary) {
                                     .arg(summary.mediaFetchFailures)
                                     .arg(summary.mediaWriteFailures);
   } else if (summary.scraped > 0 && summary.mediaWritten == 0) {
-    // Zero media, zero failures, but metadata landed: every asset list the
-    // provider returned resolved to nothing under the requested types.
-    // Without this line the run reads as a silent download problem.
-    text += QLatin1Char('\n') +
-            trc("The provider offered no media matching the selected artwork types.");
+    // Zero media written and zero failures has TWO causes, and this used to
+    // assert the first one unconditionally — so a re-scrape of an unchanged
+    // collection reported "the provider offered no media" while 28 platform
+    // files sat on disk (observed in the guest 2026-08-31). mediaUpToDate is
+    // what separates them.
+    if (summary.mediaUpToDate > 0) {
+      // Media WAS returned and fetched; every file already on disk satisfied
+      // the rescrape policy, so nothing needed rewriting. A success, and the
+      // one case where "0 media" is the expected outcome.
+      text += QLatin1Char('\n') +
+              trc("All %1 artwork file(s) were already up to date.").arg(summary.mediaUpToDate);
+    } else {
+      // Nothing was written AND nothing was skipped — the asset lists really
+      // did resolve to nothing under the requested types. Without this line
+      // the run reads as a silent download problem.
+      text += QLatin1Char('\n') +
+              trc("The provider offered no media matching the selected artwork types.");
+    }
   }
   if (summary.sidecarFailures > 0) {
     text +=

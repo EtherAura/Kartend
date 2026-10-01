@@ -107,6 +107,18 @@ public:
     /// across the queue — mirrors BatchScrapeRunner::Summary::
     /// mediaWriteFailures (Kartend-jjyst.16).
     int mediaWriteFailures = 0;
+    /// Media assets whose write was deliberately SKIPPED because what is
+    /// already on disk satisfies the rescrape policy (FillMissing — present;
+    /// UpdateChanged — bytes match). NOT a failure and not a loss.
+    ///
+    /// Exists so the completion summary can tell the two zero-media outcomes
+    /// apart, which it previously could not: "the provider offered nothing"
+    /// and "everything was already up to date" both land on mediaWritten == 0
+    /// with no failures, and the summary asserted the former. A re-scrape of
+    /// an unchanged collection therefore claimed the provider had no media
+    /// while 28 platform files sat on disk (observed in the guest
+    /// 2026-08-31).
+    int mediaUpToDate = 0;
     QStringList firstFailures;
     /// Full source path of an errored item, tagged with the index of the
     /// collection that owns it — enough for the dialog to rebuild a

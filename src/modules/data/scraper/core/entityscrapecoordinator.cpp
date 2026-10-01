@@ -361,6 +361,15 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
         self->stopForQuotaExhaustion();
         return;
       }
+      // Fold the job's dropped fetches into the run counter the completion
+      // summary reads. Until now they lived only in this aggregate: an
+      // all-failed job ticked `errors`, a partly-failed one only logged, and
+      // neither reached mediaFetchFailures — so a platform scrape whose art
+      // downloads failed reported "Media written: 0" with no failure line
+      // (Kartend-lqfox). Booked here, after the quota / 429 returns above,
+      // so a job left queued as a resume point is not charged before it
+      // actually settles.
+      self->m_summary.mediaFetchFailures += agg->failures;
       if (agg->writes.isEmpty() && agg->failures > 0) {
         // Every media fetch failed — that's an errored entity (the whole
         // point of a platform scrape is the art), not a success.
@@ -381,6 +390,16 @@ void EntityScrapeCoordinator::onEntityFetchComplete(
         qCWarning(lcEntityScrape) << agg->failures << "of" << item.media.size()
                                   << "platform media fetches failed for" << collectionName
                                   << "— writing the assets that succeeded";
+        // A partial loss is still a loss the user should be able to read
+        // about, same as the per-item runner's bounded diagnosis.
+        if (self->m_summary.firstFailures.size() < kMaxReportedFailures) {
+          self->m_summary.firstFailures.append(
+              QStringLiteral("%1: %2 of %3 platform art downloads failed: %4")
+                  .arg(collectionName)
+                  .arg(agg->failures)
+                  .arg(item.media.size())
+                  .arg(agg->firstFailureSummary));
+        }
       }
       // Write off the GUI thread (Kartend-blfub); the watcher continuation
       // books the summary, wires the config, and advances the queue.
@@ -466,6 +485,20 @@ void EntityScrapeCoordinator::onEntityMediaWriteFinished(const Scraper::ScrapedI
     return;
   if (m_svc->m_queueCursor >= m_svc->m_queue.size()) return;
   m_svc->m_summary.mediaWritten += res.mediaWritten;
+  // Genuine write failures (disk full, mkpath, unsafe path) were dropped here
+  // too — the runner books them at the same point (Kartend-jjyst.4); benign
+  // rescrape-policy skips are not in writeFailures, so FillMissing's
+  // kept-existing files do not flood the list.
+  m_svc->m_summary.mediaWriteFailures += static_cast<int>(res.writeFailures.size());
+  for (const QString &f : res.writeFailures) {
+    if (m_svc->m_summary.firstFailures.size() >= kMaxReportedFailures) break;
+    m_svc->m_summary.firstFailures.append(QStringLiteral("%1: %2").arg(item.title, f));
+  }
+  // Kartend-lqfox follow-up: carry the deliberate skips too, so the completion
+  // summary can distinguish "nothing was offered" from "nothing needed
+  // rewriting". Entity art upgrades FillMissing to UpdateChanged above, so an
+  // unchanged re-scrape lands ENTIRELY here with mediaWritten == 0.
+  m_svc->m_summary.mediaUpToDate += res.mediaSkipped;
   // Include skip-because-present destinations: a FillMissing/UpdateChanged
   // re-run whose files already exist must still wire them into the config —
   // an empty writtenPaths otherwise left the collection art unset after e.g.

@@ -14,6 +14,7 @@
 #include <QJsonObject>
 #include <QLockFile>
 #include <QObject>
+#include <QSet>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QString>
@@ -91,9 +92,18 @@ public:
   void fetchDetail(const Scraper::ScrapeCandidate &, DetailCallback cb) override {
     cb(Scraper::ScrapedItem{});
   }
+  /// URLs whose fetch fails with an HTTP 500 while the rest still answer from
+  /// mediaBytes — the partly-failed job shape (Kartend-lqfox summary tests).
+  QSet<QUrl> failingUrls;
   void fetchMediaBytes(const QUrl &url, MediaCallback cb) override {
     if (mediaSink) {
       mediaSink->media = std::move(cb);
+      return;
+    }
+    if (failingUrls.contains(url)) {
+      cb(ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::InvalidArgument,
+                                         QStringLiteral("HTTP failed"))
+             .withHttpStatus(500));
       return;
     }
     if (mediaError.has_value()) {
@@ -175,6 +185,8 @@ private slots:
   void entityMedia429sEscalateToQuotaStop();
   void entityMediaQuotaKeepsJobQueuedForResume();
   void entityAllMediaFetchesFailedCountsError();
+  void entityPartialMediaFetchFailureCountedInSummary();
+  void entityMediaWriteFailureCountedInSummary();
   void resumeReresolvesCollectionIndexByUuid();
   void resumeDropsJobWhoseUuidNoLongerResolves();
   void failedItemsRoundTripThroughPendingState();
@@ -272,6 +284,7 @@ void TestScraperServiceResume::loadRestoresMediaWrittenCount() {
       "media_written": 27,
       "media_fetch_failures": 6,
       "media_write_failures": 2,
+      "media_up_to_date": 5,
       "first_failures": ["foo.bin: timeout"]
     },
     "queue": [
@@ -304,6 +317,9 @@ void TestScraperServiceResume::loadRestoresMediaWrittenCount() {
   // back reporting zero media failures (Kartend-jjyst.16).
   QCOMPARE(state.summarySoFar.mediaFetchFailures, 6);
   QCOMPARE(state.summarySoFar.mediaWriteFailures, 2);
+  // And the up-to-date count (Kartend-lqfox), or a resumed unchanged re-scrape
+  // reads as "the provider offered nothing".
+  QCOMPARE(state.summarySoFar.mediaUpToDate, 5);
 }
 
 void TestScraperServiceResume::loadDefaultsMediaWrittenToZeroForLegacyFile() {
@@ -1567,6 +1583,126 @@ void TestScraperServiceResume::entityAllMediaFetchesFailedCountsError() {
   QCOMPARE(service.summary().failedItems.first().collectionUuid, QStringLiteral("uuid-allfail"));
   QVERIFY(!service.summary().quotaExhausted);
   QCOMPARE(service.state(), ScraperService::State::Idle);
+  // Kartend-lqfox: the lost fetch must also reach the media counter the
+  // completion summary prints — `errors` alone never named the failing stage.
+  QCOMPARE(service.summary().mediaFetchFailures, 1);
+  QCOMPARE(service.summary().mediaWritten, 0);
+}
+
+void TestScraperServiceResume::entityPartialMediaFetchFailureCountedInSummary() {
+  // Kartend-lqfox: a platform job that loses SOME of its art used to write the
+  // rest and only log the loss — the run summary showed no failure at all. The
+  // dropped fetch must tick mediaFetchFailures and leave a readable line.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("SNES");
+  Scraper::MediaAsset wheel;
+  wheel.type = QStringLiteral("wheel");
+  wheel.scope = Scraper::MediaScope::Platform;
+  wheel.scopeKey = QStringLiteral("4");
+  wheel.url = QUrl(QStringLiteral("https://example.test/wheel.png"));
+  wheel.entityRole = Scraper::EntityArtRole::Logo;
+  item.media.append(wheel);
+  Scraper::MediaAsset illustration;
+  illustration.type = QStringLiteral("illustration");
+  illustration.scope = Scraper::MediaScope::Platform;
+  illustration.scopeKey = QStringLiteral("4");
+  illustration.url = QUrl(QStringLiteral("https://example.test/illustration.png"));
+  illustration.entityRole = Scraper::EntityArtRole::Background;
+  item.media.append(illustration);
+  provider->entityResult = item;
+  provider->mediaBytes.insert(wheel.url, QByteArray("\x89PNG\x0d\x0a"
+                                                    "fake-bytes"));
+  provider->failingUrls.insert(illustration.url);
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("SNES");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  // The surviving asset still lands (the write runs on the thread pool).
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QCOMPARE(service.summary().errors, 0);
+  QCOMPARE(service.summary().mediaWritten, 1);
+  QCOMPARE(service.summary().mediaFetchFailures, 1);
+  QCOMPARE(service.summary().mediaWriteFailures, 0);
+  const QString joined = service.summary().firstFailures.join(QLatin1Char('\n'));
+  QVERIFY2(joined.contains(QStringLiteral("SNES: 1 of 2 platform art downloads failed")),
+           qPrintable(joined));
+  QVERIFY2(joined.contains(QStringLiteral("HTTP failed")), qPrintable(joined));
+}
+
+void TestScraperServiceResume::entityMediaWriteFailureCountedInSummary() {
+  // Kartend-lqfox: the bytes arrived but the file could not be written (here:
+  // a regular file occupying the {artworkDir}/_shared/wheel directory the
+  // router needs — same trick as the runner's write-failure test). The entity
+  // path dropped writeFailures on the floor; it must book them like the
+  // runner does.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  QVERIFY(QDir(tmp.path()).mkpath(QStringLiteral("_shared")));
+  QFile blocker(QDir(tmp.path()).filePath(QStringLiteral("_shared/wheel")));
+  QVERIFY(blocker.open(QIODevice::WriteOnly));
+  blocker.close();
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("SNES");
+  Scraper::MediaAsset wheel;
+  wheel.type = QStringLiteral("wheel");
+  wheel.scope = Scraper::MediaScope::Platform;
+  wheel.scopeKey = QStringLiteral("4");
+  wheel.url = QUrl(QStringLiteral("https://example.test/wheel.png"));
+  wheel.entityRole = Scraper::EntityArtRole::Logo;
+  item.media.append(wheel);
+  provider->entityResult = item;
+  provider->mediaBytes.insert(wheel.url, QByteArray("\x89PNG\x0d\x0a"
+                                                    "fake-bytes"));
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections;
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("SNES");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1); // metadata still lands; only the write is lost
+  QCOMPARE(service.summary().errors, 0);
+  QCOMPARE(service.summary().mediaWritten, 0);
+  QCOMPARE(service.summary().mediaFetchFailures, 0); // the bytes arrived fine
+  QCOMPARE(service.summary().mediaWriteFailures, 1);
+  const QString joined = service.summary().firstFailures.join(QLatin1Char('\n'));
+  QVERIFY2(joined.contains(QStringLiteral("SNES: ")), qPrintable(joined));
+  QVERIFY2(joined.contains(QStringLiteral("could not create")), qPrintable(joined));
 }
 
 void TestScraperServiceResume::resumeReresolvesCollectionIndexByUuid() {

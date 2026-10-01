@@ -119,6 +119,12 @@ public:
     /// benign rescrape-policy skips, which are not failures. The per-asset
     /// reasons are folded into firstFailures (Kartend-jjyst.4).
     int mediaWriteFailures = 0;
+    /// Media whose write was deliberately skipped because what is on disk
+    /// already satisfies the rescrape policy. Mirrored into
+    /// ScraperService::Summary::mediaUpToDate so the completion summary can
+    /// separate "nothing offered" from "nothing needed rewriting"
+    /// (Kartend-lqfox follow-up).
+    int mediaUpToDate = 0;
     /// First N (≤5) per-item failure messages — for the summary box.
     /// Bounded so a 10k-item rescrape with a broken provider doesn't
     /// produce an unreadable wall of text.
@@ -631,6 +637,9 @@ private:
     Scraper::ScrapedItem scraped;
     QStringList writtenPaths;
     int mediaWritten = 0;
+    /// Carried alongside mediaWritten so the deliberate-skip count survives
+    /// the async DB-write hop into the summary (Kartend-lqfox follow-up).
+    int mediaUpToDate = 0;
     QString baseName;
     /// Carried from MediaWriteResult so onWriteCompleted can fold a
     /// failed sidecar write into the summary (Kartend audit hhr5x).

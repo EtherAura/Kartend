@@ -511,6 +511,7 @@ void ScraperService::rollRunnerSummaryIntoSummary(const BatchScrapeRunner::Summa
       m_summaryAtCollectionStart.mediaFetchFailures + runnerSummary.mediaFetchFailures;
   m_summary.mediaWriteFailures =
       m_summaryAtCollectionStart.mediaWriteFailures + runnerSummary.mediaWriteFailures;
+  m_summary.mediaUpToDate = m_summaryAtCollectionStart.mediaUpToDate + runnerSummary.mediaUpToDate;
   m_summary.sidecarFailures =
       m_summaryAtCollectionStart.sidecarFailures + runnerSummary.sidecarFailures;
   m_summary.firstFailures = m_summaryAtCollectionStart.firstFailures;

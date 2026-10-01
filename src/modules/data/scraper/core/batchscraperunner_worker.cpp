@@ -137,6 +137,7 @@ void BatchScrapeRunner::onMediaWriteFinished(const std::shared_ptr<ItemState> &s
     ++m_summary.scraped;
     resetFatalStreak();
     m_summary.mediaWritten += writeRes.mediaWritten;
+    m_summary.mediaUpToDate += writeRes.mediaSkipped;
     if (writeRes.sidecarFailed) ++m_summary.sidecarFailures;
     m_remainingPaths.removeOne(state->path);
     emit itemCompleted(m_summary.processedItems(), totalItemCount(), effective, thumbPaths);
@@ -155,6 +156,7 @@ void BatchScrapeRunner::onMediaWriteFinished(const std::shared_ptr<ItemState> &s
   pending.scraped = effective;
   pending.writtenPaths = thumbPaths;
   pending.mediaWritten = writeRes.mediaWritten;
+  pending.mediaUpToDate = writeRes.mediaSkipped;
   pending.baseName = baseName;
   pending.sidecarFailed = writeRes.sidecarFailed;
   if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
@@ -252,6 +254,7 @@ void BatchScrapeRunner::onWriteCompleted(quint64 requestId, bool ok) {
   ++m_summary.scraped;
   resetFatalStreak();
   m_summary.mediaWritten += pending.mediaWritten;
+  m_summary.mediaUpToDate += pending.mediaUpToDate;
   if (pending.sidecarFailed) ++m_summary.sidecarFailures;
   if (pending.state) {
     m_remainingPaths.removeOne(pending.state->path);

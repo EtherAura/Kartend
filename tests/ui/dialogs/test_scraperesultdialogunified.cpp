@@ -1171,6 +1171,22 @@ void TestScrapeResultDialogUnified::completionTextNamesTheMediaOutcome() {
   QVERIFY(text.contains(QStringLiteral("Media written: 0")));
   QVERIFY(text.contains(QStringLiteral("offered no media")));
 
+  // THE UNCHANGED RE-SCRAPE. Same zero-media, zero-failure shape as above,
+  // but media WAS offered and fetched — every file already on disk satisfied
+  // the rescrape policy, so nothing needed rewriting. Claiming the provider
+  // offered nothing here is simply false: caught in the guest 2026-08-31,
+  // where a second platform scrape reported "the provider offered no media"
+  // with 28 platform files sitting on disk. mediaUpToDate is what tells the
+  // two apart.
+  s.mediaUpToDate = 28;
+  text = Scraper::SummaryFormat::completionText(s);
+  QVERIFY(text.contains(QStringLiteral("Media written: 0")));
+  QVERIFY2(!text.contains(QStringLiteral("offered no media")),
+           "an up-to-date re-scrape must not claim the provider offered nothing");
+  QVERIFY2(text.contains(QStringLiteral("already up to date")), qPrintable(text));
+  QVERIFY(text.contains(QStringLiteral("28")));
+  s.mediaUpToDate = 0;
+
   // Recorded fetch/write failures → the failure counts, not the
   // offered-nothing wording.
   s.mediaFetchFailures = 3;

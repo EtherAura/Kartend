@@ -51,6 +51,9 @@ QByteArray serialize(const ScraperService::PendingState &snap) {
   // under-reports its media failures in the final dialog (Kartend-jjyst.16).
   sumObj[QStringLiteral("media_fetch_failures")] = summary.mediaFetchFailures;
   sumObj[QStringLiteral("media_write_failures")] = summary.mediaWriteFailures;
+  // Same reasoning for the up-to-date count (Kartend-lqfox): without it a
+  // resumed unchanged re-scrape says the provider offered nothing.
+  sumObj[QStringLiteral("media_up_to_date")] = summary.mediaUpToDate;
   QJsonArray failArr;
   for (const auto &f : summary.firstFailures) failArr.append(f);
   sumObj[QStringLiteral("first_failures")] = failArr;
@@ -143,6 +146,7 @@ ScraperService::PendingState deserialize(const QByteArray &bytes) {
       sumObj.value(QStringLiteral("media_fetch_failures")).toInt(0);
   out.summarySoFar.mediaWriteFailures =
       sumObj.value(QStringLiteral("media_write_failures")).toInt(0);
+  out.summarySoFar.mediaUpToDate = sumObj.value(QStringLiteral("media_up_to_date")).toInt(0);
   const auto failArr = sumObj.value(QStringLiteral("first_failures")).toArray();
   for (const auto &v : failArr) out.summarySoFar.firstFailures.append(v.toString());
   // Restore the re-scrape-failed state. All three default to their zero

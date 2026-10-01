@@ -23,6 +23,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Platform-art download failures now show up in the scrape summary.** A
+  platform scrape whose art downloads failed reported no errors and no
+  media written, with nothing to say why — those failures were counted
+  privately and never reached the summary. They now count as media
+  failures, and the first few are listed in the details.
+
+- **Re-scraping a collection that hasn't changed no longer claims the
+  scraper found nothing.** Finishing a scrape with no new artwork has two
+  very different meanings — the provider genuinely had nothing to offer,
+  or everything you already have is still current — and the summary
+  reported the first for both. A re-scrape of an unchanged collection
+  therefore announced that no matching artwork existed while the files
+  sat on disk. It now says how many files were already up to date, and
+  keeps the "nothing offered" wording for the case that really means it.
+
 - **Scraping no longer re-downloads artwork it already has.** The scrape
   window had two separate savings built in — reusing a shared image
   another collection already fetched, and asking the server "has this
