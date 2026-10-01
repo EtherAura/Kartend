@@ -13,7 +13,10 @@
 #include <algorithm>
 
 #include <QApplication>
+#include <QCursor>
 #include <QEvent>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QTest>
@@ -42,6 +45,45 @@ bool anyHandleVisible(QScrollArea *area) {
   const auto children = area->viewport()->findChildren<QWidget *>(Qt::FindDirectChildrenOnly);
   return std::any_of(children.cbegin(), children.cend(),
                      [area](const QWidget *w) { return w != area->widget() && w->isVisible(); });
+}
+
+// Autohide's trigger is the REAL pointer: the controller polls QCursor::pos()
+// every 60ms and lights the handle once it comes within ~56px of the lane. So
+// any test asserting the handle STAYS HIDDEN silently depends on where the
+// physical mouse happens to be — an input the test never set. Under a parallel
+// ctest run the window manager can place the window right under the pointer,
+// and the assertions fail for a completely legitimate reason (Kartend-um442).
+//
+// Reproduced deterministically before fixing: parking the cursor at a known
+// point and moving the area so that point fell just inside its right edge made
+// this test fail every run, with the reported message.
+//
+// Generous relative to the 56px band (which is file-local to
+// overlayscrollbars.cpp and so not readable from here) — the point is to be
+// obviously outside it, not to sit near the edge of the thing under test.
+constexpr int kPointerSafetyMarginPx = 200;
+
+/// Move @p w to the screen edge furthest from the pointer. Deliberately moves
+/// the WINDOW and never the cursor: QCursor::setPos would yank a real user's
+/// mouse when the suite is run against a real platform plugin.
+void placeClearOfPointer(QWidget *w) {
+  const QScreen *screen = QGuiApplication::primaryScreen();
+  if (!screen) return;
+  const QRect avail = screen->availableGeometry();
+  const QPoint pointer = QCursor::pos();
+  // Opposite horizontal half from the pointer, pinned to the top edge.
+  const bool pointerOnLeft = pointer.x() < avail.center().x();
+  const int x = pointerOnLeft ? avail.right() - w->width() - 1 : avail.left() + 1;
+  w->move(x, avail.top() + 1);
+}
+
+/// True when the pointer is far enough from @p w that proximity cannot fire.
+/// Checked AFTER show(), because a compositor may ignore a move request —
+/// under Wayland a client cannot position its own top-level at all.
+bool pointerClearOf(const QWidget *w) {
+  const QRect band = w->frameGeometry().adjusted(-kPointerSafetyMarginPx, -kPointerSafetyMarginPx,
+                                                 kPointerSafetyMarginPx, kPointerSafetyMarginPx);
+  return !band.contains(QCursor::pos());
 }
 
 } // namespace
@@ -99,8 +141,20 @@ void TestScrollbarHiding::autohideKeepsTheHandleUntilThePointerNearsTheLane() {
   // show path — that is what keeps it from reopening the hide/show recursion
   // that crashed the app (Kartend-axlod).
   QScrollArea *area = makeOverflowingArea();
+  // Kartend-um442: put the window well away from the pointer BEFORE showing
+  // it, so proximity cannot fire for reasons this test never asked for.
+  placeClearOfPointer(area);
   area->show();
   QVERIFY(QTest::qWaitForWindowExposed(area));
+  if (!pointerClearOf(area)) {
+    // The platform ignored the move (Wayland clients cannot place their own
+    // top-levels) and the pointer really is beside the lane. "Stays hidden" is
+    // then not a property of the code — skip rather than report a red the
+    // environment caused.
+    delete area;
+    QSKIP("pointer sits within the autohide proximity band of this window; "
+          "the platform ignored the placement request");
+  }
   OverlayScrollbars::apply(area, true);
   OverlayScrollbars::setScrollbarMode(area, ScrollbarMode::Autohide);
   QTest::qWait(50);
