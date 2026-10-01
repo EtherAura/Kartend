@@ -57,8 +57,17 @@ void ScrapeDownloadDispatcher::dispatch(const QList<MediaAsset> &selected,
     // collection's `_shared/`, read its bytes from disk and route them through
     // the same pipeline so a new collection is self-contained on first scrape
     // without re-paying bandwidth.
+    //
+    // Kartend-0o92u: gated on the rescrape mode, which it never used to be.
+    // While sharedSearchPaths was always empty (nothing called the setter) the
+    // branch was unreachable and the missing gate did not show; supplying the
+    // paths without adding it would have made RescrapeMode::Overwrite silently
+    // keep the stale local copy instead of re-fetching, which is the one thing
+    // Overwrite exists to do. Step (2) below was already gated this way.
     const QString existing =
-        ScrapeAssetDedup::findExistingSharedAsset(asset, m_config.sharedSearchPaths);
+        m_config.rescrapeMode == RescrapeMode::Overwrite
+            ? QString()
+            : ScrapeAssetDedup::findExistingSharedAsset(asset, m_config.sharedSearchPaths);
     if (!existing.isEmpty()) {
       qCInfo(lcScrapeTimings) << "DISPATCH dedup hit" << asset.type << asset.label << "<-"
                               << existing;

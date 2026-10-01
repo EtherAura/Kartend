@@ -25,6 +25,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QFont>
 #include <QFormLayout>
 #include <QFutureWatcher>
@@ -188,6 +189,58 @@ void ScrapeResultDialog::showEvent(QShowEvent *event) {
     if (!m_liveTickTimer.isActive()) m_liveTickTimer.start();
     m_marqueeTicker->resume();
   }
+}
+
+ScrapeResultDialog::DispatchContext ScrapeResultDialog::liveDispatchContext() const {
+  // Kartend-0o92u. Everything here is read from state the dialog already
+  // holds, so the dedup and hash-hint paths cannot go dark again just because
+  // a caller forgot a setter.
+  DispatchContext out;
+  if (m_scraperCtx.generalSettings) {
+    out.rescrapeMode = static_cast<Scraper::RescrapeMode>(
+        m_scraperCtx.generalSettings->scraper.options.rescrapeMode);
+  }
+  const QList<CollectionConfig> *collections = m_scraperCtx.collections;
+  if (!collections || collections->isEmpty()) return out;
+
+  // The SERVICE is the source of truth for which collection is being
+  // processed — the dialog can be re-attached to a resumed run, so its own
+  // idea of "current" may be stale. Same reasoning as finishCurrentApply's.
+  const int activeIndex = m_service ? m_service->currentCollectionIndex() : -1;
+
+  // Active collection first: that is where new shared assets get written, and
+  // findExistingSharedAsset takes the first hit. Siblings follow, so art
+  // already fetched for one collection is copied rather than re-downloaded.
+  const auto artworkRootOf = [](const CollectionConfig &c) {
+    return PathUtils::validateAndExpandPath(c.artworkDirectory, c.name);
+  };
+  if (activeIndex >= 0 && activeIndex < collections->size()) {
+    out.artworkDir = artworkRootOf(collections->at(activeIndex));
+    if (!out.artworkDir.isEmpty()) out.sharedSearchPaths.append(out.artworkDir);
+  }
+  for (int i = 0; i < collections->size(); ++i) {
+    if (i == activeIndex) continue;
+    const QString root = artworkRootOf(collections->at(i));
+    // Deduplicate: several collections can legitimately share one artwork
+    // root, and probing the same directory twice is wasted stat() calls.
+    if (!root.isEmpty() && !out.sharedSearchPaths.contains(root)) {
+      out.sharedSearchPaths.append(root);
+    }
+  }
+
+  // Per-item half of the context. Only the interactive picker has a "current
+  // item"; the auto path never reaches this dialog's apply, and an empty base
+  // name leaves crcEligible false exactly as before.
+  if (m_unified) {
+    const QString itemPath = m_unified->currentInteractiveItemPath();
+    if (!itemPath.isEmpty()) {
+      // completeBaseName matches how the persistence layer assembles
+      // `{artworkDirectory}/<type>/{baseName}.<ext>`, so the hash hint probes
+      // the file the write would actually land on.
+      out.baseName = QFileInfo(itemPath).completeBaseName();
+    }
+  }
+  return out;
 }
 
 void ScrapeResultDialog::setSharedAssetSearchPaths(const QStringList &paths) {
@@ -621,10 +674,21 @@ void ScrapeResultDialog::dispatchSelectedDownloads(
 
   Scraper::ScrapeDownloadDispatcher::Config cfg;
   cfg.provider = m_singleItemView->provider();
-  cfg.sharedSearchPaths = m_sharedSearchPaths;
-  cfg.rescrapeArtworkDir = m_rescrapeArtworkDir;
-  cfg.rescrapeBaseName = m_rescrapeBaseName;
-  cfg.rescrapeMode = m_rescrapeMode;
+  // Kartend-0o92u: derive the dedup + rescrape context from live state rather
+  // than waiting for a caller to push it. setSharedAssetSearchPaths() and
+  // setRescrapeContext() both existed from the start and NEITHER was ever
+  // called, so `sharedSearchPaths` was always empty and `crcEligible` always
+  // false — both of the dispatcher's bandwidth savings were unreachable and
+  // every asset took the unconditional fetch, including re-scrapes of art
+  // already sitting on disk. Deriving it here removes the "caller must
+  // remember" failure mode that produced that. An explicit setter call still
+  // wins, so callers and tests can override.
+  const DispatchContext live = liveDispatchContext();
+  cfg.sharedSearchPaths =
+      m_sharedSearchPaths.isEmpty() ? live.sharedSearchPaths : m_sharedSearchPaths;
+  cfg.rescrapeArtworkDir = m_rescrapeArtworkDir.isEmpty() ? live.artworkDir : m_rescrapeArtworkDir;
+  cfg.rescrapeBaseName = m_rescrapeBaseName.isEmpty() ? live.baseName : m_rescrapeBaseName;
+  cfg.rescrapeMode = m_rescrapeArtworkDir.isEmpty() ? live.rescrapeMode : m_rescrapeMode;
   m_downloadDispatcher->setConfig(cfg);
   m_downloadDispatcher->dispatch(selected, applyTimer);
 }

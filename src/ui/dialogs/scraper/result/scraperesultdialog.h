@@ -274,6 +274,18 @@ private:
   /// the legacy in-dialog path, the directly-bound BatchScrapeRunner.
   /// Wired to m_skipItemButton.
   void skipCurrentScrapeItem();
+  /// The dedup + rescrape context the dispatcher needs, derived from state
+  /// the dialog already holds (Kartend-0o92u). Public setters override it
+  /// field-by-field; empty fields here reproduce the previous behaviour
+  /// exactly, so a flow with no collections or no current item is unchanged.
+  struct DispatchContext {
+    QStringList sharedSearchPaths;
+    QString artworkDir;
+    QString baseName;
+    Scraper::RescrapeMode rescrapeMode = Scraper::RescrapeMode::Skip;
+  };
+  [[nodiscard]] DispatchContext liveDispatchContext() const;
+
   /// Configure + start the non-UI Scraper::ScrapeDownloadDispatcher for the
   /// assets the user just confirmed via Apply (Kartend-3fkz step 5,
   /// Kartend-dpehr). The dispatcher owns the dedup/CRC/async-fetch logic; this
@@ -425,6 +437,12 @@ private:
   // Active + sibling collection artwork roots, walked for cross-
   // collection dedup of group/company-scoped assets. First entry is
   // the active collection; the rest are siblings probed in order.
+  //
+  // Kartend-0o92u: OPTIONAL OVERRIDE, not the source of truth. Left empty the
+  // dialog derives the same thing from live state in liveDispatchContext();
+  // this member exists so a caller or test can force a specific set. It being
+  // the only source was the bug — the setter was never called, so the dedup
+  // never ran.
   QStringList m_sharedSearchPaths;
   /// Per-game rescrape context (see setRescrapeContext). Empty
   /// `m_rescrapeArtworkDir` means "no short-circuit" — every selected

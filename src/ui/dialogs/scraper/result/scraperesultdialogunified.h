@@ -113,6 +113,14 @@ public:
   /// many outcomes landed in the run's last second.
   void setUnifiedCountsLabel(const Scraper::ScraperService::Summary &s);
   void finishCurrentApply();
+  /// Path of the item the interactive picker is currently on, or empty when
+  /// the queue is drained / the flow is not interactive. Same element
+  /// finishCurrentApply() hands to the applyResult hook, so the artwork base
+  /// name derived from it matches the one the persistence layer will write
+  /// under (Kartend-0o92u).
+  [[nodiscard]] QString currentInteractiveItemPath() const {
+    return m_interactiveItems.isEmpty() ? QString() : m_interactiveItems.first();
+  }
   void applyScrapedItemToLive(const Scraper::ScrapedItem &item);
   void populateCustomFields(const QHash<QString, QString> &fields);
 

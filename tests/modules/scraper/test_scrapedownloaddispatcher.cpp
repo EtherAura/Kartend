@@ -99,6 +99,8 @@ private slots:
   void emptyOkBody_reportsFailedTypeNotPersisted();
   void dedupHitUnreadable_fallsBackToNetworkFetch();
   void dedupHitUnreadable_networkFailureLandsInFailedTypes();
+  void overwriteModeBypassesTheSharedDedup();
+  void nonOverwriteModesStillTakeTheSharedDedup();
 };
 
 void TestScrapeDownloadDispatcher::allNetworkSuccess_tallisesAndFinishesOnce() {
@@ -257,6 +259,12 @@ void TestScrapeDownloadDispatcher::dedupHitUnreadable_fallsBackToNetworkFetch() 
   ScrapeDownloadDispatcher::Config cfg;
   cfg.provider = &provider;
   cfg.sharedSearchPaths = {tmp.path()};
+  // Kartend-0o92u: Config::rescrapeMode defaults to Overwrite, which now
+  // bypasses the shared dedup entirely (matching BatchScrapeRunner, which has
+  // always gated its own shared dedup that way). This case is about the
+  // UNREADABLE-copy fallback, not about mode semantics, so opt into a mode
+  // where dedup actually applies.
+  cfg.rescrapeMode = Scraper::RescrapeMode::FillMissing;
   d.setConfig(cfg);
   Capture cap;
   cap.wire(d);
@@ -279,6 +287,90 @@ void TestScrapeDownloadDispatcher::dedupHitUnreadable_fallsBackToNetworkFetch() 
   QCOMPARE(cap.downloads.last().asset.type, QStringLiteral("fanart"));
   QCOMPARE(cap.downloads.last().bytes, QByteArray("NETBYTES"));
   QVERIFY(cap.failedTypes.isEmpty());
+}
+
+namespace {
+
+/// Writes a readable shared platform asset at `_shared/wheel/platform_4.png`
+/// under @p root and returns the matching MediaAsset. Shared by the two
+/// rescrape-mode cases below.
+Scraper::MediaAsset seedSharedWheel(const QString &root) {
+  const QString path = QDir(root).filePath(QStringLiteral("_shared/wheel/platform_4.png"));
+  QDir().mkpath(QFileInfo(path).absolutePath());
+  QFile f(path);
+  if (f.open(QIODevice::WriteOnly)) {
+    f.write(QByteArray("SHAREDBYTES"));
+  }
+  Scraper::MediaAsset a = asset(QStringLiteral("wheel"), QStringLiteral("http://x/wheel"));
+  a.scope = Scraper::MediaScope::Platform;
+  a.scopeKey = QStringLiteral("4");
+  return a;
+}
+
+} // namespace
+
+void TestScrapeDownloadDispatcher::overwriteModeBypassesTheSharedDedup() {
+  // Kartend-0o92u: step (1) used to run ahead of any rescrape-mode gate. That
+  // was invisible while sharedSearchPaths was always empty (nothing called the
+  // setter, so the branch was unreachable) — but wiring the paths without the
+  // gate would have made Overwrite silently serve the STALE LOCAL COPY, which
+  // is precisely the mode that exists to re-fetch.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const MediaAsset wheel = seedSharedWheel(tmp.path());
+
+  FakeProvider provider;
+  provider.okBytes[QStringLiteral("http://x/wheel")] = QByteArray("NETBYTES");
+
+  ScrapeDownloadDispatcher d;
+  ScrapeDownloadDispatcher::Config cfg;
+  cfg.provider = &provider;
+  cfg.sharedSearchPaths = {tmp.path()};
+  cfg.rescrapeMode = Scraper::RescrapeMode::Overwrite;
+  d.setConfig(cfg);
+  Capture cap;
+  cap.wire(d);
+
+  d.dispatch({wheel});
+
+  QCOMPARE(cap.finishedCount, 1);
+  QCOMPARE(provider.fetchCalls, 1); // went to the network despite the local hit
+  QCOMPARE(cap.downloads.size(), 1);
+  QCOMPARE(cap.downloads.first().bytes, QByteArray("NETBYTES"));
+}
+
+void TestScrapeDownloadDispatcher::nonOverwriteModesStillTakeTheSharedDedup() {
+  // The other half of the same gate: every non-Overwrite mode must keep
+  // reading the existing file off disk. Without this the Overwrite fix could
+  // regress into "never dedup", which would silently undo the whole point of
+  // supplying the search paths.
+  for (const auto mode : {Scraper::RescrapeMode::Skip, Scraper::RescrapeMode::FillMissing,
+                          Scraper::RescrapeMode::UpdateChanged}) {
+    QTemporaryDir tmp;
+    QVERIFY(tmp.isValid());
+    const MediaAsset wheel = seedSharedWheel(tmp.path());
+
+    FakeProvider provider;
+    provider.okBytes[QStringLiteral("http://x/wheel")] = QByteArray("NETBYTES");
+
+    ScrapeDownloadDispatcher d;
+    ScrapeDownloadDispatcher::Config cfg;
+    cfg.provider = &provider;
+    cfg.sharedSearchPaths = {tmp.path()};
+    cfg.rescrapeMode = mode;
+    d.setConfig(cfg);
+    Capture cap;
+    cap.wire(d);
+
+    d.dispatch({wheel});
+
+    const QByteArray label = QByteArray::number(static_cast<int>(mode));
+    QVERIFY2(provider.fetchCalls == 0,
+             qPrintable(QStringLiteral("mode %1 hit the network instead of deduping")
+                            .arg(QString::fromLatin1(label))));
+    QCOMPARE(cap.downloads.size(), 1);
+    QCOMPARE(cap.downloads.first().bytes, QByteArray("SHAREDBYTES"));
+  }
 }
 
 void TestScrapeDownloadDispatcher::dedupHitUnreadable_networkFailureLandsInFailedTypes() {

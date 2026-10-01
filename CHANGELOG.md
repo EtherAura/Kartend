@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Scraping no longer re-downloads artwork it already has.** The scrape
+  window had two separate savings built in — reusing a shared image
+  another collection already fetched, and asking the server "has this
+  changed?" instead of pulling the whole file again — and neither was
+  ever switched on, so every image was downloaded in full every time,
+  including on a re-scrape of a library that had not changed. Both now
+  work. Re-scrapes are substantially faster and use far less bandwidth,
+  and a new collection can pick up artwork a sibling collection already
+  has instead of fetching it again. Choosing *Overwrite* still
+  re-downloads everything, exactly as before — that is what it is for.
+
 - **The grid selection ring no longer sits on top of the cover art.**
   With titles hidden a tile hands its whole cell to the artwork, so the
   pulsing ring — which had to be drawn inside the tile — covered the
