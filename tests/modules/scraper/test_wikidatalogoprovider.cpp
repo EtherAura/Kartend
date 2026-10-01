@@ -36,6 +36,8 @@ private slots:
   void fetchEntity_compoundNameFallsBackToFragmentQuery();
   void fetchEntity_noEntityIsNotFound();
   void fetchEntity_wrongTargetTypeIsInvalidArgument();
+  void pinnedEntityForImportSource_mapsLaunchersOnly();
+  void fetchEntity_launcherCollectionUsesPinnedEntityNotTheNameSearch();
 };
 
 void TestWikidataLogoProvider::parseEntityData_fullSparseAndMalformed() {
@@ -440,6 +442,79 @@ void TestWikidataLogoProvider::fetchEntity_ambiguousNameResolvesToConsoleNotPlan
   QVERIFY(result.has_value());
   QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
   QCOMPARE(result->value().description, QStringLiteral("home video game console"));
+}
+
+void TestWikidataLogoProvider::pinnedEntityForImportSource_mapsLaunchersOnly() {
+  // Kartend-lthng: ids verified against the live Wikidata API 2026-08-31.
+  QCOMPARE(WikidataLogoParser::pinnedEntityForImportSource(QStringLiteral("steam")),
+           QStringLiteral("Q337535"));
+  QCOMPARE(WikidataLogoParser::pinnedEntityForImportSource(QStringLiteral("flatpak")),
+           QStringLiteral("Q22661286"));
+  // The two the bare-name ladder gets WRONG, which is why the table exists:
+  // "Lutris" alone matches the Lutris *database*, "Heroic" a 2024 video game.
+  QCOMPARE(WikidataLogoParser::pinnedEntityForImportSource(QStringLiteral("lutris")),
+           QStringLiteral("Q48767907"));
+  QCOMPARE(WikidataLogoParser::pinnedEntityForImportSource(QStringLiteral("heroic")),
+           QStringLiteral("Q123510384"));
+  QCOMPARE(WikidataLogoParser::pinnedEntityForImportSource(QStringLiteral("itch")),
+           QStringLiteral("Q22905933"));
+
+  // Case/whitespace tolerance — importSource is persisted config, not a literal.
+  QCOMPARE(WikidataLogoParser::pinnedEntityForImportSource(QStringLiteral("  Steam ")),
+           QStringLiteral("Q337535"));
+
+  // Deliberately unpinned: bottles has no findable Wikidata item, and
+  // xdg / esde name a mechanism rather than a brand. Empty sends them down
+  // the ordinary name ladder instead of inventing a wrong entity.
+  QVERIFY(WikidataLogoParser::pinnedEntityForImportSource(QStringLiteral("bottles")).isEmpty());
+  QVERIFY(WikidataLogoParser::pinnedEntityForImportSource(QStringLiteral("xdg")).isEmpty());
+  QVERIFY(WikidataLogoParser::pinnedEntityForImportSource(QStringLiteral("esde")).isEmpty());
+  // A hand-made collection has no importSource at all and must be unaffected.
+  QVERIFY(WikidataLogoParser::pinnedEntityForImportSource(QString()).isEmpty());
+}
+
+void TestWikidataLogoProvider::fetchEntity_launcherCollectionUsesPinnedEntityNotTheNameSearch() {
+  // Kartend-lthng: a launcher-imported collection must resolve through its
+  // importSource, not its name. The guard is that wbsearchentities is never
+  // called at all — with the search in play, "Steam" is a plausible match for
+  // several non-Valve entities and the outcome depends on Wikidata's ranking
+  // on the day.
+  bool searched = false;
+  ProviderBase::setFetchFunctionForTesting(
+      [&searched](const QUrl &url, const Scraper::HttpClient::RawHeaders &,
+                  Scraper::HttpClient::ResponseCallback cb, const QStringList &) {
+        const QString s = url.toString();
+        if (s.contains(QStringLiteral("wbsearchentities"))) {
+          searched = true;
+          QFAIL("launcher collection fell back to the name search instead of its pinned entity");
+        } else if (s.contains(QStringLiteral("ids=Q337535"))) {
+          cb(QByteArrayLiteral(R"({"entities":{"Q337535":{
+            "descriptions":{"en":{"value":"video game digital distribution service"}},
+            "claims":{"P154":[{"mainsnak":{"datavalue":{"value":"Steam icon logo.svg"}}}]}}}})"));
+        } else if (s.contains(QStringLiteral("Steam%20icon%20logo.svg")) ||
+                   s.contains(QStringLiteral("Steam_icon_logo.svg"))) {
+          cb(QByteArrayLiteral("<svg/>"));
+        } else {
+          QFAIL(qPrintable(QStringLiteral("unexpected fetch: %1").arg(s)));
+        }
+      });
+
+  CollectionConfig cfg;
+  cfg.name = QStringLiteral("Steam");
+  cfg.type = QStringLiteral("Games");
+  cfg.importSource = QStringLiteral("steam");
+  WikidataLogoProvider provider([&cfg]() -> const CollectionConfig * { return &cfg; });
+  Scraper::EntityScrapeTarget target;
+  target.type = Scraper::ScrapeEntityType::Collection;
+  target.identity = QStringLiteral("uuid-steam");
+
+  std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> result;
+  provider.fetchEntity(
+      target, [&result](const ErrorUtils::Result<Scraper::ScrapedItem> &r) { result = r; });
+  QVERIFY(!searched);
+  QVERIFY(result.has_value());
+  QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
+  QCOMPARE(result->value().description, QStringLiteral("video game digital distribution service"));
 }
 
 void TestWikidataLogoProvider::fetchEntity_compoundNameFallsBackToFragmentQuery() {

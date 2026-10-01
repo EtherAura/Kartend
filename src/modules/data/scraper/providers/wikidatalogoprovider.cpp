@@ -91,59 +91,74 @@ void WikidataLogoProvider::fetchEntity(const Scraper::EntityScrapeTarget &target
         QStringLiteral("WikidataLogoProvider::fetchEntity"));
   };
 
+  // Continuation once the entity is known, shared by the pinned-launcher path
+  // and the search ladder below. It guards on the base lifetime token (cr950
+  // class): HttpClient holds continuations with no QObject severing, so a
+  // provider destroyed mid-flight must not be touched.
+  auto withEntity = [this, alive = std::weak_ptr<int>(m_lifetimeToken), name, scopeKey, notFound,
+                     callback](ErrorUtils::Result<QString> entity) mutable {
+    if (alive.expired()) return;
+    if (entity.isError()) {
+      callback(entity.error());
+      return;
+    }
+    if (entity.value().isEmpty()) {
+      callback(notFound("matching entity"));
+      return;
+    }
+    // Hop 2 (Kartend-445su): one wbgetentities call carries the logo
+    // claim, the manufacturer claim, the inception year, the one-line
+    // description, and the enwiki sitelink — the logo-only wbgetclaims
+    // hop grew into the DATA hop.
+    getJson<WikidataLogoParser::EntityData>(
+        userAgentHeader(), WikidataLogoParser::buildEntityDataUrl(entity.value()),
+        [](const QByteArray &body) { return WikidataLogoParser::parseEntityData(body); },
+        [this, alive, name, scopeKey, notFound,
+         callback](ErrorUtils::Result<WikidataLogoParser::EntityData> dataResult) mutable {
+          if (alive.expired()) return;
+          if (dataResult.isError()) {
+            callback(dataResult.error());
+            return;
+          }
+          const WikidataLogoParser::EntityData &data = dataResult.value();
+          if (data.logoFilename.isEmpty() && data.description.isEmpty() &&
+              data.manufacturerId.isEmpty() && data.enwikiTitle.isEmpty()) {
+            // The entity resolved but carries nothing usable — art OR
+            // text. Only now is not-found honest; a logo-less entity
+            // with a description is a metadata-only success.
+            callback(notFound("logo or descriptive data"));
+            return;
+          }
+          // No std::move: finishEntityWithData takes the callback by CONST
+          // reference (it copies into each continuation itself), so a move
+          // here cannot happen and only reads as though ownership were
+          // being handed over. clang-tidy performance-move-const-arg.
+          finishEntityWithData(name, scopeKey, data, callback);
+        });
+  };
+
+  // Kartend-lthng: a launcher-imported collection ("Steam", "Lutris", …) is
+  // named after a storefront, and the search ladder below is tuned for
+  // hardware/media vocabulary — it resolves "Heroic" to an unrelated video
+  // game and "Lutris" to a games database rather than the launcher. The
+  // importSource the importer already recorded names the launcher exactly, so
+  // pin the entity and skip the ladder entirely. Sources with no pinned entity
+  // fall through unchanged.
+  const QString pinned = WikidataLogoParser::pinnedEntityForImportSource(cfg->importSource);
+  if (!pinned.isEmpty()) {
+    withEntity(pinned);
+    return;
+  }
+
   // Hop 1 (Kartend-6i10t): resolve the entity through the search-query
   // ladder — the full name first, then compound-name fragments — picking
   // the hit whose label/description matches the collection's media-type
   // vocabulary. Blind first-hit acceptance gave a games collection named
   // "Saturn" the PLANET, and compound names ("Famicom - Nintendo
-  // Entertainment System") matched nothing at all. Continuations guard on
-  // the base lifetime token (cr950 class): HttpClient holds them with no
-  // QObject severing, so a provider destroyed mid-flight must not be
-  // touched.
+  // Entertainment System") matched nothing at all.
   const bool preferCompany = m_isShellAccessor && m_isShellAccessor();
-  resolveEntityId(
-      WikidataLogoParser::searchQueryLadder(name), 0, QString(), cfg->type, preferCompany,
-      [this, alive = std::weak_ptr<int>(m_lifetimeToken), name, scopeKey, notFound,
-       callback](ErrorUtils::Result<QString> entity) mutable {
-        if (alive.expired()) return;
-        if (entity.isError()) {
-          callback(entity.error());
-          return;
-        }
-        if (entity.value().isEmpty()) {
-          callback(notFound("matching entity"));
-          return;
-        }
-        // Hop 2 (Kartend-445su): one wbgetentities call carries the logo
-        // claim, the manufacturer claim, the inception year, the one-line
-        // description, and the enwiki sitelink — the logo-only wbgetclaims
-        // hop grew into the DATA hop.
-        getJson<WikidataLogoParser::EntityData>(
-            userAgentHeader(), WikidataLogoParser::buildEntityDataUrl(entity.value()),
-            [](const QByteArray &body) { return WikidataLogoParser::parseEntityData(body); },
-            [this, alive, name, scopeKey, notFound,
-             callback](ErrorUtils::Result<WikidataLogoParser::EntityData> dataResult) mutable {
-              if (alive.expired()) return;
-              if (dataResult.isError()) {
-                callback(dataResult.error());
-                return;
-              }
-              const WikidataLogoParser::EntityData &data = dataResult.value();
-              if (data.logoFilename.isEmpty() && data.description.isEmpty() &&
-                  data.manufacturerId.isEmpty() && data.enwikiTitle.isEmpty()) {
-                // The entity resolved but carries nothing usable — art OR
-                // text. Only now is not-found honest; a logo-less entity
-                // with a description is a metadata-only success.
-                callback(notFound("logo or descriptive data"));
-                return;
-              }
-              // No std::move: finishEntityWithData takes the callback by CONST
-              // reference (it copies into each continuation itself), so a move
-              // here cannot happen and only reads as though ownership were
-              // being handed over. clang-tidy performance-move-const-arg.
-              finishEntityWithData(name, scopeKey, data, callback);
-            });
-      });
+  resolveEntityId(WikidataLogoParser::searchQueryLadder(name), 0, QString(), cfg->type,
+                  preferCompany, std::move(withEntity));
 }
 
 void WikidataLogoProvider::resolveEntityId(const QStringList &queries, int index,

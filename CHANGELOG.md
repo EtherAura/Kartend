@@ -21,6 +21,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keep warning through the banner rather than asking a question with only
   one answer.
 
+- **Collections imported from a launcher now get that launcher's own
+  logo.** A Steam, Flatpak, Lutris, Heroic or itch.io collection is
+  named after a storefront, and the sidebar had no mark to show for one
+  — the console/manufacturer icon sets have nothing for a storefront,
+  and matching them against those sets is what used to produce absurd
+  results. The logo is now looked up on Wikidata from the launcher the
+  collection was imported from, and fetched at scrape time like any
+  other collection art, so nothing third-party ships inside Kartend.
+  Looking the launcher up by identity rather than by the collection's
+  name is what makes it reliable: searched by name, "Heroic" matches an
+  unrelated video game and "Lutris" a games database rather than the
+  launcher. Launchers with no logo published on Wikidata — Bottles
+  today — keep showing no mark, as before, and hand-made collections
+  are unaffected.
+
 ### Changed
 
 - **Re-scraping platform art no longer downloads files that haven't

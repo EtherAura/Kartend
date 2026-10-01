@@ -58,6 +58,19 @@ struct SearchHit {
                                               const QString &collectionType, const QString &query,
                                               bool preferCompany = false);
 
+/// The Wikidata entity a launcher-imported collection's mark comes from, keyed
+/// by CollectionConfig::importSource ("steam" / "lutris" / …). Empty when the
+/// source has no pinned entity, which sends the caller down the ordinary
+/// name-search ladder (Kartend-lthng).
+///
+/// Pinned rather than searched because a storefront's NAME is a bad query and
+/// the failure is silent — measured against the live API 2026-08-31, the bare
+/// name resolves "Heroic" to an unrelated 2024 video game with no logo at all,
+/// and "Lutris" to the Lutris *database* entity rather than the launcher. The
+/// set of launchers is small, closed, and defined by us, so there is nothing
+/// for a search to discover that this table does not already know.
+[[nodiscard]] QString pinnedEntityForImportSource(const QString &importSource);
+
 /// wbgetclaims for property P154 on @p entityId ("Q8093").
 [[nodiscard]] QUrl buildClaimsUrl(const QString &entityId);
 

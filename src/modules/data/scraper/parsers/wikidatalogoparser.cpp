@@ -203,6 +203,39 @@ QString pickEntityForCollection(const QList<SearchHit> &hits, const QString &col
   return bestId;
 }
 
+QString pinnedEntityForImportSource(const QString &importSource) {
+  // Kartend-lthng. Ids verified against the live Wikidata API 2026-08-31 —
+  // each row records whether the entity carries P154 (the logo claim this
+  // provider actually downloads), because an entity without one yields no
+  // glyph however well it matched.
+  //
+  //   steam    Q337535       P154 "Steam icon logo.svg"
+  //   flatpak  Q22661286     P154 "Flatpak logo.png"
+  //   lutris   Q48767907     P154 "Lutris Game Platform (Logo).svg"
+  //   itch     Q22905933     P154 "Itch.io logo.svg"
+  //   heroic   Q123510384    NO P154 today — only P18, a UI screenshot.
+  //
+  // Heroic is pinned anyway, and deliberately: the pin is what stops the bare
+  // name matching the unrelated 2024 video game "Heroic", and the entity still
+  // carries the description/enwiki text the data hop wants. It contributes no
+  // glyph until someone adds a logo claim upstream, which is the correct
+  // outcome — a screenshot is not a mark.
+  //
+  // DELIBERATELY ABSENT: "bottles" has no findable Wikidata item at all (the
+  // name resolves to a family name, two paintings, a film and a TV episode),
+  // and "xdg" / "esde" are not vendors — the desktop-menu and ES-DE importers
+  // name a mechanism, not a brand. All three fall through to the name ladder,
+  // which is expected to find nothing and leave them unglyphed as today.
+  static const QHash<QString, QString> kPinned = {
+      {QStringLiteral("steam"), QStringLiteral("Q337535")},
+      {QStringLiteral("flatpak"), QStringLiteral("Q22661286")},
+      {QStringLiteral("lutris"), QStringLiteral("Q48767907")},
+      {QStringLiteral("itch"), QStringLiteral("Q22905933")},
+      {QStringLiteral("heroic"), QStringLiteral("Q123510384")},
+  };
+  return kPinned.value(importSource.trimmed().toLower());
+}
+
 ErrorUtils::Result<QString> parseEntitySearch(const QByteArray &json) {
   auto root = rootObject(json, "WikidataLogoParser::parseEntitySearch");
   if (root.isError()) return root.error();
