@@ -1,6 +1,8 @@
 #ifndef ISETTINGSMANAGER_H
 #define ISETTINGSMANAGER_H
 
+#include <functional>
+
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "errorutils.h"
@@ -50,6 +52,34 @@ public:
   /// seeds its non-modal warning banner from this getter and tracks live
   /// changes via credentialStorageDemotionChanged().
   [[nodiscard]] virtual QString credentialDemotionReason() const = 0;
+
+  /// Asked ONCE per save, before a runtime keychain failure would write any
+  /// scraper credential to the INI in plaintext (Kartend-9t7fe). @p reason is
+  /// the QKeychain failure string. Returning true permits the plaintext write
+  /// (the pre-existing behaviour); returning false leaves the credential
+  /// unsaved for this round.
+  ///
+  /// Only the RUNTIME failure asks. A build with no keychain support compiled
+  /// in has no alternative outcome to offer, so it never prompts and keeps
+  /// reporting itself through credentialDemotionReason()'s banner alone —
+  /// prompting there would be pure nagging.
+  ///
+  /// UNSET IS THE SAFE DEFAULT: with no callback the write proceeds exactly as
+  /// it did before, so headless callers, tests, and any save that happens
+  /// without a GUI to host a dialog are unaffected. The ui layer installs one
+  /// when a window exists to parent the prompt to.
+  /// Non-pure with a no-op default deliberately: "cannot ask" is a legitimate
+  /// implementation, and it is what every test double and non-persisting
+  /// stand-in wants. Only the QSettings-backed manager, which is the one that
+  /// can actually write plaintext, needs to store the hook.
+  ///
+  /// By const reference rather than by value: the no-op default consumes
+  /// nothing, so a sink-style by-value parameter would copy the std::function
+  /// at every call site for no gain (clang-tidy
+  /// performance-unnecessary-value-param). Installing happens twice per dialog,
+  /// so the one copy the storing override makes costs nothing measurable.
+  using PlaintextCredentialConsent = std::function<bool(const QString &reason)>;
+  virtual void setPlaintextCredentialConsent(const PlaintextCredentialConsent & /*consent*/) {}
 
   // The settings-dialog orchestration methods (openSettingsDialog,
   // handleReloadRequired, handleLayoutChanges) moved off this interface to

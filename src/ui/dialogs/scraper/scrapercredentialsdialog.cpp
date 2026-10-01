@@ -12,6 +12,7 @@
 
 #include "errordialog.h"
 #include "isettingsmanager.h"
+#include "scrapercredentialconsent.h"
 #include "scrapercredentialspanel.h"
 
 ScraperCredentialsDialog::ScraperCredentialsDialog(GeneralSettings *generalSettings,
@@ -24,6 +25,9 @@ ScraperCredentialsDialog::ScraperCredentialsDialog(GeneralSettings *generalSetti
   buildUi();
 }
 
+// No consent-hook teardown here on purpose — install() binds its own cleanup to
+// this dialog's destroyed() signal. Doing it from the destructor called a
+// virtual on a half-destroyed ISettingsManager (UBSan, Kartend-9t7fe).
 ScraperCredentialsDialog::~ScraperCredentialsDialog() = default;
 
 void ScraperCredentialsDialog::buildUi() {
@@ -56,6 +60,9 @@ void ScraperCredentialsDialog::buildUi() {
     m_panel->setStorageDemotionNotice(m_settingsManager->credentialDemotionReason());
     connect(m_settingsManager, &ISettingsManager::credentialStorageDemotionChanged, m_panel,
             &ScraperCredentialsPanel::setStorageDemotionNotice);
+    // Kartend-9t7fe: this dialog is open across its own save, so a keychain
+    // failure during that save has a window to ask from.
+    ScraperCredentialConsent::install(m_settingsManager, this);
   }
   root->addWidget(m_panel);
 

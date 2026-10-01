@@ -10,6 +10,7 @@ target_sources(kartend_ui PRIVATE
   result/singleitemview.cpp
   result/valuemarqueeticker.cpp
   scrapejobgrouping.cpp
+  scrapercredentialconsent.cpp
   scrapercredentialsdialog.cpp
   scrapercredentialspanel.cpp
   scraperprovidersdialog.cpp
@@ -25,6 +26,7 @@ target_sources(kartend_ui PRIVATE
   result/transferrateformat.h
   result/valuemarqueeticker.h
   scrapejobgrouping.h
+  scrapercredentialconsent.h
   scrapercredentialsdialog.h
   scrapercredentialspanel.h
   scraperprovidersdialog.h

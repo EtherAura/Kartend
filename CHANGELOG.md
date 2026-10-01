@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Kartend asks before storing a scraper password unencrypted.** When
+  saving a password to the system keychain failed, it was written to
+  Kartend's settings file in the clear and you were told afterwards, in a
+  banner you could easily miss. Now you are asked first, while the choice
+  still means something: unlock your keyring and save again to store it
+  securely, or decline and leave the password unsaved. Declining never
+  touches a password already stored safely from an earlier save.
+  Dismissing the prompt declines. Builds compiled without keychain
+  support are unchanged — they have no secure option to offer, so they
+  keep warning through the banner rather than asking a question with only
+  one answer.
+
 ### Fixed
 
 - **Scraping no longer re-downloads artwork it already has.** The scrape

@@ -166,6 +166,15 @@ kartend_add_test(NAME MediaTypeCheckboxBuilder
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# ScraperCredentialConsent (Kartend-9t7fe): install/uninstall lifetime of the
+# plaintext-credential prompt, and the decline-don't-crash answer given when
+# the host window outlives its hook. The modal prompt itself needs a person.
+kartend_add_test(NAME ScraperCredentialConsent
+  SOURCES ui/dialogs/test_scrapercredentialconsent.cpp
+          integration/mocks/mocksettingsmanager.h
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # FlowLayout: deterministic wrap math with fixed-size chips —
 # heightForWidth row counts, margin inclusion, setGeometry positions,
 # count/itemAt/takeAt contract, minimumSize/sizeHint coupling.

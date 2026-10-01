@@ -248,6 +248,15 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
   // self-heals without user action. First failure reason wins (one banner,
   // not one per field).
   QString newDemotionReason;
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+  // Kartend-9t7fe: the runtime demotion is now a CHOICE, asked at most once per
+  // save. Tri-state because the question is per-save, not per-credential — a
+  // library with several providers configured must not produce one dialog per
+  // field, and the answer to "may Kartend store these in the clear?" is the
+  // same for all of them.
+  enum class Consent { Unasked, Allowed, Declined };
+  Consent consent = m_plaintextConsent ? Consent::Unasked : Consent::Allowed;
+#endif
   for (auto pIt = m_generalSettings.scraper.credentials.constBegin();
        pIt != m_generalSettings.scraper.credentials.constEnd(); ++pIt) {
     const QString &providerId = pIt.key();
@@ -265,16 +274,36 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
         s.setValue(fullKey, QLatin1String(kKeychainSentinel));
         retainedKeys.insert(fullKey);
       } else {
-        // No backend available — fall back to plaintext INI (matches a build
-        // without keychain support; the security improvement is best-effort,
-        // not load-bearing). Record the demotion so the settings dialog can
-        // surface a non-modal banner instead of this log-only breadcrumb.
-        qCWarning(lcSettingsManager) << "Keychain write failed for" << fullKey << "(" << writeError
-                                     << "); falling back to plaintext INI";
+        // No backend available. Before Kartend-9t7fe this dropped straight to
+        // plaintext and told the user afterwards via the banner; now the user
+        // is asked first, when declining is still useful — they can unlock the
+        // wallet and save again, and "don't store it" is a real answer.
+        qCWarning(lcSettingsManager)
+            << "Keychain write failed for" << fullKey << "(" << writeError << ")";
+        const QString reason =
+            writeError.isEmpty() ? QStringLiteral("keychain unavailable") : writeError;
+        if (consent == Consent::Unasked) {
+          consent = m_plaintextConsent(reason) ? Consent::Allowed : Consent::Declined;
+        }
+        if (consent == Consent::Declined) {
+          // Write the sentinel rather than nothing, and retain the key. Both
+          // matter: the sentinel leaves any credential a PREVIOUS (successful)
+          // save put in the keychain readable on next load, and retaining the
+          // key keeps the sweep below from deleting it. Declining the plaintext
+          // demotion must never destroy a credential that is already stored
+          // securely — the user refused this write, not the stored value.
+          // Loading a key whose keychain entry does not exist yields an empty
+          // credential, which is exactly "the new value was not saved".
+          qCInfo(lcSettingsManager)
+              << "User declined the plaintext fallback for" << fullKey << "— not saved";
+          s.setValue(fullKey, QLatin1String(kKeychainSentinel));
+          retainedKeys.insert(fullKey);
+          continue;
+        }
+        qCWarning(lcSettingsManager) << "Falling back to plaintext INI for" << fullKey;
         s.setValue(fullKey, fIt.value());
         if (newDemotionReason.isEmpty()) {
-          newDemotionReason =
-              writeError.isEmpty() ? QStringLiteral("keychain unavailable") : writeError;
+          newDemotionReason = reason;
         }
       }
 #else

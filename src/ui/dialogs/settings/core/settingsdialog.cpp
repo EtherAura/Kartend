@@ -54,6 +54,7 @@
 #include "launchertabpanel.h"
 #include "marqueepanel.h"
 #include "pathutils.h"
+#include "scrapercredentialconsent.h"
 #include "scrapercredentialspanel.h"
 #include "scrapersettingspanel.h"
 #include "settingsdialog.h"
@@ -327,6 +328,11 @@ SettingsDialog::SettingsDialog(QWidget *parent, const QList<CollectionConfig> &i
     applyDemotionNotice(settingsManager->credentialDemotionReason());
     connect(settingsManager, &ISettingsManager::credentialStorageDemotionChanged, this,
             applyDemotionNotice);
+    // Kartend-9t7fe: ask before a failed keychain write demotes a credential to
+    // plaintext, rather than demoting and reporting it in the banner after the
+    // fact. install() binds the teardown to this dialog's destroyed() signal,
+    // so the destructor deliberately does not touch the hook.
+    ScraperCredentialConsent::install(settingsManager, this);
   }
 
   // Controls panel (Keyboard / Gamepad / Mouse). Bind the gamepad-capture
@@ -456,6 +462,10 @@ auto SettingsDialog::eventFilter(QObject *obj, QEvent *event) -> bool {
 }
 
 SettingsDialog::~SettingsDialog() {
+  // No consent-hook teardown here on purpose: ScraperCredentialConsent::install
+  // binds its own cleanup to this dialog's destroyed() signal. Doing it from
+  // this destructor called a virtual on an ISettingsManager whose derived part
+  // was already gone (UBSan, Kartend-9t7fe).
   delete ui;
 }
 

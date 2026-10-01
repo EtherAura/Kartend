@@ -39,6 +39,9 @@ public:
   [[nodiscard]] QString credentialDemotionReason() const override {
     return m_credentialDemotionReason;
   }
+  void setPlaintextCredentialConsent(const PlaintextCredentialConsent &consent) override {
+    m_plaintextConsent = consent;
+  }
 
   /// Whether this BUILD has a keychain backend compiled in
   /// (KARTEND_HAVE_QTKEYCHAIN). Says nothing about whether the backend is
@@ -77,6 +80,12 @@ private:
   // emitted from saveGeneralSettings after a clean sync, matching the
   // per-domain hot-reload pattern.
   QString m_credentialDemotionReason;
+
+  // Kartend-9t7fe: consulted once per save before a runtime keychain failure
+  // demotes any credential to plaintext. Null by default, which keeps the
+  // pre-existing "demote and report afterwards" behaviour for every caller
+  // that has no GUI to prompt from.
+  PlaintextCredentialConsent m_plaintextConsent;
 
   // Per-collection fingerprint of the last successfully-saved list, keyed by
   // (name, mediaDirectory) UUID. Diff baseline for the per-domain *Changed
