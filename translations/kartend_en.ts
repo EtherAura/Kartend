@@ -8727,7 +8727,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation>ScreenScraper is busy right now (%1) — expect slower downloads.</translation>
     </message>
     <message>
-        <location filename="../src/modules/data/scraper/providers/screenscraperprovider.cpp" line="+592"/>
+        <location filename="../src/modules/data/scraper/providers/screenscraperprovider.cpp" line="+598"/>
         <source>Extracting archive for hash ID…</source>
         <translation>Extracting archive for hash ID…</translation>
     </message>
@@ -9227,12 +9227,12 @@ The app will still load, but please fix these — collections that share an iden
         <translation>Select none</translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/scraper/result/scraperesultdialog.cpp" line="+84"/>
+        <location filename="../src/ui/dialogs/scraper/result/scraperesultdialog.cpp" line="+85"/>
         <source>Scraper</source>
         <translation>Scraper</translation>
     </message>
     <message>
-        <location line="+180"/>
+        <location line="+232"/>
         <source>Skip this item</source>
         <translation>Skip this item</translation>
     </message>
@@ -9267,7 +9267,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation>Downloading %1 media items…</translation>
     </message>
     <message>
-        <location line="+90"/>
+        <location line="+101"/>
         <source>Downloaded %1 of %2 (%3) · ETA %4</source>
         <translation>Downloaded %1 of %2 (%3) · ETA %4</translation>
     </message>
@@ -9759,14 +9759,44 @@ Remaining items: %5</translation>
     </message>
 </context>
 <context>
+    <name>ScraperCredentialConsent</name>
+    <message>
+        <location filename="../src/ui/dialogs/scraper/scrapercredentialconsent.cpp" line="+42"/>
+        <source>Store password unencrypted?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+1"/>
+        <source>Kartend could not save your scraper password to the system keychain.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+4"/>
+        <source>Reason: %1
+
+It can store the password in Kartend&apos;s settings file instead, where it is readable by anything that can read your files. Otherwise the password is not saved — unlock your keyring or wallet and save again to store it securely.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>Store Unencrypted</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+3"/>
+        <source>Don&apos;t Save</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ScraperCredentialsDialog</name>
     <message>
-        <location filename="../src/ui/dialogs/scraper/scrapercredentialsdialog.cpp" line="+21"/>
+        <location filename="../src/ui/dialogs/scraper/scrapercredentialsdialog.cpp" line="+22"/>
         <source>Scraper credentials</source>
         <translation>Scraper credentials</translation>
     </message>
     <message>
-        <location line="+11"/>
+        <location line="+14"/>
         <source>API tokens stored here let Kartend pull metadata + cover art from third-party services. Leave fields blank to disable a provider — Kartend ships no bundled keys, so each provider is off until you paste your own credentials. Values live in your config file under the [Scrapers] section.</source>
         <translation>API tokens stored here let Kartend pull metadata + cover art from third-party services. Leave fields blank to disable a provider — Kartend ships no bundled keys, so each provider is off until you paste your own credentials. Values live in your config file under the [Scrapers] section.</translation>
     </message>
@@ -10411,7 +10441,7 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
     <message>
         <location filename="../src/ui/dialogs/settings/core/settingsdialog.ui" line="+20"/>
         <location line="+86"/>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+77"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+78"/>
         <source>Settings</source>
         <translation>Settings</translation>
     </message>
@@ -10647,12 +10677,12 @@ The file is size-capped; the previous run rolls over to scrape.log.old. Leave of
         <translation>Controls</translation>
     </message>
     <message>
-        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+365"/>
+        <location filename="../src/ui/dialogs/settings/core/settingsdialog.cpp" line="+369"/>
         <source>deselecting</source>
         <translation>deselecting</translation>
     </message>
     <message>
-        <location line="+93"/>
+        <location line="+97"/>
         <source>closing the dialog</source>
         <translation>closing the dialog</translation>
     </message>
