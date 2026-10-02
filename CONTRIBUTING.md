@@ -249,7 +249,10 @@ a refactor, a diagnostic — opt out explicitly:
 - **On a PR:** add the `no-changelog` label.
 - **On a push:** put `[no-changelog]` **on a line of its own** in the commit
   message. Mentioning it mid-sentence does not count, so a commit that merely
-  discusses the marker is still checked.
+  discusses the marker is still checked. Neither does a subject line that
+  merely ends in it — many older subjects do, and they passed only because
+  something else in the same push added a CHANGELOG entry. Keep the suffix
+  if you like it there, but also give the marker its own line in the body.
 
 The marker exempts **only the commit carrying it**. Batching a marked commit
 with unmarked `src/` work does not exempt that work — each commit stands on
