@@ -101,18 +101,19 @@ total; reviewers should be able to read every word.
 
 ## Periodic cleanup
 
-A useful semi-regular pass: pick one suppression, comment it out
-locally, run the sanitizer build, see whether it still fires. Many
-suppressions outlive the upstream issue they targeted — Qt and
-glib both fix things eventually. If a suppression no longer
-catches anything, delete it (with the same care as adding one —
-note in the PR description that you confirmed it's no longer
-needed).
+Many suppressions outlive the upstream issue they targeted — Qt and
+glib both fix things eventually. The cheap way to find candidates is
+to run the suite once with `print_suppressions=1` (TSan and LSan both
+support it) and `ctest -V`, then read which entries actually matched;
+see the 2026-10 measured review below for the method and for why a
+silent entry is not automatically a dead one. If a suppression no
+longer catches anything, delete it (with the same care as adding one —
+note in the commit that you confirmed it's no longer needed).
 
-The repo doesn't have a scheduled cleanup task today, but a
-sensible cadence is "every major Qt version bump and / or every
-Ubuntu LTS jump." Both are events likely to invalidate upstream-
-internal suppressions.
+The review is scheduled: the `quarterly-lint-review` workflow opens a
+tracking issue on the 1st of Jan/Apr/Jul/Oct (Kartend-b7nf8). A Qt
+version bump or an Ubuntu LTS jump is also worth an extra pass, since
+both are likely to invalidate upstream-internal suppressions.
 
 ### libtsan fork CHECK `QSKIP`s — quarterly re-check (Kartend-dhhh6)
 
@@ -226,6 +227,50 @@ clusters, each tracked by a closed-as-suppressed bd:
 Same code-review-only methodology as the LSan audit applied — the
 `--sanitize --tests` build needs Kartend-hx6l fixed before LSan/TSan
 can be re-run locally to verify each entry still fires.
+
+## Measured review: 2026-10 quarter (Kartend-oz31i, GitHub #93)
+
+The first review to use match data rather than symbol greps. The full TSan
+suite ran five times in the kartend-ci container with
+`TSAN_OPTIONS=print_suppressions=1` — three runs on all 24 host CPUs, two
+pinned to four (`docker run --cpuset-cpus=0-3`, closer to the CI runner) —
+and the per-process "Matched N suppressions" tables were unioned.
+
+Result: 48 of the 84 distinct entries matched (85 lines; one is a
+deliberate duplicate), the same 48 in every run; none matched only on four
+CPUs. "Never matched here" is **not** "dead", for three reasons that
+decided which of the 36 silent entries could go:
+
+- `called_from_lib:` entries act when a library loads and are never listed
+  as matches, so their silence carries no information. All kept.
+- CI's runner has no llvm-symbolizer, so frames inside the stripped Qt
+  libraries render `<null>` there. Module-name twins such as
+  `mutex:test_querymanager_abspath` exist for CI; in the symbolized
+  container the symbol-named entry matches first, so the twin looks idle.
+  Kept.
+- Entries anchored on Kartend frames (or on Qt templates inlined into
+  Kartend TUs) were added from real CI reports, several of them
+  contention-only (`mutex:*prewarmDirectories*` "needs real contention on
+  m_lock to surface"). Five clean runs cannot rule a rare race out, and
+  every symbol they name still exists. Kept.
+
+What remained were 13 entries naming **out-of-line libQt6Core functions**
+(`QObject::deleteLater`, `QCoreApplicationPrivate::sendPostedEvents`,
+`QMetaType::create`/`destroy`, `QByteArray::reallocData`/`QByteArray`,
+`QArrayData::allocate`/`reallocateUnaligned`, `QWaitCondition`
+ctor/dtor, `QThreadPoolPrivate::enqueueTask`, `pthread_cond_destroy`,
+`pthread_mutex_destroy`). They are inert everywhere: on CI a symbol pattern
+cannot match a stripped Qt frame, and in the container Group D's
+`called_from_lib:libQt6Core.so.6` absorbs the report first. Group D's own
+note had kept them as documentation "at no cost"; this review retired them
+instead, since the tracking issue's premise is that these lists shrink, and
+recorded the reasoning in that note. Validated by the full suite passing
+with the reduced file on both CPU configurations.
+
+**Repeating this:** `print_suppressions=1` plus `ctest -V` (so passing
+tests' stderr is kept) gives the whole match table in one run per
+configuration. Weigh each silent entry against the three caveats above
+before removing it.
 
 ## LSan suppression audit (Kartend-3hjs.1, 2026-05-27)
 

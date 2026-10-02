@@ -20,15 +20,6 @@
 # inside Qt's QMetaObject (via internal QMutex) and isn't visible to TSan.
 race:QtPrivate::QSlotObject
 
-# QObject::deleteLater() Qt event-queue lifecycle: deleteLater allocates a
-# deferred-deletion QEvent on the calling thread, posts it onto the
-# target object's thread, and the target's event loop frees it via
-# QCoreApplicationPrivate::sendPostedEvents. Qt synchronises via the
-# event-queue mutex, but the new/delete pair on the bare QEvent struct
-# isn't observable to TSan as happens-before.
-race:QObject::deleteLater
-race:QCoreApplicationPrivate::sendPostedEvents
-
 # Queued-connection arg lifecycle across the event-queue boundary: main
 # thread allocates the slot args via QMetaType::create (operator new + copy
 # ctor) into the QMetaCallEvent payload and the worker thread consumes
@@ -40,12 +31,6 @@ race:QMetaCallEvent
 race:QArrayDataPointer<CollectionConfig>::deref
 race:QArrayDataPointer<CollectionContext>::deref
 
-# ScrapeWriteWorker (and similar moveToThread'd QObject workers) receive
-# queued signals carrying heap-allocated payloads. Same Qt event-queue-mutex
-# happens-before edge as the QMetaCallEvent suppression above, but the
-# specific symbol on this stack is QMetaType::create.
-race:QMetaType::create
-
 # Queued QMetaObject::invokeMethod(obj, functor): the calling thread
 # heap-allocates a QtPrivate::QFunctorSlotObject wrapping the functor,
 # posts it to the target object's thread, and that thread runs it. Qt
@@ -53,22 +38,14 @@ race:QMetaType::create
 # fast path is futex/atomic-based — not a pthread_mutex TSan intercepts.
 race:invokeMethod
 
-# QNetworkAccessManager → main-thread queued QByteArray payload: the QNAM
-# thread allocates the response body via QByteArray::QByteArray and Qt
-# queues it across to the main-thread slot via the meta-call event queue.
-# Same fundamental pattern as the queued-arg suppressions above, but the
-# visible top frames on this stack are QByteArray-specific.
-race:QByteArray::reallocData
-race:QByteArray::QByteArray
-
 # ScrapeWriteWorker cross-thread queued writeCompleted signal: the worker
 # thread runs `emit writeCompleted(requestId, ok)` inside performWrite, which
 # heap-allocates the QMetaCallEvent argument payload via operator new on the
 # worker thread; the main-thread event loop then reads that payload when it
 # dispatches the connected slot (QtPrivate ...::call). Qt orders the
 # post→dispatch pair through the event-queue QMutex (same futex/atomic fast
-# path as the QMetaCallEvent / QMetaType::create entries above), but the
-# allocation/read pair on the payload isn't observable to TSan as
+# path as the QMetaCallEvent entry above), but the allocation/read pair on
+# the payload isn't observable to TSan as
 # happens-before. The only Qt-named frame the stripped libQt6Core leaves on
 # the racing stack is the emit site, so the suppression anchors there. This is
 # inherent to receiving any cross-thread queued signal — not specific to how
@@ -95,34 +72,12 @@ race:QueryManager::~QueryManager
 race:_Sp_counted_ptr_inplace
 race:_Sp_counted_base
 
-# QWaitCondition / QMutex tear-down at process exit: ApplicationManager
-# owns a QWaitCondition that's torn down from MainWindow::~MainWindow on
-# the main thread. TSan flags pthread_cond_destroy / pthread_mutex_destroy
-# against earlier waits on a worker thread that has already returned.
-race:pthread_cond_destroy
-race:pthread_mutex_destroy
-race:QWaitCondition::~QWaitCondition
-
 # QtTest's per-test "QtTest Watchdog" thread waits on a pthread_cond_t for
 # the test-timeout signal. When the test finishes, qExec cancels the
 # watchdog and frees its cond_var/mutex — but TSan flags the
 # pthread_cond_wait (which has already returned) as racing with operator
 # delete in the qRun teardown. Surfaces under CPU contention only.
 race:QTest::qRun
-
-# Qt copy-on-write data structures (QHash, QString, QByteArray, ...)
-# allocate their underlying buffers via QArrayData::allocate, often from
-# a worker QThread. Once the worker finishes and is joined, main thread
-# later frees the buffer through normal RAII (DatabaseManager /
-# QueryManager destructors). TSan can't establish the happens-before
-# edge through Qt's QThread::wait into the thread's earlier malloc.
-race:QArrayData::allocate
-
-# Realloc / detach path of the same COW buffers. When two QtConcurrent::run
-# tasks (BatchScrapeRunner::applyAndFinish dispatches one per item)
-# capture QString / QList members of the runner by value, the captures
-# share the COW source buffer. Pool-reuse artifact, not a real race.
-race:QArrayData::reallocateUnaligned
 
 # CacheManager::initialize() runs on a QtConcurrent::run worker thread.
 # ApplicationManager::~ApplicationManager() calls m_cacheInitFuture
@@ -236,14 +191,6 @@ race:ApplicationManager::initialize
 # Surfaces intermittently under test_batchscraperunner.
 race:Scraper::BatchScrapeRunner::applyAndFinish
 
-# Consume-side counterpart of Group A's QMetaType::create entry: the
-# main thread copies a queued signal's payload via QMetaType::construct
-# (ScrapedItem copy-ctor into the QMetaCallEvent) and the worker thread
-# frees the previous payload via QMetaType::destroy after dispatching the
-# slot; the event-queue mutex ordering both is futex-based and invisible.
-# Surfaces intermittently under test_scrapewriteworker.
-race:QMetaType::destroy
-
 # Launch usage-stats completion hop (Kartend-cbtml):
 # DatabaseManager::recordItemLaunch queues its write to the DB worker; the
 # worker then copies the onCompleted std::function into the queued
@@ -275,22 +222,6 @@ race:DatabaseManager::recordItemPlaySession
 # (TestNavigationManager); buildTile is the only named frame the racing
 # stacks keep.
 race:ItemPlaceholderRenderer::buildTile
-
-# QThreadPool queue churn between two pooled workers: enqueueTask's
-# operator new of a queue node vs another pooled thread's operator delete
-# when it dequeues — ordered by the pool's QMutex (futex fast path,
-# invisible). Both stacks are otherwise stripped libQt6Core frames;
-# enqueueTask is the lone exported symbol to anchor on. Surfaces under
-# DirectoryCache's nested QtConcurrent prewarm.
-race:QThreadPoolPrivate::enqueueTask
-
-# QThreadPool per-thread QWaitCondition lifecycle: one pooled worker
-# constructs the wait condition (operator new inside QWaitCondition's
-# ctor) while another worker's wakeOne locks its internal mutex; the
-# hand-off is the pool's QMutex again. Ctor-side counterpart of Group B's
-# ~QWaitCondition entry. Surfaces under DirectoryCache / BenchArtworkResolve
-# global-pool fan-out.
-race:QWaitCondition::QWaitCondition
 
 # (2026-07 quarterly review: an earlier libQt6Core/libQt6Gui called_from_lib
 # pair lived here as a separate sub-group. Post-merge it is textually covered
@@ -357,9 +288,18 @@ called_from_lib:libgstreamer-1.0.so
 # pair performs its access via an out-of-line interceptor call inside
 # libQt6* is muted — but those reports were already undiagnosable
 # (half-edge, all-stripped frames) and previously cost us the entire test
-# under QSKIP. The narrower race: entries in Groups A–B are kept even
-# where this overlaps: they anchor on Kartend-visible symbols, cost
-# nothing, and document the known shapes individually.
+# under QSKIP.
+#
+# 2026-10 quarterly review (Kartend-oz31i, GitHub #93): the Group A–B
+# entries that named OUT-OF-LINE libQt6Core functions (QObject::deleteLater,
+# sendPostedEvents, QMetaType::create/destroy, QByteArray, QArrayData::
+# allocate/reallocateUnaligned, QWaitCondition ctor/dtor, QThreadPoolPrivate::
+# enqueueTask, pthread_cond/mutex_destroy) were retired. On CI's stripped Qt
+# their frames render <null>, so a symbol pattern can never match there, and
+# in the symbolized container this group absorbs every such report first —
+# five print_suppressions runs (24 and 4 CPUs) matched none of them. Entries
+# anchored on Kartend frames, or on Qt templates inlined into Kartend TUs,
+# stay: this group cannot reach those.
 called_from_lib:libQt6Core.so.6
 # QScrollArea::show() reserved render-thread teardown (see
 # test_viewportschedulermath's former skip rationale).
@@ -449,11 +389,12 @@ race:shouldStartThread
 race:QtPrivate::ResultStoreBase
 
 # ─── Group D4: round-4 anchors (Kartend-t9u0o, dispatch 27280536991) ─────
-# Queued-connection argument payloads, inline variant of the Group A
-# QMetaType::create entry: Q_ARG copies construct the payload on the
-# posting thread (QMetaTypeForType<T>::getCopyCtr lambda) and the consuming
-# thread destroys it (getDtor lambda) after slot dispatch — ordered by the
-# event-queue mutex TSan can't see. The QMetaTypeForType helper lambdas
+# Queued-connection argument payloads, the inline variant of the out-of-line
+# QMetaType::create shape (whose own entry was retired 2026-10, see Group D):
+# Q_ARG copies construct the payload on the posting thread
+# (QMetaTypeForType<T>::getCopyCtr lambda) and the consuming thread destroys
+# it (getDtor lambda) after slot dispatch — ordered by the event-queue mutex
+# TSan can't see. The QMetaTypeForType helper lambdas
 # exist ONLY in this metatype machinery, never in user worker code.
 race:QMetaTypeForType
 # Mapped/filtered-kernel creation vs first worker use — the
@@ -607,9 +548,10 @@ race:*KartManager::runImport*
 # write, and QueryManager::runWrite copies that std::function again on the
 # worker thread (runWriteRung takes it by value) while the GUI thread's
 # original is still in scope. QHash's refcount is a QAtomicInt, so this is
-# memory-safe — the same COW-copy shape as the QArrayData::allocate and
-# ::reallocateUnaligned entries in Group B, which miss it only because
-# QHash/QSet allocate through their own path rather than QArrayData.
+# memory-safe — the same COW-copy shape Group B once listed as
+# QArrayData::allocate / ::reallocateUnaligned (retired 2026-10: Group D
+# covers the out-of-line Qt side). This one anchors on Kartend frames
+# because QHash/QSet allocate through their own path rather than QArrayData.
 race:*DatabaseManager::purgeOrphanCollectionData*
 
 # "double lock of a mutex" reported inside QtTsan::mutexPostLock for the
