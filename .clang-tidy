@@ -6,6 +6,14 @@
 # and what was noisy six months ago may be tractable now. The exclusions
 # should NOT be considered permanent.
 #
+# Re-enabled 2026-10 (Kartend-oz31i, GitHub #93), measured with CI's
+# clang-tidy 18: misc-use-anonymous-namespace (4 sites) and
+# readability-static-definition-in-anonymous-namespace (9) now enforce the
+# convention their old rationale stated — anonymous namespaces replace file
+# `static` — and bugprone-branch-clone (6) guards against copy-paste branches;
+# 3 were restructured and the 2 intentional chains carry
+# NOLINTBEGIN/END(bugprone-branch-clone) with their reason.
+#
 # Rationale for each disabled check (grouped by family):
 #
 # modernize-*:
@@ -42,7 +50,6 @@
 #   -readability-math-missing-parentheses     — overly cautious on idiomatic expressions
 #   -readability-use-std-min-max              — qBound/qMin/qMax are fine in Qt code
 #   -readability-function-cognitive-complexity — many legit "switch on enum" functions trip it
-#   -readability-static-definition-in-anonymous-namespace — anonymous namespaces are the canonical static replacement here
 #   -readability-convert-member-functions-to-static — many slot-like methods stay member for signal/slot connection
 #   -readability-function-size                — long functions in dialog setup are intentional
 #
@@ -54,20 +61,18 @@
 # misc-*:
 #   -misc-non-private-member-variables-in-classes — Qt UI generated classes have public members
 #   -misc-const-correctness                   — too noisy on Qt's many non-const slot signatures
-#   -misc-use-anonymous-namespace             — codebase mixes file-static and anonymous-namespace
 #   -misc-include-cleaner                     — Qt umbrella headers like <QtWidgets> are intentional
 #   -misc-no-recursion                        — recursive helpers (collection tree walks) are correct
 #   -misc-use-internal-linkage                — same as anonymous-namespace; the codebase mixes styles
 #
 # bugprone-* (the noisy ones):
 #   -bugprone-easily-swappable-parameters     — too aggressive for Qt's parameter conventions
-#   -bugprone-branch-clone                    — duplicate branches in switch are often intentional
 #   -bugprone-narrowing-conversions           — Qt's int↔qsizetype churn would flood the report
 #   -bugprone-macro-parentheses               — debugLog() macros need to remain unparenthesised
 #   -bugprone-implicit-widening-of-multiplication-result — int*int into qint64 is the common pattern
 
 # Start with all checks disabled, then enable specific categories
-Checks: "-*,clang-analyzer-*,bugprone-*,performance-*,modernize-*,readability-*,misc-*,-modernize-use-trailing-return-type,-modernize-use-designated-initializers,-modernize-use-nodiscard,-modernize-return-braced-init-list,-modernize-use-ranges,-readability-implicit-bool-conversion,-readability-identifier-length,-readability-magic-numbers,-readability-braces-around-statements,-readability-else-after-return,-readability-named-parameter,-readability-uppercase-literal-suffix,-readability-redundant-access-specifiers,-readability-simplify-boolean-expr,-readability-identifier-naming,-readability-math-missing-parentheses,-readability-use-std-min-max,-readability-function-cognitive-complexity,-readability-static-definition-in-anonymous-namespace,-readability-convert-member-functions-to-static,-readability-function-size,-performance-enum-size,-performance-avoid-endl,-performance-no-automatic-move,-misc-non-private-member-variables-in-classes,-misc-const-correctness,-misc-use-anonymous-namespace,-misc-include-cleaner,-misc-no-recursion,-misc-use-internal-linkage,-bugprone-easily-swappable-parameters,-bugprone-branch-clone,-bugprone-narrowing-conversions,-bugprone-macro-parentheses,-bugprone-implicit-widening-of-multiplication-result"
+Checks: "-*,clang-analyzer-*,bugprone-*,performance-*,modernize-*,readability-*,misc-*,-modernize-use-trailing-return-type,-modernize-use-designated-initializers,-modernize-use-nodiscard,-modernize-return-braced-init-list,-modernize-use-ranges,-readability-implicit-bool-conversion,-readability-identifier-length,-readability-magic-numbers,-readability-braces-around-statements,-readability-else-after-return,-readability-named-parameter,-readability-uppercase-literal-suffix,-readability-redundant-access-specifiers,-readability-simplify-boolean-expr,-readability-identifier-naming,-readability-math-missing-parentheses,-readability-use-std-min-max,-readability-function-cognitive-complexity,-readability-convert-member-functions-to-static,-readability-function-size,-performance-enum-size,-performance-avoid-endl,-performance-no-automatic-move,-misc-non-private-member-variables-in-classes,-misc-const-correctness,-misc-include-cleaner,-misc-no-recursion,-misc-use-internal-linkage,-bugprone-easily-swappable-parameters,-bugprone-narrowing-conversions,-bugprone-macro-parentheses,-bugprone-implicit-widening-of-multiplication-result"
 
 # Only analyze project headers, not Qt or system headers
 HeaderFilterRegex: '.*/src/.*'

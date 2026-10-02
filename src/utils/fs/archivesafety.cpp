@@ -198,6 +198,9 @@ ErrorUtils::Result<void> scanWith7z(const QString &archivePath) {
         sawLinkVerdictField = true;
       }
     }
+    // Two independent symlink signals (the link-target field and the mode
+    // bits) reject with the same verdict on purpose.
+    // NOLINTBEGIN(bugprone-branch-clone)
     if (line.startsWith(QLatin1String("Path = "))) {
       ++entryCount;
       const QString path = line.mid(7);
@@ -216,6 +219,7 @@ ErrorUtils::Result<void> scanWith7z(const QString &archivePath) {
                kSymlinkMode.match(line).hasMatch()) {
       return rejectEntry(QStringLiteral("Archive contains a symlink entry"), line.left(200));
     }
+    // NOLINTEND(bugprone-branch-clone)
   }
   // The "----------" separator is 7z's contract for where the per-entry
   // key = value table begins. If it never appeared, the loop above vetted

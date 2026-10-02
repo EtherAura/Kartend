@@ -240,10 +240,9 @@ void cmpParseGame(const QList<CmpToken> &toks, int &i, QList<DatRecord> &out) {
         const QString val = cmpNextValue(toks, i);
         if (key == QLatin1String("name"))
           gameName = val;
-        else if (key == QLatin1String("cloneof"))
-          cloneOf = val;
-        else if (key == QLatin1String("romof") && cloneOf.isEmpty())
-          cloneOf = val;
+        else if (key == QLatin1String("cloneof") ||
+                 (key == QLatin1String("romof") && cloneOf.isEmpty()))
+          cloneOf = val; // romof is only a fallback: an explicit cloneof always wins
         else if (key == QLatin1String("mia"))
           gameMia = (val.compare(QLatin1String("yes"), Qt::CaseInsensitive) == 0);
       }

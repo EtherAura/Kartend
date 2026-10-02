@@ -378,14 +378,16 @@ void CoverFlowController::settle() {
   m_widget->setSelectedIndex(m_widget->selectedIndex(), true);
 }
 
+namespace {
+
 // Compute the directory a card's primary artwork is resolved from: the
 // per-item override directory for showAllSubcollectionItems, with the
 // subfolder mirror applied when artworkDir tracks the mediaDir tree
 // (includeArtworkSubfolders, or artworkDir == mediaDir). Extracted from
 // resolveCardArtworkPath (Kartend-6x8tn) so the pending-artwork retry can
 // know which directory to prewarm / poll without paying the lookup itself.
-static QString cardArtworkDirectory(const QString &fullPath, const CollectionContext &context,
-                                    IDatabaseManager *db) {
+QString cardArtworkDirectory(const QString &fullPath, const CollectionContext &context,
+                             IDatabaseManager *db) {
   if (fullPath.isEmpty()) {
     return {};
   }
@@ -427,9 +429,8 @@ static QString cardArtworkDirectory(const QString &fullPath, const CollectionCon
 // lookup rather than the per-item item_artwork read the cards cannot afford —
 // and it needs no warm directory cache, which is why a hit here also keeps the
 // slot out of the pending-artwork retry.
-static QString resolveCardArtworkPath(const QString &fullPath, const CollectionContext &context,
-                                      IDatabaseManager *db,
-                                      const QHash<QString, QString> &manualCovers) {
+QString resolveCardArtworkPath(const QString &fullPath, const CollectionContext &context,
+                               IDatabaseManager *db, const QHash<QString, QString> &manualCovers) {
   if (!manualCovers.isEmpty()) {
     const QString manualCover = manualCovers.value(fullPath);
     if (!manualCover.isEmpty()) {
@@ -443,6 +444,8 @@ static QString resolveCardArtworkPath(const QString &fullPath, const CollectionC
   const QString fileName = QFileInfo(fullPath).fileName();
   return ArtworkUtils::findArtworkForFileCached(fileName, artworkDir);
 }
+
+} // namespace
 
 void CoverFlowController::resolveAndPushVideo(int visualIndex) {
   if (!m_widget || !m_dataManager) {

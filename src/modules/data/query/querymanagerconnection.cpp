@@ -303,7 +303,7 @@ namespace {
 //         and the sync triggers created in the same transaction).
 constexpr const char *kItemsFtsReadyGeneration = "2";
 
-static auto ensureMetaTable(QSqlDatabase &db) -> void {
+auto ensureMetaTable(QSqlDatabase &db) -> void {
   if (!db.isOpen()) {
     return;
   }
@@ -312,7 +312,7 @@ static auto ensureMetaTable(QSqlDatabase &db) -> void {
          "NOT NULL)");
 }
 
-static auto tryReadMetaValue(QSqlDatabase &db, const QString &key, QString &valueOut) -> bool {
+auto tryReadMetaValue(QSqlDatabase &db, const QString &key, QString &valueOut) -> bool {
   QSqlQuery q(db);
   q.prepare("SELECT value FROM meta WHERE key = ?");
   q.addBindValue(key);

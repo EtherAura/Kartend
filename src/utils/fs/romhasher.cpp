@@ -231,12 +231,14 @@ QStringList extractorCandidates(const QString & /*archivePath*/) {
   return candidates;
 }
 
+namespace {
+
 /// Shared extraction harness for the archive hashers: validate + symlink-
 /// resolve the path, pick a format-capable extractor, extract into the
 /// caller's `tmp` under the disk-ceiling / timeout / cancellation guards,
 /// and return the extraction root's canonical path. `origin` keeps every
 /// error context naming the public entry point that failed.
-static ErrorUtils::Result<QString>
+ErrorUtils::Result<QString>
 extractArchiveForHashing(const QString &archivePath, QTemporaryDir &tmp,
                          const std::shared_ptr<std::atomic<bool>> &cancelToken,
                          const char *origin) {
@@ -377,6 +379,8 @@ extractArchiveForHashing(const QString &archivePath, QTemporaryDir &tmp,
   }
   return rootCanonical;
 }
+
+} // namespace
 
 #ifdef KARTEND_HAS_LIBARCHIVE
 namespace {

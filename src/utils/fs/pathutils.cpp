@@ -29,8 +29,10 @@ Q_LOGGING_CATEGORY(lcPathUtils, "kartend.pathutils", QtWarningMsg)
 
 namespace PathUtils {
 
+namespace {
+
 // Helper to expand placeholders and ~ in path
-static QString expandPath(const QString &path, const QString &collectionName) {
+QString expandPath(const QString &path, const QString &collectionName) {
   QString result = path.trimmed();
 
   // Expand ~ to home directory (must be at start of path)
@@ -57,6 +59,8 @@ static QString expandPath(const QString &path, const QString &collectionName) {
   }
   return result;
 }
+
+} // namespace
 
 // New Result-returning version with structured error context
 Result<QString> tryValidateAndExpandPath(const QString &path, const QString &collectionName) {

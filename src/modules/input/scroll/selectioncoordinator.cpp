@@ -49,16 +49,13 @@ auto SelectionCoordinator::analyzeMovement(int newIndex, int prevIndex, int item
     int newRow = GridUtils::computeItemRow(newIndex, itemsPerRow);
     // Only horizontal if same row (not a row wrap)
     info.isHorizontal = (prevRow == newRow);
-  } else if (absDelta == itemsPerRow) {
-    // Exact row jump - vertical movement
-    info.isHorizontal = false;
   } else if (absDelta < itemsPerRow) {
     // Within-row jump (e.g., from click) - treat as horizontal
     int prevRow = GridUtils::computeItemRow(prevIndex, itemsPerRow);
     int newRow = GridUtils::computeItemRow(newIndex, itemsPerRow);
     info.isHorizontal = (prevRow == newRow);
   } else {
-    // Multi-row jump - vertical
+    // Exact row jump (absDelta == itemsPerRow) or multi-row jump - vertical
     info.isHorizontal = false;
   }
 

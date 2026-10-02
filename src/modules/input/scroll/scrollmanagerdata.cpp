@@ -615,14 +615,10 @@ void ScrollManager::cleanup() {
   // IMPORTANT: Pass m_gridContainer as safe parent so widgets are reparented
   // BEFORE the virtual container is deleted - prevents crash on reuse
   if (m_widgetPool) {
-    if (hasPreSearch) {
-      // Pre-search widgets exist - soft clear allows widget reuse
-      m_widgetPool->softClear(m_gridContainer);
-    } else {
-      // Full cleanup - use soft clear to allow reuse during next collection
-      // load The prewarm timer will prune unused stale widgets during idle
-      m_widgetPool->softClear(m_gridContainer);
-    }
+    // Soft clear either way: with pre-search widgets present it lets them be
+    // reused, and without them it keeps the pool for the next collection load.
+    // The prewarm timer prunes unused stale widgets during idle.
+    m_widgetPool->softClear(m_gridContainer);
   }
 
   cleanupVirtualContainer();

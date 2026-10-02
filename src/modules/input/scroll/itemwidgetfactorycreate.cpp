@@ -394,6 +394,9 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
   // If forceDirectLookup is set, always do direct filesystem lookup (used after
   // prewarm).
   QString artworkPath;
+  // Two lookups, five triggers: the branches below repeat the direct and the
+  // cached call on purpose, each with its own reason documented in place.
+  // NOLINTBEGIN(bugprone-branch-clone)
   if (forceDirectLookup) {
     // Called from reconfigure after prewarm - OS cache should be warm
     artworkPath = ArtworkUtils::findArtworkForFile(QFileInfo(fullPath).fileName(), artworkDir);
@@ -451,6 +454,7 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
       emit requestArtworkPrewarm(artworkDir);
     }
   }
+  // NOLINTEND(bugprone-branch-clone)
 
   qint64 afterArtworkFind = lcPerfTrace().isDebugEnabled() ? perfTimer.elapsed() : 0;
 

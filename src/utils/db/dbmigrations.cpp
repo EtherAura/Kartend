@@ -16,7 +16,7 @@ namespace {
 // failure on a fully-migrated database silently restarted the ladder from v0,
 // replaying destructive blocks (e.g. the v20 column drop destroys data the
 // v26 block re-created) against a schema the code no longer understands.
-static auto getUserVersion(QSqlDatabase &db, const QString &origin) -> int {
+auto getUserVersion(QSqlDatabase &db, const QString &origin) -> int {
   QSqlQuery q(db);
   if (q.exec("PRAGMA user_version") && q.next()) {
     return q.value(0).toInt();
@@ -28,7 +28,7 @@ static auto getUserVersion(QSqlDatabase &db, const QString &origin) -> int {
   return -1;
 }
 
-static auto setUserVersion(QSqlDatabase &db, int version) -> bool {
+auto setUserVersion(QSqlDatabase &db, int version) -> bool {
   QSqlQuery q(db);
   if (!q.exec(QString("PRAGMA user_version = %1").arg(version))) {
     auto err = ErrorContext::warning(ErrorCode::DatabaseQueryFailed,
@@ -41,7 +41,7 @@ static auto setUserVersion(QSqlDatabase &db, int version) -> bool {
   return true;
 }
 
-static auto tableHasColumn(QSqlDatabase &db, const QString &table, const QString &column) -> bool {
+auto tableHasColumn(QSqlDatabase &db, const QString &table, const QString &column) -> bool {
   QSqlQuery q(db);
   if (!q.exec(QString("PRAGMA table_info(%1)").arg(table))) {
     return false;
@@ -54,7 +54,7 @@ static auto tableHasColumn(QSqlDatabase &db, const QString &table, const QString
   return false;
 }
 
-static auto tableExists(QSqlDatabase &db, const QString &table) -> bool {
+auto tableExists(QSqlDatabase &db, const QString &table) -> bool {
   QSqlQuery q(db);
   q.prepare(QStringLiteral("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?"));
   q.addBindValue(table);
@@ -66,8 +66,8 @@ static auto tableExists(QSqlDatabase &db, const QString &table) -> bool {
 // column must not be indexed or part of a constraint — used here only for plain
 // unindexed columns. Returns false (aborting the block) if the drop failed, so
 // user_version is not advanced past a column that still exists.
-static auto dropColumn(QSqlDatabase &db, const QString &table, const QString &column,
-                       const QString &origin) -> bool {
+auto dropColumn(QSqlDatabase &db, const QString &table, const QString &column,
+                const QString &origin) -> bool {
   if (!tableHasColumn(db, table, column)) {
     return true;
   }
@@ -88,7 +88,7 @@ static auto dropColumn(QSqlDatabase &db, const QString &table, const QString &co
 // whole block back). The merge + delete + retry are made atomic with the rest
 // of the v1 block by the surrounding runBlock() transaction (Kartend-l793,
 // Kartend-l28zj) — this helper no longer opens its own transaction.
-static auto ensureUniqueIndexItemsUuidPath(QSqlDatabase &db, const QString &origin) -> bool {
+auto ensureUniqueIndexItemsUuidPath(QSqlDatabase &db, const QString &origin) -> bool {
   QSqlQuery q(db);
   if (q.exec("CREATE UNIQUE INDEX IF NOT EXISTS uniq_items_uuid_path ON "
              "items(collection_uuid, path)")) {
@@ -169,8 +169,7 @@ static auto ensureUniqueIndexItemsUuidPath(QSqlDatabase &db, const QString &orig
 // back (including the version stamp) and the block retries on next launch
 // (Kartend-l28zj). Returns false if the block did not fully commit.
 template <typename ApplyFn>
-static auto runBlock(QSqlDatabase &db, int version, const QString &origin, ApplyFn &&apply)
-    -> bool {
+auto runBlock(QSqlDatabase &db, int version, const QString &origin, ApplyFn &&apply) -> bool {
   if (!db.transaction()) {
     ErrorUtils::logError(
         ErrorContext::warning(
