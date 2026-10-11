@@ -244,7 +244,7 @@ jobs:
         # publishes through action-gh-release, and letting the SBOM action
         # upload on its own would give the release two upload paths that could
         # disagree about what shipped.
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           file: ${{ steps.deb.outputs.deb }}
           format: cyclonedx-json
@@ -442,7 +442,7 @@ jobs:
       - name: Upload kartend.exe for SignPath signing
         if: steps.signpath_check.outputs.configured == 'true'
         id: upload_kartend_exe
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-kartend-exe
           path: dist\kartend\kartend.exe
@@ -527,7 +527,7 @@ jobs:
       - name: Upload setup.exe for SignPath signing
         if: steps.signpath_check.outputs.configured == 'true'
         id: upload_setup_exe
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-setup-exe
           path: ${{ steps.installer.outputs.exe }}
@@ -572,7 +572,7 @@ jobs:
         #
         # Scans the directory rather than the .zip so the individual DLLs are
         # enumerated instead of one opaque archive entry.
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: dist/kartend
           format: cyclonedx-json
