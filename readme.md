@@ -170,8 +170,9 @@ ships a binary `.deb` plus the canonical Arch and Gentoo recipes:
 | Windows (installer) | `Kartend-<version>-windows-x64-setup.exe` | Run the installer; Apps & Features-managed uninstall |
 | Windows (portable) | `Kartend-<version>-windows-x64.zip` | Unzip anywhere, run `kartend.exe` |
 
-The Windows builds are unsigned, so SmartScreen warns on first launch —
-**More info → Run anyway**. Older distros, PGO, sanitizers and a `9999`
+The Windows builds are unsigned for now, so SmartScreen warns on first launch —
+**More info → Run anyway** (see the
+[Code signing policy](https://github.com/EtherAura/Kartend/wiki/Code-Signing-Policy)). Older distros, PGO, sanitizers and a `9999`
 Gentoo live build all mean building from source.
 
 Every built asset carries a build provenance attestation, so you can check
