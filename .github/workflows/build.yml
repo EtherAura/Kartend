@@ -282,6 +282,34 @@ jobs:
             --args "$BIN" \
             testFixtureBuildsWithoutTouchingRealConfig || true
 
+      # Linux counterpart of the Windows leg's preview .zip: the REQUIRED
+      # cell's own build, packaged as built, so a PR's change can be installed
+      # and tried on a desktop before it merges. Only after the tests passed
+      # (a failed step skips these). Kept 3 days: it is for trying the PR,
+      # not for distribution — release.yml builds the shipped .deb.
+      - name: Package preview .deb
+        if: ${{ matrix.build_type == 'Release' && matrix.compiler == 'gcc' }}
+        run: |
+          set -euo pipefail
+          cd build/${{ matrix.build_type }}-${{ matrix.compiler }}
+          cpack -G DEB
+          DEB_PATH="$(ls kartend_*.deb | head -n 1)"
+          if [ -z "${DEB_PATH:-}" ]; then
+            echo "::error::cpack -G DEB produced no .deb"
+            exit 1
+          fi
+          echo "DEB_NAME=kartend-linux-x64-preview-r${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "DEB_PATH=build/${{ matrix.build_type }}-${{ matrix.compiler }}/$DEB_PATH" >> "$GITHUB_ENV"
+
+      - name: Upload preview .deb
+        if: ${{ matrix.build_type == 'Release' && matrix.compiler == 'gcc' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.DEB_NAME }}
+          path: ${{ env.DEB_PATH }}
+          retention-days: 3
+          if-no-files-found: error
+
   # Build with zstd explicitly disabled. Kart compression falls back to
   # qCompress (zlib), and test_kartreader.cpp's QSKIP("Built without zstd
   # support") path actually runs. Without this job the no-zstd code path
