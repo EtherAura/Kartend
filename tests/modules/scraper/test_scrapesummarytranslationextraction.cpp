@@ -82,6 +82,14 @@ private slots:
 };
 
 void TestScrapeSummaryTranslationExtraction::lupdateExtractsEveryCompletionSummaryString() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  // Kartend-vbryg: Ubuntu 24.04's libtsan aborts in its fork hook
+  // (`tsan_rtl.cpp:253 "((!thr->slot)) != (0)"`, via ForkAfter) when
+  // QProcess forks lupdate from a QtTest binary, the same CHECK bug as the
+  // other QProcess tests (see test_romhasher.cpp). This test has no threads
+  // of its own for TSan to watch, so it only runs in non-TSan builds.
+  QSKIP("libtsan fork CHECK bug — QProcess can't be used here under TSan");
+#endif
   const QString lupdate = QStringLiteral(KARTEND_LUPDATE_EXECUTABLE);
   const QString source = QStringLiteral(KARTEND_SCRAPE_SUMMARY_SOURCE);
   QVERIFY2(QFileInfo(lupdate).isExecutable(), qPrintable(lupdate));
