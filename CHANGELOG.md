@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-11-12
+
 ### Added
 
 - **Kartend asks before storing a scraper password unencrypted.** When
@@ -2050,7 +2052,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases 0.0.1 through 0.0.16 are archived in
 [docs/changelogs/v0.0.x.md](docs/changelogs/v0.0.x.md).
 
-[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.19...HEAD
+[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.20...HEAD
+[0.0.20]: https://github.com/EtherAura/Kartend/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/EtherAura/Kartend/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/EtherAura/Kartend/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/EtherAura/Kartend/compare/v0.0.16...v0.0.17
