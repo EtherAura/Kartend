@@ -9750,13 +9750,48 @@ Not found: %3
 Errors: %4</translation>
     </message>
     <message>
+        <location filename="../src/modules/data/scraper/core/scrapesummaryformat.cpp" line="+19"/>
+        <source>Scrape complete.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+2"/>
+        <source>Scraped: %1
+Skipped: %2
+Not found: %3
+Errors: %4
+Media written: %5</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+10"/>
+        <source>Media failures: %1 fetch, %2 write</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
+        <source>All %1 artwork file(s) were already up to date.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+8"/>
+        <source>The provider offered no media matching the selected artwork types.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+7"/>
+        <source>Metadata sidecar write failures: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+5"/>
         <source>First failures:
 %1</source>
-        <translation type="vanished">First failures:
+        <translation>First failures:
 %1</translation>
     </message>
     <message>
-        <location line="+305"/>
+        <location filename="../src/core/scrapercontroller.cpp" line="+305"/>
         <source>Resume scrape?</source>
         <translation>Resume scrape?</translation>
     </message>

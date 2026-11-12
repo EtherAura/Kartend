@@ -7,23 +7,30 @@ namespace Scraper::SummaryFormat {
 namespace {
 // Kept under the ScraperController context: these strings were born in the
 // controller's completion box and existing translations key off it.
+// lupdate cannot see through this wrapper, so every literal passed to it must
+// be spelled QT_TRANSLATE_NOOP("ScraperController", ...) at the call site
+// (Kartend-ydalk); ScrapeSummaryTranslationExtraction enforces that.
 QString trc(const char *text) {
   return QCoreApplication::translate("ScraperController", text);
 }
 } // namespace
 
 QString completionText(const ScraperService::Summary &summary) {
-  QString text = trc("Scrape complete.") + QStringLiteral("\n\n") +
-                 trc("Scraped: %1\nSkipped: %2\nNot found: %3\nErrors: %4\nMedia written: %5")
+  QString text = trc(QT_TRANSLATE_NOOP("ScraperController", "Scrape complete.")) +
+                 QStringLiteral("\n\n") +
+                 trc(QT_TRANSLATE_NOOP(
+                         "ScraperController",
+                         "Scraped: %1\nSkipped: %2\nNot found: %3\nErrors: %4\nMedia written: %5"))
                      .arg(summary.scraped)
                      .arg(summary.skipped)
                      .arg(summary.notFound)
                      .arg(summary.errors)
                      .arg(summary.mediaWritten);
   if (summary.mediaFetchFailures > 0 || summary.mediaWriteFailures > 0) {
-    text += QLatin1Char('\n') + trc("Media failures: %1 fetch, %2 write")
-                                    .arg(summary.mediaFetchFailures)
-                                    .arg(summary.mediaWriteFailures);
+    text += QLatin1Char('\n') +
+            trc(QT_TRANSLATE_NOOP("ScraperController", "Media failures: %1 fetch, %2 write"))
+                .arg(summary.mediaFetchFailures)
+                .arg(summary.mediaWriteFailures);
   } else if (summary.scraped > 0 && summary.mediaWritten == 0) {
     // Zero media written and zero failures has TWO causes, and this used to
     // assert the first one unconditionally — so a re-scrape of an unchanged
@@ -35,22 +42,28 @@ QString completionText(const ScraperService::Summary &summary) {
       // the rescrape policy, so nothing needed rewriting. A success, and the
       // one case where "0 media" is the expected outcome.
       text += QLatin1Char('\n') +
-              trc("All %1 artwork file(s) were already up to date.").arg(summary.mediaUpToDate);
+              trc(QT_TRANSLATE_NOOP("ScraperController",
+                                    "All %1 artwork file(s) were already up to date."))
+                  .arg(summary.mediaUpToDate);
     } else {
       // Nothing was written AND nothing was skipped — the asset lists really
       // did resolve to nothing under the requested types. Without this line
       // the run reads as a silent download problem.
       text += QLatin1Char('\n') +
-              trc("The provider offered no media matching the selected artwork types.");
+              trc(QT_TRANSLATE_NOOP(
+                  "ScraperController",
+                  "The provider offered no media matching the selected artwork types."));
     }
   }
   if (summary.sidecarFailures > 0) {
-    text +=
-        QLatin1Char('\n') + trc("Metadata sidecar write failures: %1").arg(summary.sidecarFailures);
+    text += QLatin1Char('\n') +
+            trc(QT_TRANSLATE_NOOP("ScraperController", "Metadata sidecar write failures: %1"))
+                .arg(summary.sidecarFailures);
   }
   if (!summary.firstFailures.isEmpty()) {
-    text += QStringLiteral("\n\n") +
-            trc("First failures:\n%1").arg(summary.firstFailures.join(QChar('\n')));
+    text +=
+        QStringLiteral("\n\n") + trc(QT_TRANSLATE_NOOP("ScraperController", "First failures:\n%1"))
+                                     .arg(summary.firstFailures.join(QChar('\n')));
   }
   return text;
 }

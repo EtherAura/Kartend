@@ -74,6 +74,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The scrape completion summary can be translated again.** Its lines
+  (the scraped / skipped / not found counts, media failures, the
+  "already up to date" and "no media" notes, and the first failures)
+  were missing from the translation catalogue, so they always showed in
+  English. They are now in the catalogue, under the same names existing
+  translations already use.
+
 - **Platform-art download failures now show up in the scrape summary.** A
   platform scrape whose art downloads failed reported no errors and no
   media written, with nothing to say why — those failures were counted

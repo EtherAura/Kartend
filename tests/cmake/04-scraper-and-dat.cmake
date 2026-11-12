@@ -176,6 +176,18 @@ kartend_add_test(NAME BatchScrapeRunnerIntegration
   LINK kartend_data kartend_api kartend_utils
 )
 
+# ScrapeSummaryTranslationExtraction (Kartend-ydalk) — runs the configured
+# Qt lupdate on the production scrapesummaryformat.cpp into a temp .ts and
+# asserts every completion-summary string is an active ScraperController
+# message. Both paths come from CMake so no host path is baked in.
+kartend_add_test(NAME ScrapeSummaryTranslationExtraction
+  SOURCES modules/scraper/test_scrapesummarytranslationextraction.cpp
+)
+target_compile_definitions(test_scrapesummarytranslationextraction PRIVATE
+  KARTEND_LUPDATE_EXECUTABLE="$<TARGET_FILE:Qt6::lupdate>"
+  KARTEND_SCRAPE_SUMMARY_SOURCE="${PROJECT_SOURCE_DIR}/src/modules/data/scraper/core/scrapesummaryformat.cpp"
+)
+
 # MusicBrainz parser tests
 kartend_add_test(NAME MusicBrainzParser
   SOURCES modules/scraper/test_musicbrainzparser.cpp
