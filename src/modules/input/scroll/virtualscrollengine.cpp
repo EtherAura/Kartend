@@ -446,7 +446,10 @@ void VirtualScrollEngine::primeLayoutFor(const CollectionConfig &config) {
   // Re-push the source data + context so the FilterManager's hideMissingArtwork
   // baseline reflects the new toggle, then either rebuild the artwork-only
   // baseline (when no other filter is active) or re-run the active search /
-  // subcollection filter so the new predicate composes with it.
+  // subcollection filter so the new predicate composes with it. The
+  // FilterManager re-runs the filter of the kind that is active: re-applying
+  // currentFilter() as a text search turned a subcollection filter into a
+  // search on the subcollection's name (Kartend-3ve3n).
   if (m_owner->m_filterManager && m_owner->m_dataManager) {
     m_owner->m_filterManager->setSourceData(
         &m_owner->m_dataManager->filePaths(), &m_owner->m_dataManager->fileNames(),
@@ -454,12 +457,7 @@ void VirtualScrollEngine::primeLayoutFor(const CollectionConfig &config) {
         &m_owner->m_dataManager->virtualFolders(),
         m_owner->m_dataManager->unifiedConcatToActualMap());
     m_owner->m_filterManager->setContext(m_owner->m_context);
-    if (m_owner->m_filterManager->isFiltered() &&
-        !m_owner->m_filterManager->currentFilter().isEmpty()) {
-      m_owner->m_filterManager->applyFilter(m_owner->m_filterManager->currentFilter());
-    } else {
-      m_owner->m_filterManager->clearFilter();
-    }
+    m_owner->m_filterManager->reapplyActiveFilter();
     // Unfiltered fallback is the store's full count — virtual folders included.
     m_owner->m_totalItems = m_owner->m_filterManager->isFiltered()
                                 ? m_owner->m_filterManager->filteredCount()

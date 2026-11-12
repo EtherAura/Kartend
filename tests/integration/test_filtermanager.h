@@ -34,6 +34,9 @@ private slots:
   void testHideMissingArtworkColdCascadeFailsOpen();
   void testActualIndexRoundTripAcrossPrefixBands();
   void testUnifiedSortMapRemapsFilteredIndices();
+  // Re-running the active filter keeps a subcollection filter a subcollection
+  // filter instead of turning it into a text search on its name (Kartend-3ve3n).
+  void testReapplyKeepsSubcollectionFilterSemantics();
 
   // Precomputed artwork key set (ArtworkUtils::buildArtworkKeySet) backing
   // the hideMissingArtwork predicate.

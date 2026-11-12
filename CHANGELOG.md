@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A subcollection view keeps its items after saving settings.** While
+  you were browsing a subcollection, saving the settings dialog (or
+  navigating somewhere that rebuilds the layout) treated the
+  subcollection's name as a search, so most of its items and its
+  subcollection and folder rows disappeared. The view now keeps showing
+  the subcollection's items and every subcollection and folder row.
+
 ## [0.0.20] - 2026-11-12
 
 ### Added

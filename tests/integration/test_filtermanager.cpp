@@ -548,6 +548,37 @@ void TestFilterManager::testUnifiedSortMapRemapsFilteredIndices() {
   QCOMPARE(spy.at(0).at(1).toInt(), 3);
 }
 
+void TestFilterManager::testReapplyKeepsSubcollectionFilterSemantics() {
+  static const QList<CollectionConfig> collections = [] {
+    QList<CollectionConfig> out;
+    CollectionConfig first;
+    first.name = QStringLiteral("Alpha Shelf");
+    out.append(first);
+    CollectionConfig second;
+    second.name = QStringLiteral("Beta Shelf");
+    out.append(second);
+    return out;
+  }();
+  static const QList<int> subs = {0, 1};
+
+  FilterManager mgr;
+  mgr.setCollections(&collections);
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(), &subs, &seedFolders());
+  mgr.applySubcollectionFilter(0);
+  QVERIFY(mgr.isFiltered());
+  const QList<int> prefixRows = {0, 1, 2, 3};
+  QCOMPARE(mgr.filteredIndices().mid(0, prefixRows.size()), prefixRows);
+
+  // primeLayoutFor's settings-save / navigation reapply. Re-running it as a
+  // text search for "Alpha Shelf" (the old applyFilter(currentFilter())) kept
+  // only the matching shelf and dropped "Beta Shelf" and both folders; the
+  // subcollection filter keeps every prefix row.
+  mgr.reapplyActiveFilter();
+  QVERIFY(mgr.isFiltered());
+  QCOMPARE(mgr.filteredIndices().mid(0, prefixRows.size()), prefixRows);
+  QCOMPARE(mgr.currentFilter(), QStringLiteral("Alpha Shelf"));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Hand-linked covers (Kartend-1js9j). The key set is built from artwork FILE
 // NAMES, so it has no way to know an item was linked to an image that is named

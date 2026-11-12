@@ -156,6 +156,19 @@ public:
    */
   void clearFilter();
 
+  /**
+   * @brief Re-run whichever filter is active against the current source data.
+   *
+   * A text search re-runs applyFilter, a subcollection filter re-runs
+   * applySubcollectionFilter on the same subcollection, and no active filter
+   * re-runs clearFilter (which rebuilds the artwork-only baseline when
+   * hideMissingArtwork is on). currentFilter() alone cannot tell the first two
+   * apart — a subcollection filter stores the collection's name there — so
+   * re-applying through applyFilter(currentFilter()) turned a subcollection
+   * filter into a name search (Kartend-3ve3n).
+   */
+  void reapplyActiveFilter();
+
   // ─────────────────────────────────────────────────────────────────────────
   // Query filter state
   // ─────────────────────────────────────────────────────────────────────────
@@ -264,6 +277,12 @@ private:
   bool m_isFiltered = false;
   QString m_currentFilter;
   QList<int> m_filteredIndices;
+
+  // Which apply* entry point produced the current state, so
+  // reapplyActiveFilter re-runs the same one (Kartend-3ve3n).
+  enum class ActiveFilterKind { None, Search, Subcollection };
+  ActiveFilterKind m_activeFilterKind = ActiveFilterKind::None;
+  int m_activeSubcollectionIndex = -1;
 
   // per-collection "hide items without artwork" toggle.
   // Combines with the active search/subcollection filter as an additional
