@@ -76,6 +76,27 @@ const QList<int> &seedOneSubcollection() {
   return subs;
 }
 
+const QList<int> &seedTwoSubcollections() {
+  static const QList<int> subs = {0, 1};
+  return subs;
+}
+
+// Static for the same setCollections-lifetime reason as the seeds above:
+// FilterManager keeps a pointer to the caller's list.
+const QList<CollectionConfig> &seedAlphaOtherCollections() {
+  static const QList<CollectionConfig> collections = [] {
+    QList<CollectionConfig> out;
+    CollectionConfig alpha;
+    alpha.name = QStringLiteral("Alpha");
+    out.append(alpha);
+    CollectionConfig other;
+    other.name = QStringLiteral("Other");
+    out.append(other);
+    return out;
+  }();
+  return collections;
+}
+
 void seedThreeItems(FilterManager &mgr) {
   mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(),
                     &seedEmptySubcollections(), &seedEmptyFolders());
@@ -600,6 +621,131 @@ void TestFilterManager::testReapplyKeepsSubcollectionFilterSemantics() {
   QVERIFY(mgr.isFiltered());
   QCOMPARE(mgr.filteredIndices().mid(0, prefixRows.size()), prefixRows);
   QCOMPARE(mgr.currentFilter(), QStringLiteral("Alpha Shelf"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// applySubcollectionFilter (Kartend-kie1n). No ApplicationContext is set, so
+// itemBelongsToTargetCollections takes the name-matching fallback: a media
+// item belongs when its display name (here the path's completeBaseName, as the
+// display-name map is empty) contains the collection name.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestFilterManager::testSubcollectionFilterIgnoresOutOfRangeIndex() {
+  FilterManager mgr;
+  mgr.setCollections(&seedAlphaOtherCollections());
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(), &seedTwoSubcollections(),
+                    &seedFolders());
+  QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+  QVERIFY(spy.isValid());
+
+  mgr.applySubcollectionFilter(-1);
+  QVERIFY(!mgr.isFiltered());
+  QCOMPARE(spy.count(), 0);
+
+  mgr.applySubcollectionFilter(static_cast<int>(seedAlphaOtherCollections().size()));
+  QVERIFY(!mgr.isFiltered());
+  QCOMPARE(spy.count(), 0);
+  QCOMPARE(mgr.currentFilter(), QString());
+  QVERIFY(mgr.filteredIndices().isEmpty());
+}
+
+void TestFilterManager::testSubcollectionFilterIgnoresMissingSourceData() {
+  // No collection list at all: even index 0 is rejected.
+  {
+    FilterManager mgr;
+    mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(),
+                      &seedTwoSubcollections(), &seedFolders());
+    QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+    mgr.applySubcollectionFilter(0);
+    QVERIFY(!mgr.isFiltered());
+    QCOMPARE(spy.count(), 0);
+    QCOMPARE(mgr.currentFilter(), QString());
+    QVERIFY(mgr.filteredIndices().isEmpty());
+  }
+  // A valid index but no source data pushed yet.
+  {
+    FilterManager mgr;
+    mgr.setCollections(&seedAlphaOtherCollections());
+    QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+    mgr.applySubcollectionFilter(0);
+    QVERIFY(!mgr.isFiltered());
+    QCOMPARE(spy.count(), 0);
+    QCOMPARE(mgr.currentFilter(), QString());
+    QVERIFY(mgr.filteredIndices().isEmpty());
+  }
+  // Source data pushed, but with neither media nor subcollections.
+  {
+    static const QStringList noPaths;
+    FilterManager mgr;
+    mgr.setCollections(&seedAlphaOtherCollections());
+    mgr.setSourceData(&noPaths, &seedEmptyDisplayNames(), &seedEmptyDisplayNames(),
+                      &seedEmptySubcollections(), &seedFolders());
+    QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+    mgr.applySubcollectionFilter(0);
+    QVERIFY(!mgr.isFiltered());
+    QCOMPARE(spy.count(), 0);
+    QCOMPARE(mgr.currentFilter(), QString());
+    QVERIFY(mgr.filteredIndices().isEmpty());
+  }
+}
+
+void TestFilterManager::testSubcollectionFilterKeepsPrefixBandsAndCountsMediaOnly() {
+  FilterManager mgr;
+  mgr.setCollections(&seedAlphaOtherCollections());
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(), &seedTwoSubcollections(),
+                    &seedFolders());
+  QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+  QVERIFY(spy.isValid());
+
+  mgr.applySubcollectionFilter(0);
+
+  // Space is [subs 0,1][folders 2,3][Alpha 4, Beta 5, Gamma 6]. Both
+  // subcollections and both folders survive whatever their names; of the
+  // media only Alpha belongs to "Alpha".
+  QVERIFY(mgr.isFiltered());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 1, 2, 3, 4}));
+  QCOMPARE(mgr.currentFilter(), QStringLiteral("Alpha"));
+  // Media-only readout: 1 visible of 3 media, prefix rows not counted.
+  QCOMPARE(spy.count(), 1);
+  QCOMPARE(spy.at(0).at(0).toInt(), 1);
+  QCOMPARE(spy.at(0).at(1).toInt(), 3);
+}
+
+void TestFilterManager::testSubcollectionFilterComposesWithHideMissingArtwork() {
+  QTemporaryDir artDir;
+  QVERIFY(artDir.isValid());
+  // Covers exist, just not for Alpha — the one member of the filter.
+  QFile art(artDir.filePath(QStringLiteral("Beta.png")));
+  QVERIFY(art.open(QIODevice::WriteOnly));
+  art.write("x");
+  art.close();
+  // Full cascade so the artless verdict for Alpha is authoritative rather
+  // than failing open (Kartend-l66sn).
+  ArtworkUtils::DirectoryCache::instance().clear();
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+
+  FilterManager mgr;
+  mgr.setCollections(&seedAlphaOtherCollections());
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(), &seedTwoSubcollections(),
+                    &seedFolders());
+  mgr.setHideMissingArtworkFilter(true, artDir.path());
+  QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+  QVERIFY(spy.isValid());
+
+  mgr.applySubcollectionFilter(0);
+
+  // Alpha matches the collection but has no artwork, so only the prefix
+  // rows remain; Beta has artwork but is outside the filter.
+  QVERIFY(mgr.artworkKeySetSettled());
+  QVERIFY(mgr.isFiltered());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 1, 2, 3}));
+  QCOMPARE(mgr.currentFilter(), QStringLiteral("Alpha"));
+  QCOMPARE(spy.count(), 1);
+  QCOMPARE(spy.at(0).at(0).toInt(), 0);
+  QCOMPARE(spy.at(0).at(1).toInt(), 3);
+
+  ArtworkUtils::DirectoryCache::instance().clear();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
