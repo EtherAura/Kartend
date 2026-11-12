@@ -1,0 +1,11 @@
+# Shown beside the issue forms when somebody clicks "New issue".
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/EtherAura/Kartend/security/advisories/new
+    about: Privately, as SECURITY.md describes. Please do not open a public issue for it.
+  - name: Ask a question, or share a setup
+    url: https://github.com/EtherAura/Kartend/discussions
+    about: Discussions, for everything that is not a bug or a feature request.
+  - name: Read the user guide
+    url: https://github.com/EtherAura/Kartend/wiki
+    about: Getting started, configuration, input and controls, troubleshooting.
