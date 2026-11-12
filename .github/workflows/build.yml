@@ -1099,7 +1099,10 @@ jobs:
   # it surfaces Q_OS_UNIX-vs-Q_OS_MACOS portability gaps (bundle paths, the
   # macOS keychain backend, case-sensitivity) that the Linux/Windows jobs miss.
   macos-build-test:
-    runs-on: macos-14
+    # Kartend-m6laf: GitHub retired every macOS 14 image on 2026-11-02 (actions/runner-images#15226), so
+    # both legs were refused at start. macos-15 is the Apple-Silicon image closest to it; macos-26 (macos-latest)
+    # is the other GA one. Pinned, not -latest, so an image change is a commit here.
+    runs-on: macos-15
     # Kartend-a9hc6: was 45, which left no room for a COLD ccache. Measured on
     # main: warm build 34:45 (f8ba1c45, passing), cold build 42:50 (ede9e83a,
     # killed). Add setup and tests and a cold run needs ~46 — just past the old
@@ -1132,15 +1135,15 @@ jobs:
           host: mac
           target: desktop
           # Universal (arm64 + x86_64) clang build; runs natively on the
-          # Apple-Silicon macos-14 runner.
+          # Apple-Silicon macos-15 runner.
           arch: clang_64
           modules: 'qtmultimedia qtimageformats'
           cache: true
 
       - name: Set up ccache
-        # The macos14 infix bakes the runner image label into the key AND
-        # both restore prefixes, so a macOS image bump (e.g. macos-14 →
-        # macos-15) starts from a clean ccache rather than reusing objects
+        # The macos15 infix bakes the runner image label into the key AND
+        # both restore prefixes, so a macOS image bump (e.g. macos-15 →
+        # macos-26) starts from a clean ccache rather than reusing objects
         # built against the old SDK. (A runs-on change also rolls the
         # hashFiles() component, but the literal makes the intent explicit.)
         #
@@ -1158,9 +1161,9 @@ jobs:
         # across compiler but never across build type.
         uses: ./.github/actions/setup-ccache
         with:
-          key-infix: macos14-ccache-${{ matrix.build_type }}
+          key-infix: macos15-ccache-${{ matrix.build_type }}
           cache-path: ~/Library/Caches/ccache
-          fallback-infix: macos14-ccache-${{ matrix.build_type }}
+          fallback-infix: macos15-ccache-${{ matrix.build_type }}
 
       - name: Configure CMake
         run: |
@@ -1178,7 +1181,7 @@ jobs:
         # KARTEND_REQUIRE_ARCHIVE_TOOLS is deliberately NOT set here
         # (Kartend-pnlot.4): the Linux jobs install unzip/p7zip-full
         # themselves, so a missing extractor there is a workflow regression
-        # worth a QFAIL. Here extractor availability tracks the macos-14
+        # worth a QFAIL. Here extractor availability tracks the macos-15
         # runner image (unzip ships with macOS; 7z only if the image adds
         # it), which this workflow doesn't control — enforcing would turn
         # an image change into a red wall. QSKIP stays the intended

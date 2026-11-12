@@ -19,7 +19,7 @@ inputs:
     description: >
       Middle portion of the cache key between "${runner.os}-" and the
       config-files hash, e.g. "ccache-Release-gcc", "ccache-tsan",
-      "macos14-ccache-Debug". Also the first (most specific) restore prefix.
+      "macos15-ccache-Debug". Also the first (most specific) restore prefix.
     required: true
   cache-path:
     description: >
@@ -39,7 +39,7 @@ inputs:
   fallback-infix:
     description: >
       Infix of the last-resort restore prefix, "${runner.os}-<this>-".
-      Default shares across every Linux job; macOS passes "macos14-ccache"
+      Default shares across every Linux job; macOS passes "macos15-ccache-<build type>"
       so an image bump can keep macOS caches segregated (see the macOS job
       comment in build.yml).
     required: false
