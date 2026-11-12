@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   subcollection's name as a search, so most of its items and its
   subcollection and folder rows disappeared. The view now keeps showing
   the subcollection's items and every subcollection and folder row.
+- **Clearing a search keeps "hide items without artwork" in effect.** In
+  a collection that hides items without artwork, clearing a search could
+  size the grid for every item, including the hidden ones, leaving empty
+  slots at the end and a scroll area that ran past the last visible item.
+  The grid now counts only the items that are actually shown.
 
 ## [0.0.20] - 2026-11-12
 
