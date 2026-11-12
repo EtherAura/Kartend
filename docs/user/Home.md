@@ -8,6 +8,9 @@ If you just want to get something on screen, jump straight to
 [Getting Started](Getting-Started.md). If you've already built a library
 and want to dig into a feature, the index below is grouped by purpose.
 
+Windows builds: [Code signing policy](Code-Signing-Policy.md) — who signs them,
+and what Kartend sends over the network (nothing, unless you ask it to).
+
 ## Index
 
 ### Start here
