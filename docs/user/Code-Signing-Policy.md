@@ -29,7 +29,7 @@ third-party binary is signed.
 | Approvers | [EtherAura](https://github.com/EtherAura) |
 
 Kartend is developed with AI assistance (see
-[How this is built](../../readme.md#how-this-is-built)). A change is
+[How this is built](../dev/Development-Process.md)). A change is
 written by the maintainer or by Kartend's automated development lane,
 which works only on issues the maintainer has filed. Every change reaches
 `main` through a pull request that has passed the test suite,

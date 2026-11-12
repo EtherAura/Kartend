@@ -273,7 +273,7 @@ Kartend tries one of two backends, in order:
 
 If neither is available the **Gamepad** section in Settings is hidden.
 See [Building → Optional Qt6Gamepad / SDL2](../dev/building.md) and the
-distro-specific [Launchers + dependencies](../../readme.md#dependencies).
+distro-specific [Launchers + dependencies](../dev/building.md#dependencies).
 
 ### Default bindings
 
