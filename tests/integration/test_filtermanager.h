@@ -38,6 +38,14 @@ private slots:
   // filter instead of turning it into a text search on its name (Kartend-3ve3n).
   void testReapplyKeepsSubcollectionFilterSemantics();
 
+  // applySubcollectionFilter directly (Kartend-kie1n): early-return guards,
+  // unconditional prefix bands, media-only counts and the artwork predicate.
+  // Without an ApplicationContext, membership falls back to name matching.
+  void testSubcollectionFilterIgnoresOutOfRangeIndex();
+  void testSubcollectionFilterIgnoresMissingSourceData();
+  void testSubcollectionFilterKeepsPrefixBandsAndCountsMediaOnly();
+  void testSubcollectionFilterComposesWithHideMissingArtwork();
+
   // Precomputed artwork key set (ArtworkUtils::buildArtworkKeySet) backing
   // the hideMissingArtwork predicate.
   void testBuildArtworkKeySetFromCachedListings();
