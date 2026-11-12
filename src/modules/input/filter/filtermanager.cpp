@@ -94,6 +94,8 @@ void FilterManager::applyFilter(const QString &searchText) {
 
   m_currentFilter = trimmedQuery;
   m_isFiltered = true;
+  m_activeFilterKind = ActiveFilterKind::Search;
+  m_activeSubcollectionIndex = -1;
   rebuildFilteredIndices();
 
   // Single pass over the search results: prune media items without artwork
@@ -145,6 +147,8 @@ void FilterManager::applySubcollectionFilter(int subcollectionIndex) {
 
   m_isFiltered = true;
   m_currentFilter = (*m_collections)[subcollectionIndex].name;
+  m_activeFilterKind = ActiveFilterKind::Subcollection;
+  m_activeSubcollectionIndex = subcollectionIndex;
   m_filteredIndices.clear();
 
   QSet<int> targetCollections;
@@ -184,6 +188,8 @@ void FilterManager::applySubcollectionFilter(int subcollectionIndex) {
 void FilterManager::clearFilter() {
   m_currentFilter.clear();
   m_filteredIndices.clear();
+  m_activeFilterKind = ActiveFilterKind::None;
+  m_activeSubcollectionIndex = -1;
 
   // when the per-collection hideMissingArtwork toggle is on,
   // "clearing the filter" really means transitioning to the artwork-only
@@ -214,6 +220,31 @@ void FilterManager::clearFilter() {
   if (m_filePaths) {
     emit filterChanged(m_filePaths->size(), m_filePaths->size());
   }
+}
+
+void FilterManager::reapplyActiveFilter() {
+  switch (m_activeFilterKind) {
+  case ActiveFilterKind::Search:
+    applyFilter(m_currentFilter);
+    return;
+  case ActiveFilterKind::Subcollection:
+    if (!m_collections || m_activeSubcollectionIndex < 0 ||
+        m_activeSubcollectionIndex >= m_collections->size()) {
+      // The collection list no longer has that subcollection; drop to the
+      // unfiltered (or artwork-only baseline) view rather than keep stale rows.
+      clearFilter();
+      return;
+    }
+    // applySubcollectionFilter returns early, leaving m_filteredIndices
+    // untouched, when the source data is empty; clear first so the reapply
+    // never keeps rows from the previous source data.
+    m_filteredIndices.clear();
+    applySubcollectionFilter(m_activeSubcollectionIndex);
+    return;
+  case ActiveFilterKind::None:
+    break;
+  }
+  clearFilter();
 }
 
 auto FilterManager::getActualIndex(int visualIndex) const -> int {
