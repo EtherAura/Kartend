@@ -1,14 +1,19 @@
 #include "test_scrollmanager.h"
 
 #include "applicationmanager.h"
+#include "artworkutils.h"
 #include "collection/collectioncontext.h"
+#include "filtermanager.h"
 #include "mainwindow.h"
 #include "mocks/mockdatabasemanager.h"
 #include "mocks/mockedmainwindowfixture.h"
 #include "scrollmanager.h"
 
+#include <QFile>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStringList>
+#include <QTemporaryDir>
 #include <QTest>
 
 void TestScrollManager::getTotalItems_isZeroOnFreshFixture() {
@@ -127,6 +132,50 @@ void TestScrollManager::visualIndexForPathRestore_mapsThroughActiveFilter() {
   sm->setPendingSelectionRestoreByPath(context.filePaths.at(1));
   sm->onVisualIndexForPathLoaded(1, context.filePaths.at(1));
   QCOMPARE(spy.count(), 1);
+}
+
+void TestScrollManager::filterChange_clearKeepsHideMissingArtworkBaselineCount() {
+  // Drop the temp directory's cached listing on every exit path so later
+  // tests don't see stale entries for a deleted path.
+  const auto cacheCleanup = qScopeGuard([] { ArtworkUtils::DirectoryCache::instance().clear(); });
+
+  QTemporaryDir artDir;
+  QVERIFY(artDir.isValid());
+  for (const QString &name : {QStringLiteral("Alpha.png"), QStringLiteral("Gamma.png")}) {
+    QFile art(artDir.filePath(name));
+    QVERIFY(art.open(QIODevice::WriteOnly));
+    art.write("x");
+    art.close();
+  }
+  // Warm the full lookup cascade so the artless verdict for Beta is
+  // authoritative instead of failing open.
+  ArtworkUtils::DirectoryCache::instance().prewarmDirectories(
+      ArtworkUtils::artworkLookupDirectories(artDir.path()));
+
+  KartendTest::MockedMainWindowFixture fixture;
+  ScrollManager *sm = fixture.window()->getApplicationManager()->getScrollManager();
+  QVERIFY(sm);
+
+  CollectionContext context;
+  context.config.hideMissingArtwork = true;
+  context.config.artworkDirectory = artDir.path();
+  context.filePaths =
+      QStringList{QStringLiteral("/items/Alpha.bin"), QStringLiteral("/items/Beta.bin"),
+                  QStringLiteral("/items/Gamma.bin")};
+  context.fileNames.insert(context.filePaths.at(0), QStringLiteral("Alpha"));
+  context.fileNames.insert(context.filePaths.at(1), QStringLiteral("Beta"));
+  context.fileNames.insert(context.filePaths.at(2), QStringLiteral("Gamma"));
+  sm->setupVirtualScrolling(context.filePaths.size(), context);
+  // Beta has no artwork, so the artwork-only baseline hides it.
+  QCOMPARE(sm->getTotalItems(), 2);
+
+  // Clearing a search returns to the artwork-only baseline, not to the full
+  // store count (Kartend-v3ecx).
+  sm->applyFilter(QStringLiteral("a"));
+  sm->clearFilter();
+  QVERIFY(sm->filterManager()->isFiltered());
+  QCOMPARE(sm->getTotalItems(), sm->filterManager()->filteredCount());
+  QCOMPARE(sm->getTotalItems(), 2);
 }
 
 namespace {

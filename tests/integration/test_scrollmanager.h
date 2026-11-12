@@ -22,6 +22,10 @@ private slots:
   // media-only answer must land on the FILTERED visual index (or be skipped
   // when the item is filtered out), not on the store-space actual index.
   void visualIndexForPathRestore_mapsThroughActiveFilter();
+  // Clearing a search under hideMissingArtwork returns to the artwork-only
+  // baseline: the item count must be the baseline's filtered count, not the
+  // full store count.
+  void filterChange_clearKeepsHideMissingArtworkBaselineCount();
   void getFilePaths_isEmptyOnFreshFixture();
   void willNeedVerticalScrollbar_returnsBoolWithoutCrash();
 

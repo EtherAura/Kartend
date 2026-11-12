@@ -194,7 +194,10 @@ void ScrollManager::clearFilter() {
   }
 
   m_filterManager->clearFilter();
-  m_totalItems = m_dataManager->totalItemCount();
+  // Under hideMissingArtwork clearFilter lands on the artwork-only baseline,
+  // which stays filtered (Kartend-v3ecx).
+  m_totalItems = m_filterManager->isFiltered() ? m_filterManager->filteredCount()
+                                               : m_dataManager->totalItemCount();
 
   calculateVirtualMetrics();
 
