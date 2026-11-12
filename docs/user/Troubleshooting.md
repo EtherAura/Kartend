@@ -443,8 +443,8 @@ For build, dependency, and install issues see
 | Issue | Doc |
 |-------|-----|
 | Missing Qt6 / dependencies | [building.md](../dev/building.md) |
-| `--install` fails | [readme.md → Installation](../../readme.md#installation) |
-| Uninstall didn't remove everything | [readme.md → Uninstalling](../../readme.md#uninstalling) |
+| `--install` fails | [Installation](Installation.md) |
+| Uninstall didn't remove everything | [Uninstalling](Installation.md#uninstalling) |
 | CI passes locally but fails on GitHub | [building.md → CI parity](../dev/building.md) |
 
 ## Where to next

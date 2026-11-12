@@ -359,7 +359,7 @@ fallback** otherwise. Readers detect the codec per-entry from the
 header byte. zstd is faster and typically smaller; zlib is universal.
 
 Distro packagers should add zstd as a dependency to enable the faster
-path. See [readme.md](../../readme.md#dependencies).
+path. See [readme.md](../dev/building.md#dependencies).
 
 ## Recipes
 
