@@ -113,21 +113,44 @@ void TestFilterManager::testApplyEmptyFilterIsNoOp() {
 void TestFilterManager::testApplyCaseInsensitiveSubstringFilter() {
   FilterManager mgr;
   seedThreeItems(mgr);
-  // applyFilter requires the hierarchy cache + ApplicationContext to be
-  // wired through setApplicationContext / setHierarchyCache before it can
-  // resolve sibling-collection display names. The integration test for the
-  // full filter pipeline lives in the ScrollManager fixture suite; this
-  // bare-FilterManager test verifies that an empty applyFilter is the
-  // documented no-op (handled above) without requiring the rest of the
-  // graph. Skipped here because the real apply path is exercised by
-  // tests/integration/test_scrollmanager.cpp's filterChange_* coverage.
-  QSKIP("Full apply pipeline needs ScrollManager fixture; covered there.");
+  // An all-uppercase needle matches the mixed-case "Beta" (media index 1; no
+  // prefix bands, so actual index == media index).
+  mgr.applyFilter(QStringLiteral("BETA"));
+  QVERIFY(mgr.isFiltered());
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{1}));
+  QCOMPARE(mgr.currentFilter(), QStringLiteral("BETA"));
+  // Surrounding whitespace is trimmed before storing / matching; the
+  // mixed-case remainder still matches "Alpha".
+  mgr.applyFilter(QStringLiteral("  aLpHa  "));
+  QCOMPARE(mgr.currentFilter(), QStringLiteral("aLpHa"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
 }
 
 void TestFilterManager::testApplyFilterEmitsFilterChanged() {
-  // Same dependency story as testApplyCaseInsensitiveSubstringFilter — the
-  // signal-emission verification needs the full ScrollManager fixture.
-  QSKIP("Full apply pipeline needs ScrollManager fixture; covered there.");
+  FilterManager mgr;
+  seedThreeItems(mgr);
+  QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+  QVERIFY(spy.isValid());
+
+  // "a" occurs in Alpha, Beta and Gamma → (visible 3, total 3).
+  mgr.applyFilter(QStringLiteral("a"));
+  QCOMPARE(spy.count(), 1);
+  QCOMPARE(spy.at(0).at(0).toInt(), 3);
+  QCOMPARE(spy.at(0).at(1).toInt(), 3);
+
+  // No match → (0, 3) and an empty filtered view.
+  mgr.applyFilter(QStringLiteral("zzz"));
+  QCOMPARE(spy.count(), 2);
+  QCOMPARE(spy.at(1).at(0).toInt(), 0);
+  QCOMPARE(spy.at(1).at(1).toInt(), 3);
+  QCOMPARE(mgr.filteredCount(), 0);
+
+  // Empty search routes through clearFilter → (3, 3) and unfiltered again.
+  mgr.applyFilter(QString());
+  QCOMPARE(spy.count(), 3);
+  QCOMPARE(spy.at(2).at(0).toInt(), 3);
+  QCOMPARE(spy.at(2).at(1).toInt(), 3);
+  QVERIFY(!mgr.isFiltered());
 }
 
 void TestFilterManager::testClearFilterRestoresUnfilteredView() {
