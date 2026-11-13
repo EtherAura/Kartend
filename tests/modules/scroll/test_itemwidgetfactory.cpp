@@ -869,9 +869,9 @@ void TestItemWidgetFactory::aggregatedView_settledMissRequestsNothing() {
 // is drained with direct prewarmDirectories/processQueuedDirectories calls and
 // the reconfigure is the factory call VirtualScrollEngine makes per active
 // widget. ScrollManager's prewarm debounce timer, the thread-pool handoff and
-// the active-widget iteration are NOT exercised. Whether a cold list row asks
-// for that prewarm itself is observed (logged) but deliberately not asserted
-// either way: the missing request is the open half of Kartend-5msks.
+// the active-widget iteration are NOT exercised. The cold row's own
+// requestArtworkPrewarm is asserted only as an emitted signal; no slot is
+// connected, so nothing here shows who services it or a live list recovering.
 
 void TestItemWidgetFactory::initTestCase() {
   QVERIFY(m_homeDir.isValid());
@@ -1020,9 +1020,9 @@ void TestItemWidgetFactory::listRow_realDb_coldRowRecoversAfterDrainAndReconfigu
   QVERIFY(cache.isDirectoryQueued(artRoot.path()));
   QVERIFY2(!coldRow->hasArtwork(),
            "a cold row has no artwork until the queued directories are scanned");
-  // Observation only: today nothing asks for that scan from this path.
-  qInfo("cold list row: requestArtworkPrewarm emitted %lld time(s)",
-        static_cast<long long>(prewarm.count()));
+  // The empty, unsettled lookup asks for the scan of its artwork root, once.
+  QCOMPARE(prewarm.count(), 1);
+  QCOMPARE(prewarm.at(0).at(0).toString(), artRoot.path());
 
   // The drain ScrollManager's prewarm runs, then the factory call
   // VirtualScrollEngine::reconfigureArtworkForActiveWidgets makes per widget.
@@ -1036,6 +1036,7 @@ void TestItemWidgetFactory::listRow_realDb_coldRowRecoversAfterDrainAndReconfigu
   // A later non-forced pass over the settled cache agrees.
   h.factory.configureArtworkForWidget(coldRow, coldRow->getFilePath());
   QVERIFY(coldRow->hasArtwork());
+  QCOMPARE(prewarm.count(), 1); // the settled cascade asks for nothing more
   ArtworkUtils::clearDirectoryCache();
 }
 

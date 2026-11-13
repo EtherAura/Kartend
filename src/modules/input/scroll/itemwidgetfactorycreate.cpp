@@ -102,16 +102,24 @@ ItemWidget *ItemWidgetFactory::createMediaWidget(int mediaIndex, int &collection
       // of items in an uncached directory it serialises a filesystem stat
       // per widget on the GUI thread.
       //
-      // Gate the sync fallback on whether a prewarm is already in flight:
-      // if a background thread is about to populate the cache, skip the
-      // per-widget stat and let ScrollManager's post-prewarm
-      // reconfigureArtworkForActiveWidgets() set hasArtwork once the cache
-      // is warm (typically tens of ms later). Outside the scroll-burst
-      // case the prewarm queue is empty, so the sync fallback still fires
-      // and the button still appears on first paint as before.
+      // The sync fallback is skipped while artworkDir is queued for a scan,
+      // leaving hasArtwork to a later reconfigureArtworkForActiveWidgets().
+      // Note the cached probe above queues every uncached directory it
+      // consults, artworkDir included, so on a fully cold root it is the
+      // probe itself that makes this guard skip the fallback; the fallback
+      // runs only when artworkDir is not queued (e.g. the root is cached but
+      // a typed subdir is not).
       if (artworkPath.isEmpty() &&
           !ArtworkUtils::DirectoryCache::instance().isDirectoryQueued(artworkDir)) {
         artworkPath = ArtworkUtils::findArtworkForFile(fileName, artworkDir);
+      }
+      // Kartend-5msks: a queued directory is only pending, not being scanned,
+      // so ask for the scan this row is waiting on, as the grid's aggregated
+      // branch in configureArtworkForWidget does. A settled cascade asks for
+      // nothing, so a genuinely artless row does not request a scan each time
+      // it is rebuilt.
+      if (artworkPath.isEmpty() && !artworkLookupSettled(artworkDir)) {
+        emit requestArtworkPrewarm(artworkDir);
       }
       widget->setHasArtwork(!artworkPath.isEmpty());
     }

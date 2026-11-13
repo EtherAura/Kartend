@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   start), and those tiles only ever consulted that list. They now ask
   for it to be rebuilt when it cannot answer, and the store fetch only
   throws it away when it actually saved new artwork.
+- **List rows ask for their artwork folder to be scanned.** In list view,
+  a row whose artwork lookup comes back empty while its artwork folder has
+  not been scanned yet now requests a background scan of that folder,
+  instead of skipping the direct check and only waiting for a scan some
+  other part of Kartend might start. Rows whose folder has already been
+  scanned request nothing.
 - **Declining to store a scraper password in the clear keeps the one you
   already had.** When the system keychain could not save a changed
   scraper password and you declined storing it unencrypted, a password
