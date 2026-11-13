@@ -38,6 +38,7 @@
 #include "kartmanager.h"
 #include "kartreader.h"
 #include "kartwriter.h"
+#include "loggingrules.h"
 #include "mainwindow.h"
 #include "mediabackendconfig.h"
 #include "pathutils.h"
@@ -505,32 +506,11 @@ extern "C" auto main(int argc, char *argv[]) -> int {
                                    "  padding: 4px; "
                                    "}"));
 
-  // Optional runtime logging configuration.
-  // If set, this overrides Qt's default filtering rules.
-  // Example: KARTEND_LOG_RULES="kartend.*=true" ./kartend
-  const QByteArray logRules = qgetenv("KARTEND_LOG_RULES");
-  if (!logRules.isEmpty()) {
-    QLoggingCategory::setFilterRules(QString::fromUtf8(logRules));
-  }
-
-  // Bridge legacy diagnostic env vars to logging-category rules so existing
-  // KARTEND_PERF_TRACE=1 / KARTEND_SEARCH_DIAG=1 / KARTEND_SCAN_DIAG=1
-  // invocations continue to work after diag prints were converted from
-  // raw Qt logging macros to qCDebug(<category>).
-  QStringList bridgedRules;
-  if (qEnvironmentVariableIsSet("KARTEND_PERF_TRACE")) {
-    bridgedRules << QStringLiteral("kartend.perftrace.debug=true");
-  }
-  if (qEnvironmentVariableIsSet("KARTEND_SEARCH_DIAG")) {
-    bridgedRules << QStringLiteral("kartend.searchdiag.debug=true");
-  }
-  if (qEnvironmentVariableIsSet("KARTEND_SCAN_DIAG")) {
-    bridgedRules << QStringLiteral("kartend.scanflow.debug=true");
-  }
-  if (!bridgedRules.isEmpty()) {
-    // Append rather than replace, so KARTEND_LOG_RULES still wins if used.
-    QLoggingCategory::setFilterRules(bridgedRules.join(QLatin1Char('\n')));
-  }
+  // Optional runtime logging configuration (KARTEND_LOG_RULES plus the
+  // legacy KARTEND_PERF_TRACE / KARTEND_SEARCH_DIAG / KARTEND_SCAN_DIAG
+  // bridges). Applied through LoggingRules so the scrape-logging toggle
+  // composes with these rules instead of replacing them (Kartend-37t5r).
+  LoggingRules::applyStartupRules();
 
   QObject::connect(&app, &QCoreApplication::aboutToQuit, []() {
     // Cleanup handled by MainWindow destructor
