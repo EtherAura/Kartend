@@ -102,17 +102,70 @@ class TestCheckTestMapping(unittest.TestCase):
 
 class TestCheckLayering(unittest.TestCase):
     def test_real_repo_passes(self) -> None:
-        # check-layering is tightly coupled to a near-full repo, so a minimal
-        # violating fixture is fragile; the regression guard here is that the
-        # script still runs and passes on the canonical tree.
+        # Smoke guard: the script still runs and passes on the canonical tree.
+        # The rules themselves are pinned by the minimal fixtures below — the
+        # guardrails that need applicationcontext.h / applicationmanager.cpp or
+        # a fan-out baseline are inert on a tree that lacks them.
         r = run_script(LAYERING, REPO)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+    def test_utils_upward_include_fails(self) -> None:
+        # Include-layering rule: utils/ is the floor, so including a core/
+        # header from it reaches upward.
+        with tempfile.TemporaryDirectory() as d:
+            base = pathlib.Path(d)
+            make_tree(
+                base,
+                [],
+                {
+                    "src/utils/low.h": '#pragma once\n#include "top.h"\n',
+                    "src/core/top.h": "#pragma once\n",
+                },
+            )
+            r = run_script(LAYERING, base)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("src/utils/ reaches upward", r.stdout)
+
+    def test_ui_include_of_modules_behavior_fails(self) -> None:
+        # Scoped-area match (Kartend-1ha73): ui/ sits below modules/behavior,
+        # so a ui/ include of a behavior header reaches upward even though
+        # other modules/ sub-areas are allowed.
+        with tempfile.TemporaryDirectory() as d:
+            base = pathlib.Path(d)
+            make_tree(
+                base,
+                [],
+                {
+                    "src/ui/view.h": '#pragma once\n#include "beh.h"\n',
+                    "src/modules/behavior/app/beh.h": "#pragma once\n",
+                },
+            )
+            r = run_script(LAYERING, base)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("src/ui/ reaches upward", r.stdout)
+
+    def test_ui_include_of_modules_data_passes(self) -> None:
+        # Counterpart to the behavior case: modules/data sits below ui/, so the
+        # sub-area granularity must let this include through.
+        with tempfile.TemporaryDirectory() as d:
+            base = pathlib.Path(d)
+            make_tree(
+                base,
+                [],
+                {
+                    "src/ui/view.h": '#pragma once\n#include "store.h"\n',
+                    "src/modules/data/store/store.h": "#pragma once\n",
+                },
+            )
+            r = run_script(LAYERING, base)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("check-layering: OK", r.stdout)
 
     def test_nonconst_current_index_holder_fails(self) -> None:
         # Sixth guardrail (Kartend-dl0uz.1): a non-const `int *` holder of the
         # currentCollectionIndex back-channel outside the writer allowlist
         # must fail. This guardrail is self-contained (single regex over src/),
-        # so unlike the include-layering rules a minimal fixture is stable.
+        # so a minimal fixture is stable.
         with tempfile.TemporaryDirectory() as d:
             base = pathlib.Path(d)
             make_tree(
