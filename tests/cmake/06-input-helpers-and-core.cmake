@@ -38,6 +38,15 @@ kartend_add_test(NAME ScrollbarHiding
 )
 target_include_directories(test_scrollbarhiding PRIVATE ${SRC_DIR}/chrome/overlays)
 
+# Platform-background candidates (Kartend-ji94z): the read-only lister of a
+# platform's retained illustration/photo/background art under _shared/, over a
+# real QTemporaryDir tree. Header-only helper; no widgets, no database.
+kartend_add_test(NAME PlatformBackgroundCandidates
+  SOURCES chrome/test_platformbackgroundcandidates.cpp
+  LINK kartend_chrome kartend_api kartend_utils
+)
+target_include_directories(test_platformbackgroundcandidates PRIVATE ${SRC_DIR}/chrome/overlays)
+
 # InteractionHelpers tests (pure helpers extracted)
 kartend_add_test(NAME InteractionHelpers
   SOURCES modules/interaction/test_interactionhelpers.cpp
