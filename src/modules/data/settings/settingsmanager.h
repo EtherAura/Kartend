@@ -3,6 +3,8 @@
 
 #include "collectiondifffingerprint.h"
 #include "isettingsmanager.h"
+#include <functional>
+
 #include <QHash>
 #include <QLoggingCategory>
 #include <QString>
@@ -55,6 +57,19 @@ public:
   /// about (Kartend-4ahok).
   [[nodiscard]] static bool keychainBackendCompiledIn();
 
+  /// Test seam (Kartend-f4nf2): replaces this instance's keychain I/O so tests
+  /// can inject failures without touching the user's real wallet. Unset
+  /// members (the default) use the platform keychain. Only consulted in
+  /// keychain builds; GUI-thread state like the rest of this class.
+  struct CredentialBackend {
+    std::function<QString(const QString &key, bool *ok)> read;
+    std::function<bool(const QString &key, const QString &value, QString *errorOut)> write;
+    std::function<bool(const QString &key)> remove;
+  };
+  void setCredentialBackendForTesting(const CredentialBackend &backend) {
+    m_credentialBackend = backend;
+  }
+
   // The settings-dialog orchestration half of this class (openSettingsDialog,
   // handleReloadRequired, handleLayoutChanges, onCollectionScanSummary plus
   // the pending-add-summary state) moved to the ui-layer
@@ -86,6 +101,19 @@ private:
   // pre-existing "demote and report afterwards" behaviour for every caller
   // that has no GUI to prompt from.
   PlaintextCredentialConsent m_plaintextConsent;
+
+  // Kartend-f4nf2: credential values whose plaintext fallback the user
+  // declined, keyed by <provider>/<field>. A later save without the consent
+  // hook still retries the keychain with the value, but must not write that
+  // same refused value in the clear; the entry is dropped once the value is
+  // stored securely or plaintext is allowed for it.
+  QHash<QString, QString> m_declinedPlaintextCredentials;
+
+  CredentialBackend m_credentialBackend;
+  [[nodiscard]] QString readCredential(const QString &key, bool *ok) const;
+  [[nodiscard]] bool writeCredential(const QString &key, const QString &value,
+                                     QString *errorOut) const;
+  bool removeCredential(const QString &key) const;
 
   // Per-collection fingerprint of the last successfully-saved list, keyed by
   // (name, mediaDirectory) UUID. Diff baseline for the per-domain *Changed
