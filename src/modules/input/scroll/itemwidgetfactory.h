@@ -287,8 +287,10 @@ signals:
   void requestItemsRange(int startIndex, int count);
 
   /**
-   * @brief Emitted when a tile's cover was skipped because @p artworkDir has a
-   * queued-but-unscanned directory cache entry (Kartend-eyfik).
+   * @brief Emitted when a tile's cover was skipped because @p artworkDir's
+   * listing is not in the directory cache yet: a queued-but-unscanned entry
+   * (Kartend-eyfik), or a cold cascade in a large aggregated view, whose
+   * lookup never touches the disk (Kartend-birii).
    *
    * configureArtworkForWidget deliberately does not pay a synchronous stat
    * sweep while a prewarm is "in flight", on the promise that a post-prewarm
@@ -297,8 +299,10 @@ signals:
    * was the prewarm worker in ScrollManager::receiveItemsRange — which needs a
    * DB chunk to arrive AND showAllSubcollectionItems to be on. A layout switch
    * fetches no chunks, so after a List round-trip every cover-bearing
-   * directory stayed queued forever and the whole grid rendered placeholders.
-   * Emitting this makes the deferral's promise true on every path.
+   * directory stayed queued forever and the whole grid rendered placeholders;
+   * a directory cache cleared after the chunks had landed did the same to
+   * every tile built afterwards. Emitting this makes the deferral's promise
+   * true on every path.
    */
   void requestArtworkPrewarm(const QString &artworkDir);
 

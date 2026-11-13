@@ -68,6 +68,10 @@ private slots:
   void spansCollections_trueWhenTheConfigAggregatesChildren();
   void spansCollections_trueForBothWidenedSearchScopes();
 
+  // Cached-only cover lookup in a large aggregated view (Kartend-birii)
+  void aggregatedView_coldCascadeRequestsTheScanItWaitsOn();
+  void aggregatedView_settledMissRequestsNothing();
+
   // Pending range-request bookkeeping
   void prefetchRangeAt_requestsUnloadedChunkOnce();
   void prefetchRangeAt_guardsInvalidAndLoadedInputs();
@@ -753,6 +757,82 @@ void TestItemWidgetFactory::spansCollections_trueForBothWidenedSearchScopes() {
     QVERIFY2(ItemWidgetFactoryHelpers::viewMaySpanCollections(allCollections),
              "An all-collections search spans the whole library");
   }
+}
+
+// ── Cached-only cover lookup in a large aggregated view (Kartend-birii) ───
+//
+// A showAllSubcollectionItems view over 1000+ items resolves covers from the
+// directory cache only, so a cold cascade cannot answer. It used to say nothing
+// and wait for ScrollManager::receiveItemsRange's prewarm, which only runs when
+// a DB chunk lands: a cache cleared after the chunks around the viewport had
+// landed left every tile built afterwards a placeholder until F5.
+
+namespace {
+
+/// The view the report was filed against: a parent aggregating its children's
+/// items, large enough to take the cached-only lookup.
+void makeLargeAggregatedView(ArtworkHarness &h) {
+  h.context.config.showAllSubcollectionItems = true;
+  h.factory.setCollectionContext(h.context);
+  h.factory.setTotalItemCount(52410);
+}
+
+} // namespace
+
+void TestItemWidgetFactory::aggregatedView_coldCascadeRequestsTheScanItWaitsOn() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid());
+  makeDir(artRoot, QStringLiteral("front"));
+  const QString cover = makeImageFile(artRoot, QStringLiteral("front/Overture.png"));
+  // What the launcher-store enrichment did a few seconds into each start.
+  ArtworkUtils::clearDirectoryCache();
+
+  ArtworkHarness h(artRoot.path(), mediaRoot.path());
+  makeLargeAggregatedView(h);
+  QSignalSpy prewarm{&h.factory, &ItemWidgetFactory::requestArtworkPrewarm};
+  const QString item = QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Overture.flac"));
+
+  h.factory.configureArtworkForWidget(&h.widget, item);
+  QCOMPARE(h.artwork.calls, 0); // the cold cache cannot answer...
+  QCOMPARE(prewarm.count(), 1); // ...so the tile asks for the scan it is waiting on
+  QCOMPARE(prewarm.at(0).at(0).toString(), artRoot.path());
+
+  // The scan ScrollManager::schedulePrewarmAndReconfigure runs before it
+  // reconfigures: afterwards the same lookup finds the cover.
+  auto &cache = ArtworkUtils::DirectoryCache::instance();
+  cache.prewarmDirectories({artRoot.path()});
+  cache.processQueuedDirectories();
+  h.factory.configureArtworkForWidget(&h.widget, item);
+  QCOMPARE(h.artwork.lastPath, cover);
+  QCOMPARE(prewarm.count(), 1);
+  ArtworkUtils::clearDirectoryCache();
+}
+
+void TestItemWidgetFactory::aggregatedView_settledMissRequestsNothing() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid());
+  ArtworkUtils::clearDirectoryCache();
+
+  ArtworkHarness h(artRoot.path(), mediaRoot.path());
+  makeLargeAggregatedView(h);
+  QSignalSpy prewarm{&h.factory, &ItemWidgetFactory::requestArtworkPrewarm};
+  const QString item = QDir(mediaRoot.path()).absoluteFilePath(QStringLiteral("Silence.flac"));
+
+  // A cold miss walks the whole cascade, queueing every directory it consults;
+  // draining the queue caches them all, the subdirs that do not exist included.
+  h.factory.configureArtworkForWidget(&h.widget, item);
+  QCOMPARE(prewarm.count(), 1);
+  ArtworkUtils::DirectoryCache::instance().processQueuedDirectories();
+
+  // Settled now, so a miss is a real answer. An artless tile is rebuilt on
+  // every scroll past it, and each request costs a scan plus a reconfigure of
+  // every visible tile, so it must not ask again.
+  h.factory.configureArtworkForWidget(&h.widget, item);
+  QCOMPARE(h.artwork.calls, 0);
+  QCOMPARE(prewarm.count(), 1);
+  ArtworkUtils::clearDirectoryCache();
 }
 
 QTEST_MAIN(TestItemWidgetFactory)

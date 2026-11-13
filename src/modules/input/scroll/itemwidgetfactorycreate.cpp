@@ -404,7 +404,19 @@ void ItemWidgetFactory::configureArtworkForWidget(ItemWidget *widget, const QStr
     // Only use cached lookup - don't block UI with filesystem calls
     artworkPath =
         ArtworkUtils::findArtworkForFileCached(QFileInfo(fullPath).fileName(), artworkDir);
-    // Don't fall back to direct lookup - let prewarm handle it
+    // Don't fall back to direct lookup - let prewarm handle it. Kartend-birii:
+    // and ask for that prewarm, exactly as the queued branch below does
+    // (Kartend-eyfik). The only drain this branch relied on was
+    // ScrollManager::receiveItemsRange's, which runs when a DB chunk lands; a
+    // DirectoryCache cleared after the chunks around the viewport had landed
+    // (a scrape, a launcher import, a store enrichment that saved artwork)
+    // left every tile created afterwards a placeholder until F5 fetched the
+    // chunks again.
+    // Settled directories are skipped so a genuinely artless tile does not
+    // start a prewarm + reconfigure pass every time it is rebuilt.
+    if (artworkPath.isEmpty() && !artworkLookupSettled(artworkDir)) {
+      emit requestArtworkPrewarm(artworkDir);
+    }
   } else if (artworkLookupSettled(artworkDir)) {
     // Kartend-urrpp: the dir listing is already warm (early prewarm fires on
     // every collection selection now) — resolve via the O(1) cached lookup,
