@@ -7,6 +7,7 @@
 
 #include <QHash>
 #include <QLoggingCategory>
+#include <QSet>
 #include <QString>
 
 class QFile;
@@ -108,6 +109,14 @@ private:
   // same refused value in the clear; the entry is dropped once the value is
   // stored securely or plaintext is allowed for it.
   QHash<QString, QString> m_declinedPlaintextCredentials;
+
+  // Kartend-f4nf2: <provider>/<field> keys whose @keychain row could not be
+  // read at load (wallet locked or unavailable), so the credential map holds an
+  // empty stand-in, not a cleared value. While the value is still empty, a save
+  // keeps the @keychain row and leaves the keychain entry alone. Filled by
+  // loadScraperSection, replaced on every saveScraperSection with the keys it
+  // kept that way, so an edited or removed credential drops out.
+  QSet<QString> m_unreadableKeychainCredentials;
 
   CredentialBackend m_credentialBackend;
   [[nodiscard]] QString readCredential(const QString &key, bool *ok) const;

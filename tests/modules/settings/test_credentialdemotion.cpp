@@ -7,13 +7,13 @@
 // write clears it (the self-heal contract) and emits
 // credentialStorageDemotionChanged exactly once.
 //
-// Apart from the declined* tests, no test here seeds a <provider>/<field> credential
-// key AND call save with the platform keychain: on a developer machine with a
-// live keyring that would issue real keychain writes/deletes under the
-// production service name. The declined* tests (Kartend-f4nf2) do save
-// credentials, but only through FakeKeychain, an in-memory backend installed
-// with SettingsManager::setCredentialBackendForTesting before the first load,
-// so no real wallet is ever read, written, locked or unlocked.
+// Apart from the declined*, lockedAtLoad* and readableThenCleared* tests, no test
+// here seeds a <provider>/<field> credential key AND call save with the platform
+// keychain: on a developer machine with a live keyring that would issue real
+// keychain writes/deletes under the production service name. Those tests
+// (Kartend-f4nf2) do save credentials, but only through FakeKeychain, an in-memory backend
+// installed with SettingsManager::setCredentialBackendForTesting before the first load, so no real
+// wallet is ever read, written, locked or unlocked.
 
 #include <QDir>
 #include <QFile>
@@ -49,6 +49,9 @@ private slots:
   void declinedChange_otherPlaintextKeepsWarning();
   void declinedChange_oldSecureRow_keepsKeychainEntry();
   void declinedNewCredential_noOldRow_noWarning();
+  void lockedAtLoad_hooklessSaves_keepKeychainRow_thenRecovers();
+  void readableThenCleared_removesRowAndKeychainEntry();
+  void lockedAtLoad_thenEdited_isNotIgnored();
 
 private:
   static void writeConfigIni(const QString &iniContents);
@@ -64,17 +67,25 @@ const QString kPasswordKey = QStringLiteral("screenscraper/user_password");
 const QString kNameKey = QStringLiteral("screenscraper/user_name");
 
 // Isolated, controllable stand-in for the platform keychain. Writes fail for
-// every key while failAll is set, and for the keys in failKeys always.
+// every key while failAll is set, and for the keys in failKeys always. Reads
+// fail while failReads is set (a wallet locked at load).
 struct FakeKeychain {
   QHash<QString, QString> store;
   bool failAll = false;
+  bool failReads = false;
   QSet<QString> failKeys;
+  QStringList readAttempts;
   QStringList writeAttempts; // "<key>=<value>" per attempt
   QStringList removed;
 
   SettingsManager::CredentialBackend backend() {
     SettingsManager::CredentialBackend b;
     b.read = [this](const QString &key, bool *ok) {
+      readAttempts << key;
+      if (failReads) {
+        if (ok) *ok = false;
+        return QString();
+      }
       if (ok) *ok = store.contains(key);
       return store.value(key);
     };
@@ -446,6 +457,144 @@ void TestCredentialDemotion::declinedNewCredential_noOldRow_noWarning() {
   QCOMPARE(mgr.credentialDemotionReason(), QString());
   QVERIFY(!readConfigIni().contains(QStringLiteral("credentialDemotionReason")));
 
+  SettingsManager reloaded(nullptr, nullptr);
+  reloaded.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs2;
+  reloaded.loadGeneralSettings(gs2);
+  QCOMPARE(credential(gs2, kPasswordField), QString());
+}
+
+void TestCredentialDemotion::lockedAtLoad_hooklessSaves_keepKeychainRow_thenRecovers() {
+  // Kartend-f4nf2: a wallet locked at startup loads an @keychain password as
+  // empty. Hook-less saves (toolbar toggles and the like) must keep the stored
+  // row and keychain entry exactly as they were: no write, no delete, no
+  // plaintext, no warning. An unlocked fresh load gets the password back.
+  if (!SettingsManager::keychainBackendCompiledIn()) {
+    QSKIP("Needs the keychain build; the @keychain sentinel does not exist without it.");
+  }
+  writeConfigIni(QStringLiteral("[Scrapers]\n"
+                                "screenscraper/user_password=@keychain\n"));
+  FakeKeychain fake;
+  fake.store[kPasswordKey] = QStringLiteral("secret");
+  fake.failReads = true;
+  fake.failAll = true;
+  SettingsManager mgr(nullptr, nullptr);
+  mgr.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs;
+  mgr.loadGeneralSettings(gs);
+  QCOMPARE(fake.readAttempts, QStringList{kPasswordKey});
+  QCOMPARE(credential(gs, kPasswordField), QString());
+
+  for (int round = 0; round < 3; ++round) {
+    QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+    QCOMPARE(iniValue(kPasswordKey).toString(), QStringLiteral("@keychain"));
+    QVERIFY(fake.writeAttempts.isEmpty());
+    QVERIFY(fake.removed.isEmpty());
+    QCOMPARE(fake.store.value(kPasswordKey), QStringLiteral("secret"));
+    QVERIFY(!readConfigIni().contains(QStringLiteral("secret")));
+    QCOMPARE(mgr.credentialDemotionReason(), QString());
+    QVERIFY(!readConfigIni().contains(QStringLiteral("credentialDemotionReason")));
+  }
+  QCOMPARE(fake.readAttempts.size(), 1); // saves never read
+
+  fake.failReads = false;
+  fake.failAll = false;
+  SettingsManager reloaded(nullptr, nullptr);
+  reloaded.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs2;
+  reloaded.loadGeneralSettings(gs2);
+  QCOMPARE(credential(gs2, kPasswordField), QStringLiteral("secret"));
+  QCOMPARE(reloaded.credentialDemotionReason(), QString());
+}
+
+void TestCredentialDemotion::readableThenCleared_removesRowAndKeychainEntry() {
+  // The guard above is for unreadable values only: a password that was read
+  // and then cleared is removed from the INI and the keychain, and stays gone.
+  if (!SettingsManager::keychainBackendCompiledIn()) {
+    QSKIP("Needs the keychain build; the @keychain sentinel does not exist without it.");
+  }
+  writeConfigIni(QStringLiteral("[Scrapers]\n"
+                                "screenscraper/user_password=@keychain\n"));
+  FakeKeychain fake;
+  fake.store[kPasswordKey] = QStringLiteral("secret");
+  SettingsManager mgr(nullptr, nullptr);
+  mgr.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs;
+  mgr.loadGeneralSettings(gs);
+  QCOMPARE(credential(gs, kPasswordField), QStringLiteral("secret"));
+
+  int asks = 0;
+  mgr.setPlaintextCredentialConsent([&asks](const QString &) {
+    ++asks;
+    return false;
+  });
+  gs.scraper.credentials[kProvider][kPasswordField] = QString();
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+  mgr.setPlaintextCredentialConsent({});
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+
+  QCOMPARE(asks, 0);
+  QVERIFY(!iniValue(kPasswordKey).isValid());
+  QVERIFY(!fake.store.contains(kPasswordKey));
+  QVERIFY(fake.removed.contains(kPasswordKey));
+
+  SettingsManager reloaded(nullptr, nullptr);
+  reloaded.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs2;
+  reloaded.loadGeneralSettings(gs2);
+  QCOMPARE(credential(gs2, kPasswordField), QString());
+}
+
+void TestCredentialDemotion::lockedAtLoad_thenEdited_isNotIgnored() {
+  // A password unreadable at load that the user then changes goes through the
+  // normal keychain-first path. Declined while locked, the old secure entry is
+  // kept; once stored, a later clear removes it and nothing comes back.
+  if (!SettingsManager::keychainBackendCompiledIn()) {
+    QSKIP("Needs the keychain build; the @keychain sentinel does not exist without it.");
+  }
+  writeConfigIni(QStringLiteral("[Scrapers]\n"
+                                "screenscraper/user_password=@keychain\n"));
+  FakeKeychain fake;
+  fake.store[kPasswordKey] = QStringLiteral("secret");
+  fake.failReads = true;
+  fake.failAll = true;
+  SettingsManager mgr(nullptr, nullptr);
+  mgr.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs;
+  mgr.loadGeneralSettings(gs);
+  QCOMPARE(credential(gs, kPasswordField), QString());
+
+  int asks = 0;
+  mgr.setPlaintextCredentialConsent([&asks](const QString &) {
+    ++asks;
+    return false;
+  });
+  gs.scraper.credentials[kProvider][kPasswordField] = QStringLiteral("newpass");
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+  QCOMPARE(asks, 1);
+  QVERIFY(fake.writeAttempts.contains(kPasswordKey + QStringLiteral("=newpass")));
+  QCOMPARE(iniValue(kPasswordKey).toString(), QStringLiteral("@keychain"));
+  QCOMPARE(fake.store.value(kPasswordKey), QStringLiteral("secret"));
+  QVERIFY(fake.removed.isEmpty());
+  QVERIFY(!readConfigIni().contains(QStringLiteral("newpass")));
+
+  mgr.setPlaintextCredentialConsent({});
+  fake.failAll = false;
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+  QCOMPARE(fake.store.value(kPasswordKey), QStringLiteral("newpass"));
+  QCOMPARE(iniValue(kPasswordKey).toString(), QStringLiteral("@keychain"));
+
+  // The unreadable-at-load marker is gone: clearing now removes the row and
+  // the keychain entry instead of preserving them.
+  gs.scraper.credentials[kProvider][kPasswordField] = QString();
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+  QVERIFY(!iniValue(kPasswordKey).isValid());
+  QVERIFY(!fake.store.contains(kPasswordKey));
+  QVERIFY(fake.removed.contains(kPasswordKey));
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+  QVERIFY(!iniValue(kPasswordKey).isValid());
+
+  fake.failReads = false;
   SettingsManager reloaded(nullptr, nullptr);
   reloaded.setCredentialBackendForTesting(fake.backend());
   GeneralSettings gs2;

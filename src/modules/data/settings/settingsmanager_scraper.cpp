@@ -172,6 +172,7 @@ void SettingsManager::loadScraperSection(QSettings &s, GeneralSettings &settings
   // any other non-empty value is either a legacy plaintext credential (migrated
   // to the keychain on next save) or came from a build without keychain support.
   settings.scraper.credentials.clear();
+  m_unreadableKeychainCredentials.clear();
   s.beginGroup(keys::kGroupScrapers);
   // Kartend-ztc64: meta key persisted by saveScraperSection when a keychain
   // write failed and a credential was demoted to plaintext. Loaded into the
@@ -204,6 +205,9 @@ void SettingsManager::loadScraperSection(QSettings &s, GeneralSettings &settings
             << "Scraper credential" << fullKey << "marked @keychain but lookup failed; "
             << "treating as missing. Re-enter in Settings → Scrapers to repopulate.";
         resolvedValue.clear();
+        // Kartend-f4nf2: remember that this empty value is a stand-in, so a
+        // save before the wallet unlocks keeps the stored credential.
+        m_unreadableKeychainCredentials.insert(fullKey);
       }
     }
 #endif
@@ -265,6 +269,10 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
     s.endGroup();
   }
   QSet<QString> retainedKeys;
+  // Kartend-f4nf2: the unreadable-at-load keys this save kept as stored; it
+  // replaces m_unreadableKeychainCredentials after the loop, so a key whose
+  // value was edited or removed stops being treated as unreadable.
+  QSet<QString> stillUnreadable;
 #endif
   s.remove(keys::kGroupScrapers);
   s.beginGroup(keys::kGroupScrapers);
@@ -290,10 +298,26 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
     for (auto fIt = pIt.value().constBegin(); fIt != pIt.value().constEnd(); ++fIt) {
       const QString &field = fIt.key();
       if (field.trimmed().isEmpty()) continue;
+      const QString fullKey = providerId + QLatin1Char('/') + field;
       // Skip empty values so a fully-cleared field doesn't write an empty row
       // that survives a round-trip.
-      if (fIt.value().isEmpty()) continue;
-      const QString fullKey = providerId + QLatin1Char('/') + field;
+      if (fIt.value().isEmpty()) {
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+        // Kartend-f4nf2: unless the value is empty only because its @keychain
+        // row could not be read at load. Then nothing was changed: put the row
+        // back as it was and retain the key so the sweep below keeps its
+        // keychain entry. No keychain write, no consent, no plaintext. A
+        // credential that was read and then cleared is not in the set, so it
+        // is still removed.
+        if (m_unreadableKeychainCredentials.contains(fullKey) &&
+            preWipeRows.value(fullKey) == QLatin1String(kKeychainSentinel)) {
+          s.setValue(fullKey, QLatin1String(kKeychainSentinel));
+          retainedKeys.insert(fullKey);
+          stillUnreadable.insert(fullKey);
+        }
+#endif
+        continue;
+      }
 #ifdef KARTEND_HAVE_QTKEYCHAIN
       QString writeError;
       if (writeCredential(fullKey, fIt.value(), &writeError)) {
@@ -383,6 +407,7 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
       removeCredential(k);
     }
   }
+  m_unreadableKeychainCredentials = stillUnreadable;
 #endif
 
   // Scraper performance + behavior options. Wipe the group first so a "Reset to
