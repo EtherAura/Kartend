@@ -46,6 +46,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   keychain and without a warning, so it is available again the next time
   Kartend starts with the keychain unlocked. A password you clear yourself
   is still removed.
+- **A scraper password stored in the keychain stays there while the
+  keychain is locked.** Saving any setting (a toolbar toggle, for example)
+  while the system keychain was locked or unavailable could move a scraper
+  password that was stored securely, and had not been changed, into the
+  settings file unencrypted. Such a password is now left in the keychain
+  as it is, without asking and without a warning. This also holds after
+  you declined to store a changed password unencrypted and then changed it
+  back.
 
 ## [0.0.21] - 2026-11-12
 
