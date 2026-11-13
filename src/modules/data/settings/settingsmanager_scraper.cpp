@@ -130,6 +130,24 @@ bool syncDeleteKeychain(const QString &key) {
 #endif // KARTEND_HAVE_QTKEYCHAIN
 } // namespace
 
+#ifdef KARTEND_HAVE_QTKEYCHAIN
+// Kartend-f4nf2: every credential keychain call goes through these so a test
+// can swap in an isolated backend (setCredentialBackendForTesting).
+QString SettingsManager::readCredential(const QString &key, bool *ok) const {
+  return m_credentialBackend.read ? m_credentialBackend.read(key, ok) : syncReadKeychain(key, ok);
+}
+
+bool SettingsManager::writeCredential(const QString &key, const QString &value,
+                                      QString *errorOut) const {
+  return m_credentialBackend.write ? m_credentialBackend.write(key, value, errorOut)
+                                   : syncWriteKeychain(key, value, errorOut);
+}
+
+bool SettingsManager::removeCredential(const QString &key) const {
+  return m_credentialBackend.remove ? m_credentialBackend.remove(key) : syncDeleteKeychain(key);
+}
+#endif
+
 // Outside the anonymous namespace AND outside every #ifdef: this is the one
 // place that answers "was a keychain backend compiled in?", and it has to
 // compile — and give the right answer — in both configurations.
@@ -175,7 +193,7 @@ void SettingsManager::loadScraperSection(QSettings &s, GeneralSettings &settings
 #ifdef KARTEND_HAVE_QTKEYCHAIN
     if (resolvedValue == QLatin1String(kKeychainSentinel)) {
       bool ok = false;
-      const QString fromKeychain = syncReadKeychain(fullKey, &ok);
+      const QString fromKeychain = readCredential(fullKey, &ok);
       if (ok) {
         resolvedValue = fromKeychain;
       } else {
@@ -233,9 +251,17 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
   // used to drop keychain entries for credentials the user removed via the UI.
 #ifdef KARTEND_HAVE_QTKEYCHAIN
   QStringList preWipeKeys;
+  // Kartend-f4nf2: the old rows and marker too, so a declined fallback can
+  // put back exactly what was stored before this save.
+  QHash<QString, QString> preWipeRows;
+  QString preWipeDemotionReason;
   {
     s.beginGroup(keys::kGroupScrapers);
     preWipeKeys = s.allKeys();
+    for (const QString &k : preWipeKeys) {
+      preWipeRows[k] = s.value(k).toString();
+    }
+    preWipeDemotionReason = s.value(keys::kCredentialDemotionReason).toString();
     s.endGroup();
   }
   QSet<QString> retainedKeys;
@@ -270,9 +296,10 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
       const QString fullKey = providerId + QLatin1Char('/') + field;
 #ifdef KARTEND_HAVE_QTKEYCHAIN
       QString writeError;
-      if (syncWriteKeychain(fullKey, fIt.value(), &writeError)) {
+      if (writeCredential(fullKey, fIt.value(), &writeError)) {
         s.setValue(fullKey, QLatin1String(kKeychainSentinel));
         retainedKeys.insert(fullKey);
+        m_declinedPlaintextCredentials.remove(fullKey);
       } else {
         // No backend available. Before Kartend-9t7fe this dropped straight to
         // plaintext and told the user afterwards via the banner; now the user
@@ -282,25 +309,40 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
             << "Keychain write failed for" << fullKey << "(" << writeError << ")";
         const QString reason =
             writeError.isEmpty() ? QStringLiteral("keychain unavailable") : writeError;
-        if (consent == Consent::Unasked) {
+        // Kartend-f4nf2: a save with no hook installed (toolbar toggles and
+        // the like) that carries a value the user already refused keeps that
+        // refusal. The keychain was still tried above, so recovery works.
+        const auto declined = m_declinedPlaintextCredentials.constFind(fullKey);
+        const bool refusedBefore = !m_plaintextConsent &&
+                                   declined != m_declinedPlaintextCredentials.cend() &&
+                                   *declined == fIt.value();
+        if (!refusedBefore && consent == Consent::Unasked) {
           consent = m_plaintextConsent(reason) ? Consent::Allowed : Consent::Declined;
         }
-        if (consent == Consent::Declined) {
-          // Write the sentinel rather than nothing, and retain the key. Both
-          // matter: the sentinel leaves any credential a PREVIOUS (successful)
-          // save put in the keychain readable on next load, and retaining the
-          // key keeps the sweep below from deleting it. Declining the plaintext
-          // demotion must never destroy a credential that is already stored
-          // securely — the user refused this write, not the stored value.
-          // Loading a key whose keychain entry does not exist yields an empty
-          // credential, which is exactly "the new value was not saved".
+        if (refusedBefore || consent == Consent::Declined) {
+          // Put back exactly the row stored before this save, and retain the
+          // key so the sweep below does not delete its keychain entry.
+          // Declining must never destroy a stored credential — the user
+          // refused this write, not the stored value: an old @keychain row
+          // stays readable, an old plaintext row stays (and keeps the
+          // warning, since it is still in the clear), and with no old row the
+          // new value is simply not saved.
           qCInfo(lcSettingsManager)
               << "User declined the plaintext fallback for" << fullKey << "— not saved";
-          s.setValue(fullKey, QLatin1String(kKeychainSentinel));
-          retainedKeys.insert(fullKey);
+          m_declinedPlaintextCredentials[fullKey] = fIt.value();
+          const auto old = preWipeRows.constFind(fullKey);
+          if (old != preWipeRows.cend()) {
+            s.setValue(fullKey, *old);
+            retainedKeys.insert(fullKey);
+            if (!old->isEmpty() && *old != QLatin1String(kKeychainSentinel) &&
+                newDemotionReason.isEmpty()) {
+              newDemotionReason = preWipeDemotionReason.isEmpty() ? reason : preWipeDemotionReason;
+            }
+          }
           continue;
         }
         qCWarning(lcSettingsManager) << "Falling back to plaintext INI for" << fullKey;
+        m_declinedPlaintextCredentials.remove(fullKey);
         s.setValue(fullKey, fIt.value());
         if (newDemotionReason.isEmpty()) {
           newDemotionReason = reason;
@@ -338,7 +380,7 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
   for (const QString &k : preWipeKeys) {
     if (!k.contains(QLatin1Char('/'))) continue;
     if (!retainedKeys.contains(k)) {
-      syncDeleteKeychain(k);
+      removeCredential(k);
     }
   }
 #endif

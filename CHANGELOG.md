@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   start), and those tiles only ever consulted that list. They now ask
   for it to be rebuilt when it cannot answer, and the store fetch only
   throws it away when it actually saved new artwork.
+- **Declining to store a scraper password in the clear keeps the one you
+  already had.** When the system keychain could not save a changed
+  scraper password and you declined storing it unencrypted, a password
+  that was already stored unencrypted was replaced by a reference to a
+  keychain entry that did not exist, so it was lost, and the warning
+  about unencrypted passwords disappeared. The previously stored password
+  and the warning now stay as they were. Later saves keep trying the
+  keychain with the new password and never store it unencrypted while
+  the keychain still fails; once the keychain works again, the new
+  password is stored there and the warning clears when no unencrypted
+  password is left.
 
 ## [0.0.21] - 2026-11-12
 
