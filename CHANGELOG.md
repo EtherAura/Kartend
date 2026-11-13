@@ -38,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the keychain still fails; once the keychain works again, the new
   password is stored there and the warning clears when no unencrypted
   password is left.
+- **Scraper passwords survive a keychain that is locked at start-up.** If
+  the system keychain was locked or unavailable when Kartend started, a
+  scraper password stored there could not be read, and the next time any
+  setting was saved (a toolbar toggle, for example) the stored password
+  was deleted. Saving now leaves such a password untouched, in the
+  keychain and without a warning, so it is available again the next time
+  Kartend starts with the keychain unlocked. A password you clear yourself
+  is still removed.
 
 ## [0.0.21] - 2026-11-12
 
