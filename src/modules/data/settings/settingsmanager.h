@@ -118,6 +118,17 @@ private:
   // kept that way, so an edited or removed credential drops out.
   QSet<QString> m_unreadableKeychainCredentials;
 
+  // Kartend-f4nf2: <provider>/<field> -> the value its keychain entry is known
+  // to hold, because loadScraperSection read it or saveScraperSection wrote
+  // it successfully. While the credential still has that value and its
+  // @keychain row, a save keeps the row and entry as they are, with no keychain
+  // write (so a locked wallet cannot demote it) and no consent prompt. A
+  // declined edit keeps the old entry, so it keeps the old baseline; the
+  // refused value never becomes one. Replaced on every saveScraperSection;
+  // a cleared, removed or plaintext-stored credential drops out. Touched only
+  // by load/save on the thread that owns this manager.
+  QHash<QString, QString> m_secureCredentialBaseline;
+
   CredentialBackend m_credentialBackend;
   [[nodiscard]] QString readCredential(const QString &key, bool *ok) const;
   [[nodiscard]] bool writeCredential(const QString &key, const QString &value,

@@ -173,6 +173,7 @@ void SettingsManager::loadScraperSection(QSettings &s, GeneralSettings &settings
   // to the keychain on next save) or came from a build without keychain support.
   settings.scraper.credentials.clear();
   m_unreadableKeychainCredentials.clear();
+  m_secureCredentialBaseline.clear();
   s.beginGroup(keys::kGroupScrapers);
   // Kartend-ztc64: meta key persisted by saveScraperSection when a keychain
   // write failed and a credential was demoted to plaintext. Loaded into the
@@ -197,6 +198,9 @@ void SettingsManager::loadScraperSection(QSettings &s, GeneralSettings &settings
       const QString fromKeychain = readCredential(fullKey, &ok);
       if (ok) {
         resolvedValue = fromKeychain;
+        // Kartend-f4nf2: the keychain holds this value now; saves that leave
+        // it unchanged need not write it again.
+        m_secureCredentialBaseline[fullKey] = fromKeychain;
       } else {
         // Keychain backend dropped or the entry was wiped externally — surface
         // as a missing credential rather than handing the sentinel back to the
@@ -273,11 +277,15 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
   // replaces m_unreadableKeychainCredentials after the loop, so a key whose
   // value was edited or removed stops being treated as unreadable.
   QSet<QString> stillUnreadable;
+  // Kartend-f4nf2: replaces m_secureCredentialBaseline after the loop. Only
+  // credentials whose keychain entry still holds a known value carry over.
+  QHash<QString, QString> newSecureBaseline;
 #endif
   s.remove(keys::kGroupScrapers);
   s.beginGroup(keys::kGroupScrapers);
   // Kartend-ztc64: recomputed on every save. Each save retries the keychain
-  // write for every credential, so a recovered keychain re-promotes any
+  // write for every credential not already stored there unchanged
+  // (Kartend-f4nf2), so a recovered keychain re-promotes any
   // previously-demoted plaintext value and this stays empty — the demotion
   // self-heals without user action. First failure reason wins (one banner,
   // not one per field).
@@ -319,11 +327,25 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
         continue;
       }
 #ifdef KARTEND_HAVE_QTKEYCHAIN
+      // Kartend-f4nf2: unchanged since it was read from or written to the
+      // keychain, and its @keychain row is still there: keep the row and the
+      // entry as they are. No keychain write, so a locked wallet cannot turn
+      // it into plaintext; no consent prompt and no warning, since nothing is
+      // exposed. Also covers reverting to this value after a declined edit.
+      const auto baseline = m_secureCredentialBaseline.constFind(fullKey);
+      if (baseline != m_secureCredentialBaseline.cend() && *baseline == fIt.value() &&
+          preWipeRows.value(fullKey) == QLatin1String(kKeychainSentinel)) {
+        s.setValue(fullKey, QLatin1String(kKeychainSentinel));
+        retainedKeys.insert(fullKey);
+        newSecureBaseline[fullKey] = *baseline;
+        continue;
+      }
       QString writeError;
       if (writeCredential(fullKey, fIt.value(), &writeError)) {
         s.setValue(fullKey, QLatin1String(kKeychainSentinel));
         retainedKeys.insert(fullKey);
         m_declinedPlaintextCredentials.remove(fullKey);
+        newSecureBaseline[fullKey] = fIt.value();
       } else {
         // No backend available. Before Kartend-9t7fe this dropped straight to
         // plaintext and told the user afterwards via the banner; now the user
@@ -361,6 +383,14 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
             if (!old->isEmpty() && *old != QLatin1String(kKeychainSentinel) &&
                 newDemotionReason.isEmpty()) {
               newDemotionReason = preWipeDemotionReason.isEmpty() ? reason : preWipeDemotionReason;
+            }
+            // The kept @keychain row still points at the old entry, so the
+            // old baseline stays; the refused value is never recorded as
+            // stored, and reverting to the old value skips again.
+            const auto oldBaseline = m_secureCredentialBaseline.constFind(fullKey);
+            if (*old == QLatin1String(kKeychainSentinel) &&
+                oldBaseline != m_secureCredentialBaseline.cend()) {
+              newSecureBaseline[fullKey] = *oldBaseline;
             }
           }
           continue;
@@ -408,6 +438,7 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
     }
   }
   m_unreadableKeychainCredentials = stillUnreadable;
+  m_secureCredentialBaseline = newSecureBaseline;
 #endif
 
   // Scraper performance + behavior options. Wipe the group first so a "Reset to
