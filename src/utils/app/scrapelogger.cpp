@@ -8,10 +8,11 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QLoggingCategory>
 #include <QMutex>
 #include <QStandardPaths>
 #include <QtGlobal>
+
+#include "loggingrules.h"
 
 namespace {
 
@@ -162,7 +163,10 @@ void setEnabled(bool enabled) {
       g_chainedHandler = qInstallMessageHandler(scrapeMessageHandler);
       g_handlerInstalled = true;
     }
-    QLoggingCategory::setFilterRules(QString::fromLatin1(kRulesOn));
+    // Through LoggingRules, not setFilterRules directly: Qt keeps one API
+    // rule set, and replacing it would drop the startup KARTEND_LOG_RULES /
+    // *_DIAG rules (Kartend-37t5r).
+    LoggingRules::setScrapeRules(QString::fromLatin1(kRulesOn));
     // Session header so successive runs appended to one file stay
     // visually separable.
     QByteArray header = "\n===== scrape logging enabled ";
@@ -172,7 +176,7 @@ void setEnabled(bool enabled) {
     g_logFile->flush();
     g_bytesThisGeneration += header.size();
   } else {
-    QLoggingCategory::setFilterRules(QString::fromLatin1(kRulesOff));
+    LoggingRules::setScrapeRules(QString::fromLatin1(kRulesOff));
     if (g_logFile) {
       g_logFile->close();
       delete g_logFile;

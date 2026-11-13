@@ -100,6 +100,18 @@ kartend_add_test(NAME ScrapeLogger
   LINK kartend_utils
 )
 
+# ScrapeLogger toggle must compose with the startup KARTEND_LOG_RULES /
+# *_DIAG rules instead of replacing them (LoggingRules helper)
+kartend_add_test(NAME ScrapeLoggerRules
+  SOURCES utils/app/test_scrapelogger_rules.cpp
+  LINK kartend_utils
+)
+# Qt reads QT_LOGGING_RULES / QT_LOGGING_CONF before main() runs, so the
+# precedence case pins them (and blanks the caller's) from the test env.
+set_tests_properties(ScrapeLoggerRules PROPERTIES
+  ENVIRONMENT "QT_LOGGING_RULES=*rulestest.pinned.debug=false;QT_LOGGING_CONF="
+)
+
 # RomHasher tests (streaming MD5/SHA1 for SS hash-based ROM ID)
 kartend_add_test(NAME RomHasher
   SOURCES utils/fs/test_romhasher.cpp
