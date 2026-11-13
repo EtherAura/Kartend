@@ -18,20 +18,32 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
+#include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QWidget>
 
+#include <memory>
+
+#include "../../support/testsandbox.h"
 #include "applicationcontext.h"
 #include "artworkutils.h"
+#include "databasemanager.h"
 #include "iartworkmanager.h"
 #include "itemwidget.h"
 #include "itemwidgetfactory.h"
+#include "sessionmanager.h"
 
 class TestItemWidgetFactory : public QObject {
   Q_OBJECT
 
 private slots:
+  void initTestCase();
+
   // resolvePlaceholderArtwork policy
   void placeholder_ownCollectionValueWins();
   void placeholder_inheritedFromParentWhenOwnEmpty();
@@ -72,11 +84,22 @@ private slots:
   void aggregatedView_coldCascadeRequestsTheScanItWaitsOn();
   void aggregatedView_settledMissRequestsNothing();
 
+  // List rows built through createMediaWidget over a real DatabaseManager
+  // (Kartend-5msks, recovery coverage only)
+  void listRow_realDb_warmCacheRowHasPreview();
+  void listRow_realDb_coldRowRecoversAfterDrainAndReconfigure();
+  void listRow_realDb_warmRebuildAndSettledMissStayQuiet();
+
   // Pending range-request bookkeeping
   void prefetchRangeAt_requestsUnloadedChunkOnce();
   void prefetchRangeAt_guardsInvalidAndLoadedInputs();
   void emptyRangeResponse_allowsBoundedReRequests();
   void clearPendingRangeRequest_resetsRetryBudget();
+
+private:
+  // Private HOME so the DatabaseManager the list-row cases construct opens its
+  // media.db in a test-mode QStandardPaths tree that is deleted with the suite.
+  QTemporaryDir m_homeDir;
 };
 
 namespace {
@@ -832,6 +855,223 @@ void TestItemWidgetFactory::aggregatedView_settledMissRequestsNothing() {
   h.factory.configureArtworkForWidget(&h.widget, item);
   QCOMPARE(h.artwork.calls, 0);
   QCOMPARE(prewarm.count(), 1);
+  ArtworkUtils::clearDirectoryCache();
+}
+
+// ── List rows over a real database (Kartend-5msks) ────────────────────────
+//
+// createMediaWidget's list branch resolves each row's path through the
+// IDatabaseManager role, so these cases build rows through a production
+// DatabaseManager whose media.db lives on disk under the suite's private HOME
+// (QStandardPaths test mode), with synthetic media and covers in QTemporaryDirs.
+//
+// RECOVERY coverage only. Everything runs inline on the GUI thread: the cache
+// is drained with direct prewarmDirectories/processQueuedDirectories calls and
+// the reconfigure is the factory call VirtualScrollEngine makes per active
+// widget. ScrollManager's prewarm debounce timer, the thread-pool handoff and
+// the active-widget iteration are NOT exercised. Whether a cold list row asks
+// for that prewarm itself is observed (logged) but deliberately not asserted
+// either way: the missing request is the open half of Kartend-5msks.
+
+void TestItemWidgetFactory::initTestCase() {
+  QVERIFY(m_homeDir.isValid());
+  qputenv("HOME", m_homeDir.path().toUtf8());
+  KartendTest::initSandboxedTestCase(QStringLiteral("kartend-test-itemwidgetfactory"));
+}
+
+namespace {
+
+/// A list-mode factory wired the way ScrollManager wires it, with the
+/// production DatabaseManager seeded into the database roles.
+struct ListRowHarness {
+  ListRowHarness(const QString &artworkDir, const QString &mediaDir, const QStringList &items) {
+    ctx.managers.sessionManager = &session;
+    db = std::make_unique<DatabaseManager>(&ctx);
+    ctx.managers.seedDatabaseRoles(db.get());
+    ctx.managers.seedArtworkRoles(&artwork);
+
+    collections.resize(1);
+    collections[0].name = QStringLiteral("Music");
+    collections[0].mediaDirectory = mediaDir;
+    collections[0].artworkDirectory = artworkDir;
+    collections[0].viewType = ViewType::List;
+    context.config.name = collections[0].name;
+    context.config.mediaDirectory = mediaDir;
+    context.config.artworkDirectory = artworkDir;
+    context.config.viewType = ViewType::List;
+    context.currentIndex = 0;
+    for (const QString &item : items) {
+      filePaths.append(QDir(mediaDir).absoluteFilePath(item));
+    }
+
+    factory.setApplicationContext(&ctx);
+    factory.setParentWidget(&parent);
+    factory.setCollections(&collections);
+    factory.setCollectionContext(context);
+    factory.setFileData(&filePaths, &fileNames);
+    factory.setTotalItemCount(static_cast<int>(filePaths.size()));
+  }
+
+  ItemWidget *createRow(int mediaIndex) {
+    int collectionIndex = -1;
+    return factory.createMediaWidget(mediaIndex, collectionIndex);
+  }
+
+  SessionManager session;
+  ApplicationContext ctx;
+  RecordingArtworkManager artwork;
+  std::unique_ptr<DatabaseManager> db;
+  QList<CollectionConfig> collections;
+  CollectionContext context;
+  QStringList filePaths;
+  QHash<QString, QString> fileNames;
+  QWidget parent; // owns every row the factory creates
+  ItemWidgetFactory factory;
+};
+
+/// Fails the calling test unless @p h runs on a real, migrated, on-disk
+/// SQLite file — a setup failure must fail, never skip.
+void verifyRealDatabase(const ListRowHarness &h, const QString &homeDir) {
+  QVERIFY(h.ctx.databaseManager() == h.db.get());
+  QSqlDatabase conn = QSqlDatabase::database(h.db->connectionName(), /*open=*/false);
+  QVERIFY2(conn.isValid() && conn.isOpen(), "the production DatabaseManager must open media.db");
+  const QFileInfo file(conn.databaseName());
+  QVERIFY2(file.isFile(), qPrintable(conn.databaseName()));
+#ifndef Q_OS_WIN
+  // HOME steers the test-mode tree on Unix; Windows keeps Qt's own qttest root.
+  QVERIFY2(file.canonicalFilePath().startsWith(QFileInfo(homeDir).canonicalFilePath()),
+           qPrintable(file.canonicalFilePath()));
+#else
+  Q_UNUSED(homeDir);
+#endif
+  QSqlQuery schemaProbe(conn);
+  QVERIFY2(schemaProbe.exec(QStringLiteral("SELECT COUNT(*) FROM items")),
+           "the production schema bootstrap must have created the items table");
+}
+
+/// Warms every directory the cover cascade consults, the way the
+/// post-prewarm drain leaves it, and checks the lookup has settled.
+void warmCascade(const QString &artworkDir) {
+  auto &cache = ArtworkUtils::DirectoryCache::instance();
+  const QStringList cascade = ArtworkUtils::artworkLookupDirectories(artworkDir);
+  cache.prewarmDirectories(cascade);
+  cache.processQueuedDirectories();
+  QVERIFY(cache.areDirectoriesCached(cascade));
+  QVERIFY(!cache.isDirectoryQueued(artworkDir));
+}
+
+} // namespace
+
+void TestItemWidgetFactory::listRow_realDb_warmCacheRowHasPreview() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid());
+  makeDir(artRoot, QStringLiteral("front"));
+  makeImageFile(artRoot, QStringLiteral("front/Overture.png"));
+  ArtworkUtils::clearDirectoryCache();
+  warmCascade(artRoot.path());
+  if (QTest::currentTestFailed()) return;
+
+  ListRowHarness h(artRoot.path(), mediaRoot.path(), {QStringLiteral("Overture.flac")});
+  verifyRealDatabase(h, m_homeDir.path());
+  if (QTest::currentTestFailed()) return;
+
+  ItemWidget *row = h.createRow(0);
+  QVERIFY(row);
+  QVERIFY(row->isListMode());
+  QCOMPARE(row->getFilePath(), h.filePaths.at(0));
+  QVERIFY2(row->hasArtwork(), "a warm cascade with a cover must give the row its preview button");
+  QCOMPARE(h.artwork.calls, 0); // list rows take the flag, never a pixmap decode
+  ArtworkUtils::clearDirectoryCache();
+}
+
+void TestItemWidgetFactory::listRow_realDb_coldRowRecoversAfterDrainAndReconfigure() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid());
+  makeDir(artRoot, QStringLiteral("front"));
+  makeImageFile(artRoot, QStringLiteral("front/Overture.png"));
+  makeImageFile(artRoot, QStringLiteral("front/Nocturne.png"));
+  ArtworkUtils::clearDirectoryCache();
+  warmCascade(artRoot.path());
+  if (QTest::currentTestFailed()) return;
+
+  ListRowHarness h(artRoot.path(), mediaRoot.path(),
+                   {QStringLiteral("Overture.flac"), QStringLiteral("Nocturne.flac")});
+  verifyRealDatabase(h, m_homeDir.path());
+  if (QTest::currentTestFailed()) return;
+  ItemWidget *warmRow = h.createRow(0);
+  QVERIFY(warmRow);
+  QVERIFY(warmRow->hasArtwork());
+
+  // A mid-session clear (scrape, launcher import, store enrichment), then a
+  // row scrolled into view afterwards.
+  ArtworkUtils::clearDirectoryCache();
+  auto &cache = ArtworkUtils::DirectoryCache::instance();
+  QSignalSpy prewarm{&h.factory, &ItemWidgetFactory::requestArtworkPrewarm};
+  ItemWidget *coldRow = h.createRow(1);
+  QVERIFY(coldRow);
+  QVERIFY(coldRow->isListMode());
+
+  // The cached probe queued the cascade it could not answer — including the
+  // root the sync-fallback guard checks — so the row starts without its flag.
+  const QStringList cascade = ArtworkUtils::artworkLookupDirectories(artRoot.path());
+  QVERIFY(cache.isDirectoryQueued(cascade.at(0)));
+  QVERIFY(cache.isDirectoryQueued(artRoot.path()));
+  QVERIFY2(!coldRow->hasArtwork(),
+           "a cold row has no artwork until the queued directories are scanned");
+  // Observation only: today nothing asks for that scan from this path.
+  qInfo("cold list row: requestArtworkPrewarm emitted %lld time(s)",
+        static_cast<long long>(prewarm.count()));
+
+  // The drain ScrollManager's prewarm runs, then the factory call
+  // VirtualScrollEngine::reconfigureArtworkForActiveWidgets makes per widget.
+  warmCascade(artRoot.path());
+  if (QTest::currentTestFailed()) return;
+  h.factory.configureArtworkForWidget(coldRow, coldRow->getFilePath(),
+                                      /*forceDirectLookup=*/true);
+  QVERIFY2(coldRow->hasArtwork(), "the reconfigured row must recover its preview button");
+  QCOMPARE(h.artwork.calls, 0);
+
+  // A later non-forced pass over the settled cache agrees.
+  h.factory.configureArtworkForWidget(coldRow, coldRow->getFilePath());
+  QVERIFY(coldRow->hasArtwork());
+  ArtworkUtils::clearDirectoryCache();
+}
+
+void TestItemWidgetFactory::listRow_realDb_warmRebuildAndSettledMissStayQuiet() {
+  QTemporaryDir artRoot;
+  QTemporaryDir mediaRoot;
+  QVERIFY(artRoot.isValid() && mediaRoot.isValid());
+  makeDir(artRoot, QStringLiteral("front"));
+  makeImageFile(artRoot, QStringLiteral("front/Overture.png"));
+  ArtworkUtils::clearDirectoryCache();
+  warmCascade(artRoot.path());
+  if (QTest::currentTestFailed()) return;
+
+  ListRowHarness h(artRoot.path(), mediaRoot.path(),
+                   {QStringLiteral("Overture.flac"), QStringLiteral("Silence.flac")});
+  verifyRealDatabase(h, m_homeDir.path());
+  if (QTest::currentTestFailed()) return;
+  auto &cache = ArtworkUtils::DirectoryCache::instance();
+  const QStringList cascade = ArtworkUtils::artworkLookupDirectories(artRoot.path());
+  QSignalSpy prewarm{&h.factory, &ItemWidgetFactory::requestArtworkPrewarm};
+
+  // Rows are rebuilt on every scroll past them; each rebuild must give the
+  // same answer, and the artless one is a settled miss, not pending work.
+  for (int pass = 0; pass < 3; ++pass) {
+    ItemWidget *withCover = h.createRow(0);
+    ItemWidget *artless = h.createRow(1);
+    QVERIFY(withCover && artless);
+    QVERIFY2(withCover->hasArtwork(), "a warm rebuild must keep the preview button");
+    QVERIFY2(!artless->hasArtwork(), "a settled miss must not invent a preview button");
+    h.factory.configureArtworkForWidget(artless, artless->getFilePath());
+    QVERIFY(!artless->hasArtwork());
+  }
+  QCOMPARE(prewarm.count(), 0); // a settled cascade needs no scan
+  QVERIFY(cache.areDirectoriesCached(cascade));
+  QVERIFY(!cache.isDirectoryQueued(artRoot.path()));
+  QCOMPARE(h.artwork.calls, 0);
   ArtworkUtils::clearDirectoryCache();
 }
 
