@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cover art keeps loading after start-up in large combined
+  collections.** In a collection that shows its subcollections' items,
+  with more than about a thousand of them, tiles that scrolled into view
+  a few seconds after start-up could stay placeholders for the rest of
+  the session, until a refresh (F5). Attract mode, which moves through
+  the grid slowly, ended up filling the whole screen with them. Fetching
+  store details for a collection imported from Steam or Flatpak threw
+  away Kartend's list of which artwork files exist, even when it saved
+  nothing (a game the store has no page for is looked up again at every
+  start), and those tiles only ever consulted that list. They now ask
+  for it to be rebuilt when it cannot answer, and the store fetch only
+  throws it away when it actually saved new artwork.
+
 ## [0.0.21] - 2026-11-12
 
 ### Fixed

@@ -545,8 +545,14 @@ void LauncherImportController::startNextEnrichment() {
                       .arg(name, storeName));
             }
             // Fresh media on disk — drop the negative directory-listing
-            // entries so the grid/sidebar pick the files up.
-            ArtworkUtils::clearDirectoryCache();
+            // entries so the grid/sidebar pick the files up. Only when media
+            // actually landed, like this file's other clears (Kartend-birii):
+            // an item the store has no entry for is retried on every launch,
+            // so an unconditional clear wiped every listing in the library a
+            // few seconds into each start.
+            if (summary.mediaWritten > 0) {
+              ArtworkUtils::clearDirectoryCache();
+            }
             // Refresh by name: the collection list may have been reordered
             // while the batch ran, so a snapshotted index could be stale.
             QList<CollectionConfig> *collections =
