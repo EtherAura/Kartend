@@ -183,6 +183,53 @@ class TestCheckLayering(unittest.TestCase):
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
             self.assertIn("back-channel", r.stdout)
 
+    # Seventh guardrail (Kartend-rdzu9 invariant, Kartend-6edd7): every
+    # ManagerRefs slot must be nulled in destroyManagersAndClearContextSlots().
+    # The check is inert unless both files exist, so a parser regression that
+    # returned [] would otherwise pass silently.
+    TEARDOWN_HEADER = (
+        "struct ApplicationContext {\n"
+        "  struct ManagerRefs {\n"
+        "    FooManager *fooManager = nullptr;\n"
+        "    BarManager *barManager = nullptr;\n"
+        "  };\n"
+        "};\n"
+    )
+
+    def _teardown_fixture(self, base: pathlib.Path, body: str) -> None:
+        make_tree(
+            base,
+            [],
+            {
+                "src/utils/app/applicationcontext.h": self.TEARDOWN_HEADER,
+                "src/modules/behavior/application/applicationmanager.cpp": (
+                    "void ApplicationManager::destroyManagersAndClearContextSlots() {\n"
+                    f"{body}"
+                    "}\n"
+                ),
+            },
+        )
+
+    def test_teardown_slot_never_nulled_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            base = pathlib.Path(d)
+            self._teardown_fixture(base, "  ctx->managers.fooManager = nullptr;\n")
+            r = run_script(LAYERING, base)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("never nulled", r.stdout)
+            self.assertIn("barManager", r.stdout)
+
+    def test_teardown_all_slots_nulled_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            base = pathlib.Path(d)
+            self._teardown_fixture(
+                base,
+                "  ctx->managers.fooManager = nullptr;\n  ctx->managers.barManager = nullptr;\n",
+            )
+            r = run_script(LAYERING, base)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("every ManagerRefs slot is nulled", r.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
