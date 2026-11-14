@@ -89,6 +89,13 @@ kartend_add_test(NAME ItemArtwork
   LINK kartend_utils
 )
 
+# ScrapeNotFoundStore row helper tests (schema v30, real on-disk sqlite via
+# the MigratedDb fixture, which needs kartend_data for the production bootstrap)
+kartend_add_test(NAME ScrapeNotFoundStore
+  SOURCES utils/db/test_scrapenotfound.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # Scrape persistence tests
 # Compiles the SUT plus itemartwork.cpp (for isStandardType) and the
 # inline MockDatabaseManager from tests/integration/mocks. No DB / no

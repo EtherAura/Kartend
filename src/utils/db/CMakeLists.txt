@@ -13,6 +13,7 @@ target_sources(kartend_utils PRIVATE
   itemmetadata.cpp
   itemmetadatacache.cpp
   metadataqueue.cpp
+  scrapenotfound.cpp
   smartfilter.cpp
   smartplaylistevaluator.cpp
   statisticsservice.cpp
@@ -34,6 +35,7 @@ target_sources(kartend_utils PRIVATE
   itemmetadata.h
   itemmetadatacache.h
   metadataqueue.h
+  scrapenotfound.h
   smartfilter.h
   smartplaylistevaluator.h
   statisticsservice.h
