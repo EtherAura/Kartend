@@ -94,6 +94,13 @@ jobs:
           # pick the same configure flags as CI, so the explicit steps below
           # mirror the build matrix's Release leg. actions/python: no compile.
           build-mode: ${{ matrix.build-mode }}
+          # Kartend-bpe43: no TRAP cache. With it the action saved a new
+          # ~565 MB codeql-trap-...-cpp-<sha> entry for every push to main,
+          # about 6 GB a day against the repo's 10 GB Actions cache limit,
+          # and that churn evicted the build jobs' ccache entries within
+          # hours (macos-build-test then rebuilt cold, Kartend-i6041). The
+          # cache only sped up this job, which no pull request waits on.
+          trap-caching: false
 
       - name: Configure CMake
         if: matrix.language == 'c-cpp'
