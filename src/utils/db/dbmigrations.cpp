@@ -234,7 +234,7 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
   // bumping this leaves the early-return gate skipping the new block, so the
   // schema silently lags the code (e.g. a missing items.date_added column that
   // breaks the scanner upsert).
-  constexpr int CURRENT_SCHEMA_VERSION = 29;
+  constexpr int CURRENT_SCHEMA_VERSION = 30;
   const int version = getUserVersion(db, origin);
 
   // A failed version read (already logged with its SQL error by
@@ -1105,9 +1105,38 @@ void applySchemaMigrations(QSqlDatabase &db, const QString &origin) {
         })) {
       return;
     }
+    mutableVersion = 29; // read by the v30 block below
+  }
+
+  if (mutableVersion < 30) {
+    // v30 (Kartend-bb8df): scrape_not_found — one row per item and provider
+    // whose lookup the provider did not recognise: the provider id, when it
+    // missed (UTC ISO-8601, like updated_at elsewhere) and the lookup key
+    // actually sent (provider-serialised; for ScreenScraper the systemeid,
+    // hashes and romnom). A separate table, not item_metadata columns: a
+    // not-found item must not gain an item_metadata row that ItemMetadata::
+    // isEmpty, the sidebar or the FillMissing completeness rule would read as
+    // scraped data. Keyed by (collection_uuid, path, provider) like the other
+    // per-item tables, so rows survive item id renumbering; key lookups use
+    // the UNIQUE constraint's implicit index (see v27). No writer yet.
+    if (!runBlock(db, 30, origin, [&]() -> bool {
+          return ensureIndex(db,
+                             "CREATE TABLE IF NOT EXISTS scrape_not_found ("
+                             "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                             "collection_uuid TEXT NOT NULL DEFAULT '', "
+                             "path TEXT NOT NULL, "
+                             "provider TEXT NOT NULL, "
+                             "lookup_key TEXT NOT NULL DEFAULT '', "
+                             "missed_at TEXT NOT NULL DEFAULT '', "
+                             "UNIQUE(collection_uuid, path, provider)"
+                             ")",
+                             origin, "scrape_not_found");
+        })) {
+      return;
+    }
     // Final block: stamping the in-memory tracker is a dead store (no later
-    // block reads it) — kept so adding a v30 block stays a pure copy-paste.
-    mutableVersion = 29; // NOLINT(clang-analyzer-deadcode.DeadStores)
+    // block reads it) — kept so adding a v31 block stays a pure copy-paste.
+    mutableVersion = 30; // NOLINT(clang-analyzer-deadcode.DeadStores)
   }
 }
 
