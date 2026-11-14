@@ -154,8 +154,9 @@ struct DatHeader {
 /// its roms (Kartend-tnt0l). DatRecord is per-rom, so the machine-level
 /// classification flags and child-element metadata live here instead — one
 /// record per machine, including machines that declare no `<rom>` at all
-/// (most device sets). Parser-only for now: nothing persists or filters on
-/// these records yet.
+/// (most device sets). DatCache persists them per ingested DAT and reads them
+/// back by set name (`DatCache::Store::machinesForSet`); nothing filters on
+/// them yet.
 ///
 /// Absent or malformed optional data falls back to the MAME DTD defaults:
 /// the `is*` flags read false, `runnable` reads true, text fields stay empty,

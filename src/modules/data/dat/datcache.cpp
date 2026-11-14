@@ -34,7 +34,9 @@ namespace {
 //     a re-ingest that populates the MIA flag from the freshly re-parsed DATs.
 // v5: dat_records.setid (Kartend-m6qsb.29) — the set identity cloneof points at
 //     (MAME name= differs from game_name); the wipe re-ingests to populate it.
-constexpr int kSchemaVersion = 5;
+// v6: dat_machines (Kartend-tnt0l) — per-machine MAME listxml records; the
+//     wipe re-ingests every cached MAME DAT so its machine rows get populated.
+constexpr int kSchemaVersion = 6;
 
 // Process-unique connection-name suffix so multiple Store instances
 // (tests + production) don't collide in QSqlDatabase's global
@@ -95,6 +97,29 @@ bool createSchema(QSqlDatabase &db) {
                                     "ON dat_records(source_id, md5)")) &&
       execSimple(db, QStringLiteral("CREATE INDEX IF NOT EXISTS idx_dat_records_crc "
                                     "ON dat_records(source_id, crc)")) &&
+      // One row per MAME machine, ROM-less ones included. set_name carries
+      // COLLATE NOCASE so both the `=` lookup and the index below are
+      // case-insensitive. No UNIQUE: a malformed listxml repeating a name must
+      // not fail the whole ingest; the lookup takes the first row.
+      execSimple(db, QStringLiteral("CREATE TABLE IF NOT EXISTS dat_machines ("
+                                    "  source_id INTEGER NOT NULL,"
+                                    "  set_name TEXT NOT NULL COLLATE NOCASE,"
+                                    "  description TEXT NOT NULL DEFAULT '',"
+                                    "  cloneof TEXT NOT NULL DEFAULT '',"
+                                    "  romof TEXT NOT NULL DEFAULT '',"
+                                    "  is_bios INTEGER NOT NULL DEFAULT 0,"
+                                    "  is_device INTEGER NOT NULL DEFAULT 0,"
+                                    "  is_mechanical INTEGER NOT NULL DEFAULT 0,"
+                                    "  runnable INTEGER NOT NULL DEFAULT 1,"
+                                    "  year TEXT NOT NULL DEFAULT '',"
+                                    "  manufacturer TEXT NOT NULL DEFAULT '',"
+                                    "  driver_status TEXT NOT NULL DEFAULT '',"
+                                    "  players INTEGER NOT NULL DEFAULT -1,"
+                                    "  rotate INTEGER NOT NULL DEFAULT -1,"
+                                    "  FOREIGN KEY(source_id) REFERENCES dat_sources(id) "
+                                    "    ON DELETE CASCADE)")) &&
+      execSimple(db, QStringLiteral("CREATE INDEX IF NOT EXISTS idx_dat_machines_set "
+                                    "ON dat_machines(source_id, set_name)")) &&
       execSimple(db, QStringLiteral("PRAGMA user_version = %1").arg(kSchemaVersion));
   if (!ok) {
     return false; // guard dtor rolls back
@@ -119,6 +144,7 @@ bool migrateOrReset(QSqlDatabase &db) {
   // migration logic for a file we can always recreate by re-parsing
   // the user's DAT.
   if (current != 0) {
+    execSimple(db, QStringLiteral("DROP TABLE IF EXISTS dat_machines"));
     execSimple(db, QStringLiteral("DROP TABLE IF EXISTS dat_records"));
     execSimple(db, QStringLiteral("DROP TABLE IF EXISTS dat_sources"));
   }
@@ -232,11 +258,25 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
   // Header metadata rides along with the ingest so the matcher / UI can
   // identify the catalogue without re-touching the XML (Kartend-m6qsb.3).
   const DatLookup::DatHeader header = DatLookup::probeHeader(bytes, dialect);
-  auto parsed = DatLookup::parseDat(bytes, dialect);
-  if (parsed.isError()) {
-    return parsed.error();
+  // MAME listxml also yields the per-machine records (Kartend-tnt0l); its
+  // `records` half is exactly what parseDat returns, so the per-rom rows below
+  // are unchanged. Every other dialect keeps the plain parseDat path.
+  QList<DatLookup::DatRecord> records;
+  QList<DatLookup::MameMachine> machines;
+  if (dialect == DatLookup::Dialect::Mame) {
+    auto parsed = DatLookup::parseMameListXmlWithMachines(bytes);
+    if (parsed.isError()) {
+      return parsed.error();
+    }
+    records = parsed.value().records;
+    machines = parsed.value().machines;
+  } else {
+    auto parsed = DatLookup::parseDat(bytes, dialect);
+    if (parsed.isError()) {
+      return parsed.error();
+    }
+    records = parsed.value();
   }
-  const auto records = parsed.value();
 
   // Fail loud on the "detected dialect, zero records" contradiction
   // (Kartend-u4sdu): a DAT positively detected as a known dialect that yields
@@ -332,6 +372,41 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
       if (!ins.exec()) {
         const QString err = ins.lastError().text();
         return ErrorContext::error(ErrorCode::DatabaseQueryFailed, "Failed to insert DAT record",
+                                   "DatCache::Store::openOrIngest")
+            .withDetails(err);
+      }
+    }
+  }
+
+  // Machine rows share the source row's transaction and its ON DELETE CASCADE,
+  // so a stale re-ingest or clearAll() drops them together with the per-rom
+  // records (Kartend-tnt0l).
+  if (!machines.isEmpty()) {
+    auto text = [](const QString &s) { return s.isNull() ? QStringLiteral("") : s; };
+    QSqlQuery ins(m_db);
+    ins.prepare(QStringLiteral("INSERT INTO dat_machines (source_id, set_name, description, "
+                               "cloneof, romof, is_bios, is_device, is_mechanical, runnable, "
+                               "year, manufacturer, driver_status, players, rotate) "
+                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+    for (const DatLookup::MameMachine &m : machines) {
+      ins.bindValue(0, newId);
+      ins.bindValue(1, m.setId);
+      ins.bindValue(2, text(m.description));
+      ins.bindValue(3, text(m.cloneOf));
+      ins.bindValue(4, text(m.romOf));
+      ins.bindValue(5, m.isBios ? 1 : 0);
+      ins.bindValue(6, m.isDevice ? 1 : 0);
+      ins.bindValue(7, m.isMechanical ? 1 : 0);
+      ins.bindValue(8, m.runnable ? 1 : 0);
+      ins.bindValue(9, text(m.year));
+      ins.bindValue(10, text(m.manufacturer));
+      ins.bindValue(11, text(m.driverStatus));
+      ins.bindValue(12, m.players);
+      ins.bindValue(13, m.rotate);
+      if (!ins.exec()) {
+        const QString err = ins.lastError().text();
+        return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                   "Failed to insert DAT machine record",
                                    "DatCache::Store::openOrIngest")
             .withDetails(err);
       }
@@ -492,8 +567,53 @@ QList<DatLookup::DatRecord> Store::recordsForGame(const CachedSource &source,
   return out;
 }
 
+QList<CachedMachine> Store::machinesForSet(const QList<CachedSource> &sources,
+                                           const QString &setName) const {
+  QList<CachedMachine> out;
+  if (!isOpen() || setName.isEmpty()) return out;
+  QSqlDatabase &db = const_cast<Store *>(this)->m_db;
+  QSqlQuery q(db);
+  // Indexed by (source_id, set_name); the column's NOCASE collation makes `=`
+  // case-insensitive. One query per caller-supplied source keeps the scope
+  // explicit — no row from a source outside `sources` can be read.
+  q.prepare(QStringLiteral("SELECT set_name, description, cloneof, romof, is_bios, is_device, "
+                           "is_mechanical, runnable, year, manufacturer, driver_status, players, "
+                           "rotate FROM dat_machines WHERE source_id = ? AND set_name = ? "
+                           "ORDER BY rowid LIMIT 1"));
+  for (const CachedSource &source : sources) {
+    if (!source.isValid()) continue;
+    q.bindValue(0, source.id);
+    q.bindValue(1, setName);
+    if (!q.exec()) {
+      qWarning("DatCache: machinesForSet query failed for source %lld: %s", source.id,
+               qPrintable(q.lastError().text()));
+      return {};
+    }
+    if (!q.next()) continue;
+    CachedMachine cm;
+    cm.sourceId = source.id;
+    DatLookup::MameMachine &m = cm.machine;
+    m.setId = q.value(0).toString();
+    m.description = q.value(1).toString();
+    m.cloneOf = q.value(2).toString();
+    m.romOf = q.value(3).toString();
+    m.isBios = q.value(4).toInt() != 0;
+    m.isDevice = q.value(5).toInt() != 0;
+    m.isMechanical = q.value(6).toInt() != 0;
+    m.runnable = q.value(7).toInt() != 0;
+    m.year = q.value(8).toString();
+    m.manufacturer = q.value(9).toString();
+    m.driverStatus = q.value(10).toString();
+    m.players = q.value(11).toInt();
+    m.rotate = q.value(12).toInt();
+    out.append(cm);
+  }
+  return out;
+}
+
 void Store::clearAll() {
   if (!isOpen()) return;
+  execSimple(m_db, QStringLiteral("DELETE FROM dat_machines"));
   execSimple(m_db, QStringLiteral("DELETE FROM dat_records"));
   execSimple(m_db, QStringLiteral("DELETE FROM dat_sources"));
 }
