@@ -129,6 +129,16 @@ private:
   // by load/save on the thread that owns this manager.
   QHash<QString, QString> m_secureCredentialBaseline;
 
+  // Kartend-f4nf2: <provider>/<field> -> the value its [Scrapers] row holds in
+  // the clear, because loadScraperSection read it or saveScraperSection wrote
+  // or kept it there. While the credential still has that value and that row,
+  // a save still tries the keychain (the Kartend-ztc64 self-heal), but on
+  // failure keeps the row and the keychain entry as they are with no consent
+  // prompt, since nothing new is exposed. A declined edit keeps the old row,
+  // so it keeps the old baseline; the refused value never becomes one.
+  // Replaced on every saveScraperSection, same thread as above.
+  QHash<QString, QString> m_plaintextCredentialBaseline;
+
   CredentialBackend m_credentialBackend;
   [[nodiscard]] QString readCredential(const QString &key, bool *ok) const;
   [[nodiscard]] bool writeCredential(const QString &key, const QString &value,

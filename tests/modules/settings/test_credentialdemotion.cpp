@@ -7,7 +7,8 @@
 // write clears it (the self-heal contract) and emits
 // credentialStorageDemotionChanged exactly once.
 //
-// Apart from the declined*, lockedAtLoad*, readableThenCleared* and secureUnchanged* tests, no test
+// Apart from the declined*, lockedAtLoad*, readableThenCleared*, secureUnchanged*,
+// unchangedPlaintext* and changedPlaintext* tests, no test
 // here seeds a <provider>/<field> credential key AND call save with the platform
 // keychain: on a developer machine with a live keyring that would issue real
 // keychain writes/deletes under the production service name. Those tests
@@ -56,6 +57,9 @@ private slots:
   void declinedThenReverted_loadedBaseline_skipsAgain();
   void declinedThenReverted_savedBaseline_skipsAgain();
   void declinedStillChanged_retriesThenEditsAndClearWork();
+  void unchangedPlaintext_loaded_keptWithoutConsent_thenPromotes();
+  void unchangedPlaintext_savedThisSession_keptWithoutConsent_thenPromotes();
+  void changedPlaintext_declined_revertSkipsConsent_thenRecovers();
 
 private:
   static void writeConfigIni(const QString &iniContents);
@@ -182,6 +186,85 @@ void declineThenRevert(SettingsManager &mgr, GeneralSettings &gs, FakeKeychain &
   GeneralSettings gs2;
   reloaded.loadGeneralSettings(gs2);
   QCOMPARE(credential(gs2, kPasswordField), oldSecret);
+  QCOMPARE(reloaded.credentialDemotionReason(), QString());
+}
+
+// Kartend-f4nf2: shared body of the unchangedPlaintext_* tests. The manager
+// holds `secret` stored in the clear (loaded or saved), the warning reads
+// `reason`, the keychain holds `staleEntry` for the key, and keychain writes
+// fail. Unchanged saves, hook-less or with a hook that would allow or decline,
+// must still try the keychain, then keep the row, the entry and the warning
+// exactly as they were, without asking. Once the keychain recovers the next
+// save promotes the value, and later unchanged saves skip the keychain.
+void unchangedPlaintextKeptThenPromoted(SettingsManager &mgr, const GeneralSettings &gs,
+                                        FakeKeychain &fake, const QString &secret,
+                                        const QString &reason, const QString &staleEntry) {
+  fake.failAll = true;
+  int allowAsks = 0;
+  int declineAsks = 0;
+  const qsizetype removesBefore = fake.removed.size();
+  for (int round = 0; round < 6; ++round) {
+    if (round == 2) {
+      mgr.setPlaintextCredentialConsent([&allowAsks](const QString &) {
+        ++allowAsks;
+        return true;
+      });
+    } else if (round == 4) {
+      mgr.setPlaintextCredentialConsent([&declineAsks](const QString &) {
+        ++declineAsks;
+        return false;
+      });
+    }
+    const qsizetype writesBefore = fake.writeAttempts.size();
+    QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+    QCOMPARE(fake.writeAttempts.size(), writesBefore + 1);
+    QCOMPARE(fake.writeAttempts.last(), kPasswordKey + QLatin1Char('=') + secret);
+    QCOMPARE(fake.removed.size(), removesBefore);
+    QCOMPARE(fake.store.value(kPasswordKey), staleEntry);
+    QCOMPARE(iniPassword(), secret);
+    QCOMPARE(mgr.credentialDemotionReason(), reason);
+    QSettings raw(SettingsUtils::getConfigPath(), QSettings::IniFormat);
+    QCOMPARE(raw.value(QStringLiteral("Scrapers/credentialDemotionReason")).toString(), reason);
+  }
+  QCOMPARE(allowAsks, 0);
+  QCOMPARE(declineAsks, 0);
+  {
+    SettingsManager reloaded(nullptr, nullptr);
+    reloaded.setCredentialBackendForTesting(fake.backend());
+    GeneralSettings gs2;
+    reloaded.loadGeneralSettings(gs2);
+    QCOMPARE(credential(gs2, kPasswordField), secret);
+    QCOMPARE(reloaded.credentialDemotionReason(), reason);
+  }
+
+  // Recovery: promoted to the keychain, gone from the INI, warning cleared.
+  fake.failAll = false;
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+  QCOMPARE(fake.writeAttempts.last(), kPasswordKey + QLatin1Char('=') + secret);
+  QCOMPARE(fake.store.value(kPasswordKey), secret);
+  QCOMPARE(iniPassword(), QStringLiteral("@keychain"));
+  QVERIFY(!readIniFile().contains(secret));
+  QCOMPARE(mgr.credentialDemotionReason(), QString());
+  QVERIFY(!readIniFile().contains(QStringLiteral("credentialDemotionReason")));
+
+  // Now a secure baseline: later saves skip the keychain, even if it fails.
+  fake.failAll = true;
+  const qsizetype writesAfterPromotion = fake.writeAttempts.size();
+  for (int round = 0; round < 2; ++round) {
+    QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+    QCOMPARE(fake.writeAttempts.size(), writesAfterPromotion);
+    QCOMPARE(iniPassword(), QStringLiteral("@keychain"));
+    QVERIFY(!readIniFile().contains(secret));
+  }
+  QCOMPARE(declineAsks, 0);
+  QCOMPARE(fake.removed.size(), removesBefore);
+
+  fake.failAll = false;
+  SettingsManager reloaded(nullptr, nullptr);
+  reloaded.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs3;
+  reloaded.loadGeneralSettings(gs3);
+  QCOMPARE(credential(gs3, kPasswordField), secret);
   QCOMPARE(reloaded.credentialDemotionReason(), QString());
 }
 } // namespace
@@ -841,6 +924,122 @@ void TestCredentialDemotion::declinedStillChanged_retriesThenEditsAndClearWork()
   GeneralSettings gs2;
   reloaded.loadGeneralSettings(gs2);
   QCOMPARE(credential(gs2, kPasswordField), QString());
+}
+
+void TestCredentialDemotion::unchangedPlaintext_loaded_keptWithoutConsent_thenPromotes() {
+  // Kartend-f4nf2: a password loaded from the INI in the clear and not changed
+  // since is still offered to the keychain on every save; while that fails it
+  // stays exactly as stored, with no consent prompt, since nothing new is
+  // exposed. A stale keychain entry for the key is not deleted meanwhile.
+  if (!SettingsManager::keychainBackendCompiledIn()) {
+    QSKIP("Needs the keychain build; promotion does not exist without it.");
+  }
+  writeConfigIni(QStringLiteral("[Scrapers]\n"
+                                "credentialDemotionReason=Could not open wallet\n"
+                                "screenscraper/user_password=hunter2\n"));
+  FakeKeychain fake;
+  fake.store[kPasswordKey] = QStringLiteral("stale");
+  SettingsManager mgr(nullptr, nullptr);
+  mgr.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs;
+  mgr.loadGeneralSettings(gs);
+  QCOMPARE(credential(gs, kPasswordField), QStringLiteral("hunter2"));
+  unchangedPlaintextKeptThenPromoted(mgr, gs, fake, QStringLiteral("hunter2"),
+                                     QStringLiteral("Could not open wallet"),
+                                     QStringLiteral("stale"));
+}
+
+void TestCredentialDemotion::unchangedPlaintext_savedThisSession_keptWithoutConsent_thenPromotes() {
+  // Same, for a password the user allowed in the clear earlier this session:
+  // it was asked about once, when it was entered, and never again unchanged.
+  if (!SettingsManager::keychainBackendCompiledIn()) {
+    QSKIP("Needs the keychain build; promotion does not exist without it.");
+  }
+  writeConfigIni(QStringLiteral("[Scrapers]\n"));
+  FakeKeychain fake;
+  fake.failAll = true;
+  SettingsManager mgr(nullptr, nullptr);
+  mgr.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs;
+  mgr.loadGeneralSettings(gs);
+
+  int asks = 0;
+  mgr.setPlaintextCredentialConsent([&asks](const QString &) {
+    ++asks;
+    return true;
+  });
+  gs.scraper.credentials[kProvider][kPasswordField] = QStringLiteral("typed");
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+  QCOMPARE(asks, 1);
+  QCOMPARE(iniPassword(), QStringLiteral("typed"));
+  QCOMPARE(mgr.credentialDemotionReason(), QStringLiteral("fake keychain locked"));
+  mgr.setPlaintextCredentialConsent({});
+  unchangedPlaintextKeptThenPromoted(mgr, gs, fake, QStringLiteral("typed"),
+                                     QStringLiteral("fake keychain locked"), QString());
+  QCOMPARE(asks, 1);
+}
+
+void TestCredentialDemotion::changedPlaintext_declined_revertSkipsConsent_thenRecovers() {
+  // A changed value still asks and is refused; the refused value never becomes
+  // the plaintext baseline (asking again), while reverting to the stored value
+  // is unchanged and is not asked about. A hook-less retry of the refused
+  // value stays keychain-first and is stored once the keychain recovers.
+  if (!SettingsManager::keychainBackendCompiledIn()) {
+    QSKIP("Needs the keychain build; the declined fallback does not exist without it.");
+  }
+  writeConfigIni(QStringLiteral("[Scrapers]\n"
+                                "credentialDemotionReason=Could not open wallet\n"
+                                "screenscraper/user_password=oldpass\n"));
+  FakeKeychain fake;
+  fake.failAll = true;
+  SettingsManager mgr(nullptr, nullptr);
+  mgr.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs;
+  mgr.loadGeneralSettings(gs);
+
+  int asks = 0;
+  mgr.setPlaintextCredentialConsent([&asks](const QString &) {
+    ++asks;
+    return false;
+  });
+  gs.scraper.credentials[kProvider][kPasswordField] = QStringLiteral("newpass");
+  for (int round = 0; round < 2; ++round) {
+    QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+    QCOMPARE(asks, round + 1);
+    QCOMPARE(fake.writeAttempts.last(), kPasswordKey + QStringLiteral("=newpass"));
+    QCOMPARE(iniPassword(), QStringLiteral("oldpass"));
+    QVERIFY(!readIniFile().contains(QStringLiteral("newpass")));
+    QCOMPARE(mgr.credentialDemotionReason(), QStringLiteral("Could not open wallet"));
+  }
+
+  gs.scraper.credentials[kProvider][kPasswordField] = QStringLiteral("oldpass");
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+  QCOMPARE(asks, 2);
+  QCOMPARE(fake.writeAttempts.last(), kPasswordKey + QStringLiteral("=oldpass"));
+  QCOMPARE(iniPassword(), QStringLiteral("oldpass"));
+  QCOMPARE(mgr.credentialDemotionReason(), QStringLiteral("Could not open wallet"));
+  QVERIFY(fake.removed.isEmpty());
+
+  gs.scraper.credentials[kProvider][kPasswordField] = QStringLiteral("newpass");
+  mgr.setPlaintextCredentialConsent({});
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+  QCOMPARE(fake.writeAttempts.last(), kPasswordKey + QStringLiteral("=newpass"));
+  QCOMPARE(iniPassword(), QStringLiteral("oldpass"));
+  QVERIFY(!readIniFile().contains(QStringLiteral("newpass")));
+
+  fake.failAll = false;
+  QVERIFY(!mgr.saveGeneralSettings(gs).isError());
+  QCOMPARE(fake.store.value(kPasswordKey), QStringLiteral("newpass"));
+  QCOMPARE(iniPassword(), QStringLiteral("@keychain"));
+  QVERIFY(!readIniFile().contains(QStringLiteral("oldpass")));
+  QCOMPARE(mgr.credentialDemotionReason(), QString());
+  QCOMPARE(asks, 2);
+
+  SettingsManager reloaded(nullptr, nullptr);
+  reloaded.setCredentialBackendForTesting(fake.backend());
+  GeneralSettings gs2;
+  reloaded.loadGeneralSettings(gs2);
+  QCOMPARE(credential(gs2, kPasswordField), QStringLiteral("newpass"));
 }
 
 int main(int argc, char *argv[]) {
