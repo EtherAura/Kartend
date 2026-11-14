@@ -121,9 +121,20 @@ QString readIniFile() {
   return QString::fromUtf8(f.readAll());
 }
 
+// [Scrapers]/<key> on disk now (a fresh QSettings per call), read through
+// SettingsUtils::getFormat(), the format the app writes the file with. Not
+// QSettings::IniFormat: Qt shares one parsed copy of a file between every
+// QSettings on it, whatever its format, and only on Windows does IniFormat
+// look keys up case-insensitively — so there every read after a save came
+// back empty, which also made the absent-row checks pass vacuously
+// (Kartend-fg8v7).
+QVariant iniScrapersValue(const QString &key) {
+  QSettings s(SettingsUtils::getConfigPath(), SettingsUtils::getFormat());
+  return s.value(QStringLiteral("Scrapers/") + key);
+}
+
 QString iniPassword() {
-  QSettings s(SettingsUtils::getConfigPath(), QSettings::IniFormat);
-  return s.value(QStringLiteral("Scrapers/") + kPasswordKey).toString();
+  return iniScrapersValue(kPasswordKey).toString();
 }
 
 // Kartend-f4nf2: shared body of the declinedThenReverted_* tests. The manager
@@ -330,9 +341,7 @@ void TestCredentialDemotion::noKeychainBuild_alwaysFlagsPlaintext() {
 }
 
 QVariant TestCredentialDemotion::iniValue(const QString &key) {
-  // A fresh QSettings per call, so this reads what is on disk now.
-  QSettings s(SettingsUtils::getConfigPath(), QSettings::IniFormat);
-  return s.value(QStringLiteral("Scrapers/") + key);
+  return iniScrapersValue(key);
 }
 
 void TestCredentialDemotion::declinedChange_keepsOldPlaintextAndWarning_thenRecovers() {
