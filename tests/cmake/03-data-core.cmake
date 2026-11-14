@@ -238,6 +238,14 @@ kartend_add_test(NAME DatabaseManager
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Collection removal (purgeOrphanCollectionData) drops the removed
+# collection's scrape_not_found stamps and no other collection's, on the real
+# sandboxed on-disk media.db (Kartend-bb8df).
+kartend_add_test(NAME ScrapeNotFoundCleanup
+  SOURCES modules/database/test_scrapenotfoundcleanup.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # DatabaseManager failure injection: unopenable media.db (directory / 0000
 # perms), garbage-bytes media.db (lazy open, first-statement NOTADB, no
 # destructive rewrite), and the clearCollection throw branch driven by
