@@ -353,6 +353,16 @@ kartend_add_test(NAME DatLookup
   SOURCES modules/dat/test_datlookup.cpp
   LINK kartend_data kartend_api kartend_utils
 )
+# Focused selection of the MAME listxml machine-record cases (Kartend-tnt0l)
+# from the same executable; DatLookup above still runs the whole suite.
+add_test(NAME datlookup_machine_metadata
+  COMMAND test_datlookup
+    mameMachineKeepsAllFields
+    mameMachineClassifiesBiosDeviceMechanicalNonRunnable
+    mameMachineDefaultsForOmittedOrMalformedData
+    mameMachineListsMachinesWithoutRoms
+    mameMachineParseKeepsPerRomRecords
+    mameMachineParseReportsErrors)
 
 # DatCache tests (on-disk sqlite cache for parsed DAT files)
 kartend_add_test(NAME DatCache

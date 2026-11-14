@@ -233,7 +233,32 @@ ErrorUtils::Result<QList<DatRecord>> parseLogiqxDat(const QByteArray &xml) {
   return out;
 }
 
-ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
+namespace {
+
+/// MAME DTD yes/no flag. Tolerant like miaFromAttrs; an absent or
+/// unrecognised value yields `fallback` (the DTD default).
+bool mameFlagFromAttrs(const QXmlStreamAttributes &attrs, QLatin1String key, bool fallback) {
+  const QString v = attrs.value(key).toString().trimmed().toLower();
+  if (v == QLatin1String("yes") || v == QLatin1String("true") || v == QLatin1String("1")) {
+    return true;
+  }
+  if (v == QLatin1String("no") || v == QLatin1String("false") || v == QLatin1String("0")) {
+    return false;
+  }
+  return fallback;
+}
+
+/// Non-negative integer attribute, or -1 when absent / malformed.
+int mameIntFromAttrs(const QXmlStreamAttributes &attrs, QLatin1String key) {
+  bool ok = false;
+  const int v = attrs.value(key).toString().trimmed().toInt(&ok);
+  return (ok && v >= 0) ? v : -1;
+}
+
+/// Shared MAME listxml walk. `machinesOut` is null for the records-only
+/// entry point, so parseMameListXml pays nothing for the machine records.
+ErrorUtils::Result<QList<DatRecord>> parseMameListXmlImpl(const QByteArray &xml,
+                                                          QList<MameMachine> *machinesOut) {
   QXmlStreamReader reader(xml);
   // Kartend-v3u04: pin the entity-expansion ceiling instead of inheriting it.
   // QXmlStreamReader resolves internal entities, so a recursive declaration is
@@ -260,8 +285,27 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
   // the resolved gameName at `</machine>` so any rom that appears
   // before `<description>` still gets the nice name.
   QList<DatRecord> pendingRoms;
+  // Machine-level record (Kartend-tnt0l), only filled when machinesOut is set.
+  // <year>/<manufacturer> text is collected like <description>; the rest are
+  // attributes. Only the first <display> counts (multi-screen machines list
+  // several).
+  MameMachine currentMachine;
+  QString *machineText = nullptr;
+  bool sawDisplay = false;
 
   auto flushMachine = [&]() {
+    if (machinesOut && !currentSetId.isEmpty() && currentSetId.size() <= kMaxNameLen) {
+      currentMachine.setId = currentSetId;
+      currentMachine.description = currentDescription;
+      // Over-long free text is dropped rather than clipped, like rom names.
+      if (currentMachine.description.size() > kMaxNameLen) currentMachine.description.clear();
+      if (currentMachine.manufacturer.size() > kMaxNameLen) currentMachine.manufacturer.clear();
+      if (currentMachine.year.size() > kMaxNameLen) currentMachine.year.clear();
+      machinesOut->append(std::move(currentMachine));
+    }
+    currentMachine = MameMachine();
+    machineText = nullptr;
+    sawDisplay = false;
     const QString gameName = !currentDescription.isEmpty() ? currentDescription : currentSetId;
     for (auto &r : pendingRoms) {
       r.gameName = gameName;
@@ -297,8 +341,47 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
         currentMia = miaFromAttrs(reader.attributes());
         currentDescription.clear();
         pendingRoms.clear();
+        if (machinesOut) {
+          // Machines without roms are not bounded by the record cap above, so
+          // the machine list gets the same ceiling of its own.
+          if (machinesOut->size() >= kMaxRecords) {
+            return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                       "MAME listxml declares too many machines to parse",
+                                       "DatLookup::parseMameListXmlWithMachines")
+                .withDetails(QStringLiteral("exceeded %1 machines").arg(kMaxRecords));
+          }
+          const QXmlStreamAttributes attrs = reader.attributes();
+          currentMachine = MameMachine();
+          currentMachine.cloneOf = attrs.value(QLatin1String("cloneof")).toString();
+          currentMachine.romOf = attrs.value(QLatin1String("romof")).toString();
+          currentMachine.isBios = mameFlagFromAttrs(attrs, QLatin1String("isbios"), false);
+          currentMachine.isDevice = mameFlagFromAttrs(attrs, QLatin1String("isdevice"), false);
+          currentMachine.isMechanical =
+              mameFlagFromAttrs(attrs, QLatin1String("ismechanical"), false);
+          currentMachine.runnable = mameFlagFromAttrs(attrs, QLatin1String("runnable"), true);
+          machineText = nullptr;
+          sawDisplay = false;
+        }
       } else if (name == QLatin1String("description")) {
         inDescription = true;
+      } else if (machinesOut && !currentSetId.isEmpty() && name == QLatin1String("year")) {
+        currentMachine.year.clear();
+        machineText = &currentMachine.year;
+      } else if (machinesOut && !currentSetId.isEmpty() && name == QLatin1String("manufacturer")) {
+        currentMachine.manufacturer.clear();
+        machineText = &currentMachine.manufacturer;
+      } else if (machinesOut && !currentSetId.isEmpty() && name == QLatin1String("driver")) {
+        currentMachine.driverStatus =
+            reader.attributes().value(QLatin1String("status")).toString().trimmed().toLower();
+        if (currentMachine.driverStatus.size() > kMaxNameLen) currentMachine.driverStatus.clear();
+      } else if (machinesOut && !currentSetId.isEmpty() && name == QLatin1String("input")) {
+        currentMachine.players = mameIntFromAttrs(reader.attributes(), QLatin1String("players"));
+      } else if (machinesOut && !currentSetId.isEmpty() && name == QLatin1String("display")) {
+        if (!sawDisplay) {
+          sawDisplay = true;
+          const int rot = mameIntFromAttrs(reader.attributes(), QLatin1String("rotate"));
+          currentMachine.rotate = (rot == 0 || rot == 90 || rot == 180 || rot == 270) ? rot : -1;
+        }
       } else if (name == QLatin1String("rom") && !currentSetId.isEmpty()) {
         if (auto r = readRomElement(reader.attributes(), QString())) {
           // Both containers count: pendingRoms holds the current machine's
@@ -316,11 +399,18 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
       }
     } else if (token == QXmlStreamReader::Characters && inDescription) {
       currentDescription += reader.text().toString();
+    } else if (token == QXmlStreamReader::Characters && machineText) {
+      // Same accumulate-then-trim shape as <description>.
+      *machineText += reader.text().toString();
     } else if (token == QXmlStreamReader::EndElement) {
       const QStringView name = reader.name();
       if (name == QLatin1String("description")) {
         inDescription = false;
         currentDescription = currentDescription.trimmed();
+      } else if (machineText &&
+                 (name == QLatin1String("year") || name == QLatin1String("manufacturer"))) {
+        *machineText = machineText->trimmed();
+        machineText = nullptr;
       } else if (name == QLatin1String("machine") || name == QLatin1String("game")) {
         flushMachine();
       } else if (name == QLatin1String("mame")) {
@@ -334,6 +424,22 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
     return *err;
   }
   return out;
+}
+
+} // namespace
+
+ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml) {
+  return parseMameListXmlImpl(xml, nullptr);
+}
+
+ErrorUtils::Result<MameListXmlParse> parseMameListXmlWithMachines(const QByteArray &xml) {
+  MameListXmlParse parsed;
+  auto records = parseMameListXmlImpl(xml, &parsed.machines);
+  if (!records.isOk()) {
+    return records.error();
+  }
+  parsed.records = std::move(records.value());
+  return parsed;
 }
 
 } // namespace DatLookup

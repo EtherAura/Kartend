@@ -150,6 +150,59 @@ struct DatHeader {
 /// skipped since they declare no usable hash.
 [[nodiscard]] ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml);
 
+/// One `<machine>` (or legacy `<game>`) from a MAME listxml, independent of
+/// its roms (Kartend-tnt0l). DatRecord is per-rom, so the machine-level
+/// classification flags and child-element metadata live here instead — one
+/// record per machine, including machines that declare no `<rom>` at all
+/// (most device sets). Parser-only for now: nothing persists or filters on
+/// these records yet.
+///
+/// Absent or malformed optional data falls back to the MAME DTD defaults:
+/// the `is*` flags read false, `runnable` reads true, text fields stay empty,
+/// and `players` / `rotate` stay -1 ("undeclared").
+struct MameMachine {
+  /// `name=` set-id (e.g. "neogeo"). Never empty — a machine without one is
+  /// skipped, matching the rom path.
+  QString setId;
+  /// Trimmed `<description>` text; empty when the element is absent.
+  QString description;
+  /// Raw `cloneof=` / `romof=` attributes, kept separately (DatRecord::cloneOf
+  /// folds them into one value).
+  QString cloneOf;
+  QString romOf;
+  /// `isbios=`, `isdevice=`, `ismechanical=` — true only for "yes"
+  /// (also "true"/"1", any case).
+  bool isBios = false;
+  bool isDevice = false;
+  bool isMechanical = false;
+  /// `runnable=` — false only for "no" (also "false"/"0", any case).
+  bool runnable = true;
+  /// Trimmed `<year>` / `<manufacturer>` text. Year is kept verbatim since
+  /// MAME uses placeholders such as "198?".
+  QString year;
+  QString manufacturer;
+  /// `<driver status=>` lowercased (e.g. "good", "imperfect", "preliminary").
+  QString driverStatus;
+  /// `<input players=>`; -1 when absent or not a non-negative integer.
+  int players = -1;
+  /// First `<display rotate=>`; -1 when absent or not 0/90/180/270.
+  int rotate = -1;
+};
+
+/// Both halves of a MAME listxml parse: the per-rom records exactly as
+/// `parseMameListXml` returns them, plus one MameMachine per machine in
+/// document order.
+struct MameListXmlParse {
+  QList<DatRecord> records;
+  QList<MameMachine> machines;
+};
+
+/// `parseMameListXml` plus the machine-level records (Kartend-tnt0l). Same
+/// error and truncation rules; `records` is identical to what
+/// `parseMameListXml` returns for the same input.
+[[nodiscard]] ErrorUtils::Result<MameListXmlParse>
+parseMameListXmlWithMachines(const QByteArray &xml);
+
 /// Parse a clrmamepro text DAT — the older non-XML format whose blocks
 /// look like `game ( name "…" rom ( name "…" size N crc … sha1 … ) )`.
 /// The `clrmamepro (` / `emulator (` header block is skipped (its
