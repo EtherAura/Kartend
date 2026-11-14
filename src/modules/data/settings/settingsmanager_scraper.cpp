@@ -174,6 +174,7 @@ void SettingsManager::loadScraperSection(QSettings &s, GeneralSettings &settings
   settings.scraper.credentials.clear();
   m_unreadableKeychainCredentials.clear();
   m_secureCredentialBaseline.clear();
+  m_plaintextCredentialBaseline.clear();
   s.beginGroup(keys::kGroupScrapers);
   // Kartend-ztc64: meta key persisted by saveScraperSection when a keychain
   // write failed and a credential was demoted to plaintext. Loaded into the
@@ -213,6 +214,10 @@ void SettingsManager::loadScraperSection(QSettings &s, GeneralSettings &settings
         // save before the wallet unlocks keeps the stored credential.
         m_unreadableKeychainCredentials.insert(fullKey);
       }
+    } else if (!resolvedValue.isEmpty()) {
+      // Kartend-f4nf2: stored in the clear; saves that leave it unchanged
+      // retry the keychain but do not ask before keeping it as it is.
+      m_plaintextCredentialBaseline[fullKey] = resolvedValue;
     }
 #endif
     settings.scraper.credentials[providerId][fieldName] = resolvedValue;
@@ -280,6 +285,9 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
   // Kartend-f4nf2: replaces m_secureCredentialBaseline after the loop. Only
   // credentials whose keychain entry still holds a known value carry over.
   QHash<QString, QString> newSecureBaseline;
+  // Kartend-f4nf2: replaces m_plaintextCredentialBaseline after the loop. Only
+  // credentials whose row this save leaves in the clear carry over.
+  QHash<QString, QString> newPlaintextBaseline;
 #endif
   s.remove(keys::kGroupScrapers);
   s.beginGroup(keys::kGroupScrapers);
@@ -355,6 +363,24 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
             << "Keychain write failed for" << fullKey << "(" << writeError << ")";
         const QString reason =
             writeError.isEmpty() ? QStringLiteral("keychain unavailable") : writeError;
+        // Kartend-f4nf2: unchanged since it was read from or written to its
+        // plaintext row, and that row is still there: the promotion attempt
+        // above failed, so keep the row exactly as stored and retain the key
+        // so the sweep below leaves its keychain entry alone. No consent
+        // prompt, from a dialog or not, since nothing new is exposed; the
+        // existing warning stays as it was (or is raised, if there was none,
+        // since this credential is in the clear).
+        const auto plainBaseline = m_plaintextCredentialBaseline.constFind(fullKey);
+        if (plainBaseline != m_plaintextCredentialBaseline.cend() &&
+            *plainBaseline == fIt.value() && preWipeRows.value(fullKey) == fIt.value()) {
+          s.setValue(fullKey, fIt.value());
+          retainedKeys.insert(fullKey);
+          newPlaintextBaseline[fullKey] = fIt.value();
+          if (newDemotionReason.isEmpty()) {
+            newDemotionReason = preWipeDemotionReason.isEmpty() ? reason : preWipeDemotionReason;
+          }
+          continue;
+        }
         // Kartend-f4nf2: a save with no hook installed (toolbar toggles and
         // the like) that carries a value the user already refused keeps that
         // refusal. The keychain was still tried above, so recovery works.
@@ -392,12 +418,18 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
                 oldBaseline != m_secureCredentialBaseline.cend()) {
               newSecureBaseline[fullKey] = *oldBaseline;
             }
+            // Likewise a kept plaintext row keeps its plaintext baseline.
+            const auto oldPlain = m_plaintextCredentialBaseline.constFind(fullKey);
+            if (oldPlain != m_plaintextCredentialBaseline.cend() && *oldPlain == *old) {
+              newPlaintextBaseline[fullKey] = *oldPlain;
+            }
           }
           continue;
         }
         qCWarning(lcSettingsManager) << "Falling back to plaintext INI for" << fullKey;
         m_declinedPlaintextCredentials.remove(fullKey);
         s.setValue(fullKey, fIt.value());
+        newPlaintextBaseline[fullKey] = fIt.value();
         if (newDemotionReason.isEmpty()) {
           newDemotionReason = reason;
         }
@@ -439,6 +471,7 @@ void SettingsManager::saveScraperSection(QSettings &s, const GeneralSettings &se
   }
   m_unreadableKeychainCredentials = stillUnreadable;
   m_secureCredentialBaseline = newSecureBaseline;
+  m_plaintextCredentialBaseline = newPlaintextBaseline;
 #endif
 
   // Scraper performance + behavior options. Wipe the group first so a "Reset to

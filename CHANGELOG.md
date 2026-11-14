@@ -54,6 +54,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as it is, without asking and without a warning. This also holds after
   you declined to store a changed password unencrypted and then changed it
   back.
+- **No repeated question about a scraper password that is already
+  unencrypted.** While the system keychain was locked or unavailable,
+  saving settings in the Settings or scraper credentials dialog asked
+  again whether to store a scraper password unencrypted even though you
+  had not changed it and it was already stored that way. Answering no did
+  not move it to the keychain either. Kartend now keeps such a password as
+  it is without asking, along with the warning about unencrypted
+  passwords, and still moves it into the keychain on the first save after
+  the keychain works again. A password you change is still asked about.
 
 ## [0.0.21] - 2026-11-12
 
