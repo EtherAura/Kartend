@@ -365,12 +365,15 @@ void purgeOrphanRowsOnConnection(QSqlDatabase &db, const QSet<QString> &liveUuid
   // collection is removed. This is deliberate clean-delete semantics; the
   // re-key path for deliberate renames is migrateCollectionUuid above.
   // file_hash_cache is excluded: it is keyed by absolute path only (no
-  // uuid column) and self-validates via size+mtime.
+  // uuid column) and self-validates via size+mtime. scrape_not_found
+  // (Kartend-bb8df) has no foreign key, so its per-provider miss stamps
+  // are only ever dropped here.
   const QList<QPair<QString, QString>> targets = {
       {QStringLiteral("items"), QStringLiteral("collection_uuid")},
       {QStringLiteral("collections"), QStringLiteral("uuid")},
       {QStringLiteral("item_metadata"), QStringLiteral("collection_uuid")},
       {QStringLiteral("item_artwork"), QStringLiteral("collection_uuid")},
+      {QStringLiteral("scrape_not_found"), QStringLiteral("collection_uuid")},
       {QStringLiteral("launch_history"), QStringLiteral("collection_uuid")},
       {QStringLiteral("playlist_items"), QStringLiteral("source_collection_uuid")}};
 
