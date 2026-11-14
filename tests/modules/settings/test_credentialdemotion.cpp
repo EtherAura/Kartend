@@ -223,8 +223,7 @@ void unchangedPlaintextKeptThenPromoted(SettingsManager &mgr, const GeneralSetti
     QCOMPARE(fake.store.value(kPasswordKey), staleEntry);
     QCOMPARE(iniPassword(), secret);
     QCOMPARE(mgr.credentialDemotionReason(), reason);
-    QSettings raw(SettingsUtils::getConfigPath(), QSettings::IniFormat);
-    QCOMPARE(raw.value(QStringLiteral("Scrapers/credentialDemotionReason")).toString(), reason);
+    QCOMPARE(iniScrapersValue(QStringLiteral("credentialDemotionReason")).toString(), reason);
   }
   QCOMPARE(allowAsks, 0);
   QCOMPARE(declineAsks, 0);
