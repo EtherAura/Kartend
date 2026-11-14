@@ -16,6 +16,7 @@
 // Placeholder paths must exist to survive expansion's validation, so the
 // policy cases build real directories under a QTemporaryDir.
 
+#include <QApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -29,6 +30,7 @@
 
 #include <memory>
 
+#include "../../support/machomesandbox.h"
 #include "../../support/testsandbox.h"
 #include "applicationcontext.h"
 #include "artworkutils.h"
@@ -97,9 +99,14 @@ private slots:
   void clearPendingRangeRequest_resetsRetryBudget();
 
 private:
-  // Private HOME so the DatabaseManager the list-row cases construct opens its
-  // media.db in a test-mode QStandardPaths tree that is deleted with the suite.
+  // The suite's private HOME: the DatabaseManager the list-row cases construct
+  // opens its media.db in the test-mode QStandardPaths tree under it.
+  QString m_home;
+#ifndef Q_OS_MACOS
+  // Off macOS the suite brings its own HOME, deleted with it. macOS uses the
+  // one main() installs (see initTestCase).
   QTemporaryDir m_homeDir;
+#endif
 };
 
 namespace {
@@ -874,8 +881,18 @@ void TestItemWidgetFactory::aggregatedView_settledMissRequestsNothing() {
 // connected, so nothing here shows who services it or a live list recovering.
 
 void TestItemWidgetFactory::initTestCase() {
+#ifdef Q_OS_MACOS
+  // main() installed this process's private HOME before QApplication
+  // (installMacHomeSandbox). Foundation ignores a HOME set any later, so moving
+  // it here would split QDir::homePath() from ~/Library and the test-mode
+  // reroute would miss media.db — setting HOME alone, as below, put it in the
+  // runner's real ~/Library/Application Support (Kartend-qe5xp).
+  m_home = QDir::homePath();
+#else
   QVERIFY(m_homeDir.isValid());
   qputenv("HOME", m_homeDir.path().toUtf8());
+  m_home = m_homeDir.path();
+#endif
   KartendTest::initSandboxedTestCase(QStringLiteral("kartend-test-itemwidgetfactory"));
 }
 
@@ -938,7 +955,8 @@ void verifyRealDatabase(const ListRowHarness &h, const QString &homeDir) {
   const QFileInfo file(conn.databaseName());
   QVERIFY2(file.isFile(), qPrintable(conn.databaseName()));
 #ifndef Q_OS_WIN
-  // HOME steers the test-mode tree on Unix; Windows keeps Qt's own qttest root.
+  // The private HOME steers the test-mode tree on Linux and macOS (see
+  // initTestCase); Windows keeps Qt's own qttest root.
   QVERIFY2(file.canonicalFilePath().startsWith(QFileInfo(homeDir).canonicalFilePath()),
            qPrintable(file.canonicalFilePath()));
 #else
@@ -973,7 +991,7 @@ void TestItemWidgetFactory::listRow_realDb_warmCacheRowHasPreview() {
   if (QTest::currentTestFailed()) return;
 
   ListRowHarness h(artRoot.path(), mediaRoot.path(), {QStringLiteral("Overture.flac")});
-  verifyRealDatabase(h, m_homeDir.path());
+  verifyRealDatabase(h, m_home);
   if (QTest::currentTestFailed()) return;
 
   ItemWidget *row = h.createRow(0);
@@ -998,7 +1016,7 @@ void TestItemWidgetFactory::listRow_realDb_coldRowRecoversAfterDrainAndReconfigu
 
   ListRowHarness h(artRoot.path(), mediaRoot.path(),
                    {QStringLiteral("Overture.flac"), QStringLiteral("Nocturne.flac")});
-  verifyRealDatabase(h, m_homeDir.path());
+  verifyRealDatabase(h, m_home);
   if (QTest::currentTestFailed()) return;
   ItemWidget *warmRow = h.createRow(0);
   QVERIFY(warmRow);
@@ -1052,7 +1070,7 @@ void TestItemWidgetFactory::listRow_realDb_warmRebuildAndSettledMissStayQuiet() 
 
   ListRowHarness h(artRoot.path(), mediaRoot.path(),
                    {QStringLiteral("Overture.flac"), QStringLiteral("Silence.flac")});
-  verifyRealDatabase(h, m_homeDir.path());
+  verifyRealDatabase(h, m_home);
   if (QTest::currentTestFailed()) return;
   auto &cache = ArtworkUtils::DirectoryCache::instance();
   const QStringList cascade = ArtworkUtils::artworkLookupDirectories(artRoot.path());
@@ -1076,5 +1094,15 @@ void TestItemWidgetFactory::listRow_realDb_warmRebuildAndSettledMissStayQuiet() 
   ArtworkUtils::clearDirectoryCache();
 }
 
-QTEST_MAIN(TestItemWidgetFactory)
+// Expanded QTEST_MAIN so the macOS HOME sandbox is installed before
+// QApplication — Foundation and QDir::homePath() must agree before any
+// QStandardPaths lookup for the .qttest reroute to fire (Kartend-0ceoe).
+int main(int argc, char *argv[]) {
+  KartendTest::installMacHomeSandbox();
+  QApplication app(argc, argv);
+  app.setAttribute(Qt::AA_Use96Dpi, true);
+  TestItemWidgetFactory tc;
+  QTEST_SET_MAIN_SOURCE_PATH
+  return QTest::qExec(&tc, argc, argv);
+}
 #include "test_itemwidgetfactory.moc"
