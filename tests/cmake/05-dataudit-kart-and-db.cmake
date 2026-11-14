@@ -48,6 +48,15 @@ kartend_add_test(NAME DatAuditLayout
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Kartend-xu36n: CHD fixed-header reader over synthetic on-disk header
+# fixtures (v5 identity, v3/v4 conversion-required, malformed/truncated input,
+# bounded reading). The CTest name is test_chdheader, not CamelCase, because
+# the slice's acceptance names it exactly.
+kartend_add_test(NAME test_chdheader
+  SOURCES modules/dataudit/test_chdheader.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # DatAudit export tests (CSV + fixdat + miss-list)
 kartend_add_test(NAME DatAuditExport
   SOURCES modules/dataudit/test_datauditexport.cpp
