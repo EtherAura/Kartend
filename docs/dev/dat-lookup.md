@@ -90,6 +90,35 @@ indexes match across case variants.
 `romnom` param because SS expects a filename with extension and
 will strip the extension itself.
 
+## `MameMachine` (MAME listxml machine record)
+
+`DatRecord` is per-rom, so MAME's machine-level data has its own record.
+`parseMameListXmlWithMachines` returns a `MameListXmlParse`: `records`
+(identical to what `parseMameListXml` returns) plus `machines`, one
+`MameMachine` per `<machine>` / `<game>` in document order — including
+machines with no `<rom>` at all, as most device sets are.
+
+| Field | Source | Default when absent / malformed |
+|---|---|---|
+| `setId` | `name=` | machine skipped when empty or over the name cap |
+| `description` | `<description>` text, trimmed | empty |
+| `cloneOf`, `romOf` | `cloneof=`, `romof=` (kept apart) | empty |
+| `isBios`, `isDevice`, `isMechanical` | `isbios=`, `isdevice=`, `ismechanical=` | `false` |
+| `runnable` | `runnable=` | `true` |
+| `year`, `manufacturer` | `<year>`, `<manufacturer>` text, trimmed, verbatim (`198?` stays) | empty |
+| `driverStatus` | `<driver status=>`, lowercased | empty |
+| `players` | `<input players=>` | `-1` |
+| `rotate` | first `<display rotate=>`, one of 0/90/180/270 | `-1` |
+
+Flags accept `yes`/`true`/`1` and `no`/`false`/`0` in any case; anything
+else takes the MAME DTD default above. `parseMameListXml` itself does not
+collect machines, so existing callers pay nothing extra.
+
+This is parser-only so far: machine records are **not** persisted in
+`DatCache` (no table, no schema bump), not looked up by set name, and not
+used to hide BIOS / device / non-runnable sets from a collection. Those
+build on this record in later work.
+
 ## In-memory store
 
 `DatLookup::Store` indexes a record list at construction:

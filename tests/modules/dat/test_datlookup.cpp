@@ -57,6 +57,14 @@ private slots:
   void parsesMiaAcrossDialects();
   void readDatFilePlainAndPrefix();
   void readDatFileUnpacksZip();
+  // MAME listxml machine records (Kartend-tnt0l). Also registered on their own
+  // as the datlookup_machine_metadata CTest case.
+  void mameMachineKeepsAllFields();
+  void mameMachineClassifiesBiosDeviceMechanicalNonRunnable();
+  void mameMachineDefaultsForOmittedOrMalformedData();
+  void mameMachineListsMachinesWithoutRoms();
+  void mameMachineParseKeepsPerRomRecords();
+  void mameMachineParseReportsErrors();
 
 private:
   QTemporaryDir m_dir;
@@ -745,6 +753,262 @@ void TestDatLookup::readDatFileUnpacksZip() {
   const auto header = DatLookup::probeHeaderFromFile(zip);
   QCOMPARE(header.name, QStringLiteral("Packed"));
   QCOMPARE(header.version, QStringLiteral("9"));
+}
+
+// ── MAME listxml machine records (Kartend-tnt0l) ──────────────────────────
+namespace {
+// Synthetic listxml: one ordinary parent + clone, a BIOS, a rom-less device
+// that is also non-runnable, and a mechanical set whose only rom is a nodump.
+constexpr const char *kMameMachines = R"xml(<?xml version="1.0"?>
+<mame build="0.260" mameconfig="10">
+  <machine name="fighter" sourcefile="fighter.cpp" romof="arcbios">
+    <description>Fighter (World)</description>
+    <year> 1991 </year>
+    <manufacturer>Acme &amp; Sons</manufacturer>
+    <rom name="fighter.1" size="1024"
+         crc="11111111" sha1="1111111111111111111111111111111111111111"/>
+    <display tag="screen" type="raster" rotate="270" width="384" height="224"/>
+    <display tag="aux" type="raster" rotate="0" width="320" height="240"/>
+    <input players="2" coins="2"><control type="joy" player="1"/></input>
+    <driver status="Imperfect" emulation="good" savestate="supported"/>
+  </machine>
+  <machine name="fighterj" sourcefile="fighter.cpp" cloneof="fighter" romof="fighter">
+    <description>Fighter (Japan)</description>
+    <year>199?</year>
+    <rom name="fighterj.1" size="1024"
+         crc="22222222" sha1="2222222222222222222222222222222222222222"/>
+    <driver status="good"/>
+  </machine>
+  <machine name="arcbios" sourcefile="arcbios.cpp" isbios="yes">
+    <description>Arcade BIOS</description>
+    <rom name="bios.rom" size="2048"
+         crc="33333333" sha1="3333333333333333333333333333333333333333"/>
+  </machine>
+  <machine name="cpu_core" sourcefile="cpu.cpp" isdevice="yes" runnable="no">
+    <description>CPU Core</description>
+  </machine>
+  <machine name="flipper" sourcefile="flipper.cpp" ismechanical="yes">
+    <description>Flipper Table</description>
+    <rom name="missing.rom" size="512" status="nodump"
+         crc="00000000" sha1="0000000000000000000000000000000000000000"/>
+  </machine>
+</mame>
+)xml";
+
+// Omitted and malformed optional data: every field must fall back to the
+// documented default rather than failing the parse.
+constexpr const char *kMameMachineDefaults = R"xml(<?xml version="1.0"?>
+<mame build="0.260">
+  <machine name="bare"/>
+  <machine name="garbled" isbios="maybe" isdevice="" ismechanical="2" runnable="perhaps">
+    <input players="two"/>
+    <display rotate="45"/>
+  </machine>
+  <machine name="negative" runnable="NO" isbios="TRUE">
+    <input players="-3"/>
+    <display rotate="-90"/>
+    <driver/>
+  </machine>
+  <machine sourcefile="nameless.cpp">
+    <description>No set id</description>
+  </machine>
+</mame>
+)xml";
+
+const DatLookup::MameMachine *findMachine(const QList<DatLookup::MameMachine> &machines,
+                                          const QString &setId) {
+  for (const auto &m : machines) {
+    if (m.setId == setId) return &m;
+  }
+  return nullptr;
+}
+} // namespace
+
+void TestDatLookup::mameMachineKeepsAllFields() {
+  const auto result = DatLookup::parseMameListXmlWithMachines(QByteArray(kMameMachines));
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  const auto &machines = result.value().machines;
+
+  const auto *parent = findMachine(machines, QStringLiteral("fighter"));
+  QVERIFY(parent != nullptr);
+  QCOMPARE(parent->description, QStringLiteral("Fighter (World)"));
+  QCOMPARE(parent->cloneOf, QString());
+  QCOMPARE(parent->romOf, QStringLiteral("arcbios"));
+  QCOMPARE(parent->year, QStringLiteral("1991"));                // trimmed
+  QCOMPARE(parent->manufacturer, QStringLiteral("Acme & Sons")); // entity resolved
+  QCOMPARE(parent->driverStatus, QStringLiteral("imperfect"));   // lowercased
+  QCOMPARE(parent->players, 2);
+  QCOMPARE(parent->rotate, 270); // first <display> wins
+  QVERIFY(!parent->isBios);
+  QVERIFY(!parent->isDevice);
+  QVERIFY(!parent->isMechanical);
+  QVERIFY(parent->runnable);
+
+  const auto *clone = findMachine(machines, QStringLiteral("fighterj"));
+  QVERIFY(clone != nullptr);
+  QCOMPARE(clone->description, QStringLiteral("Fighter (Japan)"));
+  QCOMPARE(clone->cloneOf, QStringLiteral("fighter"));
+  QCOMPARE(clone->romOf, QStringLiteral("fighter"));
+  QCOMPARE(clone->year, QStringLiteral("199?")); // placeholder years kept verbatim
+  QCOMPARE(clone->manufacturer, QString());      // element absent
+  QCOMPARE(clone->driverStatus, QStringLiteral("good"));
+  QCOMPARE(clone->players, -1); // no <input>
+  QCOMPARE(clone->rotate, -1);  // no <display>
+
+  // The pre-existing sample's year/manufacturer children now come through too.
+  const auto sample = DatLookup::parseMameListXmlWithMachines(QByteArray(kMameSample));
+  QVERIFY(sample.isOk());
+  const auto *pacman = findMachine(sample.value().machines, QStringLiteral("pacman"));
+  QVERIFY(pacman != nullptr);
+  QCOMPARE(pacman->description, QStringLiteral("Pac-Man (Midway)"));
+  QCOMPARE(pacman->year, QStringLiteral("1980"));
+  QCOMPARE(pacman->manufacturer, QStringLiteral("Namco / Midway"));
+}
+
+void TestDatLookup::mameMachineClassifiesBiosDeviceMechanicalNonRunnable() {
+  const auto result = DatLookup::parseMameListXmlWithMachines(QByteArray(kMameMachines));
+  QVERIFY(result.isOk());
+  const auto &machines = result.value().machines;
+
+  const auto *bios = findMachine(machines, QStringLiteral("arcbios"));
+  QVERIFY(bios != nullptr);
+  QVERIFY(bios->isBios);
+  QVERIFY(!bios->isDevice);
+  QVERIFY(!bios->isMechanical);
+  QVERIFY(bios->runnable);
+
+  const auto *device = findMachine(machines, QStringLiteral("cpu_core"));
+  QVERIFY(device != nullptr);
+  QVERIFY(!device->isBios);
+  QVERIFY(device->isDevice);
+  QVERIFY(!device->isMechanical);
+  QVERIFY(!device->runnable);
+
+  const auto *mech = findMachine(machines, QStringLiteral("flipper"));
+  QVERIFY(mech != nullptr);
+  QVERIFY(!mech->isBios);
+  QVERIFY(!mech->isDevice);
+  QVERIFY(mech->isMechanical);
+  QVERIFY(mech->runnable);
+}
+
+void TestDatLookup::mameMachineDefaultsForOmittedOrMalformedData() {
+  const auto result = DatLookup::parseMameListXmlWithMachines(QByteArray(kMameMachineDefaults));
+  QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+  const auto &machines = result.value().machines;
+  // The machine without a name= set-id is skipped, like its roms would be.
+  QCOMPARE(machines.size(), 3);
+  QCOMPARE(machines[0].setId, QStringLiteral("bare"));
+  QCOMPARE(machines[1].setId, QStringLiteral("garbled"));
+  QCOMPARE(machines[2].setId, QStringLiteral("negative"));
+
+  // Everything omitted: MAME DTD defaults.
+  const auto &bare = machines[0];
+  QCOMPARE(bare.description, QString());
+  QCOMPARE(bare.cloneOf, QString());
+  QCOMPARE(bare.romOf, QString());
+  QVERIFY(!bare.isBios);
+  QVERIFY(!bare.isDevice);
+  QVERIFY(!bare.isMechanical);
+  QVERIFY(bare.runnable);
+  QCOMPARE(bare.year, QString());
+  QCOMPARE(bare.manufacturer, QString());
+  QCOMPARE(bare.driverStatus, QString());
+  QCOMPARE(bare.players, -1);
+  QCOMPARE(bare.rotate, -1);
+
+  // Unrecognised flag values and non-numeric / out-of-set numbers also
+  // fall back to the defaults.
+  const auto &garbled = machines[1];
+  QVERIFY(!garbled.isBios);
+  QVERIFY(!garbled.isDevice);
+  QVERIFY(!garbled.isMechanical);
+  QVERIFY(garbled.runnable);
+  QCOMPARE(garbled.players, -1);
+  QCOMPARE(garbled.rotate, -1);
+
+  // Flag values are case-insensitive; negative numbers are malformed; a
+  // <driver> without status= leaves driverStatus empty.
+  const auto &negative = machines[2];
+  QVERIFY(negative.isBios);
+  QVERIFY(!negative.runnable);
+  QCOMPARE(negative.players, -1);
+  QCOMPARE(negative.rotate, -1);
+  QCOMPARE(negative.driverStatus, QString());
+
+  // No machine here declares a rom, so there are no per-rom records.
+  QVERIFY(result.value().records.isEmpty());
+}
+
+void TestDatLookup::mameMachineListsMachinesWithoutRoms() {
+  const auto result = DatLookup::parseMameListXmlWithMachines(QByteArray(kMameMachines));
+  QVERIFY(result.isOk());
+  const auto &parsed = result.value();
+  // One record per machine in document order, rom-less ones included: the
+  // device declares no <rom>, the mechanical set only a dropped nodump.
+  QCOMPARE(parsed.machines.size(), 5);
+  const QStringList order{QStringLiteral("fighter"), QStringLiteral("fighterj"),
+                          QStringLiteral("arcbios"), QStringLiteral("cpu_core"),
+                          QStringLiteral("flipper")};
+  for (int i = 0; i < order.size(); ++i) {
+    QCOMPARE(parsed.machines[i].setId, order[i]);
+  }
+  for (const auto &r : parsed.records) {
+    QVERIFY(r.setId != QStringLiteral("cpu_core"));
+    QVERIFY(r.setId != QStringLiteral("flipper"));
+  }
+  QCOMPARE(parsed.records.size(), 3);
+}
+
+void TestDatLookup::mameMachineParseKeepsPerRomRecords() {
+  // The machine-aware entry point must return exactly the per-rom records the
+  // records-only parser does, for both the new and the pre-existing fixture.
+  for (const char *xml : {kMameMachines, kMameSample}) {
+    const auto plain = DatLookup::parseMameListXml(QByteArray(xml));
+    const auto full = DatLookup::parseMameListXmlWithMachines(QByteArray(xml));
+    QVERIFY(plain.isOk());
+    QVERIFY(full.isOk());
+    const auto &a = plain.value();
+    const auto &b = full.value().records;
+    QCOMPARE(b.size(), a.size());
+    for (int i = 0; i < a.size(); ++i) {
+      QCOMPARE(b[i].gameName, a[i].gameName);
+      QCOMPARE(b[i].romName, a[i].romName);
+      QCOMPARE(b[i].size, a[i].size);
+      QCOMPARE(b[i].crc, a[i].crc);
+      QCOMPARE(b[i].md5, a[i].md5);
+      QCOMPARE(b[i].sha1, a[i].sha1);
+      QCOMPARE(b[i].cloneOf, a[i].cloneOf);
+      QCOMPARE(b[i].setId, a[i].setId);
+      QCOMPARE(b[i].mia, a[i].mia);
+    }
+  }
+
+  // And the per-rom values themselves are the established ones: description as
+  // gameName, cloneof folded into cloneOf, romof used only as the fallback.
+  const auto plain = DatLookup::parseMameListXml(QByteArray(kMameMachines));
+  QVERIFY(plain.isOk());
+  const auto &records = plain.value();
+  QCOMPARE(records.size(), 3);
+  QCOMPARE(records[0].gameName, QStringLiteral("Fighter (World)"));
+  QCOMPARE(records[0].setId, QStringLiteral("fighter"));
+  QCOMPARE(records[0].cloneOf, QStringLiteral("arcbios")); // romof fallback
+  QCOMPARE(records[0].crc, QStringLiteral("11111111"));
+  QCOMPARE(records[1].setId, QStringLiteral("fighterj"));
+  QCOMPARE(records[1].cloneOf, QStringLiteral("fighter"));
+  QCOMPARE(records[2].gameName, QStringLiteral("Arcade BIOS"));
+  QCOMPARE(records[2].size, qint64{2048});
+}
+
+void TestDatLookup::mameMachineParseReportsErrors() {
+  // Same truncation / malformed-XML rules as parseMameListXml: no partial
+  // machine list is returned.
+  const QByteArray truncated = QByteArrayLiteral(
+      "<?xml version=\"1.0\"?><mame><machine name=\"a\" isbios=\"yes\"></machine>");
+  QVERIFY(DatLookup::parseMameListXmlWithMachines(truncated).isError());
+  const QByteArray malformed =
+      QByteArrayLiteral("<?xml version=\"1.0\"?><mame><machine name=\"a\"></mame>");
+  QVERIFY(DatLookup::parseMameListXmlWithMachines(malformed).isError());
 }
 
 QTEST_MAIN(TestDatLookup)
