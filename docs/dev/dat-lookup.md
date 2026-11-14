@@ -114,10 +114,11 @@ Flags accept `yes`/`true`/`1` and `no`/`false`/`0` in any case; anything
 else takes the MAME DTD default above. `parseMameListXml` itself does not
 collect machines, so existing callers pay nothing extra.
 
-This is parser-only so far: machine records are **not** persisted in
-`DatCache` (no table, no schema bump), not looked up by set name, and not
-used to hide BIOS / device / non-runnable sets from a collection. Those
-build on this record in later work.
+`DatCache` persists these records per ingested MAME DAT (the
+`dat_machines` table, see [Machine records](#machine-records-dat_machines)
+below) and reads them back by set name. They are not yet used to hide
+BIOS / device / non-runnable sets from a collection; that builds on this
+record in later work.
 
 ## In-memory store
 
@@ -177,7 +178,49 @@ CREATE TABLE dat_records(
 CREATE INDEX dat_records_source_sha1 ON dat_records(source_id, sha1);
 CREATE INDEX dat_records_source_md5  ON dat_records(source_id, md5);
 CREATE INDEX dat_records_source_crc  ON dat_records(source_id, crc);
+
+CREATE TABLE dat_machines(
+  source_id INTEGER REFERENCES dat_sources(id) ON DELETE CASCADE,
+  set_name TEXT COLLATE NOCASE,
+  description TEXT, cloneof TEXT, romof TEXT,
+  is_bios INTEGER, is_device INTEGER, is_mechanical INTEGER,
+  runnable INTEGER, year TEXT, manufacturer TEXT, driver_status TEXT,
+  players INTEGER, rotate INTEGER
+);
+
+CREATE INDEX idx_dat_machines_set ON dat_machines(source_id, set_name);
 ```
+
+The schema version lives in `PRAGMA user_version` (`kSchemaVersion` in
+`datcache.cpp`). Any mismatch drops every table and rebuilds; the cache
+is throwaway, so the next `openOrIngest` re-parses each DAT. Version 6
+added `dat_machines`, so caches from older builds re-ingest their MAME
+DATs and gain machine rows.
+
+### Machine records (`dat_machines`)
+
+When `openOrIngest` ingests a MAME listxml it parses with
+`parseMameListXmlWithMachines` and writes one `dat_machines` row per
+`MameMachine`, ROM-less device / BIOS sets included, in the same
+transaction as the per-rom `dat_records` rows (which are unchanged).
+Other dialects write no machine rows. Text fields are stored as `''`
+when absent and `players` / `rotate` as `-1`, so readback restores the
+`MameMachine` defaults.
+
+Rows belong to their `dat_sources` row: a stale re-ingest deletes the
+source and `ON DELETE CASCADE` sweeps its machines, and `clearAll()`
+empties the table.
+
+```cpp
+QList<CachedMachine> Store::machinesForSet(const QList<CachedSource> &sources,
+                                           const QString &setName) const;
+```
+
+Looks `setName` up case-insensitively (SQLite `NOCASE`, ASCII) in each
+caller-supplied source only, returning at most one `{sourceId, machine}`
+per source in the caller's order. A set present only in a DAT the caller
+did not pass is never returned, which is how callers scope the lookup to
+the DATs attached to a collection.
 
 ### Cache invalidation
 
@@ -187,7 +230,7 @@ CREATE INDEX dat_records_source_crc  ON dat_records(source_id, crc);
 | Cache state | Action |
 |-------------|--------|
 | Hit, `mtime` matches | Single `SELECT` — fast |
-| Hit, `mtime` differs | Drop old `dat_records` rows + re-ingest from XML |
+| Hit, `mtime` differs | Drop old `dat_records` / `dat_machines` rows + re-ingest from XML |
 | Miss | Parse via `DatLookup`, bulk-insert into cache |
 | Unparseable / missing DAT | Return an error result; UI degrades to filename-only scraping |
 

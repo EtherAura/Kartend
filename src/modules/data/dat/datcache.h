@@ -26,7 +26,14 @@
 ///               ingested_at_unix_ms)
 ///   dat_records(source_id FK, game_name, rom_name, size, crc, md5, sha1,
 ///               cloneof, setid, mia)
-///   indexes on (source_id, sha1|md5|crc) for hash-lookup speed.
+///   dat_machines(source_id FK, set_name COLLATE NOCASE, description,
+///                cloneof, romof, is_bios, is_device, is_mechanical,
+///                runnable, year, manufacturer, driver_status, players,
+///                rotate) — one row per MAME listxml machine, ROM-less
+///                device/BIOS sets included (Kartend-tnt0l). Empty for
+///                every non-MAME dialect.
+///   indexes on (source_id, sha1|md5|crc) for hash-lookup speed, and on
+///   dat_machines(source_id, set_name) for the set-name lookup.
 ///
 /// Cache invalidation: when openOrIngest sees a DAT whose mtime no
 /// longer matches the cached row, it deletes that source's records
@@ -51,6 +58,14 @@ struct CachedSource {
   QString headerVersion;
 
   [[nodiscard]] bool isValid() const { return id >= 0; }
+};
+
+/// One cached MAME machine record plus the source it was ingested from
+/// (Kartend-tnt0l). `sourceId` is the owning `CachedSource::id`, so a
+/// caller that passed several DATs can tell which one answered.
+struct CachedMachine {
+  qint64 sourceId = -1;
+  DatLookup::MameMachine machine;
 };
 
 /// Owns a sqlite connection backing the DAT cache. One instance per
@@ -122,6 +137,17 @@ public:
   /// an invalid source / query failure / unknown game.
   [[nodiscard]] QList<DatLookup::DatRecord> recordsForGame(const CachedSource &source,
                                                            const QString &gameName) const;
+
+  /// The machine record for MAME set `setName` in each of `sources`, in the
+  /// caller's order (Kartend-tnt0l). Matching is case-insensitive (ASCII —
+  /// MAME set names are ASCII) and never leaves `sources`: a set that exists
+  /// only in a DAT the caller didn't pass is not returned. A source holds at
+  /// most one entry in the result (its first machine of that name, in DAT
+  /// order); sources without the set, invalid handles and non-MAME sources
+  /// contribute nothing. Empty on an empty name, a closed store or a query
+  /// failure.
+  [[nodiscard]] QList<CachedMachine> machinesForSet(const QList<CachedSource> &sources,
+                                                    const QString &setName) const;
 
   /// Drop every cached source + record. Used by the "clear caches"
   /// UI and by tests between runs.

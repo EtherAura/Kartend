@@ -369,6 +369,15 @@ kartend_add_test(NAME DatCache
   SOURCES modules/dat/test_datcache.cpp
   LINK kartend_data kartend_api kartend_utils
 )
+# Focused selection of the MAME machine-record cache cases (Kartend-tnt0l)
+# from the same executable; DatCache above still runs the whole suite.
+add_test(NAME datcache_machine_metadata
+  COMMAND test_datcache
+    machineRecordsRoundTripThroughReopen
+    machineLookupIsScopedToSuppliedSources
+    machineRowsFollowReplacementAndClearAll
+    previousSchemaCacheReingestsMachines
+    nonMameIngestStoresNoMachines)
 
 # DatCollectionMatch tests (pure DAT-to-collection match scoring)
 kartend_add_test(NAME DatCollectionMatch

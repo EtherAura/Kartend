@@ -73,6 +73,86 @@ game (
 )
 )cmp";
 
+// MAME listxml covering every machine-record field (Kartend-tnt0l): a fully
+// described clone, a BIOS, a mechanical set, and two ROM-less machines — a
+// device and a bare machine that leaves every optional field at its default.
+constexpr const char *kMameMachinesDat = R"xml(<?xml version="1.0"?>
+<mame build="0.260">
+  <machine name="pacman" cloneof="puckman" romof="puckman">
+    <description>Pac-Man (Midway)</description>
+    <year>1980</year>
+    <manufacturer>Namco (Midway license)</manufacturer>
+    <rom name="pacman.6e" size="4096" crc="c1e6ab10"/>
+    <display type="raster" rotate="90"/>
+    <input players="2" coins="2"/>
+    <driver status="good"/>
+  </machine>
+  <machine name="neogeo" isbios="yes">
+    <description>Neo-Geo MV-6F</description>
+    <year>1990</year>
+    <rom name="sp-s2.sp1" size="131072" crc="9036d879"/>
+  </machine>
+  <machine name="z80" isdevice="yes" runnable="no">
+    <description>Zilog Z80</description>
+  </machine>
+  <machine name="bare"/>
+  <machine name="flipper" ismechanical="yes">
+    <description>Flipper</description>
+    <rom name="flip.u1" size="2048" crc="0badf00d"/>
+  </machine>
+</mame>
+)xml";
+
+// Same path, edited: pacman re-described, the z80 device dropped.
+constexpr const char *kMameMachinesDatEdited = R"xml(<?xml version="1.0"?>
+<mame build="0.261">
+  <machine name="pacman">
+    <description>Pac-Man (Midway, rev 2)</description>
+    <rom name="pacman.6e" size="4096" crc="c1e6ab11"/>
+  </machine>
+</mame>
+)xml";
+
+// A second MAME DAT that shares the "pacman" set name with different data
+// and carries a set the first DAT lacks.
+constexpr const char *kMameMachinesDatOther = R"xml(<?xml version="1.0"?>
+<mame build="0.200">
+  <machine name="PacMan">
+    <description>Pac-Man (other DAT)</description>
+    <year>1981</year>
+    <rom name="pm.bin" size="4096" crc="11112222"/>
+  </machine>
+  <machine name="onlyinb">
+    <description>Only In B</description>
+    <rom name="b.bin" size="16" crc="33334444"/>
+  </machine>
+</mame>
+)xml";
+
+/// Row count of dat_machines (optionally for one source id) read through a
+/// separate connection to the real on-disk cache file; -1 on failure.
+int countMachineRows(const QString &dbPath, qint64 sourceId = -1) {
+  const QString conn = QStringLiteral("test_datcache_machine_count");
+  int n = -1;
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+    db.setDatabaseName(dbPath);
+    if (db.open()) {
+      QSqlQuery q(db);
+      if (sourceId < 0) {
+        q.prepare(QStringLiteral("SELECT COUNT(*) FROM dat_machines"));
+      } else {
+        q.prepare(QStringLiteral("SELECT COUNT(*) FROM dat_machines WHERE source_id = ?"));
+        q.addBindValue(sourceId);
+      }
+      if (q.exec() && q.next()) n = q.value(0).toInt();
+    }
+    db.close();
+  }
+  QSqlDatabase::removeDatabase(conn);
+  return n;
+}
+
 QString writeDat(const QString &path, const char *bytes) {
   QFile f(path);
   if (!f.open(QIODevice::WriteOnly)) return QString();
@@ -114,6 +194,13 @@ private slots:
   void forEachRecordInvalidSourceReturnsFalse();
   void cloneOfRoundTripsThroughCache();
   void miaRoundTripsThroughCache();
+
+  // MAME machine records (Kartend-tnt0l); also run as datcache_machine_metadata.
+  void machineRecordsRoundTripThroughReopen();
+  void machineLookupIsScopedToSuppliedSources();
+  void machineRowsFollowReplacementAndClearAll();
+  void previousSchemaCacheReingestsMachines();
+  void nonMameIngestStoresNoMachines();
 
 private:
   QString cachePath() const { return m_dir.filePath("datcache.sqlite"); }
@@ -627,6 +714,230 @@ void TestDatCache::miaRoundTripsThroughCache() {
                       [&](const DatLookup::DatRecord &r) { miaByCrc.insert(r.crc, r.mia); });
   QVERIFY(miaByCrc.value(QStringLiteral("bbbbbbbb")));
   QVERIFY(!miaByCrc.value(QStringLiteral("aaaaaaaa")));
+}
+
+void TestDatCache::machineRecordsRoundTripThroughReopen() {
+  // Normal MAME ingest -> close the store -> reopen the same on-disk file ->
+  // case-insensitive set-name lookup returns every machine field intact.
+  writeDat(datPath(), kMameMachinesDat);
+  qint64 sourceId = -1;
+  {
+    DatCache::Store store(cachePath());
+    auto source = store.openOrIngest(datPath());
+    QVERIFY(source.isOk());
+    QCOMPARE(source.value().dialect, DatLookup::Dialect::Mame);
+    // Per-rom records are unchanged: one per ROM, ROM-less machines add none.
+    QCOMPARE(source.value().recordCount, 3);
+    sourceId = source.value().id;
+  }
+  QCOMPARE(countMachineRows(cachePath(), sourceId), 5);
+
+  DatCache::Store store(cachePath());
+  const auto peeked = store.peek(datPath());
+  QVERIFY(peeked.has_value());
+  QCOMPARE(peeked->id, sourceId);
+  // Still a cache hit — the reopen didn't re-ingest.
+  auto again = store.openOrIngest(datPath());
+  QVERIFY(again.isOk());
+  QCOMPARE(again.value().id, sourceId);
+  const QList<DatCache::CachedSource> scope{*peeked};
+
+  const auto pac = store.machinesForSet(scope, QStringLiteral("PacMan"));
+  QCOMPARE(pac.size(), 1);
+  QCOMPARE(pac[0].sourceId, sourceId);
+  const DatLookup::MameMachine &p = pac[0].machine;
+  QCOMPARE(p.setId, QStringLiteral("pacman"));
+  QCOMPARE(p.description, QStringLiteral("Pac-Man (Midway)"));
+  QCOMPARE(p.cloneOf, QStringLiteral("puckman"));
+  QCOMPARE(p.romOf, QStringLiteral("puckman"));
+  QVERIFY(!p.isBios);
+  QVERIFY(!p.isDevice);
+  QVERIFY(!p.isMechanical);
+  QVERIFY(p.runnable);
+  QCOMPARE(p.year, QStringLiteral("1980"));
+  QCOMPARE(p.manufacturer, QStringLiteral("Namco (Midway license)"));
+  QCOMPARE(p.driverStatus, QStringLiteral("good"));
+  QCOMPARE(p.players, 2);
+  QCOMPARE(p.rotate, 90);
+
+  const auto bios = store.machinesForSet(scope, QStringLiteral("NEOGEO"));
+  QCOMPARE(bios.size(), 1);
+  QVERIFY(bios[0].machine.isBios);
+  QVERIFY(!bios[0].machine.isDevice);
+  QCOMPARE(bios[0].machine.year, QStringLiteral("1990"));
+
+  const auto mech = store.machinesForSet(scope, QStringLiteral("flipper"));
+  QCOMPARE(mech.size(), 1);
+  QVERIFY(mech[0].machine.isMechanical);
+
+  // ROM-less device: present as a machine, absent from the per-rom records.
+  const auto dev = store.machinesForSet(scope, QStringLiteral("Z80"));
+  QCOMPARE(dev.size(), 1);
+  QCOMPARE(dev[0].machine.setId, QStringLiteral("z80"));
+  QCOMPARE(dev[0].machine.description, QStringLiteral("Zilog Z80"));
+  QVERIFY(dev[0].machine.isDevice);
+  QVERIFY(!dev[0].machine.runnable);
+  QVERIFY(store.recordsForGame(*peeked, QStringLiteral("Zilog Z80")).isEmpty());
+
+  // ROM-less machine with nothing declared keeps the DTD defaults.
+  const auto bare = store.machinesForSet(scope, QStringLiteral("bare"));
+  QCOMPARE(bare.size(), 1);
+  const DatLookup::MameMachine &b = bare[0].machine;
+  QCOMPARE(b.setId, QStringLiteral("bare"));
+  QVERIFY(b.description.isEmpty());
+  QVERIFY(b.cloneOf.isEmpty());
+  QVERIFY(b.romOf.isEmpty());
+  QVERIFY(!b.isBios);
+  QVERIFY(!b.isDevice);
+  QVERIFY(!b.isMechanical);
+  QVERIFY(b.runnable);
+  QVERIFY(b.year.isEmpty());
+  QVERIFY(b.manufacturer.isEmpty());
+  QVERIFY(b.driverStatus.isEmpty());
+  QCOMPARE(b.players, -1);
+  QCOMPARE(b.rotate, -1);
+
+  // Per-rom hash lookup still answers as before.
+  auto rec = store.lookup(*peeked, QString(), QString(), QStringLiteral("c1e6ab10"));
+  QVERIFY(rec.has_value());
+  QCOMPARE(rec->gameName, QStringLiteral("Pac-Man (Midway)"));
+  QVERIFY(store.machinesForSet(scope, QStringLiteral("missing")).isEmpty());
+}
+
+void TestDatCache::machineLookupIsScopedToSuppliedSources() {
+  // Two DATs carry the same set name; a lookup only ever reads rows owned by
+  // the sources the caller passed, in the caller's order.
+  const QString pathA = m_dir.filePath("machines_a.dat");
+  const QString pathB = m_dir.filePath("machines_b.dat");
+  const QString pathL = m_dir.filePath("machines_logiqx.dat");
+  writeDat(pathA, kMameMachinesDat);
+  writeDat(pathB, kMameMachinesDatOther);
+  writeDat(pathL, kLogiqxDat);
+  DatCache::Store store(cachePath());
+  auto a = store.openOrIngest(pathA);
+  auto b = store.openOrIngest(pathB);
+  auto l = store.openOrIngest(pathL);
+  QVERIFY(a.isOk());
+  QVERIFY(b.isOk());
+  QVERIFY(l.isOk());
+  const DatCache::CachedSource sa = a.value();
+  const DatCache::CachedSource sb = b.value();
+
+  const auto onlyA = store.machinesForSet({sa}, QStringLiteral("pacman"));
+  QCOMPARE(onlyA.size(), 1);
+  QCOMPARE(onlyA[0].sourceId, sa.id);
+  QCOMPARE(onlyA[0].machine.description, QStringLiteral("Pac-Man (Midway)"));
+
+  const auto onlyB = store.machinesForSet({sb}, QStringLiteral("pacman"));
+  QCOMPARE(onlyB.size(), 1);
+  QCOMPARE(onlyB[0].sourceId, sb.id);
+  QCOMPARE(onlyB[0].machine.setId, QStringLiteral("PacMan"));
+  QCOMPARE(onlyB[0].machine.description, QStringLiteral("Pac-Man (other DAT)"));
+  QCOMPARE(onlyB[0].machine.year, QStringLiteral("1981"));
+
+  const auto both = store.machinesForSet({sb, sa}, QStringLiteral("PACMAN"));
+  QCOMPARE(both.size(), 2);
+  QCOMPARE(both[0].sourceId, sb.id);
+  QCOMPARE(both[1].sourceId, sa.id);
+
+  // A set only B carries never leaks into an A-scoped (or Logiqx-scoped) lookup.
+  QVERIFY(store.machinesForSet({sa}, QStringLiteral("onlyinb")).isEmpty());
+  QVERIFY(store.machinesForSet({l.value()}, QStringLiteral("onlyinb")).isEmpty());
+  QCOMPARE(store.machinesForSet({sa, sb}, QStringLiteral("onlyinb")).size(), 1);
+  QVERIFY(store.machinesForSet({}, QStringLiteral("pacman")).isEmpty());
+  QVERIFY(store.machinesForSet({DatCache::CachedSource{}}, QStringLiteral("pacman")).isEmpty());
+  QVERIFY(store.machinesForSet({sa, sb}, QString()).isEmpty());
+}
+
+void TestDatCache::machineRowsFollowReplacementAndClearAll() {
+  // Machine rows share their DAT's lifecycle: an mtime-driven re-ingest drops
+  // the old source's machines (no stale rows), clearAll() drops all of them.
+  writeDat(datPath(), kMameMachinesDat);
+  DatCache::Store store(cachePath());
+  auto first = store.openOrIngest(datPath());
+  QVERIFY(first.isOk());
+  const DatCache::CachedSource oldSource = first.value();
+  QCOMPARE(countMachineRows(cachePath(), oldSource.id), 5);
+
+  const QDateTime originalMtime = QFileInfo(datPath()).lastModified();
+  auto stampAdvanced = [&]() -> bool {
+    writeDat(datPath(), kMameMachinesDatEdited);
+    return QFileInfo(datPath()).lastModified() != originalMtime;
+  };
+  QTRY_VERIFY_WITH_TIMEOUT(stampAdvanced(), 5000);
+
+  auto second = store.openOrIngest(datPath());
+  QVERIFY(second.isOk());
+  const DatCache::CachedSource newSource = second.value();
+  QVERIFY(newSource.id != oldSource.id);
+  QCOMPARE(countMachineRows(cachePath(), oldSource.id), 0);
+  QCOMPARE(countMachineRows(cachePath()), 1);
+
+  const auto pac = store.machinesForSet({newSource}, QStringLiteral("pacman"));
+  QCOMPARE(pac.size(), 1);
+  QCOMPARE(pac[0].machine.description, QStringLiteral("Pac-Man (Midway, rev 2)"));
+  QVERIFY(pac[0].machine.cloneOf.isEmpty());
+  QVERIFY(store.machinesForSet({newSource}, QStringLiteral("z80")).isEmpty());
+  QVERIFY(store.machinesForSet({oldSource}, QStringLiteral("z80")).isEmpty());
+  QVERIFY(store.machinesForSet({oldSource}, QStringLiteral("pacman")).isEmpty());
+
+  store.clearAll();
+  QCOMPARE(countMachineRows(cachePath()), 0);
+  QVERIFY(store.machinesForSet({newSource}, QStringLiteral("pacman")).isEmpty());
+}
+
+void TestDatCache::previousSchemaCacheReingestsMachines() {
+  // A cache written by the previous schema (v5: no dat_machines table) must be
+  // wiped on open so the MAME DAT re-ingests and gains its machine rows.
+  writeDat(datPath(), kMameMachinesDat);
+  {
+    DatCache::Store store(cachePath());
+    QVERIFY(store.openOrIngest(datPath()).isOk());
+  }
+  const QString conn = QStringLiteral("test_datcache_v5");
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+    db.setDatabaseName(cachePath());
+    QVERIFY(db.open());
+    QSqlQuery q(db);
+    QVERIFY(q.exec(QStringLiteral("DROP TABLE dat_machines")));
+    QVERIFY(q.exec(QStringLiteral("PRAGMA user_version = 5")));
+    db.close();
+  }
+  QSqlDatabase::removeDatabase(conn);
+
+  DatCache::Store reopened(cachePath());
+  QVERIFY(reopened.isOpen());
+  QVERIFY(!reopened.peek(datPath()).has_value());
+  auto source = reopened.openOrIngest(datPath());
+  QVERIFY(source.isOk());
+  QCOMPARE(source.value().recordCount, 3);
+  const auto dev = reopened.machinesForSet({source.value()}, QStringLiteral("z80"));
+  QCOMPARE(dev.size(), 1);
+  QVERIFY(dev[0].machine.isDevice);
+  QCOMPARE(countMachineRows(cachePath()), 5);
+}
+
+void TestDatCache::nonMameIngestStoresNoMachines() {
+  // Logiqx and clrmamepro ingestion is unchanged and writes no machine rows.
+  const QString pathL = m_dir.filePath("plain_logiqx.dat");
+  const QString pathC = m_dir.filePath("plain_cmp.dat");
+  writeDat(pathL, kLogiqxDat);
+  writeDat(pathC, kClrMameProDat);
+  DatCache::Store store(cachePath());
+  auto l = store.openOrIngest(pathL);
+  auto c = store.openOrIngest(pathC);
+  QVERIFY(l.isOk());
+  QVERIFY(c.isOk());
+  QCOMPARE(l.value().recordCount, 2);
+  QCOMPARE(c.value().recordCount, 1);
+  QCOMPARE(countMachineRows(cachePath()), 0);
+  QVERIFY(
+      store.machinesForSet({l.value(), c.value()}, QStringLiteral("Game Alpha (USA)")).isEmpty());
+  QVERIFY(store
+              .lookup(l.value(), QString(),
+                      QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), QString())
+              .has_value());
 }
 
 QTEST_MAIN(TestDatCache)
