@@ -8,6 +8,8 @@
 
 #include "dbtxn.h"
 
+#include <algorithm>
+
 #include <QAtomicInteger>
 #include <QDateTime>
 #include <QDir>
@@ -609,6 +611,15 @@ QList<CachedMachine> Store::machinesForSet(const QList<CachedSource> &sources,
     out.append(cm);
   }
   return out;
+}
+
+bool Store::isHideableMachineSet(const QList<CachedSource> &sources, const QString &setName) const {
+  // Only the explicit listxml flags decide; any supplied source carrying one is
+  // enough. No set-name or hash heuristics.
+  const QList<CachedMachine> machines = machinesForSet(sources, setName);
+  return std::any_of(machines.cbegin(), machines.cend(), [](const CachedMachine &cm) {
+    return cm.machine.isBios || cm.machine.isDevice || !cm.machine.runnable;
+  });
 }
 
 void Store::clearAll() {

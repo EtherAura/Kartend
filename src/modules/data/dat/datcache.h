@@ -149,6 +149,16 @@ public:
   [[nodiscard]] QList<CachedMachine> machinesForSet(const QList<CachedSource> &sources,
                                                     const QString &setName) const;
 
+  /// True when one of `sources` (via `machinesForSet`) marks set `setName` as
+  /// a BIOS (`isbios="yes"`), a device (`isdevice="yes"`) or not runnable
+  /// (`runnable="no"`) — the sets a collection may opt to hide (Kartend-tnt0l).
+  /// Mechanical or non-working flags alone never qualify, and an unknown name,
+  /// an empty scope, a non-MAME source or a closed store answers false, so
+  /// missing data never hides anything. Read-only: it decides, it does not
+  /// filter — whether hiding is enabled at all is the caller's call.
+  [[nodiscard]] bool isHideableMachineSet(const QList<CachedSource> &sources,
+                                          const QString &setName) const;
+
   /// Drop every cached source + record. Used by the "clear caches"
   /// UI and by tests between runs.
   void clearAll();

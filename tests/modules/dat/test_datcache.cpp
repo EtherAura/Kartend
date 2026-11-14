@@ -17,6 +17,7 @@
 #include <QFileInfo>
 #include <QList>
 #include <QSqlQuery>
+#include <QSqlRecord>
 #include <QStringList>
 #include <QTemporaryDir>
 #include <QTest>
@@ -129,6 +130,78 @@ constexpr const char *kMameMachinesDatOther = R"xml(<?xml version="1.0"?>
 </mame>
 )xml";
 
+// MAME listxml for the hide rule (Kartend-tnt0l): one set per flag on its own —
+// ordinary, BIOS, device (still runnable), runnable="no" only, mechanical,
+// non-working — plus a bare machine left at every default.
+constexpr const char *kMameHideRulesDat = R"xml(<?xml version="1.0"?>
+<mame build="0.260">
+  <machine name="pacman">
+    <description>Pac-Man</description>
+    <rom name="pacman.6e" size="4096" crc="c1e6ab10"/>
+    <driver status="good"/>
+  </machine>
+  <machine name="neogeo" isbios="yes">
+    <description>Neo-Geo MV-6F</description>
+    <rom name="sp-s2.sp1" size="131072" crc="9036d879"/>
+  </machine>
+  <machine name="ym2610" isdevice="yes">
+    <description>YM2610</description>
+  </machine>
+  <machine name="notrun" runnable="no">
+    <description>Not Runnable</description>
+    <rom name="nr.bin" size="16" crc="55556666"/>
+  </machine>
+  <machine name="flipper" ismechanical="yes">
+    <description>Flipper</description>
+    <rom name="flip.u1" size="2048" crc="0badf00d"/>
+  </machine>
+  <machine name="broken">
+    <description>Broken Game</description>
+    <rom name="brk.bin" size="16" crc="77778888"/>
+    <driver status="preliminary"/>
+  </machine>
+  <machine name="bare"/>
+</mame>
+)xml";
+
+// A second MAME DAT that flags names the first lists as ordinary games.
+constexpr const char *kMameHideRulesDatOther = R"xml(<?xml version="1.0"?>
+<mame build="0.200">
+  <machine name="PacMan" isbios="yes">
+    <description>Pac-Man BIOS (other DAT)</description>
+    <rom name="pmb.bin" size="16" crc="9999aaaa"/>
+  </machine>
+  <machine name="flipper" isdevice="yes" runnable="no">
+    <description>Flipper device (other DAT)</description>
+  </machine>
+</mame>
+)xml";
+
+/// Every dat_machines row, one string per row in rowid order, read through a
+/// separate connection to the real on-disk cache file — a snapshot to prove a
+/// read-only call left the stored records untouched.
+QStringList dumpMachineRows(const QString &dbPath) {
+  const QString conn = QStringLiteral("test_datcache_machine_dump");
+  QStringList rows;
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+    db.setDatabaseName(dbPath);
+    if (db.open()) {
+      QSqlQuery q(db);
+      if (q.exec(QStringLiteral("SELECT * FROM dat_machines ORDER BY rowid"))) {
+        while (q.next()) {
+          QStringList cols;
+          for (int i = 0; i < q.record().count(); ++i) cols << q.value(i).toString();
+          rows << cols.join(QLatin1Char('|'));
+        }
+      }
+    }
+    db.close();
+  }
+  QSqlDatabase::removeDatabase(conn);
+  return rows;
+}
+
 /// Row count of dat_machines (optionally for one source id) read through a
 /// separate connection to the real on-disk cache file; -1 on failure.
 int countMachineRows(const QString &dbPath, qint64 sourceId = -1) {
@@ -201,6 +274,12 @@ private slots:
   void machineRowsFollowReplacementAndClearAll();
   void previousSchemaCacheReingestsMachines();
   void nonMameIngestStoresNoMachines();
+
+  // Hide rule for BIOS / device / non-runnable sets (Kartend-tnt0l).
+  void hideRuleFlagsBiosDeviceAndNonRunnable();
+  void hideRuleKeepsUnflaggedAndUnknownSets();
+  void hideRuleIsScopedToSuppliedSources();
+  void hideRuleLeavesCacheUntouched();
 
 private:
   QString cachePath() const { return m_dir.filePath("datcache.sqlite"); }
@@ -938,6 +1017,147 @@ void TestDatCache::nonMameIngestStoresNoMachines() {
               .lookup(l.value(), QString(),
                       QStringLiteral("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), QString())
               .has_value());
+}
+
+void TestDatCache::hideRuleFlagsBiosDeviceAndNonRunnable() {
+  // Each exclusion flag qualifies on its own, read back from the on-disk cache
+  // after a reopen, with the set name matched case-insensitively.
+  writeDat(datPath(), kMameHideRulesDat);
+  {
+    DatCache::Store store(cachePath());
+    QVERIFY(store.openOrIngest(datPath()).isOk());
+  }
+  DatCache::Store store(cachePath());
+  const auto source = store.peek(datPath());
+  QVERIFY(source.has_value());
+  const QList<DatCache::CachedSource> scope{*source};
+
+  QVERIFY(store.isHideableMachineSet(scope, QStringLiteral("neogeo")));
+  QVERIFY(store.isHideableMachineSet(scope, QStringLiteral("NeoGeo")));
+  QVERIFY(store.isHideableMachineSet(scope, QStringLiteral("NEOGEO")));
+  // Device that the DAT leaves runnable: isdevice alone is enough.
+  const auto dev = store.machinesForSet(scope, QStringLiteral("ym2610"));
+  QCOMPARE(dev.size(), 1);
+  QVERIFY(dev[0].machine.isDevice);
+  QVERIFY(dev[0].machine.runnable);
+  QVERIFY(store.isHideableMachineSet(scope, QStringLiteral("YM2610")));
+  // runnable="no" with no BIOS / device flag.
+  const auto nr = store.machinesForSet(scope, QStringLiteral("notrun"));
+  QCOMPARE(nr.size(), 1);
+  QVERIFY(!nr[0].machine.isBios);
+  QVERIFY(!nr[0].machine.isDevice);
+  QVERIFY(!nr[0].machine.runnable);
+  QVERIFY(store.isHideableMachineSet(scope, QStringLiteral("NotRun")));
+}
+
+void TestDatCache::hideRuleKeepsUnflaggedAndUnknownSets() {
+  // Playable, mechanical, non-working and default-only machines stay visible,
+  // as do names the DAT does not carry at all.
+  writeDat(datPath(), kMameHideRulesDat);
+  DatCache::Store store(cachePath());
+  auto source = store.openOrIngest(datPath());
+  QVERIFY(source.isOk());
+  const QList<DatCache::CachedSource> scope{source.value()};
+
+  QVERIFY(!store.isHideableMachineSet(scope, QStringLiteral("pacman")));
+  QVERIFY(!store.isHideableMachineSet(scope, QStringLiteral("PACMAN")));
+  const auto mech = store.machinesForSet(scope, QStringLiteral("flipper"));
+  QCOMPARE(mech.size(), 1);
+  QVERIFY(mech[0].machine.isMechanical);
+  QVERIFY(!store.isHideableMachineSet(scope, QStringLiteral("flipper")));
+  const auto broken = store.machinesForSet(scope, QStringLiteral("broken"));
+  QCOMPARE(broken.size(), 1);
+  QCOMPARE(broken[0].machine.driverStatus, QStringLiteral("preliminary"));
+  QVERIFY(!store.isHideableMachineSet(scope, QStringLiteral("broken")));
+  QCOMPARE(store.machinesForSet(scope, QStringLiteral("bare")).size(), 1);
+  QVERIFY(!store.isHideableMachineSet(scope, QStringLiteral("bare")));
+
+  QVERIFY(!store.isHideableMachineSet(scope, QStringLiteral("missing")));
+  QVERIFY(!store.isHideableMachineSet(scope, QString()));
+  // No source, or only an invalid handle: nothing to decide on, nothing hidden.
+  QVERIFY(!store.isHideableMachineSet({}, QStringLiteral("neogeo")));
+  QVERIFY(!store.isHideableMachineSet({DatCache::CachedSource{}}, QStringLiteral("neogeo")));
+}
+
+void TestDatCache::hideRuleIsScopedToSuppliedSources() {
+  // A flag only in a DAT the caller did not pass never hides the same-named
+  // ordinary set; passing that DAT is enough for its flag to count. Non-MAME
+  // DATs carry no machine flags and never qualify a set.
+  const QString pathA = m_dir.filePath("hide_a.dat");
+  const QString pathB = m_dir.filePath("hide_b.dat");
+  const QString pathL = m_dir.filePath("hide_logiqx.dat");
+  const QString pathC = m_dir.filePath("hide_cmp.dat");
+  writeDat(pathA, kMameHideRulesDat);
+  writeDat(pathB, kMameHideRulesDatOther);
+  writeDat(pathL, kLogiqxDat);
+  writeDat(pathC, kClrMameProDat);
+  DatCache::Store store(cachePath());
+  auto a = store.openOrIngest(pathA);
+  auto b = store.openOrIngest(pathB);
+  auto l = store.openOrIngest(pathL);
+  auto c = store.openOrIngest(pathC);
+  QVERIFY(a.isOk());
+  QVERIFY(b.isOk());
+  QVERIFY(l.isOk());
+  QVERIFY(c.isOk());
+  const DatCache::CachedSource sa = a.value();
+  const DatCache::CachedSource sb = b.value();
+
+  QVERIFY(!store.isHideableMachineSet({sa}, QStringLiteral("pacman")));
+  QVERIFY(!store.isHideableMachineSet({sa}, QStringLiteral("flipper")));
+  QVERIFY(store.isHideableMachineSet({sb}, QStringLiteral("pacman")));
+  QVERIFY(store.isHideableMachineSet({sb}, QStringLiteral("Flipper")));
+  // Both attached: an explicit flag in either supplied MAME source suffices.
+  QVERIFY(store.isHideableMachineSet({sa, sb}, QStringLiteral("pacman")));
+  QVERIFY(store.isHideableMachineSet({sb, sa}, QStringLiteral("flipper")));
+  // B lacks neogeo; A's flag does not leak into a B-only scope.
+  QVERIFY(!store.isHideableMachineSet({sb}, QStringLiteral("neogeo")));
+
+  // Unrelated (non-MAME) DATs alone never hide, even for a name A flags.
+  const QList<DatCache::CachedSource> plain{l.value(), c.value()};
+  QVERIFY(!store.isHideableMachineSet(plain, QStringLiteral("neogeo")));
+  QVERIFY(!store.isHideableMachineSet(plain, QStringLiteral("Game Alpha (USA)")));
+  QVERIFY(!store.isHideableMachineSet({l.value(), sa}, QStringLiteral("pacman")));
+  QVERIFY(store.isHideableMachineSet({l.value(), sa}, QStringLiteral("neogeo")));
+}
+
+void TestDatCache::hideRuleLeavesCacheUntouched() {
+  // Deciding is read-only: the stored machine rows, the source row and the
+  // records the lookup returns are identical before and after.
+  writeDat(datPath(), kMameHideRulesDat);
+  DatCache::Store store(cachePath());
+  auto source = store.openOrIngest(datPath());
+  QVERIFY(source.isOk());
+  const QList<DatCache::CachedSource> scope{source.value()};
+  const QStringList rowsBefore = dumpMachineRows(cachePath());
+  QCOMPARE(rowsBefore.size(), 7);
+  const auto biosBefore = store.machinesForSet(scope, QStringLiteral("neogeo"));
+  QCOMPARE(biosBefore.size(), 1);
+
+  const QStringList names{QStringLiteral("pacman"),  QStringLiteral("neogeo"),
+                          QStringLiteral("ym2610"),  QStringLiteral("notrun"),
+                          QStringLiteral("flipper"), QStringLiteral("broken"),
+                          QStringLiteral("bare"),    QStringLiteral("missing")};
+  for (const QString &name : names) {
+    (void)store.isHideableMachineSet(scope, name);
+    (void)store.isHideableMachineSet(scope, name.toUpper());
+  }
+
+  QCOMPARE(dumpMachineRows(cachePath()), rowsBefore);
+  const auto biosAfter = store.machinesForSet(scope, QStringLiteral("neogeo"));
+  QCOMPARE(biosAfter.size(), 1);
+  QCOMPARE(biosAfter[0].machine.setId, biosBefore[0].machine.setId);
+  QVERIFY(biosAfter[0].machine.isBios);
+  QVERIFY(biosAfter[0].machine.runnable);
+  const auto peeked = store.peek(datPath());
+  QVERIFY(peeked.has_value());
+  QCOMPARE(peeked->id, source.value().id);
+  QCOMPARE(peeked->mtimeUnixMs, source.value().mtimeUnixMs);
+  QCOMPARE(peeked->recordCount, source.value().recordCount);
+  // Still a cache hit — nothing the rule did forced a re-ingest.
+  auto again = store.openOrIngest(datPath());
+  QVERIFY(again.isOk());
+  QCOMPARE(again.value().id, source.value().id);
 }
 
 QTEST_MAIN(TestDatCache)
