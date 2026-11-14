@@ -40,6 +40,9 @@ private slots:
   void parseDetailResponse_keepsValidGroupScopeKey();
   void parseDetailResponse_retainsValidCompanyIdRejectsHostile();
   void parseUserInfoResponse_nonJsonBodyRejectedRegardlessOfPrefix();
+  void parseDetailResponse_systemIdentity_data();
+  void parseDetailResponse_systemIdentity();
+  void parseDetailResponse_systemIdentityKeepsOtherFields();
 };
 
 namespace {
@@ -614,6 +617,175 @@ void TestScreenScraperParser::parseUserInfoResponse_nonJsonBodyRejectedRegardles
   QVERIFY(html.isError());
   QVERIFY2(html.error().message.contains(QStringLiteral("rejected")),
            qPrintable(html.error().message));
+}
+
+namespace {
+
+// Minimal jeuInfos reply with `systeme` set to the raw JSON `systeme` text; a
+// empty `systeme` leaves the key out entirely (Kartend-8hw6f).
+QByteArray withSysteme(const QByteArray &systeme) {
+  QByteArray json = R"json({"response": {"jeu": {"id": "42",
+    "noms": [{"region": "us", "text": "Game"}], "rom": {"romregions": "us"})json";
+  if (!systeme.isEmpty()) {
+    json += R"(, "systeme": )" + systeme;
+  }
+  json += "}}}";
+  return json;
+}
+
+} // namespace
+
+void TestScreenScraperParser::parseDetailResponse_systemIdentity_data() {
+  QTest::addColumn<QByteArray>("systeme");
+  QTest::addColumn<QString>("expectedId");
+  QTest::addColumn<QString>("expectedParentId");
+
+  const QString none;
+  // Valid ids, string and number.
+  QTest::newRow("string ids") << QByteArray(R"({"id": "20", "parentid": "1"})") << "20"
+                              << "1";
+  QTest::newRow("numeric ids") << QByteArray(R"({"id": 20, "parentid": 1})") << "20"
+                               << "1";
+  QTest::newRow("numeric zero") << QByteArray(R"({"id": 0, "parentid": 0})") << "0"
+                                << "0";
+  QTest::newRow("string zero") << QByteArray(R"({"id": "0", "parentid": "0"})") << "0"
+                               << "0";
+  QTest::newRow("numeric negative zero") << QByteArray(R"({"id": -0, "parentid": 7})") << "0"
+                                         << "7";
+  QTest::newRow("numeric negative integral") << QByteArray(R"({"id": -7, "parentid": 3})") << "-7"
+                                             << "3";
+  QTest::newRow("largest exact integer")
+      << QByteArray(R"({"id": 9007199254740991, "parentid": -9007199254740991})")
+      << "9007199254740991"
+      << "-9007199254740991";
+  QTest::newRow("integral exponent form") << QByteArray(R"({"id": 2.0e1, "parentid": 1})") << "20"
+                                          << "1";
+
+  // Fractional numbers: each field independently, the other stays intact.
+  QTest::newRow("id 0.5") << QByteArray(R"({"id": 0.5, "parentid": 1})") << none << "1";
+  QTest::newRow("id -0.5") << QByteArray(R"({"id": -0.5, "parentid": 1})") << none << "1";
+  QTest::newRow("id 2.5") << QByteArray(R"({"id": 2.5, "parentid": 1})") << none << "1";
+  QTest::newRow("id -2.5") << QByteArray(R"({"id": -2.5, "parentid": 1})") << none << "1";
+  QTest::newRow("parentid 0.5") << QByteArray(R"({"id": 20, "parentid": 0.5})") << "20" << none;
+  QTest::newRow("parentid -0.5") << QByteArray(R"({"id": 20, "parentid": -0.5})") << "20" << none;
+  QTest::newRow("parentid 1.25") << QByteArray(R"({"id": 20, "parentid": 1.25})") << "20" << none;
+  QTest::newRow("parentid -3.75") << QByteArray(R"({"id": 20, "parentid": -3.75})") << "20" << none;
+
+  // Outside the exactly representable integer range.
+  QTest::newRow("id 2^53") << QByteArray(R"({"id": 9007199254740992, "parentid": 1})") << none
+                           << "1";
+  QTest::newRow("id -2^53") << QByteArray(R"({"id": -9007199254740992, "parentid": 1})") << none
+                            << "1";
+  QTest::newRow("id 2^53+1") << QByteArray(R"({"id": 9007199254740993, "parentid": 1})") << none
+                             << "1";
+  QTest::newRow("id 2^63") << QByteArray(R"({"id": 9223372036854775808, "parentid": 1})") << none
+                           << "1";
+  QTest::newRow("id 1e300") << QByteArray(R"({"id": 1e300, "parentid": 1})") << none << "1";
+  QTest::newRow("parentid -1e300")
+      << QByteArray(R"({"id": 20, "parentid": -1e300})") << "20" << none;
+  QTest::newRow("parentid 2^64") << QByteArray(R"({"id": 20, "parentid": 18446744073709551616})")
+                                 << "20" << none;
+  QTest::newRow("parentid -2^63") << QByteArray(R"({"id": 20, "parentid": -9223372036854775808})")
+                                  << "20" << none;
+
+  // Missing fields / missing or non-object systeme.
+  QTest::newRow("id missing") << QByteArray(R"({"parentid": 1})") << none << "1";
+  QTest::newRow("parentid missing") << QByteArray(R"({"id": "20"})") << "20" << none;
+  QTest::newRow("empty systeme") << QByteArray("{}") << none << none;
+  QTest::newRow("systeme absent") << QByteArray() << none << none;
+  QTest::newRow("systeme null") << QByteArray("null") << none << none;
+  QTest::newRow("systeme string") << QByteArray(R"("20")") << none << none;
+  QTest::newRow("systeme number") << QByteArray("20") << none << none;
+  QTest::newRow("systeme array") << QByteArray(R"([{"id": 20}])") << none << none;
+
+  // Wrong JSON types per field.
+  QTest::newRow("id bool") << QByteArray(R"({"id": true, "parentid": 1})") << none << "1";
+  QTest::newRow("id null") << QByteArray(R"({"id": null, "parentid": 1})") << none << "1";
+  QTest::newRow("id object") << QByteArray(R"({"id": {"id": 20}, "parentid": 1})") << none << "1";
+  QTest::newRow("parentid array") << QByteArray(R"({"id": 20, "parentid": [1]})") << "20" << none;
+  QTest::newRow("parentid bool") << QByteArray(R"({"id": 20, "parentid": false})") << "20" << none;
+
+  // Hostile / malformed strings.
+  QTest::newRow("id traversal") << QByteArray(R"({"id": "../20", "parentid": "1"})") << none << "1";
+  QTest::newRow("id empty string") << QByteArray(R"({"id": "", "parentid": "1"})") << none << "1";
+  QTest::newRow("id inner space") << QByteArray(R"({"id": "2 0", "parentid": "1"})") << none << "1";
+  QTest::newRow("parentid markup")
+      << QByteArray(R"({"id": "20", "parentid": "<b>1</b>"})") << "20" << none;
+  QTest::newRow("parentid nul byte")
+      << QByteArray(R"({"id": "20", "parentid": "1\u0000"})") << "20" << none;
+  QTest::newRow("parentid decimal string")
+      << QByteArray(R"({"id": "20", "parentid": "1.5"})") << "20" << none;
+}
+
+void TestScreenScraperParser::parseDetailResponse_systemIdentity() {
+  // Kartend-8hw6f: jeu.systeme.id / parentid are read through the real parser.
+  // A malformed field reads as absent — never as a fabricated "0" — and never
+  // disturbs the other field or the parse outcome.
+  QFETCH(QByteArray, systeme);
+  QFETCH(QString, expectedId);
+  QFETCH(QString, expectedParentId);
+  auto result = ScreenScraperParser::parseDetailResponse(withSysteme(systeme));
+  QVERIFY(result.isOk());
+  const auto &item = result.value();
+  QCOMPARE(item.providerSystemId, expectedId);
+  QCOMPARE(item.providerSystemParentId, expectedParentId);
+  QCOMPARE(item.title, QStringLiteral("Game"));
+  QCOMPARE(item.customFields.value(QStringLiteral("screenscraper_id")), QStringLiteral("42"));
+  QCOMPARE(item.customFields.value(QStringLiteral("region")), QStringLiteral("us"));
+  QCOMPARE(item.customFields.size(), 2);
+  QCOMPARE(item.sourceProviderId, QStringLiteral("screenscraper"));
+}
+
+void TestScreenScraperParser::parseDetailResponse_systemIdentityKeepsOtherFields() {
+  // Adding `systeme` (one valid field, one malformed) to the full fixture
+  // changes nothing but the two new identity fields (Kartend-8hw6f).
+  QByteArray withSys = FIXTURE;
+  withSys.replace(R"("id": "1234",)", R"("id": "1234", "systeme": {"id": 4, "parentid": 2.5},)");
+  QVERIFY(withSys != FIXTURE);
+
+  auto base = ScreenScraperParser::parseDetailResponse(FIXTURE);
+  auto sys = ScreenScraperParser::parseDetailResponse(withSys);
+  QVERIFY(base.isOk());
+  QVERIFY(sys.isOk());
+  const auto &a = base.value();
+  const auto &b = sys.value();
+  QVERIFY(a.providerSystemId.isEmpty());
+  QVERIFY(a.providerSystemParentId.isEmpty());
+  QCOMPARE(b.providerSystemId, QStringLiteral("4"));
+  QVERIFY(b.providerSystemParentId.isEmpty());
+
+  QCOMPARE(b.title, a.title);
+  QCOMPARE(b.description, a.description);
+  QCOMPARE(b.genre, a.genre);
+  QCOMPARE(b.developer, a.developer);
+  QCOMPARE(b.publisher, a.publisher);
+  QCOMPARE(b.publisherId, a.publisherId);
+  QCOMPARE(b.developerId, a.developerId);
+  QCOMPARE(b.releaseDate, a.releaseDate);
+  QCOMPARE(b.contentRating, a.contentRating);
+  QCOMPARE(b.players, a.players);
+  QCOMPARE(b.runtimeSeconds, a.runtimeSeconds);
+  QCOMPARE(b.tagsJson, a.tagsJson);
+  QCOMPARE(b.customFields, a.customFields);
+  QCOMPARE(b.sourceProviderId, a.sourceProviderId);
+  QCOMPARE(b.media.size(), a.media.size());
+  for (qsizetype i = 0; i < a.media.size(); ++i) {
+    QCOMPARE(b.media.at(i).type, a.media.at(i).type);
+    QCOMPARE(b.media.at(i).label, a.media.at(i).label);
+    QCOMPARE(b.media.at(i).url, a.media.at(i).url);
+    QCOMPARE(b.media.at(i).scope, a.media.at(i).scope);
+    QCOMPARE(b.media.at(i).scopeKey, a.media.at(i).scopeKey);
+  }
+
+  // Search and not-found outcomes are unchanged too.
+  auto search = ScreenScraperParser::parseSearchResponse(withSys);
+  QVERIFY(search.isOk());
+  QCOMPARE(search.value().size(), 1);
+  QCOMPARE(search.value().first().providerSpecificId, QStringLiteral("1234"));
+  auto missing =
+      ScreenScraperParser::parseDetailResponse(R"json({"response": {"systeme": {"id": 4}}})json");
+  QVERIFY(missing.isError());
+  QCOMPARE(missing.error().code, ErrorUtils::ErrorCode::FileNotFound);
 }
 
 QTEST_MAIN(TestScreenScraperParser)
