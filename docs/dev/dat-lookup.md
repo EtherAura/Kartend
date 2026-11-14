@@ -222,6 +222,19 @@ per source in the caller's order. A set present only in a DAT the caller
 did not pass is never returned, which is how callers scope the lookup to
 the DATs attached to a collection.
 
+```cpp
+bool Store::isHideableMachineSet(const QList<CachedSource> &sources,
+                                 const QString &setName) const;
+```
+
+The read-only rule for the planned "hide MAME BIOS and device sets"
+collection option: true when a machine `machinesForSet` returns for those
+sources has `isBios`, `isDevice` or `!runnable`. Mechanical and
+non-working sets are not hideable; an unknown name, an empty scope or a
+non-MAME source answers false. It only decides — nothing calls it yet, and
+checking that hiding is switched on for the collection stays the caller's
+job.
+
 ### Cache invalidation
 
 `openOrIngest(datPath)` checks the cache for a row matching
