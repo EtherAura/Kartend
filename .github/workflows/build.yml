@@ -883,20 +883,21 @@ jobs:
     # too, not just the Release pipeline. fail-fast off so one leg's failure
     # doesn't cancel the other; the staging/packaging steps below are gated to
     # Release only.
-    # The Debug leg is gated off pull_request events: at ~45 min per leg the
-    # two Windows legs set the PR wall-clock critical path, and the Debug
-    # leg's Q_ASSERT coverage does not need per-PR cadence. Debug still runs
-    # on every push to main/develop and on workflow_dispatch (preserving the
-    # manual full-matrix re-run). Release stays per-PR — it is the shipping
-    # configuration and feeds the preview artifact. fromJSON because a matrix
-    # axis takes an expression, not a YAML conditional. release.yml is
+    # Both legs run on pull requests too (Kartend-ojb7d). The Debug leg used
+    # to be gated off them, when two ~45-min legs set the PR critical path and
+    # Debug added only Q_ASSERT coverage. Since Kartend-qwxy2 the Debug leg is
+    # the only Windows job that runs the test suite, so the gate left a pull
+    # request with no Windows test run at all: a Windows-only failure was
+    # first seen on main after the merge, and kept main red (Kartend-fg8v7).
+    # It costs no PR wall-clock now — Release is ~15 min without tests, Debug
+    # 30-45, and macos-build-test (Release) ~55-60. release.yml is
     # deliberately untouched: it shares the windows-build composite action
     # (incl. the vcpkg baseline sync step), not this matrix, and keeps its
     # own cadence.
     strategy:
       fail-fast: false
       matrix:
-        build_type: ${{ github.event_name == 'pull_request' && fromJSON('["Release"]') || fromJSON('["Release", "Debug"]') }}
+        build_type: [Release, Debug]
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
