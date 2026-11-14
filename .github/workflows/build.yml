@@ -1142,9 +1142,9 @@ jobs:
     # 57-59 min when they pass (runs 43556413039, 43566013323), and one was
     # killed at 60 with its Build step at 58.7 (run 43562774301). actions/cache
     # saves only when the job succeeds, so the leg stayed cold from 2026-11-13
-    # until a run happened to fit. Cold starts are also likelier now that the
-    # repo's 10 GB cache budget is full and evicting. 90 fits a cold run with
-    # margin; a warm run takes ~47 (run 43570159749).
+    # until a run happened to fit. Cold starts are routine anyway: the cache
+    # key rolls on every root CMakeLists.txt or *.cmake change (five times
+    # from 2026-11-11 to 11-13). 90 fits a cold run with margin.
     timeout-minutes: 90
     # h4j5s: also build+test Debug so Q_ASSERT and debug-iterator checks run on
     # macOS, not just the Release pipeline. fail-fast off so a Debug-only failure

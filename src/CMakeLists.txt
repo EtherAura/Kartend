@@ -73,6 +73,14 @@ set_target_properties(
 # ccache-config steps and recommended locally); without it every compile is a
 # cache miss and warm rebuilds regress. Disable with -DKARTEND_ENABLE_PCH=OFF
 # if your local ccache can't be configured.
+#
+# Clang also needs -fno-pch-timestamp (Kartend-zs57d). Without it clang stamps
+# each .pch, so a fresh build tree writes a different .pch from the same
+# headers, and ccache misses every TU that includes it: about 43% of the
+# build on every clang CI job, while gcc hit 97%. With it, two fresh builds
+# write the same .pch and the second hits all 118 compiles of utils, api
+# and chrome (1 of 118 without it). ninja still rebuilds a .pch when its
+# headers change; only clang's own timestamp check is lost.
 option(KARTEND_ENABLE_PCH "Precompile the common Qt headers" ON)
 if(KARTEND_ENABLE_PCH AND NOT KARTEND_MAINTENANCE)
   set(KARTEND_PCH_HEADERS
@@ -91,6 +99,9 @@ if(KARTEND_ENABLE_PCH AND NOT KARTEND_MAINTENANCE)
       kartend_utils kartend_api kartend_chrome kartend_data kartend_input
       kartend_media kartend_behavior kartend_ui kartend_core)
     target_precompile_headers(${kartend_pch_target} PRIVATE ${KARTEND_PCH_HEADERS})
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      target_compile_options(${kartend_pch_target} PRIVATE "SHELL:-Xclang -fno-pch-timestamp")
+    endif()
   endforeach()
 endif()
 
