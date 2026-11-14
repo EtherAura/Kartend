@@ -3,7 +3,8 @@ name: Build and Test
 # Kartend-gy0o4: companion to build.yml for branch protection.
 #
 # build.yml skips entirely on doc-only changes via paths-ignore
-# (Kartend-q9gmq). With `script-lint` and `build (Release, gcc)` now
+# (Kartend-q9gmq). With `script-lint`, `build (Release, gcc)` and, since
+# Kartend-7a941, `macos-build-test (Debug)` and `windows-build-test (Debug)`
 # REQUIRED status checks on main, a skipped workflow would leave those
 # checks eternally "expected" and block doc-only PRs. This workflow runs
 # on exactly the INVERSE path set and reports same-named, instantly-green
@@ -16,7 +17,8 @@ name: Build and Test
 # all check runs with a required name must pass.
 #
 # Keep the job names and the path lists below in EXACT lockstep with
-# build.yml's paths-ignore and required-check job names.
+# build.yml's paths-ignore and required-check job names. A check is named
+# after its job, not its runner, so every no-op runs on ubuntu.
 
 on:
   pull_request:
@@ -41,3 +43,19 @@ jobs:
     steps:
       - name: No-op (docs-only change)
         run: echo "docs-only change — real build matrix skipped by build.yml paths-ignore (Kartend-gy0o4)"
+
+  macos-build-test-debug:
+    name: macos-build-test (Debug)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: No-op (docs-only change)
+        run: echo "docs-only change — real macOS test leg skipped by build.yml paths-ignore (Kartend-7a941)"
+
+  windows-build-test-debug:
+    name: windows-build-test (Debug)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: No-op (docs-only change)
+        run: echo "docs-only change — real Windows test leg skipped by build.yml paths-ignore (Kartend-7a941)"
