@@ -8,6 +8,8 @@
 // the same fixed chain.
 #include "screenscraperparser.h"
 
+#include <cmath>
+
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -56,6 +58,27 @@ bool isValidScopeKey(const QString &s) {
   static const QRegularExpression re(
       QRegularExpression::anchoredPattern(QStringLiteral("[0-9A-Za-z_-]+")));
   return re.match(s).hasMatch();
+}
+
+/// Read a jeu.systeme id (Kartend-8hw6f). SS sends ids as strings, held to the
+/// same allowlist as company/scope ids. A JSON number is accepted only when it
+/// is integral and |n| < 2^53, where every value is exact as a double; that
+/// limit is itself a double, so the comparison cannot round. Anything else
+/// (fractional, huge, wrong type) reads as absent. No default-producing
+/// conversion (toInteger/toInt) runs first, so an invalid number can never
+/// turn into a fabricated "0".
+QString readSystemField(const QJsonValue &v) {
+  if (v.isString()) {
+    const QString id = v.toString();
+    return isValidScopeKey(id) ? id : QString();
+  }
+  if (!v.isDouble()) return {};
+  constexpr double kExactIntegerLimit = 9007199254740992.0; // 2^53
+  const double d = v.toDouble();
+  if (!std::isfinite(d) || std::trunc(d) != d || std::fabs(d) >= kExactIntegerLimit) {
+    return {};
+  }
+  return QString::number(static_cast<qint64>(d));
 }
 
 const QStringList REGION_PREFERENCES = {
@@ -454,6 +477,11 @@ parseInner(const QByteArray &json, const ScreenScraperParser::ParseOptions &opti
   };
   item.publisherId = readCompanyId(jeu.value("editeur"));
   item.developerId = readCompanyId(jeu.value("developpeur"));
+  // Kartend-8hw6f: the platform SS actually matched. Parsed only; nothing
+  // compares it with the requested systemeid yet.
+  const QJsonObject systeme = jeu.value("systeme").toObject();
+  item.providerSystemId = readSystemField(systeme.value("id"));
+  item.providerSystemParentId = readSystemField(systeme.value("parentid"));
   item.players = readSingleText(jeu.value("joueurs"));
   item.releaseDate = pickByTag(jeu.value("dates").toArray(), "region", regionPrefs);
   item.genre = collectGenres(jeu.value("genres").toArray(), languagePrefs);

@@ -210,6 +210,12 @@ struct ScrapedItem {
   /// trusted (same posture as MediaAsset::scopeKey, Kartend-xhbt).
   QString publisherId;
   QString developerId;
+  /// Provider's own platform identity for the returned game (Kartend-8hw6f —
+  /// ScreenScraper's jeu.systeme.id / jeu.systeme.parentid). In-memory only:
+  /// never persisted or shown. Empty when absent or malformed; a non-integral
+  /// or out-of-range number stays empty rather than becoming a fabricated id.
+  QString providerSystemId;
+  QString providerSystemParentId;
   QString releaseDate;
   QString contentRating;
   QString players;

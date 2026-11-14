@@ -225,6 +225,12 @@ kartend_add_test(NAME ScreenScraperParser
   SOURCES modules/scraper/test_screenscraperparser.cpp
   LINK kartend_data kartend_api kartend_utils
 )
+# Focused selection of the jeu.systeme identity cases (Kartend-8hw6f) from the
+# same executable; ScreenScraperParser above still runs the whole suite.
+add_test(NAME ScreenScraperSystemIdentity
+  COMMAND test_screenscraperparser
+    parseDetailResponse_systemIdentity
+    parseDetailResponse_systemIdentityKeepsOtherFields)
 
 # ScreenScraper quota tracker tests (Kartend-vyz9u): ssuser quota-block parsing
 # + no-op-preserves-prior-snapshot behaviour, no HTTP.
