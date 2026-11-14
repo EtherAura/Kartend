@@ -1,4 +1,6 @@
 target_sources(kartend_data PRIVATE
+  chdheader.cpp
+  chdheader.h
   datauditbrowsermodels.cpp
   datauditbrowsermodels.h
   datauditbrowserrepository.cpp
