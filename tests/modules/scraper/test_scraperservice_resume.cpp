@@ -174,6 +174,7 @@ private slots:
   void entityScrapeProcessesViaQueue();
   void entityScrapeNotFoundCountedSeparately();
   void entityScrapeDownloadsArtToSharedAndConfig();
+  void entityScrapeRoleNoneExtrasLandInSharedWithoutRewiring();
   void entityScrapeCollectionArtToSharedAndConfig();
   void entityScrapeWithoutArtworkDirBorrowsAnotherCollectionsRoot();
   void entityScrapeWithNoArtworkRootAnywhereStillSucceeds();
@@ -741,6 +742,75 @@ void TestScraperServiceResume::entityScrapeDownloadsArtToSharedAndConfig() {
   const QString expectedBg =
       QDir(tmp.path()).filePath(QStringLiteral("_shared/illustration/platform_4.png"));
   QVERIFY2(QFile::exists(expectedBg), qPrintable(expectedBg));
+  QCOMPARE(collections[0].background.backgroundImage, expectedBg);
+}
+
+void TestScraperServiceResume::entityScrapeRoleNoneExtrasLandInSharedWithoutRewiring() {
+  // Kartend-5b5r1: the extra catalog images a platform scrape now retains
+  // carry EntityArtRole::None. Each must be written to its own
+  // _shared/<type>/platform_<id>.<ext> file, and none may displace the
+  // config-wired Logo/Background picks — even when listed ahead of them.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+
+  auto provider = std::make_shared<EntityStubProvider>();
+  Scraper::ScrapedItem item;
+  item.title = QStringLiteral("SNES");
+  const auto platformAsset = [](const char *type, Scraper::EntityArtRole role) {
+    Scraper::MediaAsset a;
+    a.type = QLatin1String(type);
+    a.scope = Scraper::MediaScope::Platform;
+    a.scopeKey = QStringLiteral("4");
+    a.url = QUrl(QStringLiteral("https://example.test/%1.png").arg(a.type));
+    a.entityRole = role;
+    return a;
+  };
+  const Scraper::MediaAsset icon = platformAsset("icon", Scraper::EntityArtRole::None);
+  const Scraper::MediaAsset bezel = platformAsset("bezel-16-9", Scraper::EntityArtRole::None);
+  const Scraper::MediaAsset wheel = platformAsset("wheel", Scraper::EntityArtRole::Logo);
+  const Scraper::MediaAsset illustration =
+      platformAsset("illustration", Scraper::EntityArtRole::Background);
+  item.media = {icon, bezel, wheel, illustration};
+  provider->entityResult = item;
+  for (const Scraper::MediaAsset &a : item.media) {
+    provider->mediaBytes.insert(a.url, QByteArray("\x89PNG\x0d\x0a") + a.type.toLatin1());
+  }
+
+  ScraperService service;
+  ScraperService::Context ctx;
+  ctx.providerBuilder = [provider](int) -> std::shared_ptr<MetadataLookupProvider> {
+    return provider;
+  };
+  QList<CollectionConfig> collections;
+  collections.append(CollectionConfig{});
+  ctx.collections = &collections; // ctx.ctx left null → in-memory mutate, no disk save
+  service.setContext(ctx);
+
+  ScraperService::CollectionJob job;
+  job.collectionIndex = 0;
+  job.collectionName = QStringLiteral("SNES");
+  job.artworkDir = tmp.path();
+  job.entity.type = Scraper::ScrapeEntityType::Platform;
+  job.entity.identity = QStringLiteral("4");
+  service.startScrape({job}, ScraperService::Mode::Auto, /*mediaFilter=*/{},
+                      /*writeMetadata=*/true);
+
+  QTRY_COMPARE(service.summary().scraped, 1);
+  QCOMPARE(service.summary().mediaWritten, 4);
+  for (const Scraper::MediaAsset &a : item.media) {
+    const QString path =
+        QDir(tmp.path()).filePath(QStringLiteral("_shared/%1/platform_4.png").arg(a.type));
+    QFile f(path);
+    QVERIFY2(f.open(QIODevice::ReadOnly), qPrintable(path));
+    // Distinct bytes per file: no extra overwrote another asset.
+    QCOMPARE(f.readAll(), QByteArray("\x89PNG\x0d\x0a") + a.type.toLatin1());
+  }
+  const QString expectedLogo =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/wheel/platform_4.png"));
+  const QString expectedBg =
+      QDir(tmp.path()).filePath(QStringLiteral("_shared/illustration/platform_4.png"));
+  QCOMPARE(collections[0].background.headerLogoImage, expectedLogo);
+  QCOMPARE(collections[0].collectionIcon, expectedLogo);
   QCOMPARE(collections[0].background.backgroundImage, expectedBg);
 }
 
