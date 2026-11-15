@@ -221,6 +221,14 @@ kartend_add_test(NAME WikidataLogoProvider
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Wikidata P18 console photo retention (Kartend-5b5r1): the real provider
+# offline through the fetch seam, ScraperService's entity pipeline, and the
+# shared-art writer, with the config-wired platform picks left untouched.
+kartend_add_test(NAME WikidataPlatformPhoto
+  SOURCES modules/scraper/test_wikidataplatformphoto.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # ScreenScraper systems autodetect tests
 kartend_add_test(NAME ScreenScraperSystems
   SOURCES modules/scraper/test_screenscrapersystems.cpp
