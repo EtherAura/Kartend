@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A console photo from Wikidata is kept even when it is the only thing
+  Wikidata has.** When a collection's Wikidata entry had a photo of the
+  console but no logo, description or other details, the scrape reported
+  "not found" and threw the photo away. The photo is now saved with the
+  collection's other shared artwork. Your collection's icon, header logo
+  and background stay as they were.
+
 - **Launches are no longer forgotten while the library sits idle after a
   scan.** If the item grid had just counted its items and a background
   scan then saved changes, the next launch could fail to record its play

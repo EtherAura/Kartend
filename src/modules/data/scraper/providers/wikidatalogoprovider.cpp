@@ -121,11 +121,14 @@ void WikidataLogoProvider::fetchEntity(const Scraper::EntityScrapeTarget &target
             return;
           }
           const WikidataLogoParser::EntityData &data = dataResult.value();
-          if (data.logoFilename.isEmpty() && data.description.isEmpty() &&
-              data.manufacturerId.isEmpty() && data.enwikiTitle.isEmpty()) {
+          if (data.logoFilename.isEmpty() && data.photoFilename.isEmpty() &&
+              data.description.isEmpty() && data.manufacturerId.isEmpty() &&
+              data.enwikiTitle.isEmpty()) {
             // The entity resolved but carries nothing usable — art OR
             // text. Only now is not-found honest; a logo-less entity
-            // with a description is a metadata-only success.
+            // with a description is a metadata-only success, and one
+            // whose only claim is the P18 photo still has art to retain
+            // (Kartend-5b5r1).
             callback(notFound("logo or descriptive data"));
             return;
           }
