@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Launches are no longer forgotten while the library sits idle after a
+  scan.** If the item grid had just counted its items and a background
+  scan then saved changes, the next launch could fail to record its play
+  count, its history entry and, for tracked launches, its play time. The
+  app retried for about half a minute and then gave up. These are now
+  saved on the first try.
+
 - **Cover art keeps loading after start-up in large combined
   collections.** In a collection that shows its subcollections' items,
   with more than about a thousand of them, tiles that scrolled into view

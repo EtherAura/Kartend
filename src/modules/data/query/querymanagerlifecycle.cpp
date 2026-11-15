@@ -204,6 +204,16 @@ void QueryManager::runWriteRung(std::function<bool(QSqlDatabase &)> op, const QS
   constexpr int MAX_INLINE_ATTEMPTS = 2;
   constexpr int BASE_DELAY_MS = 100;
   const int attempts = (deferral == 0) ? MAX_INLINE_ATTEMPTS : 1;
+  // Kartend-5esj1: release this connection's cached cursors before writing.
+  // A cached SELECT read with a single next() (fetchItemCountImpl's COUNT(*),
+  // ScanService::needsRescan's lookups) stays active after its slot returns
+  // and pins the connection's implicit WAL read transaction. Once another
+  // connection commits, every write on the pinned snapshot fails with
+  // SQLITE_BUSY_SNAPSHOT — which no busy_timeout, backoff or deferral can
+  // outwait, because only this thread can release it. Every rung re-checks:
+  // reads served during the deferral window can pin it again. finish() keeps
+  // the compiled statements (same as refreshWalView).
+  m_statementCache.finishAll();
   for (int attempt = 1; attempt <= attempts; ++attempt) {
     if (op(m_db)) {
       if (attempt > 1 || deferral > 0) {

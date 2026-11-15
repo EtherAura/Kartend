@@ -14,6 +14,7 @@
 #include <QElapsedTimer>
 #include <QFile>
 #include <QSet>
+#include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -28,6 +29,7 @@
 #include "collection/typehelpers.h"
 #include "databasemanager.h"
 #include "itemartwork.h"
+#include "pathutils.h"
 #include "sessionmanager.h"
 
 namespace {
@@ -70,6 +72,7 @@ private slots:
   void testRecordItemLaunch_survivesHeldWriteLock();
   void testRecordItemLaunch_survivesWriteLockOutlastingInlineLadder();
   void testRecordItemLaunch_deferredWriteKeepsItsLaunchTimeOrder();
+  void testTrackedLaunchWrites_surviveCursorPinnedByItemCount();
 
   // Sidebar size aggregate (Kartend-6i10t) ----------------------------------
   void testSumCollectionFileSizesRecursive_addsDescendants();
@@ -843,6 +846,83 @@ void TestDatabaseManager::testRecordItemLaunch_deferredWriteKeepsItsLaunchTimeOr
   QVERIFY2(aHist < bHist, qPrintable(QStringLiteral("deferred history row stamped at/after the "
                                                     "later launch: A=%1 B=%2")
                                          .arg(aHist, bHist)));
+}
+
+void TestDatabaseManager::testTrackedLaunchWrites_surviveCursorPinnedByItemCount() {
+  // Kartend-5esj1: the lock holder here is the query worker's OWN connection.
+  // fetchItemCountImpl reads its cached `SELECT COUNT(*)` with a single next(),
+  // which never steps the statement to SQLITE_DONE, so the statement stays
+  // active and pins the connection's implicit WAL read transaction after the
+  // slot returns. Once any other connection commits (a scan batch; here the
+  // inspector), every write runWrite issues on that pinned connection fails
+  // with SQLITE_BUSY_SNAPSHOT ("database is locked"). busy_timeout cannot clear
+  // it and neither can the inline ladder or the eight deferrals: the snapshot is
+  // only released by a later fetch slot's refreshWalView(), and an idle UI
+  // issues none. Pre-fix, the tracked launch's play count, history row and
+  // play session are all LOST after the eighth deferral (~35s), which is why
+  // the 45s waits below fail. Post-fix, runWrite releases the cached cursors
+  // before each attempt and the writes land on the first one.
+  m_session = std::make_unique<SessionManager>();
+  auto appCtx = makeCtxWithSession(m_session.get());
+  DatabaseManager db(&appCtx);
+  db.initDatabase();
+
+  QTemporaryDir mediaDir;
+  QVERIFY(mediaDir.isValid());
+  CollectionConfig collection;
+  collection.name = QStringLiteral("PinnedCursor");
+  collection.mediaDirectory = mediaDir.path();
+  collection.extensions = {QStringLiteral("bin")};
+  const QString uuid = CollectionUtils::computeCollectionUuid(
+      collection.name,
+      PathUtils::validateAndExpandPath(collection.mediaDirectory, collection.name));
+  const QString itemPath = QDir(mediaDir.path()).filePath(QStringLiteral("pinned.bin"));
+
+  QSqlDatabase insp = openInspector();
+  QVERIFY(insp.isValid() && insp.isOpen());
+  QVERIFY(runSql(insp, "DELETE FROM items"));
+  QVERIFY(runSql(insp, "DELETE FROM collections"));
+  QVERIFY(runSql(insp, "DELETE FROM launch_history"));
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO collections (id, name, last_scanned, uuid) "
+                                      "VALUES (1, 'PinnedCursor', 'x', '%1')")
+                           .arg(uuid)));
+  QVERIFY(runSql(insp, QStringLiteral("INSERT INTO items (collection_id, path, name, "
+                                      "last_modified, collection_uuid) "
+                                      "VALUES (1, '%1', 'pinned', 'x', '%2')")
+                           .arg(itemPath, uuid)));
+
+  // An item count on the query worker, as the grid issues after every scan.
+  // The non-empty filter keeps DatabaseManager from also scheduling a scan of
+  // the (empty) media directory, which would delete the seeded row.
+  CollectionContext ctx;
+  ctx.currentIndex = 0;
+  ctx.config = collection;
+  QSignalSpy counted(&db, &IDatabaseManager::itemCountLoadedWithToken);
+  db.fetchItemCount(ctx, {collection}, QStringLiteral("pinned"), /*requestToken=*/1);
+  QTRY_COMPARE_WITH_TIMEOUT(counted.count(), 1, 10000);
+  QCOMPARE(counted.first().at(0).toInt(), 1);
+
+  // Another connection commits, the way a scan batch commits while the grid
+  // sits idle on its count. This moves the WAL past the worker's pinned
+  // snapshot.
+  QVERIFY(runSql(
+      insp, QStringLiteral("UPDATE collections SET last_scanned = 'y' WHERE uuid='%1'").arg(uuid)));
+
+  // The tracked launch's three writes (LaunchManager -> InteractionManager
+  // callbacks): play count on start, history row, play session on exit.
+  db.recordItemLaunch(uuid, itemPath);
+  db.recordHistoryEntry(uuid, itemPath, QStringLiteral("pinned"), /*maxEntries=*/50);
+  db.recordItemPlaySession(uuid, itemPath, /*seconds=*/3);
+
+  const QString itemSql =
+      QStringLiteral("SELECT %1 FROM items WHERE collection_uuid='%2' AND path='%3'");
+  QTRY_COMPARE_WITH_TIMEOUT(scalar(insp, itemSql.arg("play_count", uuid, itemPath)), 1, 45000);
+  QTRY_COMPARE_WITH_TIMEOUT(
+      scalar(insp, QStringLiteral("SELECT COUNT(*) FROM launch_history WHERE collection_uuid='%1'")
+                       .arg(uuid)),
+      1, 45000);
+  QTRY_COMPARE_WITH_TIMEOUT(scalar(insp, itemSql.arg("total_play_seconds", uuid, itemPath)), 3,
+                            45000);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
