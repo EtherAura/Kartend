@@ -83,6 +83,36 @@ struct Game {
 [[nodiscard]] QList<Game> games(const System &system, const QString &dataDir,
                                 const QString &mediaDir);
 
+/// One <game> of a per-system-folder gamelist (Kartend-1bwzs): the layout of
+/// Batocera, RetroPie, Recalbox and classic EmulationStation, where the list
+/// sits INSIDE the system's ROM folder and names its media in the XML instead
+/// of by ES-DE's naming convention. Every path is confined to the system root.
+struct FolderGamelistGame {
+  QString romPath; ///< Canonical absolute path to the ROM, inside the system root.
+  QString name;    ///< <name> verbatim; empty when the gamelist has none.
+  QString description;
+  QString developer;
+  QString publisher;
+  QString genre;
+  QString players;
+  QString releaseDate; ///< Basic ISO8601 ("19910623T000000"), verbatim.
+  bool hidden = false; ///< Retained, not applied: filtering is the caller's call.
+  QString coverPath;   ///< <boxart> if usable, else <thumbnail>.
+  QString logoPath;    ///< <marquee> if usable, else <wheel>.
+  QString heroPath;    ///< <fanart> if usable, else <image> (usually a screenshot).
+};
+
+/// Reads the gamelist at `gamelistPath` (normally `<systemRoot>/gamelist.xml`)
+/// in document order. <path> and media values are resolved relative to
+/// `systemRoot`; absolute values, `..` segments and anything whose canonical
+/// target lies outside the root (a symlink escape) are refused. A <game> whose
+/// ROM is refused or missing is dropped; a refused or missing media value only
+/// empties that slot (falling back as documented above) and keeps the
+/// metadata. Gamelist hashes (<md5>, <crc32>) are ignored. A missing or
+/// malformed file yields what was read before the error, or nothing.
+[[nodiscard]] QList<FolderGamelistGame> readFolderGamelist(const QString &gamelistPath,
+                                                           const QString &systemRoot);
+
 /// Extensions treated as ROMs. Deliberately broad: the per-system lists live
 /// in the unreachable es_systems.xml (see above), so this admits the common
 /// cartridge/disc/archive forms and lets the collection's own extension list

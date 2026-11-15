@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QRegularExpression>
 #include <QXmlStreamReader>
 
 namespace EsdeLibrary {
@@ -99,17 +100,29 @@ struct GamelistEntry {
   QString players;
   QString releaseDate;
   bool hidden = false;
+  // Raw media tags (Kartend-1bwzs). Only the per-folder reader uses them; the
+  // ES-DE source keeps finding media by naming convention.
+  QString boxart;
+  QString thumbnail;
+  QString marquee;
+  QString wheel;
+  QString fanart;
+  QString image;
 };
 
-/// Parses `<dataDir>/gamelists/<system>/gamelist.xml` into a by-relative-path
-/// map. A missing or malformed file yields an empty map: the gamelist is an
-/// OVERLAY, so its absence must not hide the games themselves.
-QHash<QString, GamelistEntry> readGamelist(const QString &dataDir, const QString &systemName) {
-  QHash<QString, GamelistEntry> entries;
-  QFile file(dataDir + QStringLiteral("/gamelists/") + systemName +
-             QStringLiteral("/gamelist.xml"));
+struct GamelistRecord {
+  QString path; ///< <path> verbatim (trimmed).
+  GamelistEntry entry;
+};
+
+/// Parses one gamelist.xml into its <game> records, in document order. A
+/// missing file yields nothing; a malformed one yields the records completed
+/// before the error.
+QList<GamelistRecord> parseGamelistFile(const QString &gamelistPath) {
+  QList<GamelistRecord> records;
+  QFile file(gamelistPath);
   if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    return entries;
+    return records;
   }
   QXmlStreamReader xml(&file);
   // Kartend-v3u04: pin the entity-expansion ceiling instead of inheriting it.
@@ -151,13 +164,73 @@ QHash<QString, GamelistEntry> readGamelist(const QString &dataDir, const QString
         entry.releaseDate = text;
       } else if (tag == QLatin1String("hidden")) {
         entry.hidden = (text.compare(QLatin1String("true"), Qt::CaseInsensitive) == 0);
+      } else if (tag == QLatin1String("boxart")) {
+        entry.boxart = text;
+      } else if (tag == QLatin1String("thumbnail")) {
+        entry.thumbnail = text;
+      } else if (tag == QLatin1String("marquee")) {
+        entry.marquee = text;
+      } else if (tag == QLatin1String("wheel")) {
+        entry.wheel = text;
+      } else if (tag == QLatin1String("fanart")) {
+        entry.fanart = text;
+      } else if (tag == QLatin1String("image")) {
+        entry.image = text;
       }
     }
     if (!path.isEmpty()) {
-      entries.insert(gamelistKey(path), entry);
+      records.append({path, entry});
     }
   }
+  return records;
+}
+
+/// Parses `<dataDir>/gamelists/<system>/gamelist.xml` into a by-relative-path
+/// map. A missing or malformed file yields an empty map: the gamelist is an
+/// OVERLAY, so its absence must not hide the games themselves.
+QHash<QString, GamelistEntry> readGamelist(const QString &dataDir, const QString &systemName) {
+  QHash<QString, GamelistEntry> entries;
+  const QList<GamelistRecord> records = parseGamelistFile(
+      dataDir + QStringLiteral("/gamelists/") + systemName + QStringLiteral("/gamelist.xml"));
+  for (const GamelistRecord &record : records) {
+    // Later duplicates replace earlier ones, as before.
+    entries[gamelistKey(record.path)] = record.entry;
+  }
   return entries;
+}
+
+/// Resolves a gamelist-relative value against `canonicalRoot` (Kartend-1bwzs).
+/// Empty unless the value is relative, has no ".." segment, names an existing
+/// entry, and that entry's canonical target is strictly inside the root — the
+/// last check is what defeats a symlink pointing out of the system folder.
+QString confinedPath(const QString &canonicalRoot, const QString &rawValue) {
+  const QString value = rawValue.trimmed();
+  if (value.isEmpty() || QDir::isAbsolutePath(value) || value.startsWith(QLatin1Char('\\'))) {
+    return {};
+  }
+  // Backslash counts as a separator here only: a list written on Windows must
+  // not smuggle "..\" past the check, but the value is not otherwise rewritten.
+  static const QRegularExpression kSeparator(QStringLiteral("[/\\\\]"));
+  const QStringList segments = value.split(kSeparator);
+  if (segments.contains(QStringLiteral(".."))) {
+    return {};
+  }
+  const QString canonical = QFileInfo(canonicalRoot + QLatin1Char('/') + value).canonicalFilePath();
+  if (canonical.isEmpty() || !canonical.startsWith(canonicalRoot + QLatin1Char('/'))) {
+    return {};
+  }
+  return canonical;
+}
+
+/// The first of `candidates` that confines to an existing FILE under the root.
+QString firstMedia(const QString &canonicalRoot, std::initializer_list<QString> candidates) {
+  for (const QString &candidate : candidates) {
+    const QString resolved = confinedPath(canonicalRoot, candidate);
+    if (!resolved.isEmpty() && QFileInfo(resolved).isFile()) {
+      return resolved;
+    }
+  }
+  return {};
 }
 
 /// downloaded_media/<system>/<type>/<rom base name>.<ext>. ES-DE writes jpg
@@ -340,6 +413,39 @@ auto games(const System &system, const QString &dataDir, const QString &mediaDir
   }
   std::sort(result.begin(), result.end(),
             [](const Game &a, const Game &b) { return a.title.localeAwareCompare(b.title) < 0; });
+  return result;
+}
+
+auto readFolderGamelist(const QString &gamelistPath, const QString &systemRoot)
+    -> QList<FolderGamelistGame> {
+  QList<FolderGamelistGame> result;
+  const QString canonicalRoot = QFileInfo(systemRoot).canonicalFilePath();
+  if (canonicalRoot.isEmpty() || !QFileInfo(canonicalRoot).isDir()) {
+    return result;
+  }
+  for (const GamelistRecord &record : parseGamelistFile(gamelistPath)) {
+    const QString romPath = confinedPath(canonicalRoot, record.path);
+    if (romPath.isEmpty()) {
+      continue; // refused or missing: nothing to launch
+    }
+    const GamelistEntry &entry = record.entry;
+    FolderGamelistGame game;
+    game.romPath = romPath;
+    game.name = entry.name;
+    game.description = entry.description;
+    game.developer = entry.developer;
+    game.publisher = entry.publisher;
+    game.genre = entry.genre;
+    game.players = entry.players;
+    game.releaseDate = entry.releaseDate;
+    game.hidden = entry.hidden;
+    // An unusable preferred tag falls through to its fallback rather than
+    // emptying the slot outright.
+    game.coverPath = firstMedia(canonicalRoot, {entry.boxart, entry.thumbnail});
+    game.logoPath = firstMedia(canonicalRoot, {entry.marquee, entry.wheel});
+    game.heroPath = firstMedia(canonicalRoot, {entry.fanart, entry.image});
+    result.append(game);
+  }
   return result;
 }
 

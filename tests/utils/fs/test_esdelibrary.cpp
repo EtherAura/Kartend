@@ -31,6 +31,7 @@ private slots:
   void systemsSkipDirectoriesWithoutGames();
   void mediaIsKeyedOnTheRomBaseName();
   void readsTheGamelistARealInstallWrote();
+  void mediaTagsInTheGamelistDoNotOverrideTheNamingConvention();
 
 private:
   QTemporaryDir m_dir;
@@ -232,6 +233,32 @@ void TestEsdeLibrary::readsTheGamelistARealInstallWrote() {
   QCOMPARE(games.at(1).title, QStringLiteral("RoboRun"));
   QCOMPARE(games.at(2).title, QStringLiteral("Runner"));
   QCOMPARE(games.at(3).title, QStringLiteral("Witch n Wiz"));
+}
+
+// Kartend-1bwzs: the per-folder reader resolves <image>/<boxart>/... from the
+// XML, but the ES-DE source must keep finding media by naming convention only.
+// A media tag in ES-DE's own gamelist is ignored, even when the file exists.
+void TestEsdeLibrary::mediaTagsInTheGamelistDoNotOverrideTheNamingConvention() {
+  const QString dataDir = newTree();
+  const QString romDir = dataDir + QStringLiteral("/ROMs");
+  const QString mediaDir = dataDir + QStringLiteral("/media");
+  writeSettings(dataDir, romDir, mediaDir);
+  write(romDir + QStringLiteral("/nes/Game.nes"), "rom");
+  write(romDir + QStringLiteral("/nes/images/Game-boxart.png"), "img");
+  write(mediaDir + QStringLiteral("/nes/covers/Game.png"), "img");
+  write(dataDir + QStringLiteral("/gamelists/nes/gamelist.xml"),
+        QByteArrayLiteral("<?xml version=\"1.0\"?>\n<gameList>\n<game>\n"
+                          "<path>./Game.nes</path>\n<name>Game</name>\n"
+                          "<boxart>./images/Game-boxart.png</boxart>\n"
+                          "<marquee>./images/Game-boxart.png</marquee>\n"
+                          "</game>\n</gameList>\n"));
+
+  const QList<EsdeLibrary::System> systems = EsdeLibrary::systems(romDir);
+  QCOMPARE(systems.size(), 1);
+  const QList<EsdeLibrary::Game> games = EsdeLibrary::games(systems.at(0), dataDir, mediaDir);
+  QCOMPARE(games.size(), 1);
+  QVERIFY(games.at(0).coverPath.endsWith(QStringLiteral("/media/nes/covers/Game.png")));
+  QVERIFY(games.at(0).logoPath.isEmpty());
 }
 
 QTEST_MAIN(TestEsdeLibrary)

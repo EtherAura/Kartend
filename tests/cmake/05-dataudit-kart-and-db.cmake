@@ -216,6 +216,14 @@ kartend_add_test(NAME EsdeLibrary
   LINK kartend_utils
 )
 
+# Kartend-1bwzs: EsdeLibrary::readFolderGamelist, the per-system-folder
+# gamelist.xml of Batocera / RetroPie / classic EmulationStation, against real
+# fixture trees including symlink escapes.
+kartend_add_test(NAME EmulationStationGamelist
+  SOURCES utils/fs/test_emulationstationgamelist.cpp
+  LINK kartend_utils
+)
+
 kartend_add_test(NAME BottlesLibrary
   SOURCES utils/fs/test_bottleslibrary.cpp
   LINK kartend_utils
