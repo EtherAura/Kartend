@@ -34,11 +34,17 @@ struct ScraperOverrides {
   /// means "automatic" — the scrape resolves a provider by matching the
   /// collection `type`. A non-empty value pins that exact scraper.
   QString scraperProviderId;
+  /// Kartend-tnt0l: when true, sets the attached MAME listxml marks as BIOS,
+  /// device or non-runnable are left out of this collection at scan time.
+  /// Off by default; never deletes files or writes the Hidden flag. Lives here
+  /// beside datFilePaths because it only means anything with a DAT attached.
+  bool hideMameBiosAndDeviceSets = false;
 
   bool operator==(const ScraperOverrides &other) const {
     return screenscraperSystemId == other.screenscraperSystemId &&
            screenscraperHashArchive == other.screenscraperHashArchive &&
-           datFilePaths == other.datFilePaths && scraperProviderId == other.scraperProviderId;
+           datFilePaths == other.datFilePaths && scraperProviderId == other.scraperProviderId &&
+           hideMameBiosAndDeviceSets == other.hideMameBiosAndDeviceSets;
   }
   bool operator!=(const ScraperOverrides &other) const { return !(*this == other); }
 };
@@ -49,7 +55,7 @@ struct ScraperOverrides {
 // overload for QList/QStringList).
 inline size_t qHash(const ScraperOverrides &key, size_t seed = 0) {
   seed = qHashMulti(seed, key.screenscraperSystemId, key.screenscraperHashArchive,
-                    key.scraperProviderId);
+                    key.scraperProviderId, key.hideMameBiosAndDeviceSets);
   return qHashRange(key.datFilePaths.begin(), key.datFilePaths.end(), seed);
 }
 

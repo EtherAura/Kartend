@@ -11,6 +11,9 @@ void load(QSettings &settings, ScraperOverrides &overrides) {
   overrides.screenscraperHashArchive =
       settings.value(keys::kScreenscraperHashArchive, true).toBool();
   overrides.scraperProviderId = settings.value(keys::kScraperProviderId).toString().trimmed();
+  // Absent in every config written before Kartend-tnt0l: default off.
+  overrides.hideMameBiosAndDeviceSets =
+      settings.value(keys::kHideMameBiosAndDeviceSets, false).toBool();
   // datFilePaths is persisted as a QSettings array so individual
   // entries can contain commas / brackets without delimiter
   // escaping. Legacy configs (pre-multi-DAT) shipped a single
@@ -36,6 +39,7 @@ void save(QSettings &settings, const ScraperOverrides &overrides) {
   settings.setValue(keys::kScreenscraperSystemId, overrides.screenscraperSystemId);
   settings.setValue(keys::kScreenscraperHashArchive, overrides.screenscraperHashArchive);
   settings.setValue(keys::kScraperProviderId, overrides.scraperProviderId);
+  settings.setValue(keys::kHideMameBiosAndDeviceSets, overrides.hideMameBiosAndDeviceSets);
   // Drop any stale single-key `datFilePath=` from pre-upgrade configs
   // — keeping both formats around would confuse hand-editors and
   // round-tripping.

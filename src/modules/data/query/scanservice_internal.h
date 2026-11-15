@@ -48,6 +48,11 @@ inline constexpr int PROGRESS_REPORT_INTERVAL = 50000;
   if (collection.groupMultiDisc) {
     signature += QLatin1String("|multidisc");
   }
+  // Kartend-tnt0l: hiding MAME BIOS/device sets changes which sets become
+  // items, so toggling it must rewalk the collection like multi-disc above.
+  if (collection.scraperOverrides.hideMameBiosAndDeviceSets) {
+    signature += QLatin1String("|hidemamebios");
+  }
   return signature;
 }
 

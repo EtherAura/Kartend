@@ -156,6 +156,15 @@ kartend_add_test(NAME CollectionDiffFingerprint
   LINK kartend_utils
 )
 
+# Per-collection "hide MAME BIOS and device sets" preference (Kartend-tnt0l):
+# default-off load/save through the real INI serializer on temporary files, and
+# the scan-signature term that makes toggling it rescan. Links kartend_data for
+# ScanServiceInternal::buildExtSignature.
+kartend_add_test(NAME CollectionMameBiosSetting
+  SOURCES modules/settings/test_collectionmamebiossetting.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # SettingsManager migration / schemaVersion tests (Kartend-39g9). Links
 # against the full kartend object-lib aggregate because SettingsManager
 # pulls in a wide dependency footprint (path/error/config-validation utils,

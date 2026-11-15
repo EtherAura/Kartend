@@ -216,6 +216,7 @@ void TestCollectionDiffFingerprint::scraperOverridesHashTracksEachField() {
   hashDetects<T>("datFilePaths", [](T &c) { c.datFilePaths = {QStringLiteral("/tmp/a.dat")}; });
   hashDetects<T>("scraperProviderId",
                  [](T &c) { c.scraperProviderId = QStringLiteral("screenscraper"); });
+  hashDetects<T>("hideMameBiosAndDeviceSets", [](T &c) { c.hideMameBiosAndDeviceSets = true; });
 }
 
 void TestCollectionDiffFingerprint::launcherProfileHashTracksEachField() {
