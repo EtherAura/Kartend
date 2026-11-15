@@ -516,8 +516,11 @@ void TestScreenScraperProvider::fetchEntity_catalogEmitsEveryStillImageTypeRoleN
         QCryptographicHash::hash(QByteArray(type), QCryptographicHash::Md5).toHex().toUpper());
     return m;
   };
-  sys.media = {media("wheel", "wheel(wor)"), media("icon", "icon(wor)"),
-               media("bezel-16-9", "bezel-16-9(wor)"), media("video", "video", /*video=*/true),
+  sys.media = {media("wheel", "wheel(wor)"),
+               media("icon", "icon(wor)"),
+               media("bezel-16-9", "bezel-16-9(wor)"),
+               media("illustration", "illustration(wor)"),
+               media("video", "video", /*video=*/true),
                media("Bad_Type!", "bad(wor)")};
   QVERIFY(ScreenScraperSystemCache::saveSystems(cachePath, {sys}));
 
@@ -543,7 +546,21 @@ void TestScreenScraperProvider::fetchEntity_catalogEmitsEveryStillImageTypeRoleN
   QVERIFY(types.contains(QStringLiteral("bezel-16-9")));
   QVERIFY(!types.contains(QStringLiteral("video")));
   QVERIFY(!types.contains(QStringLiteral("Bad_Type!")));
+  // Every retained type is emitted exactly once — two distinct extras both
+  // survive, and an extra never duplicates a config-wired entry.
+  for (const char *t : {"wheel", "icon", "bezel-16-9", "illustration"}) {
+    QCOMPARE(types.count(QString::fromLatin1(t)), 1);
+  }
   for (const auto &asset : result->value().media) {
+    // The extras must not disturb the config-wired picks: wheel stays the
+    // top Logo candidate and illustration the top Background candidate.
+    if (asset.type == QLatin1String("wheel")) {
+      QCOMPARE(asset.entityRole, Scraper::EntityArtRole::Logo);
+      QCOMPARE(asset.entityRolePriority, 0);
+    } else if (asset.type == QLatin1String("illustration")) {
+      QCOMPARE(asset.entityRole, Scraper::EntityArtRole::Background);
+      QCOMPARE(asset.entityRolePriority, 0);
+    }
     if (asset.type == QLatin1String("icon") || asset.type == QLatin1String("bezel-16-9")) {
       QCOMPARE(asset.entityRole, Scraper::EntityArtRole::None);
       QCOMPARE(asset.scopeKey, QStringLiteral("42"));
