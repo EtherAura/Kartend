@@ -16,6 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collection's other shared artwork. Your collection's icon, header logo
   and background stay as they were.
 
+- **Console specs from Wikidata are kept even when they are the only thing
+  Wikidata has.** When a collection's Wikidata entry listed only hardware
+  details, such as the CPU, GPU, units sold or the previous and next
+  console, but no logo, photo or description, the scrape reported "not
+  found" and dropped those details. They are now kept with the collection's
+  other scraped details.
+
 - **Launches are no longer forgotten while the library sits idle after a
   scan.** If the item grid had just counted its items and a background
   scan then saved changes, the next launch could fail to record its play

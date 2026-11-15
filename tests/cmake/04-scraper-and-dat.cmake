@@ -236,6 +236,13 @@ kartend_add_test(NAME WikidataPlatformPhoto
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Wikidata spec-only platform acceptance (Kartend-5b5r1): an entity whose
+# only usable claims are already-parsed spec fields is a metadata success.
+kartend_add_test(NAME WikidataPlatformSpecs
+  SOURCES modules/scraper/test_wikidataplatformspecs.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # ScreenScraper systems autodetect tests
 kartend_add_test(NAME ScreenScraperSystems
   SOURCES modules/scraper/test_screenscrapersystems.cpp

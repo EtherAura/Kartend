@@ -123,12 +123,15 @@ void WikidataLogoProvider::fetchEntity(const Scraper::EntityScrapeTarget &target
           const WikidataLogoParser::EntityData &data = dataResult.value();
           if (data.logoFilename.isEmpty() && data.photoFilename.isEmpty() &&
               data.description.isEmpty() && data.manufacturerId.isEmpty() &&
-              data.enwikiTitle.isEmpty()) {
-            // The entity resolved but carries nothing usable — art OR
-            // text. Only now is not-found honest; a logo-less entity
-            // with a description is a metadata-only success, and one
-            // whose only claim is the P18 photo still has art to retain
-            // (Kartend-5b5r1).
+              data.enwikiTitle.isEmpty() && data.unitsSold.isEmpty() && data.cpuId.isEmpty() &&
+              data.gpuId.isEmpty() && data.predecessorId.isEmpty() && data.successorId.isEmpty()) {
+            // The entity resolved but carries nothing usable — art, text
+            // OR spec sheet. Only now is not-found honest; a logo-less
+            // entity with a description is a metadata-only success, one
+            // whose only claim is the P18 photo still has art to retain,
+            // and one carrying only spec-sheet claims keeps those
+            // (Kartend-5b5r1). P361 "part of" is not counted: it only
+            // yields a generation once its label names one.
             callback(notFound("logo or descriptive data"));
             return;
           }
