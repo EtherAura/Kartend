@@ -147,6 +147,13 @@ kartend_add_test(NAME ScraperRetryPolicy
   LINK kartend_data kartend_api kartend_utils
 )
 
+# HasheousLookupPayload — pure serializer for the outgoing Hasheous
+# Lookup/ByHash JSON body (Kartend-fgd5k). No network, no response fixtures.
+kartend_add_test(NAME HasheousLookupPayload
+  SOURCES modules/scraper/test_hasheouslookuppayload.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # ScrapeDownloadDispatcher — non-UI dedup/CRC/async-fetch orchestration
 # extracted from ScrapeResultDialog (Kartend-dpehr). Driven by a fake provider,
 # no QDialog: covers tally / partial-success skip / hash short-circuit /
