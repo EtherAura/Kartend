@@ -123,6 +123,7 @@ inline constexpr auto kGridWidthSidebarHidden = "gridWidthSidebarHidden";
 inline constexpr auto kHeaderLogoImage = "headerLogoImage";
 inline constexpr auto kHeaderLogoPosition = "headerLogoPosition";
 inline constexpr auto kHideHorizontalScrollbar = "hideHorizontalScrollbar";
+inline constexpr auto kHideMameBiosAndDeviceSets = "hideMameBiosAndDeviceSets";
 inline constexpr auto kHideMissingArtwork = "hideMissingArtwork";
 inline constexpr auto kHideSubcollectionTiles = "hideSubcollectionTiles";
 inline constexpr auto kHideSubcollectionTitles = "hideSubcollectionTitles";

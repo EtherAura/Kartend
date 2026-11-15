@@ -522,6 +522,7 @@ void TestSettingsPersistenceRoundtrip::scraperOverrides() {
   // Comma in an entry exercises the array storage (no delimiter escaping).
   in.datFilePaths = QStringList{QStringLiteral("/tmp/a.dat"), QStringLiteral("/tmp/b, c.dat")};
   in.scraperProviderId = QStringLiteral("screenscraper"); // load trims
+  in.hideMameBiosAndDeviceSets = !in.hideMameBiosAndDeviceSets;
   verifyRoundTrip("ScraperOverrides", in, ScraperOverridesPersistence::save,
                   ScraperOverridesPersistence::load);
 }
