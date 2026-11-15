@@ -1,5 +1,6 @@
 target_sources(kartend_data PRIVATE
   flathubprovider.cpp
+  hasheouslookuppayload.cpp
   metadataproviderregistry.cpp
   musicbrainzprovider.cpp
   openlibraryprovider.cpp
@@ -19,6 +20,7 @@ target_sources(kartend_data PRIVATE
   wikidatalogoprovider.cpp
   websearchprovider.cpp
   flathubprovider.h
+  hasheouslookuppayload.h
   metadatalookupprovider.h
   metadataprovider.h
   metadataproviderregistry.h
