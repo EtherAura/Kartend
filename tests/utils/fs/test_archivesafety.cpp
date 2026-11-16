@@ -44,6 +44,7 @@ private slots:
   void sevenZipMissingLinkVocabularyFailsClosedWithoutSecurityVerdict();
   void sevenZipAttributesSymlinkModeEndingInDashIsRejected();
   void scannersRejectEscapingEntryPathAsSecurityVerdict();
+  void scanWithToolGuardsPathAndRejectsUnsupportedTool();
 
 private:
   // Builds a tar at `tarPath` from the contents of `srcDir` using bsdtar.
@@ -633,6 +634,61 @@ void TestArchiveSafety::scannersRejectEscapingEntryPathAsSecurityVerdict() {
   QVERIFY2(!QFile::exists(sevenZipMarker),
            "scanArchiveEntries retried 7z after a bsdtar security rejection");
 #endif
+}
+
+void TestArchiveSafety::scanWithToolGuardsPathAndRejectsUnsupportedTool() {
+  // Kartend-m8bnq: an empty or dash-leading archive path is refused before any
+  // tool lookup or spawn, and with InvalidFilePath — the class
+  // isSecurityRejection treats as "abort, don't try another tool". PATH is
+  // emptied for these calls: if the guard ran after the findExecutable lookup
+  // the result would be FileNotFound instead, so this also pins the order and
+  // keeps the checks independent of bsdtar/7z being installed.
+  QTemporaryDir emptyBin;
+  QVERIFY(emptyBin.isValid());
+  {
+    const QByteArray oldPath = qgetenv("PATH");
+    const auto restorePath = qScopeGuard([&oldPath] { qputenv("PATH", oldPath); });
+    qputenv("PATH", emptyBin.path().toUtf8());
+
+    const auto dashPath = ArchiveSafety::scanArchiveEntriesWithTool(QStringLiteral("-evil.tar"),
+                                                                    QStringLiteral("bsdtar"));
+    QVERIFY2(dashPath.isError(), "a dash-leading archive path must be refused");
+    QCOMPARE(dashPath.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
+    QVERIFY2(ArchiveSafety::isSecurityRejection(dashPath.error()),
+             "a dash-leading archive path must read as a security rejection");
+
+    const auto emptyPath =
+        ArchiveSafety::scanArchiveEntriesWithTool(QString(), QStringLiteral("7z"));
+    QVERIFY2(emptyPath.isError(), "an empty archive path must be refused");
+    QCOMPARE(emptyPath.error().code, ErrorUtils::ErrorCode::InvalidFilePath);
+    QVERIFY2(ArchiveSafety::isSecurityRejection(emptyPath.error()),
+             "an empty archive path must read as a security rejection");
+  }
+
+  // A tool that IS on PATH but is neither bsdtar nor 7z reaches the
+  // unsupported-tool branch (not the missing-executable one), which must stay
+  // a non-security failure so the fallback chain remains available. Nothing
+  // is spawned on this branch.
+  if (QStandardPaths::findExecutable(QStringLiteral("sh")).isEmpty()) {
+    QSKIP("sh not found on PATH; cannot reach the unsupported-tool branch");
+  }
+  QTemporaryDir out;
+  QVERIFY(out.isValid());
+  const QString archivePath = out.path() + QStringLiteral("/plain.tar");
+  {
+    QFile f(archivePath);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    QVERIFY(f.write("not really a tar") > 0);
+  }
+  QVERIFY(QFileInfo(archivePath).size() > 0);
+  const auto unsupported =
+      ArchiveSafety::scanArchiveEntriesWithTool(archivePath, QStringLiteral("sh"));
+  QVERIFY2(unsupported.isError(), "an unsupported listing tool must error");
+  QCOMPARE(unsupported.error().code, ErrorUtils::ErrorCode::FileNotFound);
+  QCOMPARE(unsupported.error().message, QStringLiteral("Unsupported archive listing tool"));
+  QCOMPARE(unsupported.error().details, QStringLiteral("sh"));
+  QVERIFY2(!ArchiveSafety::isSecurityRejection(unsupported.error()),
+           "an unsupported listing tool must NOT read as a security rejection");
 }
 
 QTEST_MAIN(TestArchiveSafety)
