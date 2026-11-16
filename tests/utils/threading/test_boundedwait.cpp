@@ -28,8 +28,10 @@ struct Outcome {
 // that state when it returns, so one test cannot leak it into the next.
 template <typename Body> void insideApplicationExec(Body &&body) {
   // Zero delay: defer the body to the first iteration of the exec() below, so
-  // that it runs inside the application's event loop.
-  QTimer::singleShot(0, qApp, [&body]() {
+  // that it runs inside the application's event loop. Not qApp: with the
+  // widgets headers in reach it casts the instance to QApplication, and this
+  // test runs on a plain QCoreApplication.
+  QTimer::singleShot(0, QCoreApplication::instance(), [&body]() {
     body();
     QCoreApplication::exit(0); // harmless when the body already asked to quit
   });
@@ -125,7 +127,8 @@ void TestBoundedWait::quitDuringTheWait_theOperationStillFinishes() {
   insideApplicationExec([&outcome]() {
     TimerUtils::BoundedWait wait;
     // The quit arrives first, kOperationMs into the wait...
-    QTimer::singleShot(kOperationMs, qApp, []() { QCoreApplication::exit(0); });
+    QTimer::singleShot(kOperationMs, QCoreApplication::instance(),
+                       []() { QCoreApplication::exit(0); });
     // ...and the operation completes after it.
     QTimer::singleShot(3 * kOperationMs, &wait, &TimerUtils::BoundedWait::finish);
     QElapsedTimer timer;
