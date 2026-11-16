@@ -478,6 +478,12 @@ QString sanitizeFileBaseName(const QString &title, const QString &replacement,
   constexpr int kMaxLength = 120;
   if (base.size() > kMaxLength) {
     base.truncate(kMaxLength);
+    // The cap counts UTF-16 code units, so a cut inside an astral character
+    // leaves a lone high surrogate that no filename encoding can carry
+    // faithfully; drop the half character (Kartend-zzkiu).
+    if (base.back().isHighSurrogate()) {
+      base.chop(1);
+    }
     base = base.trimmed();
   }
   if (base.isEmpty()) {
