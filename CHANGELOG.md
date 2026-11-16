@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **More archives containing symbolic links are refused before extraction.**
+  When 7-Zip was used to check a zip or 7z archive, a symbolic link whose
+  permissions did not end in an execute bit (for example `lrw-r--r--`) was
+  not recognised, so the archive was treated as safe. Such archives are now
+  refused before anything is extracted, like other archives with links.
+
 - **Very long titles ending in an emoji or other special character get a
   valid file name.** When an imported game's stub file or a multi-disc
   playlist was named after a title long enough to be shortened, the cut

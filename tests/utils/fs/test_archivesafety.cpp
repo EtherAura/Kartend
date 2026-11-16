@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <QString>
 #include <QTemporaryDir>
@@ -41,6 +42,7 @@ private slots:
   void zeroParsedEntriesFailsClosedWithoutSecurityVerdict();
   void sevenZipLinkVocabularyGuardAcceptsEverySupportedFormat();
   void sevenZipMissingLinkVocabularyFailsClosedWithoutSecurityVerdict();
+  void sevenZipAttributesSymlinkModeEndingInDashIsRejected();
 
 private:
   // Builds a tar at `tarPath` from the contents of `srcDir` using bsdtar.
@@ -448,6 +450,78 @@ void TestArchiveSafety::sevenZipMissingLinkVocabularyFailsClosedWithoutSecurityV
   // only the 7z-only host of the reported scenario refuses outright.
   QVERIFY2(!ArchiveSafety::isSecurityRejection(scan.error()),
            "a missing link vocabulary is an uninterpretable listing, not an unsafe entry");
+#endif
+}
+
+// Kartend-dth95: for zip/7z the Attributes mode string is the scanner's only
+// symlink signal. A mode whose last character is '-' (0120644 ->
+// "lrw-r--r--") ends the trimmed line on a non-word character, so a trailing
+// \b never matched and such a symlink scanned as safe. Staged with stub `7z`
+// listings on a sandboxed PATH; the lrwxrwxrwx and -rw-r--r-- controls pin
+// that the fix neither loses the old match nor rejects regular files.
+void TestArchiveSafety::sevenZipAttributesSymlinkModeEndingInDashIsRejected() {
+  KARTEND_SKIP_QPROCESS_UNDER_TSAN();
+#ifdef Q_OS_WIN
+  QSKIP("shell-stub PATH sandbox is POSIX-only");
+#else
+  QTemporaryDir out;
+  QVERIFY(out.isValid());
+
+  // A non-empty file to stand in for the archive; the stubs never read it.
+  const QString fakeArchive = out.path() + QStringLiteral("/entries.zip");
+  {
+    QFile f(fakeArchive);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("not really a zip, the stub does the talking");
+  }
+
+  // One sandbox per mode string. printf is a shell builtin, so the stub runs
+  // with PATH stripped to the sandbox (see the slot above).
+  const auto writeStub = [](const QString &binDir, const QByteArray &attributes) {
+    QFile f(binDir + QStringLiteral("/7z"));
+    if (!f.open(QIODevice::WriteOnly)) return false;
+    f.write("#!/bin/sh\n"
+            "printf '%s\\n' \\\n"
+            "  'Listing archive: entries.zip' \\\n"
+            "  '' \\\n"
+            "  'Type = zip' \\\n"
+            "  '' \\\n"
+            "  '----------' \\\n"
+            "  'Path = link' \\\n"
+            "  'Attributes = " +
+            attributes + "'\n");
+    f.close();
+    return f.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner |
+                            QFile::ReadUser | QFile::ExeUser);
+  };
+  const auto scanWithStubIn = [&fakeArchive](const QString &binDir) {
+    // Restored on every exit path so no later slot inherits the stripped PATH.
+    const QByteArray oldPath = qgetenv("PATH");
+    const auto restorePath = qScopeGuard([&oldPath] { qputenv("PATH", oldPath); });
+    qputenv("PATH", binDir.toUtf8());
+    return ArchiveSafety::scanArchiveEntriesWithTool(fakeArchive, QStringLiteral("7z"));
+  };
+
+  QTemporaryDir dashBin;
+  QTemporaryDir fullBin;
+  QTemporaryDir regularBin;
+  QVERIFY(dashBin.isValid() && fullBin.isValid() && regularBin.isValid());
+  QVERIFY(writeStub(dashBin.path(), "A_ lrw-r--r--"));
+  QVERIFY(writeStub(fullBin.path(), "A_ lrwxrwxrwx"));
+  QVERIFY(writeStub(regularBin.path(), "A_ -rw-r--r--"));
+
+  const auto dashTail = scanWithStubIn(dashBin.path());
+  QVERIFY2(dashTail.isError(), "a symlink mode ending in '-' must not scan as safe");
+  QVERIFY2(ArchiveSafety::isSecurityRejection(dashTail.error()),
+           qPrintable(dashTail.error().userFacingSummary()));
+
+  const auto fullMode = scanWithStubIn(fullBin.path());
+  QVERIFY2(fullMode.isError(), "a symlink mode ending in 'x' must still be rejected");
+  QVERIFY2(ArchiveSafety::isSecurityRejection(fullMode.error()),
+           qPrintable(fullMode.error().userFacingSummary()));
+
+  const auto regularFile = scanWithStubIn(regularBin.path());
+  QVERIFY2(regularFile.isOk(), qPrintable(regularFile.error().userFacingSummary()));
 #endif
 }
 
