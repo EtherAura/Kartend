@@ -5,8 +5,8 @@ bundle — config + metadata + every media / artwork / video / manual
 file the collection references, packed into one append-only stream.
 
 Used by **Backup & Migration** (export from one of your machines,
-import on another) and by the headless `--kart-export` /
-`--kart-import` CLI.
+import on another) and by the headless `--export-kart` /
+`--import-kart` CLI.
 
 User-facing overview: [Backup & Migration](../user/Backup-and-Migration.md).
 This page is the on-disk format spec.
@@ -144,19 +144,26 @@ build vs zlib build) keeps the same hash.
 | Code | Codec | Available when |
 |------|-------|----------------|
 | `0` | None | Always |
-| `1` | Zstd | `KARTEND_HAVE_ZSTD` build flag |
+| `1` | Zstd | Built with zstd (`KARTEND_HAS_ZSTD` compile define) |
 | `2` | Zlib | Always (via Qt's built-in `qCompress` / `qUncompress`) |
 
 `kartcompression.cpp` picks **Zstd** when available, **Zlib** as a
-fallback. The build-flag is set by CMake when `find_package(zstd
-QUIET)` succeeds; absence means the binary still **reads** Zstd
-entries (well — only if it was built with zstd) but **writes** with
-Zlib. Practically, builds without zstd:
+fallback. Whether zstd is available is decided at configure time:
+when the `KARTEND_ENABLE_ZSTD` CMake option is `ON` (the default) and
+pkg-config finds `libzstd` (`cmake/OptionalBackends.cmake`), the
+`PkgConfig::ZSTD` target exists and the top-level `CMakeLists.txt`
+links it into `kartend_utils` and adds the `KARTEND_HAS_ZSTD=1`
+compile definition. The code gates on `#ifdef KARTEND_HAS_ZSTD`;
+`KartCompression::zstdAvailable()` reports the result at runtime.
+Configuring with `-DKARTEND_ENABLE_ZSTD=OFF`, or without libzstd
+installed, gives a build without zstd. Practically, builds without
+zstd:
 
 - Can read Zlib- or None-compressed entries.
-- Can read Zstd entries **only if linked against zstd** — a non-zstd
-  build returns a `KartFormat::CodecUnavailable` error for any
-  Zstd entry.
+- Cannot read Zstd entries — the zstd branches of
+  `KartCompression` (buffered `decompress` and the streaming
+  decompressor the reader uses) fail with
+  `ErrorUtils::ErrorCode::KartCompressionFailed` for any Zstd entry.
 - Write everything as Zlib.
 
 So a kart written on a Zstd-capable machine is portable to a
@@ -185,21 +192,59 @@ Both reader and writer are streaming:
 
 The whole stream is **append-only** — there's no central directory
 table. Concatenating two karts isn't supported (the second's magic
-ends up in the middle of the first's entry payload region), but
-karts can be re-emitted with a subset of entries via the merger
-([kartmerge.cpp](../../src/modules/data/kart/kartmerge.cpp)).
+ends up in the middle of the first's entry payload region), and
+there is no tool that merges two `.kart` files or re-emits one with
+a subset of its entries.
 
-## Merging two karts
+## Merging imported metadata
 
-`KartMerge` reads two `.kart` files, dedupes by SHA-256 across
-entries (same uncompressed bytes ⇒ one entry kept), and emits the
-union. The manifest is merged item-by-item using the source kart's
-item UUID as the dedupe key; the **later** kart's manifest fields
-win on conflict (a deliberate "import-overrides-existing" stance).
+[kartmerge.cpp](../../src/modules/data/kart/kartmerge.cpp) does not
+operate on `.kart` files. After an import has extracted the entries,
+`kart::persistImportedMetadata` writes the manifest's per-item
+metadata into the media database, merging it with whatever
+`ItemMetadataStore` already holds:
 
-The kart-merge dialog (`src/ui/dialogs/kart/kartmergedialog.cpp`)
-surfaces this from the UI when an import would collide with an
-existing collection.
+- Items are keyed by **(collection UUID, resolved media path)** —
+  the destination collection's UUID plus the item's `media_path`
+  joined onto the import's destination directory. There is no
+  per-item UUID and no SHA-256 dedupe.
+- An item with no `media_path` is ignored; one whose incoming
+  metadata is empty (after falling back to the item's `title` and
+  `launcher_index`) is counted as skipped.
+- If no row exists for that key, the incoming metadata is written as is.
+- If a row exists, the `ConflictResolver` picks a `kart::MergeChoice`:
+  **Skip** (keep the existing row), **Overwrite** (replace it with the
+  incoming metadata) or **Merge** (save
+  `kart::mergeItemMetadata(existing, incoming, policy)`). A resolution
+  with `applyToAll` set is reused for every later conflict in the same
+  import; with no resolver the choice is Skip.
+
+`mergeItemMetadata` decides field by field from the `kart::MergePolicy`
+flags (all off by default):
+
+- Strings: the existing value wins, but an empty existing value is
+  filled from the incoming one. With `preferIncoming…` set, the
+  incoming value wins unless it is empty.
+- Optional ints (runtime, launcher index, rating; negative = unset):
+  the same rule, with "unset" in place of "empty".
+- Flags (pinned, hidden, continue later): the default is the union of
+  both sides; `preferIncoming…` copies the incoming value exactly, so
+  it can clear a local flag.
+- The collection UUID and path keep the existing values (filled from
+  incoming only when empty), and `updatedAt` keeps the existing value.
+
+The GUI's resolver is the kart-merge dialog
+(`src/ui/dialogs/kart/kartmergedialog.cpp`), shown once per
+conflicting item with Skip / Overwrite / Merge… buttons, a
+"prefer incoming" checkbox per field for Merge, and an "apply to all
+remaining conflicts" checkbox. Headless `--import-kart` uses one fixed
+choice for every conflict, chosen with
+`--on-conflict skip|overwrite|merge` (default `skip`); its Merge uses
+the default policy.
+
+`kart::persistImportedArtworkLinks` (same file) restores the bundle's
+hand-linked artwork rows, and never replaces an existing local manual
+link.
 
 ## Limits
 
@@ -241,7 +286,7 @@ itself.
 | Change | Bump |
 |--------|------|
 | Add a new entry flag bit | Magic byte (new layout / new mandatory header semantics) |
-| Add a new compression codec id | None (existing readers fail with `CodecUnavailable` for the new id, which is the desired forward-compat behavior) |
+| Add a new compression codec id | None (existing readers fail with `ErrorUtils::ErrorCode::KartCompressionFailed` ("Unknown compression algorithm") for the new id, which is the desired forward-compat behavior) |
 | Add a new manifest JSON top-level field | None — JSON ignores unknown fields. Readers continue to work. |
 | Rename a manifest field | `format_version` |
 | Remove a manifest field | `format_version` |
@@ -261,6 +306,6 @@ clean break for hard backwards-incompatible layout changes.
 | Reader (streaming, hash-verified) | [kartreader.cpp](../../src/modules/data/kart/kartreader.cpp) |
 | Writer (streaming, atomic via QSaveFile) | [kartwriter.cpp](../../src/modules/data/kart/kartwriter.cpp) |
 | Zstd / Zlib selection | [kartcompression.cpp](../../src/modules/data/kart/kartcompression.cpp) |
-| Merger (dedupe by SHA-256) | [kartmerge.cpp](../../src/modules/data/kart/kartmerge.cpp) |
+| Imported-metadata merge (conflict resolution) | [kartmerge.cpp](../../src/modules/data/kart/kartmerge.cpp) |
 | Manager (high-level export / import) | [kartmanager.{h,cpp}](../../src/modules/data/kart/) |
 | User docs | [docs/user/Backup-and-Migration.md](../user/Backup-and-Migration.md) |
