@@ -174,7 +174,9 @@ ErrorUtils::Result<void> scanWith7z(const QString &archivePath) {
   const auto listing =
       runListing(QStringLiteral("7z"), {QStringLiteral("l"), QStringLiteral("-slt"), archivePath});
   if (listing.isError()) return listing.error();
-  static const QRegularExpression kSymlinkMode(QStringLiteral("\\bl[rwxsStT-]{9}\\b"));
+  // Kartend-dth95: the mode must END at whitespace or end-of-line, not at a
+  // word boundary — a trailing \b never matches after a final '-' (lrw-r--r--).
+  static const QRegularExpression kSymlinkMode(QStringLiteral("\\bl[rwxsStT-]{9}(?!\\S)"));
   bool inEntries = false;
   // Kartend-mm5sp: the codec is read from the HEADER (before the separator) so
   // the scan can afterwards assert it actually saw the field that carries this
