@@ -460,8 +460,9 @@ A future plain-text export format is a wishlist item.
   existingCollectionNames)` collects the summary + concerns; `KartSuspiciousPaths` flags `..`-traversal and
   outside-prefix targets. The dialog is
   [src/ui/dialogs/kart/kartpreflightdialog.h](../../src/ui/dialogs/kart/).
-- Compression: zstd via `KARTEND_HAS_ZSTD` (CMake-time toggle); zlib
-  fallback uses Qt's built-in `qCompress`.
+- Compression: zstd when the `KARTEND_ENABLE_ZSTD` CMake option is on
+  (the default) and libzstd is found, which sets the `KARTEND_HAS_ZSTD`
+  compile define; zlib fallback uses Qt's built-in `qCompress`.
 - Dialogs: [src/ui/dialogs/kart/](../../src/ui/dialogs/kart/) —
   `kartmergedialog.h`, `kartprogressdialog.h`, `kartpreflightdialog.h`.
 - CLI entry point: [src/core/main.cpp](../../src/core/main.cpp). The
