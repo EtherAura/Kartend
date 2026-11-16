@@ -8,6 +8,7 @@
 #include "pathutils.h"
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
@@ -78,6 +79,7 @@ private slots:
   void testIsPrivateDir_ownerOnlyDirIsPrivate();
   void testIsPrivateDir_groupOrOtherAccessibleIsNotPrivate();
   void testIsPrivateDir_emptyMissingOrFileIsNotPrivate();
+  void testIsPrivateDir_symlinkToPrivateDirIsNotPrivate();
 
   // PathStatus tests (Kartend-qc1c)
   void testCheckLauncherPath_empty();
@@ -554,6 +556,31 @@ void TestPathUtils::testIsPrivateDir_emptyMissingOrFileIsNotPrivate() {
   f.write("x");
   f.close();
   QVERIFY(!PathUtils::isPrivateDirOfCurrentUser(filePath));
+}
+
+void TestPathUtils::testIsPrivateDir_symlinkToPrivateDirIsNotPrivate() {
+#if defined(Q_OS_UNIX)
+  // Kartend-ibzk4: the check uses lstat so a symlink is never trusted as the
+  // private cache base, even when it points at a genuinely private 0700 dir.
+  // A switch to stat() or QFileInfo would follow the link and fail this test.
+  const QString real = QDir(m_tempDir.path()).filePath(QStringLiteral("real0700"));
+  QVERIFY(QDir().mkpath(real));
+  QVERIFY(QFile::setPermissions(real, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                          QFileDevice::ExeOwner));
+  QVERIFY(PathUtils::isPrivateDirOfCurrentUser(real));
+
+  const QString link = QDir(m_tempDir.path()).filePath(QStringLiteral("link-to-real"));
+  QVERIFY(QFile::link(real, link));
+  // The link must really exist as a symlink to the dir, so the rejection below
+  // proves symlink handling rather than a missing-path case.
+  const QFileInfo linkInfo(link);
+  QVERIFY(linkInfo.isSymLink());
+  QVERIFY(linkInfo.isDir());
+  QCOMPARE(linkInfo.canonicalFilePath(), QFileInfo(real).canonicalFilePath());
+  QVERIFY(!PathUtils::isPrivateDirOfCurrentUser(link));
+#else
+  QSKIP("POSIX lstat semantics; not meaningful on this platform");
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
