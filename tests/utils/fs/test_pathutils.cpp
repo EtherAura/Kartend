@@ -87,14 +87,17 @@ private slots:
   void testCheckLauncherPath_existsButNotExecutable();
   void testCheckLauncherPath_existsAndExecutable();
   void testCheckLauncherPath_bareCommandResolvesViaPath();
+  void testCheckLauncherPath_bareCommandNotOnPathIsMissing();
   void testCheckDirectoryPath_empty();
   void testCheckDirectoryPath_missing();
   void testCheckDirectoryPath_existingDir();
   void testCheckDirectoryPath_wrongTypeIsFile();
+  void testCheckDirectoryPath_unreadableDirIsNotReadable();
   void testCheckFilePath_empty();
   void testCheckFilePath_missing();
   void testCheckFilePath_existingFile();
   void testCheckFilePath_wrongTypeIsDir();
+  void testCheckFilePath_unreadableFileIsNotReadable();
   void testPathStatusDescription_okAndEmptyAreBlank();
   void testPathStatusDescription_nonOkProducesText();
 
@@ -637,6 +640,13 @@ void TestPathUtils::testCheckLauncherPath_bareCommandResolvesViaPath() {
   QCOMPARE(PathUtils::checkLauncherPath(bareCommand), PathUtils::PathStatus::OK);
 }
 
+void TestPathUtils::testCheckLauncherPath_bareCommandNotOnPathIsMissing() {
+  // Kartend-0bff5: a bare name that QStandardPaths::findExecutable cannot
+  // resolve takes the PATH-miss branch and reports Missing.
+  QCOMPARE(PathUtils::checkLauncherPath(QStringLiteral("kartend-no-such-command-zz9")),
+           PathUtils::PathStatus::Missing);
+}
+
 void TestPathUtils::testCheckDirectoryPath_empty() {
   QCOMPARE(PathUtils::checkDirectoryPath(QString()), PathUtils::PathStatus::Empty);
 }
@@ -659,6 +669,27 @@ void TestPathUtils::testCheckDirectoryPath_wrongTypeIsFile() {
   QCOMPARE(PathUtils::checkDirectoryPath(path), PathUtils::PathStatus::WrongType);
 }
 
+void TestPathUtils::testCheckDirectoryPath_unreadableDirIsNotReadable() {
+#if defined(Q_OS_UNIX)
+  if (::geteuid() == 0) {
+    QSKIP("root bypasses directory read permissions");
+  }
+  // Kartend-0bff5: an existing directory chmod 0000 still stats as a dir but is
+  // not readable, so it reports NotReadable rather than Missing or WrongType.
+  const QString dir = QDir(m_tempDir.path()).filePath(QStringLiteral("unreadable-dir"));
+  QVERIFY(QDir().mkpath(dir));
+  QVERIFY(QFile::setPermissions(dir, QFileDevice::Permissions()));
+  const PathUtils::PathStatus status = PathUtils::checkDirectoryPath(dir);
+  // Restore permissions first so QTemporaryDir cleanup can remove the dir even
+  // if the assertion below fails.
+  QVERIFY(QFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                         QFileDevice::ExeOwner));
+  QCOMPARE(status, PathUtils::PathStatus::NotReadable);
+#else
+  QSKIP("POSIX permission semantics; not meaningful on this platform");
+#endif
+}
+
 void TestPathUtils::testCheckFilePath_empty() {
   QCOMPARE(PathUtils::checkFilePath(QString()), PathUtils::PathStatus::Empty);
 }
@@ -679,6 +710,28 @@ void TestPathUtils::testCheckFilePath_existingFile() {
 
 void TestPathUtils::testCheckFilePath_wrongTypeIsDir() {
   QCOMPARE(PathUtils::checkFilePath(m_tempDir.path()), PathUtils::PathStatus::WrongType);
+}
+
+void TestPathUtils::testCheckFilePath_unreadableFileIsNotReadable() {
+#if defined(Q_OS_UNIX)
+  if (::geteuid() == 0) {
+    QSKIP("root bypasses file read permissions");
+  }
+  // Kartend-0bff5: an existing write-only (0200) file reports NotReadable.
+  const QString path = QDir(m_tempDir.path()).filePath(QStringLiteral("write-only.png"));
+  QFile f(path);
+  QVERIFY(f.open(QIODevice::WriteOnly));
+  f.write("\x89PNG\r\n");
+  f.close();
+  QVERIFY(QFile::setPermissions(path, QFileDevice::WriteOwner));
+  const PathUtils::PathStatus status = PathUtils::checkFilePath(path);
+  // Restore permissions first so QTemporaryDir cleanup works even if the
+  // assertion below fails.
+  QVERIFY(QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+  QCOMPARE(status, PathUtils::PathStatus::NotReadable);
+#else
+  QSKIP("POSIX permission semantics; not meaningful on this platform");
+#endif
 }
 
 void TestPathUtils::testPathStatusDescription_okAndEmptyAreBlank() {
