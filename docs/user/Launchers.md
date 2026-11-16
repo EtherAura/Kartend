@@ -106,7 +106,7 @@ Only `%1` and `%f` place the media argument. Naming a *part* of the path
 does not count, so a template that uses `%name%` but never `%1` still
 gets the full path appended at the end.
 
-Two things worth knowing:
+Three things worth knowing:
 
 - **Launcher-import entries have no file on disk.** Items imported from
   Steam, Flatpak, Lutris and friends are shortcut stubs that resolve to a
@@ -116,6 +116,14 @@ Two things worth knowing:
 - **Unknown tokens are left alone.** A `%something%` Kartend doesn't
   recognise is passed through verbatim rather than blanked, and the launch
   preview flags it as unresolved — so a typo is visible instead of silent.
+- **A token whose value starts with `-` refuses the launch.** A file
+  named `-rf.mkv` gives `%name%` the value `-rf`, which the launcher would
+  read as an option rather than a title. When the template names
+  `%name%`, `%filename%`, `%dir%` or `%ext%` and that value starts with
+  `-`, Kartend refuses to launch the item and names the token in the
+  error; **Preview launch command…** shows the same message. Templates
+  that don't name the token are unaffected — the same file launches
+  normally with its full path.
 
 If you need genuine shell behavior — pipes, globs, conditionals — a
 wrapper script is still the answer:
@@ -456,12 +464,17 @@ What it shows:
   an archive, the preview notes that Kartend would extract to a temp
   directory and launch the configured extension from inside. It does
   not extract, so it cannot show you the resolved inner path.
-- **Warnings** — the checks that run before a real launch. The full
-  set is: launcher executable not found; file does not exist on disk;
-  archive extraction enabled but the target extension is empty; core
-  path will be ignored (launcher is not a libretro launcher); a
-  `%filename%` / `%dir%` / `%ext%` token that is empty for a
-  launcher-import stub; and an unresolved `%placeholder%`.
+- **Warnings** — the checks that run before a real launch. When the
+  command can't be built at all, the warning is the reason the launch
+  would be refused — for example no launcher configured, an unclosed
+  quote in the launch parameters, a media path that starts with `-`, or
+  a `%name%` / `%filename%` / `%dir%` / `%ext%` value that starts with
+  `-` (see [Placeholder tokens](#placeholder-tokens)). Otherwise the full
+  set is: launcher executable not found; file
+  does not exist on disk; archive extraction enabled but the target
+  extension is empty; core path will be ignored (launcher is not a
+  libretro launcher); a `%filename%` / `%dir%` / `%ext%` token that is
+  empty for a launcher-import stub; and an unresolved `%placeholder%`.
 
 The preview does **not** show a working directory, and the cwd is not
 what you might guess: `QProcess` is started in the **launcher's own**
