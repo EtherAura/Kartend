@@ -7,7 +7,8 @@
 
 /// Pre-extraction archive safety scan.
 ///
-/// The extraction call sites (launch-time archive unpack, DAT-pack unpack)
+/// The extraction call sites (launch-time archive unpack, DAT-pack unpack,
+/// ROM-hasher inner-file unpack in RomHasher's extractArchiveForHashing)
 /// spawn external extractors into a temp directory and then walk the result
 /// with QDir::NoSymLinks. Those post-extraction walks only govern which file
 /// is *read* — they cannot catch the write-through-symlink zip-slip class: a
@@ -16,12 +17,15 @@
 /// outside the extraction root where no later walk ever looks.
 ///
 /// scanArchiveEntries() lists the archive with the best available listing
-/// tool (bsdtar, else 7z — the same binaries the extraction sites prefer)
-/// and refuses archives that contain symlink or hardlink entries, absolute
-/// entry paths, Windows drive-absolute paths, or ".." traversal components.
-/// Callers run it before spawning the extractor and fail closed on error —
-/// including the no-listing-tool case, which cannot happen when the caller
-/// selected one of the same binaries as its extractor.
+/// tool (bsdtar, else 7z) and refuses archives that contain symlink or
+/// hardlink entries, absolute entry paths, Windows drive-absolute paths, or
+/// ".." traversal components. The launch and DAT sites also prefer bsdtar,
+/// then 7z, as extractor (launch scans per tool via
+/// scanArchiveEntriesWithTool); the ROM hasher scans bsdtar-first but
+/// extracts with 7z first (RomHasher::extractorCandidates). Every extractor
+/// is one of the two listing binaries, so callers run the scan before
+/// spawning the extractor and fail closed on error — including the
+/// no-listing-tool case, which then means no extractor exists either.
 namespace ArchiveSafety {
 
 /// Scan @p archivePath's entry listing for symlink/hardlink entries and
