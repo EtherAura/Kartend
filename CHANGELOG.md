@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The launch preview shows the launcher exactly as it would run when the
+  command cannot be built.** If the launcher path had spaces before or after
+  it and the command could not be assembled (for example because of an
+  unclosed quote in the launch parameters), the preview showed the path with
+  those spaces, although a launch ignores them. It now shows the same
+  trimmed path a launch would use.
+
 - **A file name containing a launch placeholder no longer breaks the
   launch.** When a file's name or path itself contained text such as `%f`,
   `%1` or `%core`, that text was replaced again after it had been inserted
