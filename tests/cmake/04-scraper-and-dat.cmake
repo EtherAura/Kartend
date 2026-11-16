@@ -236,6 +236,14 @@ kartend_add_test(NAME WikidataPlatformPhoto
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Wikidata units-sold-only platform retention (Kartend-5b5r1): the real
+# provider offline through the fetch seam keeps an entity whose only usable
+# data is the parsed P2664 quantity; an empty entity stays not-found.
+kartend_add_test(NAME WikidataPlatformSpecs
+  SOURCES modules/scraper/test_wikidataplatformspecs.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # ScreenScraper systems autodetect tests
 kartend_add_test(NAME ScreenScraperSystems
   SOURCES modules/scraper/test_screenscrapersystems.cpp
