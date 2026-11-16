@@ -1051,7 +1051,10 @@ jobs:
   # backend is simply absent.
   linux-qt-newer:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # 45 rather than 30: a passing run takes 24-26 min, so a slower runner or
+    # a larger rebuild crossed 30 and was cancelled, three times on 2026-11-15
+    # (a lane PR was closed for it). Matches the other build jobs (Kartend-563qw).
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
