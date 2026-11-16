@@ -338,6 +338,14 @@ kartend_add_test(NAME ThreadingUtils
   LINK kartend_utils
 )
 
+# BoundedWait (Kartend-87x93): the bounded wait behind the keychain calls must
+# keep working while the application is quitting, when Qt refuses to run a
+# nested event loop. Timers only; no GUI and no keychain needed.
+kartend_add_test(NAME BoundedWait
+  SOURCES utils/threading/test_boundedwait.cpp
+  LINK kartend_utils
+)
+
 # CollectionConfig::operator== field coverage (guards against a new field being
 # added to the struct but forgotten in operator==).
 kartend_add_test(NAME CollectionConfig

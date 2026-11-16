@@ -2,6 +2,7 @@
 #define TIMERUTILS_H
 
 #include <functional>
+#include <QEventLoop>
 #include <QHash>
 #include <QList>
 #include <QObject>
@@ -76,6 +77,59 @@ private slots:
 private:
   QTimer *m_layoutTimer;
   QTimer *m_viewportTimer;
+};
+
+/**
+ * @brief Waits, up to a deadline, for an asynchronous operation of the calling
+ * thread to finish.
+ *
+ * Connect the operation's completion signal to finish(), start the operation,
+ * then call run(): it processes the thread's events until finish() has been
+ * called or the deadline has passed. One BoundedWait serves one operation.
+ *
+ *   TimerUtils::BoundedWait wait;
+ *   QObject::connect(&job, &Job::finished, &wait, &TimerUtils::BoundedWait::finish);
+ *   job.start();
+ *   if (!wait.run(5000)) {
+ *     // the operation did not finish within five seconds
+ *   }
+ *
+ * Unlike a bare nested QEventLoop, run() also works while the application is
+ * quitting (Kartend-87x93). QCoreApplication::quit() and exit() mark the
+ * thread as quitting, and until the application's own exec() has returned,
+ * QEventLoop::exec() refuses to run: it returns -1 at once. Code that
+ * continues after a modal dialog which the quit has just closed is in exactly
+ * that state. A wait built on exec() alone "times out" there in zero
+ * milliseconds, although the operation was never given a chance. run()
+ * notices that the loop did not run, or was ended early by a quit, and
+ * processes the events itself until the operation finishes or the same
+ * deadline passes.
+ *
+ * Thread-affinity: NOT thread-safe. Create it, call finish() and call run()
+ * on one thread.
+ *
+ * Re-entrancy: run() dispatches every pending event of the thread, user input
+ * included, as a nested QEventLoop does. Use it only where that is acceptable.
+ */
+class BoundedWait : public QObject {
+  Q_OBJECT
+  Q_DISABLE_COPY_MOVE(BoundedWait)
+public:
+  explicit BoundedWait(QObject *parent = nullptr);
+  ~BoundedWait() override;
+
+  /// Marks the awaited operation as finished and ends a run() in progress.
+  void finish();
+
+  /// Processes events until finish() was called or @p timeoutMs has passed.
+  /// @return true if the operation finished, false if the deadline came first.
+  [[nodiscard]] bool run(int timeoutMs);
+
+  [[nodiscard]] bool isFinished() const { return m_finished; }
+
+private:
+  QEventLoop m_loop;
+  bool m_finished = false;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
