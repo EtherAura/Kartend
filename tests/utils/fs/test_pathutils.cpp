@@ -105,6 +105,10 @@ private slots:
   void testIsWindowsReservedStem_data();
   void testIsWindowsReservedStem();
 
+  // isSafePathComponent tests (Kartend-6lx76)
+  void testIsSafePathComponent_data();
+  void testIsSafePathComponent();
+
   // sanitizeFileBaseName length cap (Kartend-zzkiu)
   void testSanitizeFileBaseName_capDoesNotSplitSurrogatePair();
   void testSanitizeFileBaseName_capKeepsWholePairAtLimit();
@@ -790,6 +794,39 @@ void TestPathUtils::testIsWindowsReservedStem() {
   QFETCH(QString, stem);
   QFETCH(bool, reserved);
   QCOMPARE(PathUtils::isWindowsReservedStem(stem), reserved);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// isSafePathComponent tests (Kartend-6lx76)
+//
+// The shared guard (Kartend-2mol7) every caller uses before appending an
+// untrusted string to a filesystem path as a single segment. Pinned directly
+// rather than only through callers such as the lutris slug test.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestPathUtils::testIsSafePathComponent_data() {
+  QTest::addColumn<QString>("component");
+  QTest::addColumn<bool>("safe");
+
+  // Empty, the two traversal segments and anything carrying a separator.
+  QTest::newRow("empty") << QString() << false;
+  QTest::newRow("dot") << QStringLiteral(".") << false;
+  QTest::newRow("dotdot") << QStringLiteral("..") << false;
+  QTest::newRow("forward slash inside") << QStringLiteral("a/b") << false;
+  QTest::newRow("backslash inside") << QStringLiteral("a\\b") << false;
+  QTest::newRow("slash only") << QStringLiteral("/") << false;
+  // Dots are only refused as the whole segment "." or "..".
+  QTest::newRow("three dots") << QStringLiteral("...") << true;
+  QTest::newRow("dotdot prefix") << QStringLiteral("..a") << true;
+  QTest::newRow("inner dot") << QStringLiteral("a.b") << true;
+  QTest::newRow("hidden name") << QStringLiteral(".hidden") << true;
+  QTest::newRow("volume name") << QStringLiteral("Vol.2") << true;
+}
+
+void TestPathUtils::testIsSafePathComponent() {
+  QFETCH(QString, component);
+  QFETCH(bool, safe);
+  QCOMPARE(PathUtils::isSafePathComponent(component), safe);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
