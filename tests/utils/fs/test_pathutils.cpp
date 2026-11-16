@@ -100,6 +100,10 @@ private slots:
   void testIsWindowsReservedStem_data();
   void testIsWindowsReservedStem();
 
+  // sanitizeFileBaseName length cap (Kartend-zzkiu)
+  void testSanitizeFileBaseName_capDoesNotSplitSurrogatePair();
+  void testSanitizeFileBaseName_capKeepsWholePairAtLimit();
+
 private:
   QTemporaryDir m_tempDir;
 };
@@ -706,6 +710,41 @@ void TestPathUtils::testIsWindowsReservedStem() {
   QFETCH(QString, stem);
   QFETCH(bool, reserved);
   QCOMPARE(PathUtils::isWindowsReservedStem(stem), reserved);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sanitizeFileBaseName length cap (Kartend-zzkiu)
+//
+// The 120 cap counts UTF-16 code units, so a cut landing inside an astral
+// character used to keep a lone high surrogate, which cannot be encoded to an
+// on-disk filename faithfully.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestPathUtils::testSanitizeFileBaseName_capDoesNotSplitSurrogatePair() {
+  const QString emoji = QString::fromUcs4(U"\U0001F3AE");
+  QCOMPARE(emoji.size(), 2);
+  const QString title = QString(119, QLatin1Char('x')) + emoji;
+  QCOMPARE(title.size(), 121);
+
+  const QString result =
+      PathUtils::sanitizeFileBaseName(title, QStringLiteral(" "), QStringLiteral("Untitled"));
+  QVERIFY(result.size() <= 120);
+  QVERIFY(!result.isEmpty());
+  QVERIFY(!result.back().isHighSurrogate());
+  QCOMPARE(result, QString(119, QLatin1Char('x')));
+}
+
+void TestPathUtils::testSanitizeFileBaseName_capKeepsWholePairAtLimit() {
+  const QString emoji = QString::fromUcs4(U"\U0001F3AE");
+  const QString title = QString(118, QLatin1Char('x')) + emoji;
+  QCOMPARE(title.size(), 120);
+
+  const QString result =
+      PathUtils::sanitizeFileBaseName(title, QStringLiteral(" "), QStringLiteral("Untitled"));
+  QCOMPARE(result.size(), 120);
+  QVERIFY(result.at(118).isHighSurrogate());
+  QVERIFY(result.at(119).isLowSurrogate());
+  QCOMPARE(result, title);
 }
 
 QTEST_MAIN(TestPathUtils)

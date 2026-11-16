@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Very long titles ending in an emoji or other special character get a
+  valid file name.** When an imported game's stub file or a multi-disc
+  playlist was named after a title long enough to be shortened, the cut
+  could land in the middle of an emoji or a similar character and leave half
+  of it in the name, so the file on disk did not match the name Kartend had
+  computed. The shortened name now drops the incomplete character instead.
+
 - **The launch preview shows the launcher exactly as it would run when the
   command cannot be built.** If the launcher path had spaces before or after
   it and the command could not be assembled (for example because of an
