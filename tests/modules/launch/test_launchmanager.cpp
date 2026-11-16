@@ -9,6 +9,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
 #include "collection/launcherconfig.h"
+#include "kartlink.h"
 #include "launchmanager.h"
 
 #include "../../support/launchfakes.h"
@@ -123,6 +124,9 @@ private slots:
   void testPreview_warnsCorePathIgnoredForNonLibretroLauncher();
   void testPreview_noCoreWarningForLibretroLauncher();
   void testPreview_unclosedQuoteParameterSurfacedAsWarning();
+  void testPreview_warnsPathPartTokensOnKartLinkStub_data();
+  void testPreview_warnsPathPartTokensOnKartLinkStub();
+  void testPreview_noPathPartWarningForNameOnKartLinkStub();
 
   // Archive extraction (extractArchiveToTemp) + isArchiveFile coverage.
   void testIsArchiveFile_recognizesKnownExtensions();
@@ -1456,6 +1460,87 @@ void TestLaunchManager::testPreview_noCoreWarningForLibretroLauncher() {
     QVERIFY2(!w.contains("Core path will be ignored"),
              qPrintable(QString("Unexpected core-ignored warning: %1").arg(w)));
   }
+}
+
+namespace {
+// Writes a launcher-import stub (as LauncherImportService would) into @p dir
+// and returns its path, or an empty string when the write failed.
+QString writeSteamStub(const QTemporaryDir &dir) {
+  KartLink::LinkData data;
+  data.source = QStringLiteral("steam");
+  data.target = QStringLiteral("steam://rungameid/400");
+  data.title = QStringLiteral("Portal");
+  const QString stub = dir.filePath(QStringLiteral("Portal.kartlink"));
+  return KartLink::write(stub, data) ? stub : QString();
+}
+
+QStringList launcherImportWarnings(const LaunchPreview &preview) {
+  QStringList matching;
+  for (const QString &w : preview.warnings) {
+    if (w.contains("launcher-import")) {
+      matching << w;
+    }
+  }
+  return matching;
+}
+} // namespace
+
+void TestLaunchManager::testPreview_warnsPathPartTokensOnKartLinkStub_data() {
+  QTest::addColumn<QString>("parameters");
+  QTest::addColumn<QString>("expectedToken");
+  QTest::newRow("dir") << "--dir=%dir%" << "%dir%";
+  QTest::newRow("filename") << "--file=%filename%" << "%filename%";
+  QTest::newRow("ext") << "--ext=%ext%" << "%ext%";
+  // The builder stops at the first token it finds: one warning, not three.
+  QTest::newRow("allThree") << "%dir% %filename% %ext%" << "%filename%";
+}
+
+void TestLaunchManager::testPreview_warnsPathPartTokensOnKartLinkStub() {
+  // Kartend-kvcxd / Kartend-3j5bg: %filename%/%dir%/%ext% expand to empty for
+  // a .kartlink stub, and the preview must say why — without the warning the
+  // blank argument reads as a Kartend bug.
+  QFETCH(QString, parameters);
+  QFETCH(QString, expectedToken);
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString stub = writeSteamStub(dir);
+  QVERIFY(!stub.isEmpty());
+
+  CollectionConfig collection;
+  collection.name = "Steam";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable;
+  launcher.launchParameters = parameters;
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, stub);
+  QVERIFY2(preview.buildOk, qPrintable(preview.buildError));
+
+  const QStringList warnings = launcherImportWarnings(preview);
+  QCOMPARE(warnings.size(), 1);
+  QVERIFY2(
+      warnings.first().startsWith(expectedToken),
+      qPrintable(QString("Warning does not name %1: %2").arg(expectedToken, warnings.first())));
+}
+
+void TestLaunchManager::testPreview_noPathPartWarningForNameOnKartLinkStub() {
+  // %name% resolves to the stub's display title, so it is deliberately not one
+  // of the path-part tokens the launcher-import warning covers.
+  QTemporaryDir dir;
+  QVERIFY(dir.isValid());
+  const QString stub = writeSteamStub(dir);
+  QVERIFY(!stub.isEmpty());
+
+  CollectionConfig collection;
+  collection.name = "Steam";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable;
+  launcher.launchParameters = "--title=%name%";
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, stub);
+  QVERIFY2(preview.buildOk, qPrintable(preview.buildError));
+  QVERIFY(preview.arguments.contains(QStringLiteral("--title=Portal")));
+
+  const QStringList warnings = launcherImportWarnings(preview);
+  QVERIFY2(warnings.isEmpty(),
+           qPrintable(QString("Unexpected launcher-import warning: %1").arg(warnings.join("; "))));
 }
 
 // ---------------------------------------------------------------------------
