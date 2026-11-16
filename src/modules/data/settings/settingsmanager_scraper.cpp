@@ -15,9 +15,9 @@
 #include "settingskeys.h"
 
 #ifdef KARTEND_HAVE_QTKEYCHAIN
-#include <QEventLoop>
 #include <qt6keychain/keychain.h>
-#include <QTimer>
+
+#include "timerutils.h"
 #endif
 
 namespace keys = kartend::settings::keys;
@@ -41,30 +41,32 @@ constexpr const char *kKeychainService = "io.github.EtherAura.Kartend.scrapers";
 // QSettings — settingsmanager handles the fallback explicitly so the caller can
 // see the boundary and so the migration logic isn't confused by QKeychain
 // doubling up its own plaintext copy.
-// Cap nested QEventLoop::exec() so an unresponsive secret service daemon can't
-// wedge the GUI thread. 5s is generous for a local keychain RPC; the
-// startup/save callers degrade to a "keychain unavailable" failure path on
-// timeout.
+// Cap the wait so an unresponsive secret service daemon can't wedge the GUI
+// thread. 5s is generous for a local keychain RPC; the startup/save callers
+// degrade to a "keychain unavailable" failure path on timeout.
 constexpr int kKeychainTimeoutMs = 5000;
 
-// Runs the QKeychain job to completion with a bounded event loop. Returns true
-// if the job finished within the timeout, false if the timer fired first.
+// Runs the QKeychain job to completion, waiting at most kKeychainTimeoutMs.
+// Returns true if the job finished in time, false if the deadline came first.
 // Either way the caller still inspects job.error() — on a real timeout we
 // synthesize a warning so users see the daemon stall.
+//
+// The wait is a TimerUtils::BoundedWait, not a bare nested QEventLoop
+// (Kartend-87x93). A save that ran while the application was quitting, in the
+// code that continues after a modal dialog the quit had just closed, found
+// QEventLoop::exec() refusing to run, so every keychain job "timed out" in
+// zero milliseconds: a new credential stayed in the clear with a false "did
+// not respond" reason, and a removed credential's keychain entry was never
+// deleted.
 bool runKeychainJobBounded(QKeychain::Job &job, const char *opName) {
-  QEventLoop loop;
-  bool finished = false;
-  QObject::connect(&job, &QKeychain::Job::finished, &loop, [&loop, &finished]() {
-    finished = true;
-    loop.quit();
-  });
+  TimerUtils::BoundedWait wait;
+  QObject::connect(&job, &QKeychain::Job::finished, &wait, &TimerUtils::BoundedWait::finish);
   job.start();
-  // Watchdog: QKeychain has no built-in timeout. If the platform secret service
-  // daemon stalls (GNOME Keyring on first-unlock prompt, KWallet not running,
-  // etc.), this timer fires and quits the bounded loop so the caller falls back
-  // to plaintext storage instead of wedging forever.
-  QTimer::singleShot(kKeychainTimeoutMs, &loop, &QEventLoop::quit);
-  loop.exec();
+  // QKeychain has no built-in timeout. If the platform secret service daemon
+  // stalls (GNOME Keyring on first-unlock prompt, KWallet not running, etc.),
+  // the wait gives up at the deadline, so the caller falls back to plaintext
+  // storage instead of wedging forever.
+  const bool finished = wait.run(kKeychainTimeoutMs);
   if (!finished) {
     qCWarning(lcSettingsManager) << "SettingsManager: keychain" << opName << "timed out after"
                                  << kKeychainTimeoutMs << "ms";

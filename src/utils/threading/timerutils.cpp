@@ -6,6 +6,47 @@
 #include <QTimer>
 
 // ============================================================================
+// BoundedWait Implementation
+// ============================================================================
+
+TimerUtils::BoundedWait::BoundedWait(QObject *parent) : QObject(parent) {}
+
+TimerUtils::BoundedWait::~BoundedWait() = default;
+
+void TimerUtils::BoundedWait::finish() {
+  m_finished = true;
+  m_loop.quit();
+}
+
+bool TimerUtils::BoundedWait::run(int timeoutMs) {
+  if (m_finished) {
+    // Finished before the wait began: nothing to wait for, and a quit() issued
+    // before exec() would not end the loop below.
+    return true;
+  }
+  bool timedOut = false;
+  QTimer watchdog;
+  watchdog.setSingleShot(true);
+  QObject::connect(&watchdog, &QTimer::timeout, &m_loop, [this, &timedOut]() {
+    timedOut = true;
+    m_loop.quit();
+  });
+  watchdog.start(timeoutMs);
+  m_loop.exec();
+  // exec() comes back with neither flag set in two cases, both while the
+  // application is quitting: Qt refused to enter the loop (it returned -1 at
+  // once), or a quit that arrived during the wait ended every loop of the
+  // thread. The operation is still in flight and still needs its events, so
+  // process them here until it finishes or the watchdog fires. The watchdog is
+  // itself a pending event, so waiting for more events cannot outlast the
+  // deadline.
+  while (!m_finished && !timedOut) {
+    QCoreApplication::processEvents(QEventLoop::AllEvents | QEventLoop::WaitForMoreEvents);
+  }
+  return m_finished;
+}
+
+// ============================================================================
 // DebouncedTimer Implementation
 // ============================================================================
 

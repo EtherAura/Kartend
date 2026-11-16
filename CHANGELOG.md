@@ -91,6 +91,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it is without asking, along with the warning about unencrypted
   passwords, and still moves it into the keychain on the first save after
   the keychain works again. A password you change is still asked about.
+- **A scraper password is saved to the system keychain even while Kartend
+  is closing.** If Kartend was told to quit while a dialog was open (at
+  logout or shutdown, with Ctrl+C in a terminal, or while the first-run
+  wizard was showing), the save that followed could not reach the
+  keychain. A scraper password that was new, or still stored unencrypted,
+  stayed unencrypted in the settings file, with a warning that the
+  keychain "did not respond within 5000 ms" although nothing had waited
+  that long. A password you had removed was left behind in the keychain.
+  Kartend now reaches the keychain in that moment too. A password that
+  was already in the keychain and unchanged was not affected.
 
 ## [0.0.21] - 2026-11-12
 
