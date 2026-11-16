@@ -43,6 +43,7 @@ private slots:
   void sevenZipLinkVocabularyGuardAcceptsEverySupportedFormat();
   void sevenZipMissingLinkVocabularyFailsClosedWithoutSecurityVerdict();
   void sevenZipAttributesSymlinkModeEndingInDashIsRejected();
+  void scannersRejectEscapingEntryPathAsSecurityVerdict();
 
 private:
   // Builds a tar at `tarPath` from the contents of `srcDir` using bsdtar.
@@ -522,6 +523,115 @@ void TestArchiveSafety::sevenZipAttributesSymlinkModeEndingInDashIsRejected() {
 
   const auto regularFile = scanWithStubIn(regularBin.path());
   QVERIFY2(regularFile.isOk(), qPrintable(regularFile.error().userFacingSummary()));
+#endif
+}
+
+// Kartend-6e9p3: entryPathEscapes is unit-tested on its own, but a scanner that
+// stopped calling it would still pass every other slot. Stub `bsdtar` and `7z`
+// on a sandboxed PATH list one regular entry named "../evil.bin" (with the full
+// tar link vocabulary for 7z, so no earlier fail-closed branch fires), and each
+// scanner must reject it as a SECURITY verdict. The dispatcher must then return
+// bsdtar's rejection without consulting 7z: each stub logs its first argument
+// to a marker in the test's temporary directory.
+void TestArchiveSafety::scannersRejectEscapingEntryPathAsSecurityVerdict() {
+  KARTEND_SKIP_QPROCESS_UNDER_TSAN();
+#ifdef Q_OS_WIN
+  QSKIP("shell-stub PATH sandbox is POSIX-only");
+#else
+  QTemporaryDir out;
+  QTemporaryDir bin;
+  QVERIFY(out.isValid() && bin.isValid());
+
+  // A non-empty file to stand in for the archive; the stubs never read it.
+  const QString fakeArchive = out.path() + QStringLiteral("/escape.tar");
+  {
+    QFile f(fakeArchive);
+    QVERIFY(f.open(QIODevice::WriteOnly));
+    f.write("not really a tar, the stubs do the talking");
+  }
+  const QString bsdtarMarker = out.path() + QStringLiteral("/bsdtar.calls");
+  const QString sevenZipMarker = out.path() + QStringLiteral("/7z.calls");
+
+  // printf and >> are shell builtins, so the stubs run with PATH stripped to
+  // the sandbox and can never reach a real archive tool. Any unexpected
+  // invocation exits non-zero, which the scanner reports as "tool failed".
+  const auto writeStub = [&bin](const QString &name, const QByteArray &body) {
+    QFile f(bin.path() + QLatin1Char('/') + name);
+    if (!f.open(QIODevice::WriteOnly)) return false;
+    f.write("#!/bin/sh\n" + body);
+    f.close();
+    return f.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner |
+                            QFile::ReadUser | QFile::ExeUser);
+  };
+  QVERIFY(writeStub(QStringLiteral("bsdtar"),
+                    "printf '%s\\n' \"$1\" >> '" + bsdtarMarker.toUtf8() +
+                        "'\n"
+                        "case \"$1\" in\n"
+                        "  -tvf) printf '%s\\n' '-rw-r--r--  0 0 0 5 Jan  1  2026 ../evil.bin' ;;\n"
+                        "  -tf) printf '%s\\n' '../evil.bin' ;;\n"
+                        "  *) exit 2 ;;\n"
+                        "esac\n"));
+  QVERIFY(writeStub(QStringLiteral("7z"), "printf '%s\\n' \"$1\" >> '" + sevenZipMarker.toUtf8() +
+                                              "'\n"
+                                              "printf '%s\\n' \\\n"
+                                              "  'Listing archive: escape.tar' \\\n"
+                                              "  '' \\\n"
+                                              "  'Type = tar' \\\n"
+                                              "  '' \\\n"
+                                              "  '----------' \\\n"
+                                              "  'Path = ../evil.bin' \\\n"
+                                              "  'Size = 5' \\\n"
+                                              "  'Symbolic Link = ' \\\n"
+                                              "  'Hard Link = '\n"));
+
+  const auto readCalls = [](const QString &marker) {
+    QFile f(marker);
+    if (!f.open(QIODevice::ReadOnly)) return QStringList();
+    return QString::fromUtf8(f.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+  };
+  const auto verifyPathEscapeRejection = [](const ErrorUtils::Result<void> &scan,
+                                            const char *tool) {
+    QVERIFY2(
+        scan.isError(),
+        qPrintable(
+            QStringLiteral("%1 scanned an escaping entry path as safe").arg(QLatin1String(tool))));
+    const QString summary = scan.error().userFacingSummary();
+    QVERIFY2(ArchiveSafety::isSecurityRejection(scan.error()), qPrintable(summary));
+    QVERIFY2(summary.contains(QStringLiteral("path escapes the extraction directory")),
+             qPrintable(summary));
+    QCOMPARE(scan.error().details, QStringLiteral("../evil.bin"));
+  };
+
+  // Restored on every exit path so no later slot inherits the stripped PATH.
+  const QByteArray oldPath = qgetenv("PATH");
+  const auto restorePath = qScopeGuard([&oldPath] { qputenv("PATH", oldPath); });
+  qputenv("PATH", bin.path().toUtf8());
+
+  // bsdtar: the verbose listing passes the link checks, so the rejection must
+  // come from the -tf name loop — both listings must have run.
+  const auto bsdtarScan =
+      ArchiveSafety::scanArchiveEntriesWithTool(fakeArchive, QStringLiteral("bsdtar"));
+  verifyPathEscapeRejection(bsdtarScan, "bsdtar");
+  if (QTest::currentTestFailed()) return;
+  QCOMPARE(readCalls(bsdtarMarker), (QStringList{QStringLiteral("-tvf"), QStringLiteral("-tf")}));
+
+  // 7z: the 'Path =' branch rejects before the link-vocabulary guard is reached.
+  const auto sevenZipScan =
+      ArchiveSafety::scanArchiveEntriesWithTool(fakeArchive, QStringLiteral("7z"));
+  verifyPathEscapeRejection(sevenZipScan, "7z");
+  if (QTest::currentTestFailed()) return;
+  QCOMPARE(readCalls(sevenZipMarker), QStringList{QStringLiteral("l")});
+
+  // Dispatcher with both stubs on PATH: bsdtar's security rejection is final,
+  // so 7z must never be invoked.
+  QVERIFY(QFile::remove(bsdtarMarker));
+  QVERIFY(QFile::remove(sevenZipMarker));
+  const auto dispatched = ArchiveSafety::scanArchiveEntries(fakeArchive);
+  verifyPathEscapeRejection(dispatched, "scanArchiveEntries");
+  if (QTest::currentTestFailed()) return;
+  QCOMPARE(readCalls(bsdtarMarker), (QStringList{QStringLiteral("-tvf"), QStringLiteral("-tf")}));
+  QVERIFY2(!QFile::exists(sevenZipMarker),
+           "scanArchiveEntries retried 7z after a bsdtar security rejection");
 #endif
 }
 
