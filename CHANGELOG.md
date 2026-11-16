@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   collection's other shared artwork. Your collection's icon, header logo
   and background stay as they were.
 
+- **A console's units sold from Wikidata is kept even when it is the only
+  thing Wikidata has.** When a collection's Wikidata entry listed how many
+  units the console sold but had no logo, photo, description or other
+  details, the scrape reported "not found" and dropped the number. The
+  units sold figure is now kept with the collection's details.
+
 - **Launches are no longer forgotten while the library sits idle after a
   scan.** If the item grid had just counted its items and a background
   scan then saved changes, the next launch could fail to record its play
