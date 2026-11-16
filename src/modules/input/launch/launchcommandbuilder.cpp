@@ -243,11 +243,10 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
     return result;
   };
   auto expandLaunchParameters = [&](QStringList &out) -> ErrorUtils::Result<void> {
-    const QString rawLaunchParameters = launcher.launchParameters.trimmed();
-    if (rawLaunchParameters.isEmpty()) {
+    if (rawParameters.isEmpty()) {
       return {};
     }
-    auto parseResult = parseParameters(rawLaunchParameters);
+    auto parseResult = parseParameters(rawParameters);
     if (parseResult.isError()) {
       return parseResult.error();
     }
@@ -334,11 +333,12 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
 auto previewLaunchCommand(const CollectionConfig &collection, const LauncherConfig &launcher,
                           const QString &filePath) -> LaunchPreview {
   LaunchPreview out;
-  // Expand %collection% so the build-error early-return below reports the
-  // resolved program rather than the raw template (the success path overwrites
-  // this with cmd.value().program, which is the same expanded value).
-  out.program =
-      QString(launcher.launcherPath).replace("%collection%", collection.name, Qt::CaseInsensitive);
+  // Expand %collection% (and trim) so the build-error early-return below
+  // reports the resolved program rather than the raw template (the success path
+  // overwrites this with cmd.value().program, which is the same expanded
+  // value). Kartend-qnfb6: the shared helper keeps this in step with
+  // buildLaunchCommand, which also trims.
+  out.program = LauncherUtils::expandCollectionPlaceholder(launcher.launcherPath, collection.name);
 
   auto cmd = buildLaunchCommand(launcher, collection.name, filePath);
   if (cmd.isError()) {
@@ -398,11 +398,11 @@ auto previewLaunchCommand(const CollectionConfig &collection, const LauncherConf
   // the preview rather than mysteriously ignored. Preview-only; the actual
   // command above is unchanged.
   const QString previewCorePath =
-      QString(launcher.corePath).replace("%collection%", collection.name, Qt::CaseInsensitive);
-  if (!previewCorePath.trimmed().isEmpty() && !LauncherUtils::usesLibretroCore(out.program)) {
+      LauncherUtils::expandCollectionPlaceholder(launcher.corePath, collection.name);
+  if (!previewCorePath.isEmpty() && !LauncherUtils::usesLibretroCore(out.program)) {
     out.warnings << QObject::tr(
                         "Core path will be ignored (launcher is not a libretro core launcher): %1")
-                        .arg(previewCorePath.trimmed());
+                        .arg(previewCorePath);
   }
 
   // Kartend-kvcxd: %filename%/%dir%/%ext% describe a media file on disk, which

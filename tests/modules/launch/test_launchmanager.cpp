@@ -124,6 +124,8 @@ private slots:
   void testPreview_warnsCorePathIgnoredForNonLibretroLauncher();
   void testPreview_noCoreWarningForLibretroLauncher();
   void testPreview_unclosedQuoteParameterSurfacedAsWarning();
+  void testPreview_buildErrorProgramMatchesExpandedLauncherPath();
+  void testPreview_coreIgnoredWarningUsesExpandedCorePath();
   void testPreview_warnsPathPartTokensOnKartLinkStub_data();
   void testPreview_warnsPathPartTokensOnKartLinkStub();
   void testPreview_noPathPartWarningForNameOnKartLinkStub();
@@ -1306,6 +1308,48 @@ void TestLaunchManager::testPreview_unclosedQuoteParameterSurfacedAsWarning() {
   QVERIFY(preview.buildError.contains("Unclosed quote"));
   QCOMPARE(preview.warnings.size(), 1);
   QVERIFY(preview.warnings.first().contains("Unclosed quote"));
+}
+
+void TestLaunchManager::testPreview_buildErrorProgramMatchesExpandedLauncherPath() {
+  // Kartend-qnfb6: on a failed build the preview reports the program the real
+  // launch would run — %collection%-expanded AND trimmed, exactly like
+  // buildLaunchCommand — not the stored path with its surrounding whitespace.
+  QVERIFY2(!m_tempExecutable.isEmpty(), "Test setup failed: no temp executable");
+  CollectionConfig collection;
+  collection.name = "Concert Recordings";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable + QStringLiteral(" ");
+  launcher.launchParameters = "--title \"Unfinished";
+
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
+  QVERIFY(!preview.buildOk);
+  QCOMPARE(preview.program,
+           LauncherUtils::expandCollectionPlaceholder(launcher.launcherPath, collection.name));
+  QCOMPARE(preview.program, m_tempExecutable);
+}
+
+void TestLaunchManager::testPreview_coreIgnoredWarningUsesExpandedCorePath() {
+  // Kartend-qnfb6: the "core path will be ignored" warning names the core path
+  // through the same shared expansion the launch uses (%collection% + trim).
+  QVERIFY2(!m_tempExecutable.isEmpty(), "Test setup failed: no temp executable");
+  CollectionConfig collection;
+  collection.name = "Video";
+  LauncherConfig launcher;
+  launcher.launcherPath = m_tempExecutable; // basename has no "retroarch"
+  launcher.corePath = "  /cores/%COLLECTION%.so ";
+  const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
+  QVERIFY(preview.buildOk);
+  const QString expectedCore =
+      LauncherUtils::expandCollectionPlaceholder(launcher.corePath, collection.name);
+  QCOMPARE(expectedCore, QStringLiteral("/cores/Video.so"));
+  bool sawCoreIgnored = false;
+  for (const QString &w : preview.warnings) {
+    if (w.contains("Core path will be ignored")) {
+      QVERIFY2(w.endsWith(QStringLiteral(": ") + expectedCore), qPrintable(w));
+      sawCoreIgnored = true;
+    }
+  }
+  QVERIFY2(sawCoreIgnored, "a core path on a non-libretro launcher must surface a warning");
 }
 
 void TestLaunchManager::testPreview_missingFileSurfacesWarning() {
