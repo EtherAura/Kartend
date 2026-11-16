@@ -94,6 +94,23 @@ void patchU64LE(QByteArray &entry, qsizetype offset, quint64 value) {
   }
 }
 
+// Same as patchU64LE for the narrower header fields: an entry's path_len (u16
+// at offset 2) and the container's manifest length (u32 right after MAGIC).
+void patchU16LE(QByteArray &bytes, qsizetype offset, quint16 value) {
+  bytes[offset] = static_cast<char>(value & 0xFF);
+  bytes[offset + 1] = static_cast<char>((value >> 8) & 0xFF);
+}
+
+void patchU32LE(QByteArray &bytes, qsizetype offset, quint32 value) {
+  for (int i = 0; i < 4; ++i) {
+    bytes[offset + i] = static_cast<char>((value >> (8 * i)) & 0xFF);
+  }
+}
+
+bool dirIsEmpty(const QString &path) {
+  return QDir(path).isEmpty(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System);
+}
+
 KartManifest::Manifest sampleManifest() {
   KartManifest::Manifest m;
   m.uuid = "test-uuid";
@@ -143,6 +160,18 @@ private slots:
   void testExtractToRefusesEntryOverEarlierDirectory();
   void testCountEntriesWalksHeadersWithoutExtracting();
   void testCountEntriesRejectsTruncatedContainer();
+
+  // Header range guards that a later check would otherwise mask (Kartend-z6v63)
+  void testPeekManifestRejectsOutOfRangeManifestLength_data();
+  void testPeekManifestRejectsOutOfRangeManifestLength();
+  void testExtractToRejectsOutOfRangePathLength_data();
+  void testExtractToRejectsOutOfRangePathLength();
+  void testExtractToRejectsDeclaredSizeAboveCap_data();
+  void testExtractToRejectsDeclaredSizeAboveCap();
+  void testExtractToRejectsUnknownCompression_data();
+  void testExtractToRejectsUnknownCompression();
+  void testCountEntriesRejectsOutOfRangeHeaderFields_data();
+  void testCountEntriesRejectsOutOfRangeHeaderFields();
 };
 
 void TestKartReader::testPeekManifestRejectsBadMagic() {
@@ -775,6 +804,157 @@ void TestKartReader::testZlibRejectsALyingSizePrefixBeforeAllocating() {
   // Too short to even carry a prefix.
   QVERIFY(KartCompression::decompress(QByteArray("ab"), KartFormat::Compression_Zlib, raw.size())
               .isError());
+}
+
+// ----- Header range guards (Kartend-z6v63) -----
+
+// Each of these inputs would still be refused by some later check if its
+// range guard were removed (an empty path fails isPathSafe, an over-long
+// length overruns the file), so every case pins the guard-specific code AND
+// message: a regression that falls through to the downstream rejection must
+// fail here rather than pass unnoticed.
+
+void TestKartReader::testPeekManifestRejectsOutOfRangeManifestLength_data() {
+  QTest::addColumn<quint32>("manifestLen");
+
+  QTest::newRow("zero") << quint32{0};
+  QTest::newRow("above-cap") << KartFormat::MAX_MANIFEST_SIZE + 1u;
+}
+
+void TestKartReader::testPeekManifestRejectsOutOfRangeManifestLength() {
+  QFETCH(quint32, manifestLen);
+
+  QByteArray bytes = buildKart(sampleManifest(), {});
+  patchU32LE(bytes, KartFormat::MAGIC_SIZE, manifestLen);
+  QTemporaryFile f;
+  writeTempKart(bytes, f);
+  auto result = KartReader::peekManifest(f.fileName());
+  QVERIFY(result.isError());
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::KartManifestInvalid);
+  QCOMPARE(result.error().message, QStringLiteral("Manifest length out of range"));
+}
+
+void TestKartReader::testExtractToRejectsOutOfRangePathLength_data() {
+  QTest::addColumn<quint16>("pathLen");
+
+  QTest::newRow("zero") << quint16{0};
+  QTest::newRow("above-cap") << static_cast<quint16>(KartFormat::MAX_PATH_LEN + 1);
+  QTest::newRow("u16-max") << std::numeric_limits<quint16>::max();
+}
+
+void TestKartReader::testExtractToRejectsOutOfRangePathLength() {
+  QFETCH(quint16, pathLen);
+
+  QByteArray entry = entryBytes("media/x.bin", QByteArray("x"), KartFormat::Flag_Media,
+                                KartFormat::Compression_None);
+  patchU16LE(entry, 2, pathLen);
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entry}), f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::KartFormatInvalid);
+  QCOMPARE(result.error().message, QStringLiteral("Entry path length out of range"));
+  QVERIFY(dirIsEmpty(dest.path()));
+}
+
+void TestKartReader::testExtractToRejectsDeclaredSizeAboveCap_data() {
+  // Field offsets past the 4-byte fixed prefix and the path (see patchU64LE).
+  QTest::addColumn<qsizetype>("fieldOffset");
+
+  QTest::newRow("original-size") << qsizetype{0};
+  QTest::newRow("payload-size") << qsizetype{8};
+}
+
+void TestKartReader::testExtractToRejectsDeclaredSizeAboveCap() {
+  QFETCH(qsizetype, fieldOffset);
+
+  // A zlib entry, so that without the cap an over-declared original_size
+  // would reach the decompressor and come back as KartCompressionFailed.
+  const QString relPath = QStringLiteral("media/x.bin");
+  QByteArray entry = entryBytes(relPath, QByteArray(256, 'C'), KartFormat::Flag_Media,
+                                KartFormat::Compression_Zlib);
+  patchU64LE(entry, 4 + relPath.toUtf8().size() + fieldOffset, KartFormat::MAX_ENTRY_SIZE + 1);
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entry}), f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::KartFormatInvalid);
+  QCOMPARE(result.error().message, QStringLiteral("Entry size out of range"));
+  QVERIFY(dirIsEmpty(dest.path()));
+}
+
+void TestKartReader::testExtractToRejectsUnknownCompression_data() {
+  QTest::addColumn<quint8>("algo");
+
+  QTest::newRow("first-unassigned") << quint8{3};
+  QTest::newRow("u8-max") << std::numeric_limits<quint8>::max();
+}
+
+void TestKartReader::testExtractToRejectsUnknownCompression() {
+  QFETCH(quint8, algo);
+
+  // A stored entry relabelled with an unassigned algorithm byte. The
+  // decompressor rejects unknown algorithms with the same code and message,
+  // so the source pins that extractTo refused it before decompression.
+  const QString relPath = QStringLiteral("media/x.bin");
+  QByteArray entry = entryBytes(relPath, QByteArray("unknown-algo-payload"), KartFormat::Flag_Media,
+                                KartFormat::Compression_None);
+  entry[1] = static_cast<char>(algo);
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entry}), f);
+  QTemporaryDir dest;
+  KartReader::Extractor ex;
+  auto result = ex.extractTo(f.fileName(), dest.path());
+  QVERIFY(result.isError());
+  QCOMPARE(result.error().code, ErrorUtils::ErrorCode::KartCompressionFailed);
+  QCOMPARE(result.error().message, QStringLiteral("Unknown compression algorithm"));
+  QCOMPARE(result.error().source, QStringLiteral("KartReader::extractTo"));
+  QVERIFY(!QFile::exists(QDir(dest.path()).filePath(relPath)));
+  QVERIFY(dirIsEmpty(dest.path()));
+}
+
+void TestKartReader::testCountEntriesRejectsOutOfRangeHeaderFields_data() {
+  // pathLen < 0 keeps the entry's real path_len; payloadSize == 0 keeps its
+  // real payload_size.
+  QTest::addColumn<int>("pathLen");
+  QTest::addColumn<qulonglong>("payloadSize");
+  QTest::addColumn<QString>("message");
+
+  const QString pathMsg = QStringLiteral("Entry path length out of range");
+  const QString sizeMsg = QStringLiteral("Entry size out of range");
+  QTest::newRow("path-len-zero") << 0 << qulonglong{0} << pathMsg;
+  QTest::newRow("path-len-above-cap") << KartFormat::MAX_PATH_LEN + 1 << qulonglong{0} << pathMsg;
+  QTest::newRow("path-len-u16-max")
+      << int{std::numeric_limits<quint16>::max()} << qulonglong{0} << pathMsg;
+  QTest::newRow("payload-above-cap") << -1 << qulonglong{KartFormat::MAX_ENTRY_SIZE + 1} << sizeMsg;
+  QTest::newRow("payload-u64-max")
+      << -1 << qulonglong{std::numeric_limits<quint64>::max()} << sizeMsg;
+}
+
+void TestKartReader::testCountEntriesRejectsOutOfRangeHeaderFields() {
+  QFETCH(int, pathLen);
+  QFETCH(qulonglong, payloadSize);
+  QFETCH(QString, message);
+
+  const QString relPath = QStringLiteral("media/a.bin");
+  QByteArray entry = entryBytes(relPath, QByteArray(64, 'a'), KartFormat::Flag_Media,
+                                KartFormat::Compression_None);
+  if (pathLen >= 0) {
+    patchU16LE(entry, 2, static_cast<quint16>(pathLen));
+  }
+  if (payloadSize != 0) {
+    patchU64LE(entry, 12 + relPath.toUtf8().size(), payloadSize);
+  }
+  QTemporaryFile f;
+  writeTempKart(buildKart(sampleManifest(), {entry}), f);
+  auto count = KartReader::countEntries(f.fileName());
+  QVERIFY(count.isError());
+  QCOMPARE(count.error().code, ErrorUtils::ErrorCode::KartFormatInvalid);
+  QCOMPARE(count.error().message, message);
 }
 
 QTEST_MAIN(TestKartReader)
