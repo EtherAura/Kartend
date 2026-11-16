@@ -197,10 +197,51 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
   // trailing \b leaves a token followed by another word character alone, so
   // the preview's warning and the executed command agree on what substitutes.
   // %collection% needs no boundary — its trailing '%' already delimits it.
-  static const QRegularExpression kFileTokenRe(QStringLiteral("%(?:1|f)\\b"),
-                                               QRegularExpression::CaseInsensitiveOption);
-  static const QRegularExpression kCoreTokenRe(QStringLiteral("%core\\b"),
-                                               QRegularExpression::CaseInsensitiveOption);
+  //
+  // Kartend-6kwdn: every placeholder in one alternation, so each argument is
+  // scanned exactly once and only the ORIGINAL template text can match.
+  // Applying the tokens as successive replace passes rescanned the values
+  // earlier passes had inserted: a file named "Game %f.mkv" turned %name% into
+  // "Game %f", the %1/%f pass then expanded that too (and its hit suppressed
+  // the append-media-path fallback), and a media path containing "%core" was
+  // rewritten by the %core pass. Values are inserted verbatim and never
+  // rescanned. Capture 1 is the %1/%f media token, capture 2 is %core.
+  static const QRegularExpression kLaunchTokenRe(
+      QStringLiteral("%collection%|%name%|%filename%|%dir%|%ext%|(%(?:1|f)\\b)|(%core\\b)"),
+      QRegularExpression::CaseInsensitiveOption);
+  auto substituteTokens = [&](const QString &arg) -> QString {
+    QString result;
+    qsizetype last = 0;
+    auto it = kLaunchTokenRe.globalMatch(arg);
+    while (it.hasNext()) {
+      const QRegularExpressionMatch match = it.next();
+      result += QStringView(arg).mid(last, match.capturedStart() - last);
+      last = match.capturedEnd();
+      if (match.capturedLength(1) > 0) {
+        sawFilePlaceholder = true;
+        result += mediaArgument;
+        continue;
+      }
+      if (match.capturedLength(2) > 0) {
+        sawCorePlaceholder = true;
+        result += expandedCorePath;
+        continue;
+      }
+      const QString token = match.captured(0);
+      if (token.compare(QLatin1String("%collection%"), Qt::CaseInsensitive) == 0) {
+        result += collectionName;
+        continue;
+      }
+      for (const auto &[derived, value] : derivedTokens) {
+        if (token.compare(derived, Qt::CaseInsensitive) == 0) {
+          result += value;
+          break;
+        }
+      }
+    }
+    result += QStringView(arg).mid(last);
+    return result;
+  };
   auto expandLaunchParameters = [&](QStringList &out) -> ErrorUtils::Result<void> {
     const QString rawLaunchParameters = launcher.launchParameters.trimmed();
     if (rawLaunchParameters.isEmpty()) {
@@ -212,23 +253,9 @@ auto buildLaunchCommand(const LauncherConfig &launcher, const QString &collectio
     }
     QStringList expandedArgs = parseResult.value();
     for (QString &arg : expandedArgs) {
-      arg.replace("%collection%", collectionName, Qt::CaseInsensitive);
-      // Derived tokens before %1/%f: each is %word%-delimited, so a plain
-      // case-insensitive replace is enough — no \b needed, and "%name%" is not
-      // a substring of "%filename%", so the two cannot alias regardless of
-      // order. Doing them ahead of the media path also keeps a path that
-      // happens to contain a literal token from being re-substituted.
-      for (const auto &[token, value] : derivedTokens) {
-        arg.replace(token, value, Qt::CaseInsensitive);
-      }
-      if (arg.contains(kFileTokenRe)) {
-        sawFilePlaceholder = true;
-        arg.replace(kFileTokenRe, mediaArgument);
-      }
-      if (arg.contains(kCoreTokenRe)) {
-        sawCorePlaceholder = true;
-        arg.replace(kCoreTokenRe, expandedCorePath);
-      }
+      // Derived tokens are %word%-delimited, so they need no \b, and "%name%"
+      // is not a substring of "%filename%", so the two cannot alias.
+      arg = substituteTokens(arg);
     }
     out.append(expandedArgs);
     return {};
@@ -402,7 +429,7 @@ auto previewLaunchCommand(const CollectionConfig &collection, const LauncherConf
   // (e.g. %core left in a non-libretro launcher) — likely indicates a typo or
   // a placeholder the launcher won't honour. Flag it without claiming to know
   // what the user meant. Must stay in sync with the boundary-aware
-  // substitution tokens in buildLaunchCommand (kFileTokenRe / kCoreTokenRe)
+  // substitution tokens in buildLaunchCommand (kLaunchTokenRe)
   // so preview warnings and the executed command never disagree.
   static const QRegularExpression kPlaceholderRe(
       QStringLiteral("%[A-Za-z0-9_]+%|%(?:[0-9]+|f|core)\\b"),

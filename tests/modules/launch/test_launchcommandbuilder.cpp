@@ -71,6 +71,7 @@ private slots:
   void testLibretroTemplateWithBothPlaceholdersIsNotDuplicated();
   void testLibretroTemplateWithCorePlaceholderOnlyAppendsMedia();
   void testLibretroTemplateWithFilePlaceholderOnlyAppendsCore();
+  void testSubstitutedValuesAreNotReexpanded();
 
   // %collection% expansion
   void testCollectionExpansion();
@@ -335,6 +336,34 @@ void TestLaunchCommandBuilder::testLibretroTemplateWithFilePlaceholderOnlyAppend
   QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
   QCOMPARE(result.value().arguments,
            (QStringList{"--appendconfig", "/tmp/extra.cfg", file, "-L", "/tmp/cores/engine.so"}));
+}
+
+void TestLaunchCommandBuilder::testSubstitutedValuesAreNotReexpanded() {
+  // Kartend-6kwdn: only the template's own placeholders substitute. A value
+  // that itself contains token-looking text is inserted literally — it is not
+  // rescanned, and it does not count as the template having placed the media.
+  {
+    // %name% == "Game %f" must not have its %f expanded, and since the
+    // template never placed the media, the fallback still appends it.
+    const QString file = QStringLiteral("/tmp/media/Game %f.mkv");
+    const auto result = LaunchCommandBuilder::buildLaunchCommand(
+        plainLauncher(QStringLiteral("--title %name%")), QStringLiteral("Games"), file);
+    QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+    QCOMPARE(result.value().arguments, (QStringList{"--title", "Game %f", file}));
+  }
+  {
+    // The probe's RetroArch default with a media path containing "%core": the
+    // substituted path must not have its "%core" rewritten to the core path.
+    LauncherConfig lc;
+    lc.launcherPath = QStringLiteral("/usr/bin/retroarch");
+    lc.corePath = QStringLiteral("/tmp/cores/engine.so");
+    lc.launchParameters = QStringLiteral("-L %core \"%1\"");
+
+    const QString file = QStringLiteral("/tmp/media/x %core.sfc");
+    const auto result = LaunchCommandBuilder::buildLaunchCommand(lc, QStringLiteral("Games"), file);
+    QVERIFY2(result.isOk(), qPrintable(result.isError() ? result.error().message : QString()));
+    QCOMPARE(result.value().arguments, (QStringList{"-L", "/tmp/cores/engine.so", file}));
+  }
 }
 
 void TestLaunchCommandBuilder::testCollectionExpansion() {

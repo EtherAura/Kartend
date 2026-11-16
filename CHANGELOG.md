@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A file name containing a launch placeholder no longer breaks the
+  launch.** When a file's name or path itself contained text such as `%f`,
+  `%1` or `%core`, that text was replaced again after it had been inserted
+  into the launch command. A launcher could then receive a mangled title or
+  file path, or no media file at all, and the launch preview showed the same
+  wrong command. Only the placeholders you wrote in the launcher's
+  parameters are now replaced, and the file name is passed exactly as it is.
+
 - **A console photo from Wikidata is kept even when it is the only thing
   Wikidata has.** When a collection's Wikidata entry had a photo of the
   console but no logo, description or other details, the scrape reported
