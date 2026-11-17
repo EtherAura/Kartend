@@ -38,7 +38,9 @@ namespace {
 //     (MAME name= differs from game_name); the wipe re-ingests to populate it.
 // v6: dat_machines (Kartend-tnt0l) — per-machine MAME listxml records; the
 //     wipe re-ingests every cached MAME DAT so its machine rows get populated.
-constexpr int kSchemaVersion = 6;
+// v7: dat_machines.id + dat_machine_disks (Kartend-xu36n) — each machine row's
+//     own <disk> list; the wipe re-ingests every MAME DAT to populate it.
+constexpr int kSchemaVersion = 7;
 
 // Process-unique connection-name suffix so multiple Store instances
 // (tests + production) don't collide in QSqlDatabase's global
@@ -102,8 +104,10 @@ bool createSchema(QSqlDatabase &db) {
       // One row per MAME machine, ROM-less ones included. set_name carries
       // COLLATE NOCASE so both the `=` lookup and the index below are
       // case-insensitive. No UNIQUE: a malformed listxml repeating a name must
-      // not fail the whole ingest; the lookup takes the first row.
+      // not fail the whole ingest; the lookup takes the first row. `id` aliases
+      // the rowid, so that order is unchanged and disks can point at one row.
       execSimple(db, QStringLiteral("CREATE TABLE IF NOT EXISTS dat_machines ("
+                                    "  id INTEGER PRIMARY KEY,"
                                     "  source_id INTEGER NOT NULL,"
                                     "  set_name TEXT NOT NULL COLLATE NOCASE,"
                                     "  description TEXT NOT NULL DEFAULT '',"
@@ -122,6 +126,21 @@ bool createSchema(QSqlDatabase &db) {
                                     "    ON DELETE CASCADE)")) &&
       execSimple(db, QStringLiteral("CREATE INDEX IF NOT EXISTS idx_dat_machines_set "
                                     "ON dat_machines(source_id, set_name)")) &&
+      // A machine's dumped <disk> entries (Kartend-xu36n), keyed by that exact
+      // machine row rather than by set name: a repeated name must not pool the
+      // disks of every same-named machine. The cascade follows the machine row,
+      // which itself follows its source.
+      execSimple(db, QStringLiteral("CREATE TABLE IF NOT EXISTS dat_machine_disks ("
+                                    "  machine_id INTEGER NOT NULL,"
+                                    "  ordinal INTEGER NOT NULL,"
+                                    "  name TEXT NOT NULL,"
+                                    "  sha1 TEXT NOT NULL,"
+                                    "  status TEXT NOT NULL DEFAULT '',"
+                                    "  merge_name TEXT NOT NULL DEFAULT '',"
+                                    "  FOREIGN KEY(machine_id) REFERENCES dat_machines(id) "
+                                    "    ON DELETE CASCADE)")) &&
+      execSimple(db, QStringLiteral("CREATE INDEX IF NOT EXISTS idx_dat_machine_disks_machine "
+                                    "ON dat_machine_disks(machine_id, ordinal)")) &&
       execSimple(db, QStringLiteral("PRAGMA user_version = %1").arg(kSchemaVersion));
   if (!ok) {
     return false; // guard dtor rolls back
@@ -146,6 +165,7 @@ bool migrateOrReset(QSqlDatabase &db) {
   // migration logic for a file we can always recreate by re-parsing
   // the user's DAT.
   if (current != 0) {
+    execSimple(db, QStringLiteral("DROP TABLE IF EXISTS dat_machine_disks"));
     execSimple(db, QStringLiteral("DROP TABLE IF EXISTS dat_machines"));
     execSimple(db, QStringLiteral("DROP TABLE IF EXISTS dat_records"));
     execSimple(db, QStringLiteral("DROP TABLE IF EXISTS dat_sources"));
@@ -386,6 +406,9 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
   if (!machines.isEmpty()) {
     auto text = [](const QString &s) { return s.isNull() ? QStringLiteral("") : s; };
     QSqlQuery ins(m_db);
+    QSqlQuery diskIns(m_db);
+    diskIns.prepare(QStringLiteral("INSERT INTO dat_machine_disks (machine_id, ordinal, name, "
+                                   "sha1, status, merge_name) VALUES (?, ?, ?, ?, ?, ?)"));
     ins.prepare(QStringLiteral("INSERT INTO dat_machines (source_id, set_name, description, "
                                "cloneof, romof, is_bios, is_device, is_mechanical, runnable, "
                                "year, manufacturer, driver_status, players, rotate) "
@@ -411,6 +434,24 @@ ErrorUtils::Result<CachedSource> Store::openOrIngest(const QString &datPath) {
                                    "Failed to insert DAT machine record",
                                    "DatCache::Store::openOrIngest")
             .withDetails(err);
+      }
+      // This machine's own disks, tied to the row just inserted (Kartend-xu36n).
+      const qint64 machineId = ins.lastInsertId().toLongLong();
+      for (qsizetype i = 0; i < m.disks.size(); ++i) {
+        const DatLookup::MameDisk &d = m.disks.at(i);
+        diskIns.bindValue(0, machineId);
+        diskIns.bindValue(1, static_cast<qint64>(i));
+        diskIns.bindValue(2, d.name);
+        diskIns.bindValue(3, d.sha1);
+        diskIns.bindValue(4, text(d.status));
+        diskIns.bindValue(5, text(d.merge));
+        if (!diskIns.exec()) {
+          const QString err = diskIns.lastError().text();
+          return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
+                                     "Failed to insert DAT machine disk record",
+                                     "DatCache::Store::openOrIngest")
+              .withDetails(err);
+        }
       }
     }
   }
@@ -580,8 +621,12 @@ QList<CachedMachine> Store::machinesForSet(const QList<CachedSource> &sources,
   // explicit — no row from a source outside `sources` can be read.
   q.prepare(QStringLiteral("SELECT set_name, description, cloneof, romof, is_bios, is_device, "
                            "is_mechanical, runnable, year, manufacturer, driver_status, players, "
-                           "rotate FROM dat_machines WHERE source_id = ? AND set_name = ? "
+                           "rotate, id FROM dat_machines WHERE source_id = ? AND set_name = ? "
                            "ORDER BY rowid LIMIT 1"));
+  // Disks of the one machine row selected above, by its id (Kartend-xu36n).
+  QSqlQuery dq(db);
+  dq.prepare(QStringLiteral("SELECT name, sha1, status, merge_name FROM dat_machine_disks "
+                            "WHERE machine_id = ? ORDER BY ordinal"));
   for (const CachedSource &source : sources) {
     if (!source.isValid()) continue;
     q.bindValue(0, source.id);
@@ -608,6 +653,20 @@ QList<CachedMachine> Store::machinesForSet(const QList<CachedSource> &sources,
     m.driverStatus = q.value(10).toString();
     m.players = q.value(11).toInt();
     m.rotate = q.value(12).toInt();
+    dq.bindValue(0, q.value(13).toLongLong());
+    if (!dq.exec()) {
+      qWarning("DatCache: machinesForSet disk query failed for source %lld: %s", source.id,
+               qPrintable(dq.lastError().text()));
+      return {};
+    }
+    while (dq.next()) {
+      DatLookup::MameDisk d;
+      d.name = dq.value(0).toString();
+      d.sha1 = dq.value(1).toString();
+      d.status = dq.value(2).toString();
+      d.merge = dq.value(3).toString();
+      m.disks.append(d);
+    }
     out.append(cm);
   }
   return out;
@@ -624,6 +683,7 @@ bool Store::isHideableMachineSet(const QList<CachedSource> &sources, const QStri
 
 void Store::clearAll() {
   if (!isOpen()) return;
+  execSimple(m_db, QStringLiteral("DELETE FROM dat_machine_disks"));
   execSimple(m_db, QStringLiteral("DELETE FROM dat_machines"));
   execSimple(m_db, QStringLiteral("DELETE FROM dat_records"));
   execSimple(m_db, QStringLiteral("DELETE FROM dat_sources"));

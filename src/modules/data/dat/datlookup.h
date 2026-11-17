@@ -150,6 +150,22 @@ struct DatHeader {
 /// skipped since they declare no usable hash.
 [[nodiscard]] ErrorUtils::Result<QList<DatRecord>> parseMameListXml(const QByteArray &xml);
 
+/// One dumped `<disk>` (CHD) declared by a MAME listxml machine (Kartend-xu36n).
+/// Kept apart from the per-rom DatRecords: a disk has no size or CRC, and the
+/// SHA-1 is the one MAME records for the CHD's content, not a hash of the file.
+/// `status="nodump"` disks are skipped at parse time (they need no sha1), as is
+/// a dumped disk without a 40-digit sha1.
+struct MameDisk {
+  /// `name=` (e.g. "gdl-0001"); never empty.
+  QString name;
+  /// Lowercase 40-digit hex `sha1=`; never empty.
+  QString sha1;
+  /// `status=` lowercased (e.g. "good", "baddump"); empty when absent.
+  QString status;
+  /// Raw `merge=` — the parent set's disk this one shares; empty when absent.
+  QString merge;
+};
+
 /// One `<machine>` (or legacy `<game>`) from a MAME listxml, independent of
 /// its roms (Kartend-tnt0l). DatRecord is per-rom, so the machine-level
 /// classification flags and child-element metadata live here instead — one
@@ -188,6 +204,9 @@ struct MameMachine {
   int players = -1;
   /// First `<display rotate=>`; -1 when absent or not 0/90/180/270.
   int rotate = -1;
+  /// Dumped `<disk>` entries in document order (Kartend-xu36n); empty for a
+  /// machine that declares none. Nothing audits or matches them yet.
+  QList<MameDisk> disks;
 };
 
 /// Both halves of a MAME listxml parse: the per-rom records exactly as
