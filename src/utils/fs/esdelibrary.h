@@ -56,6 +56,9 @@ struct Game {
   QString logoPath;    ///< …/marquees/
   QString screenshotPath;
   QString fanartPath;
+  /// …/videos/ (Kartend-vtz2h), probed in ExtensionUtils::videoBaseExtensions
+  /// order. Never fills an image slot. Empty when nothing was downloaded.
+  QString videoPath;
 };
 
 /// First existing ES-DE data dir: ~/ES-DE (3.0 and later), then the legacy

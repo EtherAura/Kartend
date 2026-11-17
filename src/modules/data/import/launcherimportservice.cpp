@@ -17,6 +17,7 @@
 #include "dbtxn.h"
 #include "desktopentry.h"
 #include "esdelibrary.h"
+#include "extensionutils.h"
 #include "flatpaklibrary.h"
 #include "heroiclibrary.h"
 #include "itchlibrary.h"
@@ -115,6 +116,34 @@ void copyArtworkIfMissing(const QString &sourcePath, const QString &typedDir,
     ++result.artworkCopied;
   } else {
     result.errors.append(QStringLiteral("Cannot copy artwork %1 -> %2").arg(sourcePath, destPath));
+  }
+}
+
+/// The preview video's counterpart to copyArtworkIfMissing (Kartend-vtz2h):
+/// copied into `{artworkDir}/video/`, where VideoUtils::findVideoForFile looks
+/// for an item's video, only when no video of any format already has the
+/// stub's basename. Only the extensions that lookup probes are admitted, so a
+/// copied file is always one the item will find.
+void copyVideoIfMissing(const QString &sourcePath, const QString &videoDir, const QString &baseName,
+                        SyncResult &result) {
+  if (sourcePath.isEmpty()) {
+    return;
+  }
+  const QStringList &extensions = ExtensionUtils::videoBaseExtensions();
+  const QString suffix = QFileInfo(sourcePath).suffix().toLower();
+  if (!extensions.contains(suffix) ||
+      !ExtensionUtils::findFileWithExtensions(QDir(videoDir), baseName, extensions).isEmpty()) {
+    return;
+  }
+  if (!QDir().mkpath(videoDir)) {
+    result.errors.append(QStringLiteral("Cannot create video directory %1").arg(videoDir));
+    return;
+  }
+  const QString destPath = videoDir + QLatin1Char('/') + baseName + QLatin1Char('.') + suffix;
+  if (QFile::copy(sourcePath, destPath)) {
+    ++result.artworkCopied;
+  } else {
+    result.errors.append(QStringLiteral("Cannot copy video %1 -> %2").arg(sourcePath, destPath));
   }
 }
 
@@ -368,8 +397,13 @@ QList<GameEntry> xdgEntries() {
 /// Games of ONE ES-DE system. The system is the sourceKey; an empty key would
 /// be meaningless here, since ES-DE never imports as a single collection.
 QList<GameEntry> esdeEntries(const QString &systemKey) {
+  return esdeGames(EsdeLibrary::defaultDataDir(), systemKey);
+}
+
+} // namespace
+
+auto esdeGames(const QString &dataDir, const QString &systemKey) -> QList<GameEntry> {
   QList<GameEntry> entries;
-  const QString dataDir = EsdeLibrary::defaultDataDir();
   if (dataDir.isEmpty() || systemKey.isEmpty()) {
     return entries;
   }
@@ -393,14 +427,13 @@ QList<GameEntry> esdeEntries(const QString &systemKey) {
       // ES-DE scrapes screenshots far more often than fanart, so a screenshot
       // is the better wide-art fallback when no fanart was downloaded.
       entry.heroPath = game.fanartPath.isEmpty() ? game.screenshotPath : game.fanartPath;
+      entry.videoPath = game.videoPath;
       entries.append(entry);
     }
     break;
   }
   return entries;
 }
-
-} // namespace
 
 auto sourceSlices(const QString &sourceId) -> QList<SourceSlice> {
   QList<SourceSlice> slices;
@@ -754,6 +787,7 @@ auto syncEntries(const QList<GameEntry> &entries, const QString &sourceId, const
       copyArtworkIfMissing(it.value().logoPath, artworkDir + QStringLiteral("/logo"), base, result);
       copyArtworkIfMissing(it.value().heroPath, artworkDir + QStringLiteral("/fanart"), base,
                            result);
+      copyVideoIfMissing(it.value().videoPath, artworkDir + QStringLiteral("/video"), base, result);
     }
   }
   return result;

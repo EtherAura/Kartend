@@ -1,5 +1,7 @@
 #include "esdelibrary.h"
 
+#include "extensionutils.h"
+
 #include <algorithm>
 #include <filesystem>
 #include <system_error>
@@ -283,6 +285,23 @@ QString mediaFor(const QString &mediaDir, const QString &systemName, const QStri
   return {};
 }
 
+/// downloaded_media/<system>/videos/<rom base name>.<ext> (Kartend-vtz2h).
+/// Probed with the video extensions the rest of Kartend plays, in their order,
+/// so the import admits exactly what the details pane would look for.
+QString videoFor(const QString &mediaDir, const QString &systemName, const QString &baseName) {
+  if (mediaDir.isEmpty()) {
+    return {};
+  }
+  const QDir dir(mediaDir + QLatin1Char('/') + systemName + QStringLiteral("/videos"));
+  for (const QString &extension : ExtensionUtils::videoBaseExtensions()) {
+    const QString path = dir.path() + QLatin1Char('/') + baseName + QLatin1Char('.') + extension;
+    if (QFileInfo(path).isFile()) {
+      return path;
+    }
+  }
+  return {};
+}
+
 } // namespace
 
 auto romExtensions() -> const QStringList & {
@@ -441,6 +460,7 @@ auto games(const System &system, const QString &dataDir, const QString &mediaDir
     game.logoPath = mediaFor(mediaDir, system.name, QStringLiteral("marquees"), base);
     game.screenshotPath = mediaFor(mediaDir, system.name, QStringLiteral("screenshots"), base);
     game.fanartPath = mediaFor(mediaDir, system.name, QStringLiteral("fanart"), base);
+    game.videoPath = videoFor(mediaDir, system.name, base);
     result.append(game);
   }
   std::sort(result.begin(), result.end(),
