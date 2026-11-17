@@ -4,6 +4,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <type_traits>
 
 #include <QByteArray>
@@ -188,6 +189,19 @@ public:
   /// of their own.
   [[nodiscard]] virtual bool isQuotaExhausted(const ErrorUtils::ErrorContext &err) const {
     return err.httpStatus == 430 || err.httpStatus == 431;
+  }
+
+  /// Kartend-bb8df: hands over (and forgets) the lookup key of @p filePath's
+  /// most recent lookup when, and only when, the provider's answer to it was a
+  /// genuine "no such entry" (not a transport, quota, rate-limit, server,
+  /// parse or cancellation failure). The key is the provider-serialised,
+  /// credential-free identity of what was actually sent; the batch runner
+  /// stores it as that item's not-found stamp for this provider. Main thread
+  /// only, like lookup(). The default — no key — means the provider does not
+  /// take part, so nothing is recorded for it.
+  [[nodiscard]] virtual std::optional<QString> takeNoEntryLookupKey(const QString &filePath) {
+    Q_UNUSED(filePath);
+    return std::nullopt;
   }
 
   /// Optional progress reporter for long-running lookup stages

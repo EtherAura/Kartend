@@ -11,6 +11,7 @@
 #include <QStandardPaths>
 
 #include "databaseschema.h"
+#include "scrapenotfound.h"
 #include "scrapepersistence.h"
 
 Q_LOGGING_CATEGORY(lcScrapeWriteWorker, "kartend.scrape.writeworker", QtWarningMsg)
@@ -103,6 +104,26 @@ void ScrapeWriteWorker::performWrite(quint64 requestId, const QString &collectio
   const bool ok = Scraper::saveScrapedMetadataDirect(m_db, collectionUuid, sourcePath, scraped,
                                                      nonStandardArtwork);
   emit writeCompleted(requestId, ok);
+}
+
+void ScrapeWriteWorker::recordNoEntry(quint64 requestId, const QString &collectionUuid,
+                                      const QString &sourcePath, const QString &provider,
+                                      const QString &lookupKey, const QDateTime &missedAt) {
+  if (!m_db.isValid() || !m_db.isOpen()) {
+    openConnection();
+  }
+  ScrapeNotFoundStore::Stamp stamp;
+  stamp.collectionUuid = collectionUuid;
+  stamp.path = sourcePath;
+  stamp.provider = provider;
+  stamp.lookupKey = lookupKey;
+  stamp.missedAt = missedAt;
+  const auto recorded = ScrapeNotFoundStore::record(m_db, stamp);
+  if (recorded.isError()) {
+    qCWarning(lcScrapeWriteWorker) << "recording not-found stamp failed for provider" << provider
+                                   << ":" << recorded.error().message;
+  }
+  emit noEntryRecorded(requestId, recorded.isOk());
 }
 
 } // namespace Scraper

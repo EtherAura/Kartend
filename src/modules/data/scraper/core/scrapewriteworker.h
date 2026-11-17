@@ -1,6 +1,7 @@
 #ifndef SCRAPEWRITEWORKER_H
 #define SCRAPEWRITEWORKER_H
 
+#include <QDateTime>
 #include <QList>
 #include <QObject>
 #include <QPair>
@@ -68,11 +69,23 @@ public slots:
                     const Scraper::ScrapedItem &scraped,
                     const Scraper::NonStandardArtworkList &nonStandardArtwork);
 
+  /// Record (insert or refresh) @p provider's not-found stamp for
+  /// (collectionUuid, sourcePath) via ScrapeNotFoundStore::record on the
+  /// worker connection (Kartend-bb8df). Writes nothing else — no
+  /// item_metadata row, no sidecar. Emits `noEntryRecorded(requestId, ok)`
+  /// once the statement has run (or failed).
+  void recordNoEntry(quint64 requestId, const QString &collectionUuid, const QString &sourcePath,
+                     const QString &provider, const QString &lookupKey, const QDateTime &missedAt);
+
 signals:
   /// Emitted on the worker thread after `performWrite` finishes. Crosses
   /// the thread boundary as a queued signal so the runner observes it on
   /// its own (main) thread.
   void writeCompleted(quint64 requestId, bool ok);
+
+  /// Emitted on the worker thread after `recordNoEntry` finishes; queued to
+  /// the runner like `writeCompleted`.
+  void noEntryRecorded(quint64 requestId, bool ok);
 
 private:
   QString m_connectionName;

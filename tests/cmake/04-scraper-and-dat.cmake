@@ -96,6 +96,15 @@ kartend_add_test(NAME ScrapeNotFoundStore
   LINK kartend_data kartend_api kartend_utils
 )
 
+# ScreenScraper not-found stamps recorded by the production batch path
+# (BatchScrapeRunner → ScreenScraperProvider → ScrapeWriteWorker) into a real,
+# migrated on-disk media.db; local canned replies via the ProviderBase fetch
+# seam, no network (Kartend-bb8df)
+kartend_add_test(NAME ScrapeNotFoundPersistence
+  SOURCES modules/scraper/test_scrapenotfoundpersistence.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # Scrape persistence tests
 # Compiles the SUT plus itemartwork.cpp (for isStandardType) and the
 # inline MockDatabaseManager from tests/integration/mocks. No DB / no

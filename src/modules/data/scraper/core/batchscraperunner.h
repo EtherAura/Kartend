@@ -448,6 +448,16 @@ private:
   /// already mid-chain runs to completion.
   void recordError(const QString &itemName, const ErrorUtils::ErrorContext &err);
 
+  /// The routine "not found" verdict shared by the empty-candidates and
+  /// HTTP-404 branches: counts it, resets the fatal streak, drops the item
+  /// from the resume list and frees its slot. When the provider vouched for a
+  /// genuine no-entry answer (@p noEntryKey, from takeNoEntryLookupKey) and a
+  /// database is attached, the provider's not-found stamp is first persisted
+  /// on the write worker and the slot is freed only once the worker replies
+  /// (onNoEntryRecorded), so `finished` never precedes the stored stamp
+  /// (Kartend-bb8df). Counters and reporting are identical either way.
+  void finishNotFound(const QString &itemPath, const std::optional<QString> &noEntryKey);
+
   /// Per-item stall guard (Kartend audit xnm8a). The per-item chain only
   /// bounds its HTTP legs (HttpClient's 30s transfer timeout). The local
   /// I/O stages — the provider's ROM hash-read inside lookup(), the
@@ -529,6 +539,11 @@ private:
   /// the metadata cache, ticks counters, emits itemCompleted, and pumps
   /// the queue.
   void onWriteCompleted(quint64 requestId, bool ok);
+  /// Slot — receives `noEntryRecorded` from the worker thread (queued).
+  /// Retires the stamp write's stall guard and frees the item's slot. A
+  /// failed stamp write is only logged: the stamp is a request-saving hint,
+  /// never part of the item's reported outcome.
+  void onNoEntryRecorded(quint64 requestId, bool ok);
 
   // Kartend-m02z: m_db field replaced with ctx-routed access. dbMgr() reads
   // through m_ctx so future ApplicationContext::managers rebinds don't leave
@@ -659,6 +674,10 @@ private:
   };
   QHash<quint64, PendingWrite> m_pendingWrites;
   quint64 m_nextWriteId = 0;
+  /// In-flight not-found stamp writes (Kartend-bb8df), keyed on the same
+  /// m_nextWriteId sequence, each mapped to its stall-guard timer (parented
+  /// to the runner). Main thread only, like m_pendingWrites.
+  QHash<quint64, QTimer *> m_pendingNoEntryWrites;
 
   /// Cooperative cancel for the media-write tasks this runner launches on
   /// the global QThreadPool (Kartend-vi76q). cancel() and the destructor
