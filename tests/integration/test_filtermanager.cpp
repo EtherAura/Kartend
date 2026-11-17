@@ -623,6 +623,109 @@ void TestFilterManager::testReapplyKeepsSubcollectionFilterSemantics() {
   QCOMPARE(mgr.currentFilter(), QStringLiteral("Alpha Shelf"));
 }
 
+void TestFilterManager::testReapplyRerunsSearchAgainstNewSourceData() {
+  // Static: setSourceData keeps pointers to these containers.
+  static const QStringList swappedPaths = {
+      QStringLiteral("/items/Beta Two.bin"),
+      QStringLiteral("/items/Delta.bin"),
+      QStringLiteral("/items/Beta.bin"),
+      QStringLiteral("/items/Epsilon.bin"),
+  };
+  static const QHash<QString, QString> swappedNames = [] {
+    QHash<QString, QString> out;
+    out.insert(swappedPaths.at(0), QStringLiteral("Beta Two"));
+    out.insert(swappedPaths.at(1), QStringLiteral("Delta"));
+    out.insert(swappedPaths.at(2), QStringLiteral("Beta"));
+    out.insert(swappedPaths.at(3), QStringLiteral("Epsilon"));
+    return out;
+  }();
+
+  FilterManager mgr;
+  seedThreeItems(mgr);
+  mgr.applyFilter(QStringLiteral("beta"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{1}));
+
+  mgr.setSourceData(&swappedPaths, &swappedNames, &seedEmptyDisplayNames(),
+                    &seedEmptySubcollections(), &seedEmptyFolders());
+  QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+  QVERIFY(spy.isValid());
+
+  // The search re-runs over the new rows: the stale {1} would now point at
+  // "Delta", the refreshed result is both "Beta" rows.
+  mgr.reapplyActiveFilter();
+  QVERIFY(mgr.isFiltered());
+  QCOMPARE(mgr.currentFilter(), QStringLiteral("beta"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 2}));
+  QCOMPARE(spy.count(), 1);
+  QCOMPARE(spy.at(0).at(0).toInt(), 2);
+  QCOMPARE(spy.at(0).at(1).toInt(), 4);
+}
+
+void TestFilterManager::testReapplyClearsStaleSubcollectionFilter() {
+  // Static: setCollections keeps a pointer to the list for the manager's
+  // lifetime, so the replacement must outlive the reapply below.
+  static const QList<CollectionConfig> oneCollection = [] {
+    QList<CollectionConfig> out;
+    CollectionConfig only;
+    only.name = QStringLiteral("Alpha");
+    out.append(only);
+    return out;
+  }();
+
+  FilterManager mgr;
+  mgr.setCollections(&seedAlphaOtherCollections());
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(), &seedTwoSubcollections(),
+                    &seedFolders());
+  mgr.applySubcollectionFilter(1);
+  QVERIFY(mgr.isFiltered());
+  QCOMPARE(mgr.currentFilter(), QStringLiteral("Other"));
+  QVERIFY(!mgr.filteredIndices().isEmpty());
+
+  // Index 1 no longer exists in the one-entry list.
+  mgr.setCollections(&oneCollection);
+  QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+  QVERIFY(spy.isValid());
+
+  mgr.reapplyActiveFilter();
+  QVERIFY(!mgr.isFiltered());
+  QCOMPARE(mgr.currentFilter(), QString());
+  QVERIFY(mgr.filteredIndices().isEmpty());
+  const int total = static_cast<int>(seedPaths().size());
+  QCOMPARE(spy.count(), 1);
+  QCOMPARE(spy.at(0).at(0).toInt(), total);
+  QCOMPARE(spy.at(0).at(1).toInt(), total);
+
+  // The cleared kind sticks: a further reapply does not resurrect the filter.
+  mgr.reapplyActiveFilter();
+  QVERIFY(!mgr.isFiltered());
+  QCOMPARE(mgr.currentFilter(), QString());
+}
+
+void TestFilterManager::testReapplyWithoutActiveFilterStaysUnfiltered() {
+  FilterManager mgr;
+  seedThreeItems(mgr);
+  QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+  QVERIFY(spy.isValid());
+
+  // Never filtered.
+  mgr.reapplyActiveFilter();
+  QVERIFY(!mgr.isFiltered());
+  QCOMPARE(mgr.currentFilter(), QString());
+  QVERIFY(mgr.filteredIndices().isEmpty());
+  QCOMPARE(spy.count(), 1);
+  QCOMPARE(spy.at(0).at(0).toInt(), 3);
+  QCOMPARE(spy.at(0).at(1).toInt(), 3);
+
+  // A search that was cleared leaves no active filter to re-run.
+  mgr.applyFilter(QStringLiteral("beta"));
+  QVERIFY(mgr.isFiltered());
+  mgr.clearFilter();
+  mgr.reapplyActiveFilter();
+  QVERIFY(!mgr.isFiltered());
+  QCOMPARE(mgr.currentFilter(), QString());
+  QVERIFY(mgr.filteredIndices().isEmpty());
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // applySubcollectionFilter (Kartend-kie1n). No ApplicationContext is set, so
 // itemBelongsToTargetCollections takes the name-matching fallback: a media
