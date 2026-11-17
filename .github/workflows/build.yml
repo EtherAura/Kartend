@@ -654,7 +654,8 @@ jobs:
         # Kartend-z4ev0: restrict the PR clang-tidy pass to the .cpp TUs the
         # PR actually changed (vs the merge base). The list is consumed by
         # .scripts/build.sh via KARTEND_TIDY_ONLY_FILES; push/dispatch runs
-        # skip this step and run the curated fatal gate below instead.
+        # skip this step. The curated fatal gate below reads the same list on
+        # pull requests (its src/ TUs), and every src/ TU on push/dispatch.
         # KNOWN LIMITATION (kept simple on purpose): a changed header does
         # NOT pull its including TUs into the scope — header-only regressions
         # are caught by the nightly full sweep (nightly-lint.yml) after
@@ -729,10 +730,15 @@ jobs:
             bash .scripts/build.sh --maintenance --tests --analysis=off
           fi
 
-      - name: Enforce curated clang-tidy checks (fatal, non-PR runs)
-        # ENFORCING clang-tidy gate for pushes to main/develop and manual
-        # dispatch: any finding from a check listed in
+      - name: Enforce curated clang-tidy checks (fatal)
+        # ENFORCING clang-tidy gate: any finding from a check listed in
         # KARTEND_TIDY_FATAL_CHECKS fails the job (--warnings-as-errors).
+        # Kartend-b2e0u: on pull requests it runs over the PR's changed src/
+        # TUs (the diff-scope step's list), on push / dispatch over every src/
+        # TU. It used to skip pull requests, so #166 merged green and turned
+        # main red for 5 h (Kartend-8evxv). As with the advisory pass, a
+        # changed header does not pull in the TUs that include it: the push run
+        # on main still covers those.
         # The list mirrors .clang-tidy's WarningsAsErrors set — every entry
         # was verified zero-hit on the tree when promoted there — so a green
         # run is EXPECTED; the FIRST run of this gate must still be watched,
@@ -749,7 +755,6 @@ jobs:
         # run curated-only, which is what makes this pass cheaper than the
         # demoted full sweep. Scope is src/ (matching the sweep the baseline
         # was verified on); tests/ stays advisory-only in the nightly.
-        if: github.event_name != 'pull_request'
         env:
           # Single knob: comma-separated clang-tidy checks promoted to fatal.
           # Keep in lockstep with .clang-tidy's WarningsAsErrors when
@@ -792,10 +797,22 @@ jobs:
             exit 1
           fi
           mkdir -p build/ninja-maintenance/logs
+          tus="$RUNNER_TEMP/tidy-fatal-tus"
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            { grep -E '^src/.*\.cpp$' "$KARTEND_TIDY_ONLY_FILES" || true; } | tr '\n' '\0' > "$tus"
+            if [ ! -s "$tus" ]; then
+              echo "No src/ TU changed in this pull request: nothing for the fatal gate."
+              exit 0
+            fi
+            echo "Fatal gate over the pull request's changed src/ TUs:"
+            tr '\0' '\n' < "$tus"
+          else
+            find src -name '*.cpp' -print0 > "$tus"
+          fi
           # xargs -n1 -P: same fan-out shape as do_clang_tidy in
           # .scripts/lib/quality.sh; xargs exits non-zero (123) if any TU's
           # clang-tidy invocation reports a promoted error, failing the step.
-          find src -name '*.cpp' -print0 | xargs -0 -n1 -P"$(nproc)" clang-tidy \
+          xargs -0 -n1 -P"$(nproc)" clang-tidy < "$tus" \
             -p="$compdb_dir" \
             --checks="-*,clang-analyzer-*,${checks}" \
             --warnings-as-errors="${checks}" \
