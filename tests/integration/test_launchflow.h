@@ -35,6 +35,11 @@ private slots:
   // link/path-relaxing switch (bsdtar: no -P; 7z: no -snld* and kin).
   void testArchiveExtractionBsdtarSafeArguments();
   void testArchiveExtraction7zSafeArguments();
+  // Kartend-ecjq6: the production extraction path into the installed bsdtar
+  // (skipped where bsdtar is absent), on runtime-built hostile archives.
+  void testArchiveExtractionRealBsdtarExtractsBenignArchive();
+  void testArchiveExtractionRealBsdtarRefusesSymlinkChainEscape();
+  void testArchiveExtractionRealBsdtarRefusesDotDotEscape();
 };
 
 #endif // KARTEND_TESTS_TEST_LAUNCHFLOW_H
