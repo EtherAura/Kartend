@@ -35,6 +35,8 @@ https://github.com/user-attachments/assets/f4298240-68d6-435a-8276-84d223e5e30a
 Pick a Linux package or Windows download from [Releases](https://github.com/EtherAura/Kartend/releases/latest), then follow the New Library Wizard.
 [Installation and verification](docs/user/Installation.md) covers packages, unsigned Windows builds and download provenance.
 
+Support Kartend on Patreon: https://www.patreon.com/EtherAura
+
 ## Build from source
 
 ```bash
