@@ -864,9 +864,10 @@ void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filePa
 }
 
 std::optional<QString> ScreenScraperProvider::takeNoEntryLookupKey(const QString &filePath) {
-  const auto it = m_noEntryLookupKeys.constFind(filePath);
-  if (it == m_noEntryLookupKeys.constEnd()) return std::nullopt;
-  const QString key = it.value();
+  const auto it = m_noEntryLookupKeys.find(filePath);
+  if (it == m_noEntryLookupKeys.end()) return std::nullopt;
+  // Moved out, not bound by reference: erase() below destroys the stored value.
+  QString key = std::move(it.value());
   m_noEntryLookupKeys.erase(it);
   return key;
 }
