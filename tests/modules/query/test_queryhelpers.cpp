@@ -39,6 +39,10 @@ private slots:
   void orderBy_nameDescending_bare();
   void orderBy_dateDescending_withSortPrefix_andLimit();
   void orderBy_collectionAscending_collectionUuidStaysUnprefixed();
+  void orderBy_dateAscending_bareAndPrefixed();
+  void orderBy_sizeAscending_bareAndPrefixed();
+  void orderBy_sizeDescending_bareAndPrefixed();
+  void orderBy_collectionDescending_collectionUuidStaysUnprefixed();
   void orderBy_artworkFirst_fallsThroughToNameAsc();
   void orderBy_random_fallsThroughToNameAsc();
   void orderBy_appendLimitOffset_whenRequested();
@@ -183,6 +187,36 @@ void TestQueryHelpers::orderBy_collectionAscending_collectionUuidStaysUnprefixed
            QStringLiteral("ORDER BY collection_uuid, sort_name COLLATE NOCASE"));
   QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::CollectionAscending, false, false),
            QStringLiteral("ORDER BY collection_uuid, name COLLATE NOCASE"));
+}
+
+void TestQueryHelpers::orderBy_dateAscending_bareAndPrefixed() {
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::DateAscending, false, false),
+           QStringLiteral("ORDER BY last_modified ASC, name COLLATE NOCASE"));
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::DateAscending, true, false),
+           QStringLiteral("ORDER BY sort_last_modified ASC, sort_name COLLATE NOCASE"));
+}
+
+void TestQueryHelpers::orderBy_sizeAscending_bareAndPrefixed() {
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::SizeAscending, false, false),
+           QStringLiteral("ORDER BY file_size ASC, name COLLATE NOCASE"));
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::SizeAscending, true, false),
+           QStringLiteral("ORDER BY sort_file_size ASC, sort_name COLLATE NOCASE"));
+}
+
+void TestQueryHelpers::orderBy_sizeDescending_bareAndPrefixed() {
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::SizeDescending, false, false),
+           QStringLiteral("ORDER BY file_size DESC, name COLLATE NOCASE"));
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::SizeDescending, true, false),
+           QStringLiteral("ORDER BY sort_file_size DESC, sort_name COLLATE NOCASE"));
+}
+
+void TestQueryHelpers::orderBy_collectionDescending_collectionUuidStaysUnprefixed() {
+  // As for CollectionAscending: collection_uuid is the GROUP BY key and is
+  // never aliased, so only the name tie-breaker takes the sort_ prefix.
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::CollectionDescending, true, false),
+           QStringLiteral("ORDER BY collection_uuid DESC, sort_name COLLATE NOCASE"));
+  QCOMPARE(QueryHelpers::orderByForSortMode(SortMode::CollectionDescending, false, false),
+           QStringLiteral("ORDER BY collection_uuid DESC, name COLLATE NOCASE"));
 }
 
 void TestQueryHelpers::orderBy_artworkFirst_fallsThroughToNameAsc() {
