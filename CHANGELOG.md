@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **ES-DE imports now bring in the game videos ES-DE downloaded.** A video
+  saved in ES-DE's `videos` media folder (for example `.mp4` or `.mkv`) is
+  copied into the imported game's video folder, next to its cover and other
+  art, so it plays in the details pane like a scraped video. A video you
+  already have for that game is never replaced. Whether a given video plays
+  still depends on the codecs your system's media backend supports.
+
 ### Fixed
 
 - **Heroic imports now use the titles and covers you edited in Heroic.**

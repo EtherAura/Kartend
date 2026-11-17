@@ -72,6 +72,9 @@ struct GameEntry {
   QString coverPath; ///< Portrait cover art → artwork/front/.
   QString logoPath;  ///< Transparent logo → artwork/logo/.
   QString heroPath;  ///< Wide banner art → artwork/fanart/.
+  /// Preview video → artwork/video/, where the details pane and marquee look
+  /// for an item's video (Kartend-vtz2h). Empty for every source but ES-DE.
+  QString videoPath;
   /// Extra launcher arguments this game needs beyond the target — see
   /// KartLink::LinkData::args. Empty for every source but Bottles.
   QStringList launchArgs;
@@ -185,6 +188,12 @@ struct SyncResult {
                                          ImportScope scope = ImportScope::Installed,
                                          const QString &sourceKey = QString());
 
+/// The games of ES-DE system `systemKey` in the library at `dataDir` — what
+/// listGames(kSourceEsde, …, systemKey) returns for EsdeLibrary::
+/// defaultDataDir(). Takes the data dir explicitly so tests can stage a
+/// fixture library instead of reading the user's home (Kartend-vtz2h).
+[[nodiscard]] QList<GameEntry> esdeGames(const QString &dataDir, const QString &systemKey);
+
 /// listGames + syncEntries in one call — the normal production path.
 ///
 /// Pass the scope the collection was imported with, not a fresh default:
@@ -199,8 +208,9 @@ struct SyncResult {
 
 /// Diff-syncs `entries` into `stubDir`: writes new/changed stubs, deletes
 /// this source's stubs for games no longer present, and copies artwork into
-/// `{artworkDir}/front|logo|fanart/` only where no file with the stub's
-/// basename exists yet (scraped or hand-placed art is never clobbered).
+/// `{artworkDir}/front|logo|fanart/` and the preview video into
+/// `{artworkDir}/video/` only where no file with the stub's basename exists
+/// yet (scraped or hand-placed art is never clobbered).
 /// Separated from syncSource so tests can drive it with a synthetic list.
 [[nodiscard]] SyncResult syncEntries(const QList<GameEntry> &entries, const QString &sourceId,
                                      const QString &stubDir, const QString &artworkDir);

@@ -218,10 +218,12 @@ kartend_add_test(NAME EsdeLibrary
 
 # Kartend-vtz2h: EsdeLibrary media discovery for ES-DE 3.4/3.5 formats — a
 # WebP cover through the naming convention, and video files kept out of the
-# image slots. Separate binary so the cases run as their own CTest entry.
+# image slots. Separate binary so the cases run as their own CTest entry. Also
+# drives the video path on through LauncherImportService (esdeGames +
+# syncEntries) into the imported item's artwork/video/, hence kartend_data.
 kartend_add_test(NAME ESDEMediaImport
   SOURCES utils/fs/test_esde_media_import.cpp
-  LINK kartend_utils
+  LINK kartend_data kartend_api kartend_utils
 )
 
 # Kartend-1bwzs: EsdeLibrary::readFolderGamelist, the per-system-folder
