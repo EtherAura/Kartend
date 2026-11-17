@@ -483,3 +483,12 @@ kartend_add_test(NAME PlaylistMenuController
   SOURCES modules/interaction/test_playlistmenucontroller.cpp
   LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
+
+# MAME BIOS/device-set scan compatibility (Kartend-tnt0l): with the per-collection
+# toggle off, or with no usable MAME listxml attached, a real scan of an arcade
+# folder still lists every set. Real on-disk SQLite, same standalone ScanService
+# wiring as MultiDiscCollapse.
+kartend_add_test(NAME Integration.TestMameBiosScan
+  SOURCES integration/test_mamebiosscan.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
