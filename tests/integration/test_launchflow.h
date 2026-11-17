@@ -40,6 +40,13 @@ private slots:
   void testArchiveExtractionRealBsdtarExtractsBenignArchive();
   void testArchiveExtractionRealBsdtarRefusesSymlinkChainEscape();
   void testArchiveExtractionRealBsdtarRefusesDotDotEscape();
+  // Kartend-ecjq6: the same path into the installed 7z (skipped where 7z is
+  // absent). 7z refuses the symlink chain; for ".." members it strips the
+  // dot-dot components and extracts inside the destination, which is the
+  // approved outcome as long as nothing outside it is created or changed.
+  void testArchiveExtractionReal7zExtractsBenignArchive();
+  void testArchiveExtractionReal7zRefusesSymlinkChainEscape();
+  void testArchiveExtractionReal7zContainsDotDotEntries();
 };
 
 #endif // KARTEND_TESTS_TEST_LAUNCHFLOW_H
