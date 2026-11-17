@@ -2,6 +2,7 @@
 
 #include "applicationcontext.h"
 #include "applicationmanager.h"
+#include "archivesafety.h"
 #include "collection/collectionconfig.h"
 #include "collection/typehelpers.h"
 #include "historystore.h"
@@ -18,13 +19,18 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QProcess>
 #include <QScopeGuard>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QString>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <utility>
 
 namespace {
 
@@ -318,6 +324,251 @@ void verifyExtractionReached(const StubbedExtraction &run, const ToolInvocation 
   QVERIFY(extracted.open(QIODevice::ReadOnly));
   QCOMPARE(extracted.readAll(), QByteArrayLiteral("ISO"));
 }
+
+/// Kartend-ecjq6: one member of a POSIX ustar archive built at runtime, so the
+/// hostile layouts are spelled out here rather than committed as binaries.
+struct TarMember {
+  QByteArray name;
+  char type = '0'; // '0' regular file, '2' symlink
+  QByteArray linkTarget;
+  QByteArray content;
+};
+
+void putTarOctal(QByteArray &header, int offset, int width, qint64 value) {
+  // width - 1 zero-padded octal digits; the field's last byte stays NUL.
+  header.replace(offset, width - 1, QByteArray::number(value, 8).rightJustified(width - 1, '0'));
+}
+
+/// Serialises @p members as a ustar stream. Empty when a name or link target
+/// does not fit its 100-byte header field (caller asserts non-empty).
+QByteArray buildTar(const QList<TarMember> &members) {
+  constexpr int kBlock = 512;
+  QByteArray tar;
+  for (const TarMember &m : members) {
+    if (m.name.size() >= 100 || m.linkTarget.size() >= 100) {
+      return {};
+    }
+    QByteArray header(kBlock, '\0');
+    header.replace(0, m.name.size(), m.name);
+    putTarOctal(header, 100, 8, m.type == '2' ? 0777 : 0644);
+    putTarOctal(header, 108, 8, 0);
+    putTarOctal(header, 116, 8, 0);
+    putTarOctal(header, 124, 12, m.content.size());
+    putTarOctal(header, 136, 12, 1767225600); // 2026-01-01T00:00:00Z
+    header[156] = m.type;
+    header.replace(157, m.linkTarget.size(), m.linkTarget);
+    header.replace(257, 6, QByteArray("ustar\0", 6));
+    header.replace(263, 2, QByteArrayLiteral("00"));
+    // The checksum is summed with its own field read as eight spaces.
+    header.replace(148, 8, QByteArray(8, ' '));
+    unsigned sum = 0;
+    for (const char c : std::as_const(header)) {
+      sum += static_cast<unsigned char>(c);
+    }
+    header.replace(148, 6, QByteArray::number(sum, 8).rightJustified(6, '0'));
+    header[154] = '\0';
+    header[155] = ' ';
+    tar += header;
+    tar += m.content;
+    tar += QByteArray((kBlock - m.content.size() % kBlock) % kBlock, '\0');
+  }
+  tar += QByteArray(2 * kBlock, '\0');
+  return tar;
+}
+
+QByteArray shellSingleQuoted(const QString &text) {
+  QByteArray quoted = text.toUtf8();
+  quoted.replace('\'', "'\\''");
+  return QByteArrayLiteral("'") + quoted + QByteArrayLiteral("'");
+}
+
+/// Kartend-ecjq6: a TEST-ONLY bsdtar wrapper for the real-extractor cases. It
+/// logs every invocation like stubExtractorScript, answers the two ArchiveSafety
+/// listing argvs (-tvf / -tf) with a clean one-entry listing, and hands every
+/// other invocation — the extraction — to @p realBsdtar via exec with argv,
+/// cwd, stdio and exit status untouched. The listing answer deliberately
+/// bypasses the pre-extraction scan (which would refuse the hostile archives
+/// before bsdtar ever wrote a byte), so what these cases prove is bsdtar's own
+/// extract-time containment on the production extractArchiveToTemp path.
+QByteArray realBsdtarWrapperScript(const QString &realBsdtar, const QString &logPath) {
+  return QByteArrayLiteral("#!/bin/sh\nlog=") + shellSingleQuoted(logPath) +
+         QByteArrayLiteral("\nreal=") + shellSingleQuoted(realBsdtar) +
+         QByteArrayLiteral(
+             "\n"
+             "printf 'cwd=%s\\n' \"$(pwd -P)\" >> \"$log\"\n"
+             "for a in \"$@\"; do printf 'arg=%s\\n' \"$a\" >> \"$log\"; done\n"
+             "printf 'end\\n' >> \"$log\"\n"
+             "case \"$1\" in\n"
+             "  -tvf) printf '%s\\n' '-rw-r--r--  0 0      0           3 Jan  1  2026 disc.iso'; "
+             "exit 0 ;;\n"
+             "  -tf) printf '%s\\n' 'disc.iso'; exit 0 ;;\n"
+             "esac\n"
+             "exec \"$real\" \"$@\"\n");
+}
+
+/// The installed bsdtar, resolved on the unmodified PATH (before any test
+/// narrows it), so the wrapper can never exec itself. Empty when absent.
+QString resolveRealBsdtar() {
+  const QString found = QStandardPaths::findExecutable(QStringLiteral("bsdtar"));
+  return found.isEmpty() ? QString() : QFileInfo(found).canonicalFilePath();
+}
+
+QString realBsdtarVersion(const QString &realBsdtar) {
+  QProcess probe;
+  probe.start(realBsdtar, {QStringLiteral("--version")});
+  if (!probe.waitForFinished(10000)) {
+    return QStringLiteral("<no answer>");
+  }
+  return QString::fromUtf8(probe.readAllStandardOutput()).trimmed();
+}
+
+constexpr auto kOutsideDirName = "outside dir";
+constexpr auto kInvocationLogName = "bsdtar invocations.log";
+
+/// Every path under @p rootPath, relative and sorted. Symlinks are listed, not
+/// followed, so a dangling or escaping link the extraction left behind shows up.
+QStringList snapshotTree(const QString &rootPath) {
+  QStringList paths;
+  const QDir rootDir(rootPath);
+  QDirIterator it(rootPath, QDir::AllEntries | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot,
+                  QDirIterator::Subdirectories);
+  while (it.hasNext()) {
+    paths << rootDir.relativeFilePath(it.next());
+  }
+  paths.sort();
+  return paths;
+}
+
+/// Everything one real-bsdtar extraction run leaves behind for the assertions.
+struct RealBsdtarRun {
+  QString setupError;
+  QString archivePath;      // the archive handed to extractArchiveToTemp
+  QString extractionParent; // canonical <cache>/kartend_extract
+  QString extractionDir;    // <cache>/kartend_extract/<base>; gone again on failure
+  QString resultPath;       // canonical result on success, empty on error
+  QString errorMessage;
+  QString errorDetails;
+  QList<ToolInvocation> invocations;
+};
+
+/// Writes @p tar as media/@p archiveFileName under @p root and runs the
+/// production extractArchiveToTemp with PATH narrowed to root/bin, which holds
+/// only the realBsdtarWrapperScript — so bsdtar is the sole extractor found (7z
+/// never joins the fallback) and the bytes are written by @p realBsdtar.
+RealBsdtarRun runRealBsdtarExtraction(const QTemporaryDir &root, const QString &realBsdtar,
+                                      const QString &archiveFileName, const QByteArray &tar) {
+  RealBsdtarRun run;
+  const QDir rootDir(root.path());
+  if (tar.isEmpty() || !rootDir.mkpath(QStringLiteral("bin")) ||
+      !rootDir.mkpath(QStringLiteral("media"))) {
+    run.setupError = QStringLiteral("could not build the archive or create the fixture dirs");
+    return run;
+  }
+  const QString logPath = rootDir.filePath(QLatin1String(kInvocationLogName));
+  run.archivePath =
+      QFileInfo(rootDir.filePath(QStringLiteral("media/") + archiveFileName)).absoluteFilePath();
+  if (!writeFile(rootDir.filePath(QStringLiteral("bin/bsdtar")),
+                 realBsdtarWrapperScript(realBsdtar, logPath), /*executable=*/true) ||
+      !writeFile(run.archivePath, tar, /*executable=*/false)) {
+    run.setupError = QStringLiteral("could not write the bsdtar wrapper or the archive");
+    return run;
+  }
+  const QString cacheBase = rootDir.filePath(QStringLiteral("cache"));
+  run.extractionDir = cacheBase + QStringLiteral("/kartend_extract/") +
+                      QFileInfo(run.archivePath).completeBaseName();
+
+  const QByteArray oldPath = qgetenv("PATH");
+  qputenv("PATH", rootDir.filePath(QStringLiteral("bin")).toUtf8());
+  {
+    const auto restorePath = qScopeGuard([&oldPath]() { qputenv("PATH", oldPath); });
+    const auto result =
+        LaunchManager::extractArchiveToTemp(run.archivePath, QStringLiteral(".iso"), nullptr,
+                                            /*maxDecompressedBytes=*/1 << 20, cacheBase);
+    if (result.isError()) {
+      run.errorMessage = result.error().message;
+      run.errorDetails = result.error().details;
+    } else {
+      run.resultPath = QFileInfo(result.value()).canonicalFilePath();
+    }
+  }
+  run.extractionParent =
+      QFileInfo(cacheBase + QStringLiteral("/kartend_extract")).canonicalFilePath();
+  run.invocations = readInvocationLog(logPath);
+  return run;
+}
+
+/// The run went through the wrapper exactly as production drives bsdtar: both
+/// pre-scan listings, then one forwarded extraction in the per-archive dir with
+/// the plain `-xf <archive>` argv (never -P).
+void verifyRealExtractionInvoked(const RealBsdtarRun &run) {
+  QVERIFY2(run.setupError.isEmpty(), qPrintable(run.setupError));
+  QCOMPARE(run.invocations.size(), 3);
+  QCOMPARE(run.invocations.at(0).args, (QStringList{QStringLiteral("-tvf"), run.archivePath}));
+  QCOMPARE(run.invocations.at(1).args, (QStringList{QStringLiteral("-tf"), run.archivePath}));
+  const ToolInvocation &extraction = run.invocations.at(2);
+  QCOMPARE(extraction.args, (QStringList{QStringLiteral("-xf"), run.archivePath}));
+  QVERIFY2(!run.extractionParent.isEmpty(), "the extraction root was never created");
+  QCOMPARE(extraction.cwd,
+           run.extractionParent + QLatin1Char('/') + QFileInfo(run.extractionDir).fileName());
+}
+
+/// Shared proof for the hostile cases: the real extractor was reached and
+/// failed (not the pre-scan, which the wrapper answered), and the sandbox
+/// outside the per-archive dir is exactly what it was before — no new file,
+/// directory or link anywhere in it, and the sentinel's bytes untouched.
+void verifyHostileExtractionContained(const RealBsdtarRun &run, const QString &rootPath,
+                                      const QStringList &treeBefore) {
+  verifyRealExtractionInvoked(run);
+  if (QTest::currentTestFailed()) {
+    return;
+  }
+  QVERIFY2(run.resultPath.isEmpty(),
+           qPrintable(QStringLiteral("hostile archive extracted to ") + run.resultPath));
+  QCOMPARE(run.errorMessage, QStringLiteral("Archive extraction failed"));
+  QVERIFY2(run.errorDetails.startsWith(QLatin1String("bsdtar exit code: ")) &&
+               !run.errorDetails.startsWith(QLatin1String("bsdtar exit code: 0,")),
+           qPrintable(run.errorDetails));
+  qInfo().noquote() << "real bsdtar refused the hostile archive:" << run.errorDetails;
+
+  // Atomic-on-failure cleanup removed the per-archive dir (links included,
+  // never followed); whatever remains must be the fixture plus the dirs and
+  // log this harness itself creates.
+  const QString base = QFileInfo(run.extractionDir).fileName();
+  const QString baseRel = QStringLiteral("cache/kartend_extract/") + base;
+  const QStringList harnessOwned{QStringLiteral("bin"),
+                                 QStringLiteral("bin/bsdtar"),
+                                 QStringLiteral("media"),
+                                 QStringLiteral("media/") + QFileInfo(run.archivePath).fileName(),
+                                 QLatin1String(kInvocationLogName),
+                                 QStringLiteral("cache"),
+                                 QStringLiteral("cache/kartend_extract")};
+  QStringList treeAfter;
+  for (const QString &path : snapshotTree(rootPath)) {
+    if (!harnessOwned.contains(path) && path != baseRel &&
+        !path.startsWith(baseRel + QLatin1Char('/'))) {
+      treeAfter << path;
+    }
+  }
+  QCOMPARE(treeAfter, treeBefore);
+
+  QFile sentinel(QDir(rootPath).filePath(QLatin1String(kOutsideDirName)) +
+                 QStringLiteral("/sentinel.txt"));
+  QVERIFY(sentinel.open(QIODevice::ReadOnly));
+  QCOMPARE(sentinel.readAll(), QByteArrayLiteral("SENTINEL"));
+}
+
+/// Creates root/"outside dir"/sentinel.txt — the only thing outside the
+/// extraction destination the hostile archives aim at — and returns the
+/// sandbox's tree as it stands before the run.
+QStringList plantOutsideSentinel(const QTemporaryDir &root) {
+  const QDir rootDir(root.path());
+  if (!rootDir.mkpath(QLatin1String(kOutsideDirName)) ||
+      !writeFile(rootDir.filePath(QLatin1String(kOutsideDirName)) + QStringLiteral("/sentinel.txt"),
+                 QByteArrayLiteral("SENTINEL"), /*executable=*/false)) {
+    return {};
+  }
+  return snapshotTree(root.path());
+}
 #endif
 
 } // namespace
@@ -516,5 +767,157 @@ void TestLaunchFlow::testArchiveExtraction7zSafeArguments() {
            (QStringList{QStringLiteral("x"), QStringLiteral("-y"), run.archivePath}));
 
   verifyExtractionReached(run, extraction);
+#endif
+}
+
+// Kartend-ecjq6: the three cases below drive the production extractArchiveToTemp
+// into the INSTALLED bsdtar (see realBsdtarWrapperScript). Everything they
+// create — archive, wrapper, log, extraction root and the "outside" sentinel
+// the hostile archives aim at — sits inside one QTemporaryDir, and no member
+// reaches above it.
+
+void TestLaunchFlow::testArchiveExtractionRealBsdtarExtractsBenignArchive() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Kartend-dhhh6: extractArchiveToTemp forks the extractor synchronously on the test "
+        "thread, and fork() aborts libtsan.");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The bsdtar wrapper is a POSIX shell script");
+#else
+  const QString realBsdtar = resolveRealBsdtar();
+  if (realBsdtar.isEmpty()) {
+    QSKIP("bsdtar is not installed");
+  }
+  qInfo().noquote() << "real bsdtar:" << realBsdtar << "-" << realBsdtarVersion(realBsdtar);
+  QTemporaryDir root(QDir::tempPath() + QStringLiteral("/kartend ecjq6 XXXXXX"));
+  QVERIFY(root.isValid());
+
+  // Bytes the wrapper never writes: finding them extracted proves the real
+  // bsdtar ran, so a missing tool or a broken wrapper cannot pass as
+  // "containment" in the hostile cases.
+  const QByteArray payload = QByteArrayLiteral("payload written by the real bsdtar\n");
+  const QByteArray nested = QByteArrayLiteral("nested member\n");
+  const QByteArray tar = buildTar({{QByteArrayLiteral("disc.iso"), '0', {}, payload},
+                                   {QByteArrayLiteral("extras dir/read me.txt"), '0', {}, nested}});
+  const RealBsdtarRun run =
+      runRealBsdtarExtraction(root, realBsdtar, QStringLiteral("benign game.tar"), tar);
+
+  verifyRealExtractionInvoked(run);
+  QVERIFY2(run.errorMessage.isEmpty(),
+           qPrintable(run.errorMessage + QStringLiteral(": ") + run.errorDetails));
+  const QString extractionDir = QFileInfo(run.extractionDir).canonicalFilePath();
+  QVERIFY(!extractionDir.isEmpty());
+  QCOMPARE(run.resultPath, extractionDir + QStringLiteral("/disc.iso"));
+  QFile disc(run.resultPath);
+  QVERIFY(disc.open(QIODevice::ReadOnly));
+  QCOMPARE(disc.readAll(), payload);
+  QFile readMe(extractionDir + QStringLiteral("/extras dir/read me.txt"));
+  QVERIFY(readMe.open(QIODevice::ReadOnly));
+  QCOMPARE(readMe.readAll(), nested);
+
+  // The production pre-scan passes this archive with the real bsdtar too.
+  QVERIFY(!ArchiveSafety::scanArchiveEntriesWithTool(run.archivePath, QStringLiteral("bsdtar"))
+               .isError());
+#endif
+}
+
+void TestLaunchFlow::testArchiveExtractionRealBsdtarRefusesSymlinkChainEscape() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Kartend-dhhh6: extractArchiveToTemp forks the extractor synchronously on the test "
+        "thread, and fork() aborts libtsan.");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The bsdtar wrapper is a POSIX shell script");
+#else
+  const QString realBsdtar = resolveRealBsdtar();
+  if (realBsdtar.isEmpty()) {
+    QSKIP("bsdtar is not installed");
+  }
+  qInfo().noquote() << "real bsdtar:" << realBsdtar << "-" << realBsdtarVersion(realBsdtar);
+  QTemporaryDir root(QDir::tempPath() + QStringLiteral("/kartend ecjq6 XXXXXX"));
+  QVERIFY(root.isValid());
+  const QStringList treeBefore = plantOutsideSentinel(root);
+  QVERIFY(!treeBefore.isEmpty());
+
+  // hop1 -> hop2 -> hop3 -> ../../../outside dir. Seen from the per-archive
+  // dir <root>/cache/kartend_extract/<base>, three ".." land exactly on the
+  // sandbox root, so the chain ends at the sentinel dir and nowhere above.
+  const QString archiveName = QStringLiteral("symlink chain.tar");
+  const QByteArray escape = QByteArrayLiteral("../../../") + kOutsideDirName;
+  const QString destination =
+      QDir(root.path()).filePath(QStringLiteral("cache/kartend_extract/symlink chain"));
+  const QString outsideDir = QDir(root.path()).filePath(QLatin1String(kOutsideDirName));
+  QCOMPARE(QDir::cleanPath(destination + QLatin1Char('/') + QString::fromUtf8(escape)),
+           QDir::cleanPath(outsideDir));
+
+  const QByteArray tar = buildTar({
+      {QByteArrayLiteral("disc.iso"), '0', {}, QByteArrayLiteral("ISO")},
+      {QByteArrayLiteral("hop1"), '2', QByteArrayLiteral("hop2"), {}},
+      {QByteArrayLiteral("hop2"), '2', QByteArrayLiteral("hop3"), {}},
+      {QByteArrayLiteral("hop3"), '2', escape, {}},
+      // Written THROUGH the chain: a new file, and an overwrite of the sentinel.
+      {QByteArrayLiteral("hop1/escaped.txt"), '0', {}, QByteArrayLiteral("ESCAPED")},
+      {QByteArrayLiteral("hop1/sentinel.txt"), '0', {}, QByteArrayLiteral("OVERWRITTEN")},
+  });
+  const RealBsdtarRun run = runRealBsdtarExtraction(root, realBsdtar, archiveName, tar);
+
+  // An escape would add outside dir/escaped.txt (tree comparison) or change
+  // the sentinel's bytes (content comparison); a success return would mean
+  // bsdtar accepted writing through the chain.
+  verifyHostileExtractionContained(run, root.path(), treeBefore);
+  QVERIFY(!QFileInfo::exists(outsideDir + QStringLiteral("/escaped.txt")));
+
+  // The layer the wrapper bypassed: the real pre-scan refuses this archive.
+  const auto scan =
+      ArchiveSafety::scanArchiveEntriesWithTool(run.archivePath, QStringLiteral("bsdtar"));
+  QVERIFY(scan.isError());
+  QVERIFY(ArchiveSafety::isSecurityRejection(scan.error()));
+#endif
+}
+
+void TestLaunchFlow::testArchiveExtractionRealBsdtarRefusesDotDotEscape() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Kartend-dhhh6: extractArchiveToTemp forks the extractor synchronously on the test "
+        "thread, and fork() aborts libtsan.");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The bsdtar wrapper is a POSIX shell script");
+#else
+  const QString realBsdtar = resolveRealBsdtar();
+  if (realBsdtar.isEmpty()) {
+    QSKIP("bsdtar is not installed");
+  }
+  qInfo().noquote() << "real bsdtar:" << realBsdtar << "-" << realBsdtarVersion(realBsdtar);
+  QTemporaryDir root(QDir::tempPath() + QStringLiteral("/kartend ecjq6 XXXXXX"));
+  QVERIFY(root.isValid());
+  const QStringList treeBefore = plantOutsideSentinel(root);
+  QVERIFY(!treeBefore.isEmpty());
+
+  // One member per ".." depth from <root>/cache/kartend_extract/<base>: into
+  // kartend_extract, into cache, and (three up, the sandbox root) into the
+  // sentinel dir — never deeper than the QTemporaryDir.
+  const QDir rootDir(root.path());
+  const QByteArray up3 = QByteArrayLiteral("../../../") + kOutsideDirName;
+  const QByteArray tar = buildTar({
+      {QByteArrayLiteral("disc.iso"), '0', {}, QByteArrayLiteral("ISO")},
+      {QByteArrayLiteral("../d1.txt"), '0', {}, QByteArrayLiteral("ESCAPED")},
+      {QByteArrayLiteral("../../d2.txt"), '0', {}, QByteArrayLiteral("ESCAPED")},
+      {up3 + QByteArrayLiteral("/escaped.txt"), '0', {}, QByteArrayLiteral("ESCAPED")},
+      {up3 + QByteArrayLiteral("/sentinel.txt"), '0', {}, QByteArrayLiteral("OVERWRITTEN")},
+  });
+  const RealBsdtarRun run =
+      runRealBsdtarExtraction(root, realBsdtar, QStringLiteral("dot dot.tar"), tar);
+
+  verifyHostileExtractionContained(run, root.path(), treeBefore);
+  QVERIFY(!QFileInfo::exists(rootDir.filePath(QStringLiteral("cache/kartend_extract/d1.txt"))));
+  QVERIFY(!QFileInfo::exists(rootDir.filePath(QStringLiteral("cache/d2.txt"))));
+  QVERIFY(!QFileInfo::exists(rootDir.filePath(QLatin1String(kOutsideDirName)) +
+                             QStringLiteral("/escaped.txt")));
+
+  // The layer the wrapper bypassed: the real pre-scan refuses this archive.
+  const auto scan =
+      ArchiveSafety::scanArchiveEntriesWithTool(run.archivePath, QStringLiteral("bsdtar"));
+  QVERIFY(scan.isError());
+  QVERIFY(ArchiveSafety::isSecurityRejection(scan.error()));
 #endif
 }
