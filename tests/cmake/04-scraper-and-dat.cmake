@@ -418,6 +418,12 @@ add_test(NAME datcache_machine_metadata
     previousSchemaCacheReingestsMachines
     nonMameIngestStoresNoMachines)
 
+# MAME listxml <disk> parsing + DatCache round-trip (Kartend-xu36n)
+kartend_add_test(NAME MameDiskParsing
+  SOURCES modules/dat/test_mamediskparsing.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # DatCollectionMatch tests (pure DAT-to-collection match scoring)
 kartend_add_test(NAME DatCollectionMatch
   SOURCES modules/dat/test_datcollectionmatch.cpp

@@ -255,6 +255,26 @@ int mameIntFromAttrs(const QXmlStreamAttributes &attrs, QLatin1String key) {
   return (ok && v >= 0) ? v : -1;
 }
 
+/// Build a MameDisk from a MAME `<disk>` element's attributes (Kartend-xu36n).
+/// Returns nullopt for `status="nodump"` (checked first: such disks may carry
+/// no sha1 and are not malformed), for a dumped disk without a valid 40-digit
+/// sha1 (same parse-time drop as a hashless rom), and for an empty or over-long
+/// name or merge (same drop as an over-long rom name).
+std::optional<MameDisk> readMameDiskElement(const QXmlStreamAttributes &attrs) {
+  const QString status = attrs.value(QLatin1String("status")).toString().trimmed().toLower();
+  if (status == QLatin1String("nodump")) return std::nullopt;
+  MameDisk d;
+  d.name = attrs.value(QLatin1String("name")).toString();
+  d.merge = attrs.value(QLatin1String("merge")).toString();
+  if (d.name.isEmpty() || d.name.size() > kMaxNameLen || d.merge.size() > kMaxNameLen) {
+    return std::nullopt;
+  }
+  d.sha1 = normaliseHex(attrs.value(QLatin1String("sha1")));
+  if (d.sha1.size() != 40) return std::nullopt;
+  d.status = status.size() > kMaxNameLen ? QString() : status;
+  return d;
+}
+
 /// Shared MAME listxml walk. `machinesOut` is null for the records-only
 /// entry point, so parseMameListXml pays nothing for the machine records.
 ErrorUtils::Result<QList<DatRecord>> parseMameListXmlImpl(const QByteArray &xml,
@@ -292,6 +312,8 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXmlImpl(const QByteArray &xml,
   MameMachine currentMachine;
   QString *machineText = nullptr;
   bool sawDisplay = false;
+  // <disk> entries kept so far across all machines (Kartend-xu36n).
+  qsizetype diskCount = 0;
 
   auto flushMachine = [&]() {
     if (machinesOut && !currentSetId.isEmpty() && currentSetId.size() <= kMaxNameLen) {
@@ -395,6 +417,19 @@ ErrorUtils::Result<QList<DatRecord>> parseMameListXmlImpl(const QByteArray &xml,
           }
           // gameName left blank here; set in flushMachine() below.
           pendingRoms.append(std::move(*r));
+        }
+      } else if (machinesOut && !currentSetId.isEmpty() && name == QLatin1String("disk")) {
+        if (auto d = readMameDiskElement(reader.attributes())) {
+          // Disks live on the machine records, outside both rom containers, so
+          // they get the same ceiling of their own across the whole document.
+          if (diskCount >= kMaxRecords) {
+            return ErrorContext::error(ErrorCode::ResourceLimitExceeded,
+                                       "MAME listxml declares too many disks to parse",
+                                       "DatLookup::parseMameListXmlWithMachines")
+                .withDetails(QStringLiteral("exceeded %1 disks").arg(kMaxRecords));
+          }
+          ++diskCount;
+          currentMachine.disks.append(std::move(*d));
         }
       }
     } else if (token == QXmlStreamReader::Characters && inDescription) {
