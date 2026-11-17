@@ -9,6 +9,7 @@
 #include <QElapsedTimer>
 #include <QList>
 #include <QObject>
+#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
 #include <QTest>
@@ -42,6 +43,13 @@ private slots:
   void compilePatterns_whitespaceOnlyEntrySkipped();
   void compilePatterns_validAndInvalidMixedKeepsOnlyValid();
 
+  // ReDoS length cap (Kartend-omin4): compilePatterns skips any trimmed pattern
+  // longer than 256 characters. Boundary coverage at 256 / 257 and a check that
+  // the length is measured after trimming.
+  void compilePatterns_patternAtLengthCapCompiles();
+  void compilePatterns_patternOverLengthCapSkippedNeighbourKept();
+  void compilePatterns_lengthCapMeasuredAfterTrimming();
+
   // Concurrency regression: apply() copies the compiled patterns under the
   // read lock then DROPS it before the regex loop, so a concurrent
   // rebuildFromCollections() (write lock) is never blocked for a whole
@@ -61,6 +69,16 @@ CollectionConfig makeConfig(const QString &name, const QStringList &patterns, bo
   c.filter.titleExclusionPatterns = patterns;
   c.filter.titleExclusionEnabled = enabled;
   return c;
+}
+
+// Builds a genuinely valid regex of exactly `length` characters that still
+// strips a trailing " (USA)": an optional non-capturing group of 'x' padding
+// (5 characters of syntax plus the padding) followed by the 11-character
+// "\s*\(USA\)$" suffix.
+QString makeUsaPatternOfLength(int length) {
+  const QString suffix = QStringLiteral("\\s*\\(USA\\)$");
+  const int padding = length - suffix.size() - 5;
+  return QStringLiteral("(?:") + QString(padding, QLatin1Char('x')) + QStringLiteral(")?") + suffix;
 }
 
 } // namespace
@@ -179,6 +197,45 @@ void TestTitleFilter::compilePatterns_validAndInvalidMixedKeepsOnlyValid() {
   for (const auto &re : compiled) {
     QVERIFY(re.isValid());
   }
+}
+
+void TestTitleFilter::compilePatterns_patternAtLengthCapCompiles() {
+  const QString atCap = makeUsaPatternOfLength(256);
+  QCOMPARE(atCap.size(), 256);
+
+  const auto compiled = TitleFilter::compilePatterns({atCap}, QStringLiteral("test-context"));
+  QCOMPARE(compiled.size(), 1);
+  QVERIFY(compiled.first().isValid());
+  QCOMPARE(compiled.first().pattern(), atCap);
+  QString title = QStringLiteral("Mario (USA)");
+  QCOMPARE(title.remove(compiled.first()), QStringLiteral("Mario"));
+}
+
+void TestTitleFilter::compilePatterns_patternOverLengthCapSkippedNeighbourKept() {
+  const QString overCap = makeUsaPatternOfLength(257);
+  QCOMPARE(overCap.size(), 257);
+  // The oversized pattern is itself a valid regex, so it is the length cap,
+  // not the validity check, that drops it.
+  QVERIFY(QRegularExpression(overCap).isValid());
+
+  const QString neighbour = QStringLiteral("\\s*\\[!\\]$");
+  const auto compiled =
+      TitleFilter::compilePatterns({overCap, neighbour}, QStringLiteral("test-context"));
+  QCOMPARE(compiled.size(), 1);
+  QVERIFY(compiled.first().isValid());
+  QCOMPARE(compiled.first().pattern(), neighbour);
+}
+
+void TestTitleFilter::compilePatterns_lengthCapMeasuredAfterTrimming() {
+  const QString atCap = makeUsaPatternOfLength(256);
+  const QString padded = QStringLiteral("  \t") + atCap + QStringLiteral(" \n ");
+  QVERIFY(padded.size() > 256);
+  QCOMPARE(padded.trimmed().size(), 256);
+
+  const auto compiled = TitleFilter::compilePatterns({padded}, QStringLiteral("test-context"));
+  QCOMPARE(compiled.size(), 1);
+  QVERIFY(compiled.first().isValid());
+  QCOMPARE(compiled.first().pattern(), atCap);
 }
 
 namespace {
