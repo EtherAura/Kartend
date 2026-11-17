@@ -216,6 +216,14 @@ kartend_add_test(NAME EsdeLibrary
   LINK kartend_utils
 )
 
+# Kartend-vtz2h: EsdeLibrary media discovery for ES-DE 3.4/3.5 formats — a
+# WebP cover through the naming convention, and video files kept out of the
+# image slots. Separate binary so the cases run as their own CTest entry.
+kartend_add_test(NAME ESDEMediaImport
+  SOURCES utils/fs/test_esde_media_import.cpp
+  LINK kartend_utils
+)
+
 # Kartend-1bwzs: EsdeLibrary::readFolderGamelist, the per-system-folder
 # gamelist.xml of Batocera / RetroPie / classic EmulationStation, against real
 # fixture trees including link escapes. The links are real filesystem links
