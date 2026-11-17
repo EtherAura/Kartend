@@ -16,6 +16,14 @@
 /// different layout per runner and carry no titles. An entry is imported only
 /// when its cache record says it is installed.
 ///
+/// EDITS MADE IN HEROIC (Kartend-5jk77): Heroic 2.22 keeps the title and
+/// art a user edited in store/game-overrides.json, keyed by appName. A
+/// nonblank edited title replaces the cache title. Edited art replaces the
+/// store art only when the cover fetch can use it (HTTPS on one of the
+/// stores' art hosts — see LauncherImportService::coverHostAllowlist):
+/// custom portrait, then custom wide, else the store art as before. Local
+/// paths and file URLs are not supported and leave the store art in place.
+///
 /// Functions take an explicit config dir so tests can stage a fixture tree;
 /// production callers use defaultConfigDir().
 namespace HeroicLibrary {
@@ -23,7 +31,7 @@ namespace HeroicLibrary {
 struct Game {
   QString appName; ///< Heroic's internal id; the `appName` in the launch URI.
   QString runner;  ///< "legendary" | "gog" | "nile" | "sideload".
-  QString title;
+  QString title;   ///< The user's edited title when Heroic has one.
   /// Icon Heroic already cached on disk (shortcut icons, or a GOG install's
   /// own icon). Empty for most games — Heroic's cover art lives at a URL,
   /// not on disk.

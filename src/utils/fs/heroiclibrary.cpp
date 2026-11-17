@@ -46,6 +46,72 @@ QJsonArray readGameArray(const QString &filePath, const char *arrayKey) {
   return doc.object().value(QLatin1String(arrayKey)).toArray();
 }
 
+/// Per-game edits the user made in Heroic (title, card and cover art),
+/// keyed by appName with no runner namespace (Kartend-5jk77). Heroic 2.22
+/// keeps them in their own electron-store file rather than in the library
+/// caches, and drops an entry once every field is cleared. Missing, unreadable
+/// or malformed means "no edits", never "no games".
+QJsonObject readOverrides(const QString &configDir) {
+  QFile file(configDir + QStringLiteral("/store/game-overrides.json"));
+  if (!file.open(QIODevice::ReadOnly)) {
+    return {};
+  }
+  const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+  if (!doc.isObject()) {
+    return {};
+  }
+  return doc.object().value(QStringLiteral("overrides")).toObject();
+}
+
+/// Whether the cover fetch would actually accept @p url. A user-edited art
+/// field can point anywhere, and the importer only fetches HTTPS from the
+/// stores' own art hosts, so an override outside that is unusable and must
+/// not displace store art that would have downloaded.
+///
+/// MIRRORS LauncherImportService::coverHostAllowlist("heroic") and
+/// HttpClient's https-only, dot-boundary host match — utils/ cannot include
+/// either (check-layering.py). Keep the list in step with that function;
+/// this copy only narrows what the reader prefers and grants no fetch.
+bool isSupportedCoverUrl(const QString &url) {
+  const QUrl parsed(url);
+  if (!parsed.isValid() || parsed.scheme() != QLatin1String("https")) {
+    return false;
+  }
+  const QString host = parsed.host();
+  for (const char *suffix :
+       {"epicgames.com", "unrealengine.com", "gog.com", "gog-statics.com", "media-amazon.com"}) {
+    const QString allowed = QLatin1String(suffix);
+    if (host.compare(allowed, Qt::CaseInsensitive) == 0) {
+      return true;
+    }
+    const QString dotSuffix = QLatin1Char('.') + allowed;
+    if (host.size() > dotSuffix.size() && host.endsWith(dotSuffix, Qt::CaseInsensitive)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Epic URLs carry a literal "{ext}" that Heroic substitutes at use time;
+/// left in place it is a 404. jpg is what Heroic itself picks.
+QString substituteExt(QString url) {
+  url.replace(QLatin1String("{ext}"), QLatin1String("jpg"));
+  return url;
+}
+
+/// The user's custom art when the fetch can use it: portrait first, then
+/// wide. Empty when neither edit is a supported URL, so the caller keeps the
+/// store art.
+QString editedCoverUrl(const QJsonObject &edits) {
+  for (const QString &key : {QStringLiteral("art_square"), QStringLiteral("art_cover")}) {
+    const QString candidate = substituteExt(edits.value(key).toString().trimmed());
+    if (isSupportedCoverUrl(candidate)) {
+      return candidate;
+    }
+  }
+  return {};
+}
+
 /// Art Heroic happens to have on disk. Two opportunistic probes, both cheap:
 /// the icon it downloads when the user creates a desktop shortcut, and — for
 /// GOG — the icon the installer itself drops in the game folder. Everything
@@ -113,6 +179,7 @@ auto installedGames(const QString &configDir) -> QList<Game> {
     return games;
   }
   QStringList seenAppNames;
+  const QJsonObject overrides = readOverrides(configDir);
   for (const CacheFile &cache : cacheFiles()) {
     const QJsonArray entries = readGameArray(
         configDir + QLatin1Char('/') + QLatin1String(cache.relativePath), cache.arrayKey);
@@ -140,9 +207,18 @@ auto installedGames(const QString &configDir) -> QList<Game> {
       if (game.coverUrl.isEmpty()) {
         game.coverUrl = entry.value(QStringLiteral("art_cover")).toString();
       }
-      // Epic URLs carry a literal "{ext}" that Heroic substitutes at use
-      // time; left in place it is a 404. jpg is what Heroic itself picks.
-      game.coverUrl.replace(QLatin1String("{ext}"), QLatin1String("jpg"));
+      game.coverUrl = substituteExt(game.coverUrl);
+      // The user's edits in Heroic win where they are usable. Each field is
+      // independent: a title edit applies even when the edited art does not.
+      const QJsonObject edits = overrides.value(game.appName).toObject();
+      const QString editedTitle = edits.value(QStringLiteral("title")).toString().trimmed();
+      if (!editedTitle.isEmpty()) {
+        game.title = editedTitle;
+      }
+      const QString editedCover = editedCoverUrl(edits);
+      if (!editedCover.isEmpty()) {
+        game.coverUrl = editedCover;
+      }
       const QJsonObject install = entry.value(QStringLiteral("install")).toObject();
       game.iconPath = localIcon(configDir, game.appName, game.runner,
                                 install.value(QStringLiteral("install_path")).toString());

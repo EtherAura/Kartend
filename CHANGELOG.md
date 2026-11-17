@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Heroic imports now use the titles and covers you edited in Heroic.**
+  Heroic 2.22 lets you rename a game and pick its own card or cover image,
+  but imported collections kept showing the store's title and art. A
+  renamed game now arrives under your name. A custom image is used when it
+  is hosted on the Epic, GOG or Amazon art servers Kartend already
+  downloads Heroic covers from, preferring your card image over your cover
+  image. A custom image from anywhere else, or a file on your computer,
+  is skipped and the store's own art is kept, so editing a game never
+  leaves it without a cover.
 - **More archives containing symbolic links are refused before extraction.**
   When 7-Zip was used to check a zip or 7z archive, a symbolic link whose
   permissions did not end in an execute bit (for example `lrw-r--r--`) was
