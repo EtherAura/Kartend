@@ -27,6 +27,25 @@
 //   buildSortMetadataKeysLikeSortFiles
 //     Relative-keyed scan/DB metadata is re-keyed to the absolute (and, when
 //     a canonical-path cache is supplied, canonicalized) form sortFiles sees.
+//
+// Name-order rules (Kartend-ek49m). Paths need not exist: name sort never
+// stats, and the date tie-break case covers every path with the map. Every
+// asserted list uses distinct normalized keys so no order between equal keys
+// is imposed.
+//
+//   nameAscendingOrdersByPriorityBucket
+//     Bracket/paren, then other punctuation, then digit, then letter — chosen
+//     so a plain string compare of the keys would give a different order.
+//
+//   nameSortStripsLeadingApostrophe
+//     "'98 Game" sorts as "98 Game" and "'Bout" as "Bout"; an apostrophe not
+//     followed by a digit or letter stays punctuation.
+//
+//   nameDescendingIsExactReverse / nameSortIsCaseInsensitive
+//   dateSortBreaksTiesByName
+//     Equal mtimes fall back to the same name order (reversed descending).
+
+#include <algorithm>
 
 #include <QDateTime>
 #include <QDir>
@@ -52,8 +71,19 @@ private slots:
   void missingKeysFallBackToStat();
   void nameSortIgnoresMetadata();
   void buildSortMetadataKeysLikeSortFiles();
+  void nameAscendingOrdersByPriorityBucket();
+  void nameSortStripsLeadingApostrophe();
+  void nameDescendingIsExactReverse();
+  void nameSortIsCaseInsensitive();
+  void dateSortBreaksTiesByName();
 
 private:
+  // Absolute paths for @p names under a subdirectory of m_dir that is never
+  // created, so any accidental stat would see a missing file.
+  QStringList namePaths(const QStringList &names) const;
+  // Returns @p list in reverse order.
+  static QStringList reversed(const QStringList &list);
+
   // Creates <name> under m_dir with @p size bytes and mtime @p mtime.
   QString makeFile(const QString &name, qint64 size, const QDateTime &mtime);
 
@@ -235,6 +265,147 @@ void TestQueryManagerSortFiles::buildSortMetadataKeysLikeSortFiles() {
     QCOMPARE(mtimeMsByPath.value(abs, -1), mtime.toMSecsSinceEpoch());
     QCOMPARE(sizeByPath.value(abs, -1), qint64(42));
   }
+}
+
+QStringList TestQueryManagerSortFiles::namePaths(const QStringList &names) const {
+  const QDir dir(QDir(m_dir.path()).absoluteFilePath(QStringLiteral("never-created")));
+  QStringList paths;
+  paths.reserve(names.size());
+  for (const QString &name : names) {
+    paths.append(dir.absoluteFilePath(name));
+  }
+  return paths;
+}
+
+QStringList TestQueryManagerSortFiles::reversed(const QStringList &list) {
+  QStringList out = list;
+  std::reverse(out.begin(), out.end());
+  return out;
+}
+
+void TestQueryManagerSortFiles::nameAscendingOrdersByPriorityBucket() {
+  // A plain compare of the lowercased keys would give
+  // !bang, (alpha), 1 two, 9 nine, [beta], apple, zebra, ~tilde.
+  const QStringList expected = namePaths({
+      QStringLiteral("(Alpha).zip"),
+      QStringLiteral("[Beta].zip"),
+      QStringLiteral("!Bang.zip"),
+      QStringLiteral("~Tilde.zip"),
+      QStringLiteral("1 Two.zip"),
+      QStringLiteral("9 Nine.zip"),
+      QStringLiteral("apple.zip"),
+      QStringLiteral("Zebra.zip"),
+  });
+
+  const QStringList scrambled{expected[6], expected[3], expected[1], expected[7],
+                              expected[4], expected[0], expected[5], expected[2]};
+  for (const QStringList &input : {scrambled, reversed(expected)}) {
+    QStringList files = input;
+    sortFiles(files, SortMode::NameAscending);
+    QCOMPARE(files, expected);
+  }
+}
+
+void TestQueryManagerSortFiles::nameSortStripsLeadingApostrophe() {
+  // Unstripped, "'98 game" and "'bout time" would sort before "97 game" and
+  // "apple" ('\'' < '9' < 'a'). "' Quote" keeps its apostrophe (space follows)
+  // and so stays in the punctuation bucket, after "!Bang" ('!' < '\'').
+  const QStringList expected = namePaths({
+      QStringLiteral("!Bang.zip"),
+      QStringLiteral("' Quote.zip"),
+      QStringLiteral("97 Game.zip"),
+      QStringLiteral("'98 Game.zip"),
+      QStringLiteral("99 Game.zip"),
+      QStringLiteral("Apple.zip"),
+      QStringLiteral("'Bout Time.zip"),
+      QStringLiteral("Cat.zip"),
+  });
+
+  const QStringList scrambled{expected[3], expected[7], expected[6], expected[0],
+                              expected[4], expected[1], expected[2], expected[5]};
+  for (const QStringList &input : {scrambled, reversed(expected)}) {
+    QStringList files = input;
+    sortFiles(files, SortMode::NameAscending);
+    QCOMPARE(files, expected);
+  }
+}
+
+void TestQueryManagerSortFiles::nameDescendingIsExactReverse() {
+  // Every bucket plus the apostrophe cases, all with distinct normalized keys,
+  // so descending must reverse both the bucket and the key order exactly.
+  const QStringList ascending = namePaths({
+      QStringLiteral("(Alpha).zip"),
+      QStringLiteral("[Beta].zip"),
+      QStringLiteral("!Bang.zip"),
+      QStringLiteral("' Quote.zip"),
+      QStringLiteral("~Tilde.zip"),
+      QStringLiteral("1 Two.zip"),
+      QStringLiteral("9 Nine.zip"),
+      QStringLiteral("97 Game.zip"),
+      QStringLiteral("'98 Game.zip"),
+      QStringLiteral("99 Game.zip"),
+      QStringLiteral("apple.zip"),
+      QStringLiteral("'Bout Time.zip"),
+      QStringLiteral("Cat.zip"),
+      QStringLiteral("Zebra.zip"),
+  });
+
+  QStringList files = ascending;
+  sortFiles(files, SortMode::NameDescending);
+  QCOMPARE(files, reversed(ascending));
+
+  sortFiles(files, SortMode::NameAscending);
+  QCOMPARE(files, ascending);
+}
+
+void TestQueryManagerSortFiles::nameSortIsCaseInsensitive() {
+  // A case-sensitive compare would put CHARLIE and Delta before alpha.
+  const QStringList expected = namePaths({
+      QStringLiteral("alpha.zip"),
+      QStringLiteral("bravo.zip"),
+      QStringLiteral("CHARLIE.zip"),
+      QStringLiteral("Delta.zip"),
+  });
+
+  QStringList files{expected[3], expected[2], expected[0], expected[1]};
+  sortFiles(files, SortMode::NameAscending);
+  QCOMPARE(files, expected);
+
+  sortFiles(files, SortMode::NameDescending);
+  QCOMPARE(files, reversed(expected));
+}
+
+void TestQueryManagerSortFiles::dateSortBreaksTiesByName() {
+  const QStringList paths = namePaths({
+      QStringLiteral("Zebra.zip"),
+      QStringLiteral("1 Two.zip"),
+      QStringLiteral("apple.zip"),
+      QStringLiteral("[Beta].zip"),
+      QStringLiteral("zzz Oldest.zip"),
+      QStringLiteral("aaa Newest.zip"),
+  });
+  const QString &zebra = paths[0];
+  const QString &oneTwo = paths[1];
+  const QString &apple = paths[2];
+  const QString &beta = paths[3];
+  const QString &oldest = paths[4];
+  const QString &newest = paths[5];
+
+  // The four tied names span three buckets; the untied ones have names that
+  // would sort opposite to their mtimes, so the numeric key must win first.
+  QHash<QString, qint64> mtimes;
+  for (const QString &p : {zebra, oneTwo, apple, beta}) {
+    mtimes[p] = 5000;
+  }
+  mtimes[oldest] = 1000;
+  mtimes[newest] = 9000;
+
+  QStringList files = paths;
+  sortFiles(files, SortMode::DateAscending, &mtimes, nullptr);
+  QCOMPARE(files, (QStringList{oldest, beta, oneTwo, apple, zebra, newest}));
+
+  sortFiles(files, SortMode::DateDescending, &mtimes, nullptr);
+  QCOMPARE(files, (QStringList{newest, zebra, apple, oneTwo, beta, oldest}));
 }
 
 QTEST_GUILESS_MAIN(TestQueryManagerSortFiles)
