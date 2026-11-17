@@ -26,6 +26,15 @@ private slots:
   // that sleeps ~1s, so on exit onPlaySessionEnded must accumulate a
   // positive total_play_seconds for the item.
   void testTrackedLaunchRecordsPlaySession();
+
+  // Kartend-ecjq6 (argv slice): the archive-launch extraction runs the real
+  // LaunchManager::extractArchiveToTemp against a stub extractor on an
+  // isolated PATH that records every argv it is handed. The listing scan and
+  // the extraction are told apart, the extraction must actually run in the
+  // per-archive dir on the intended archive, and its argv must carry no
+  // link/path-relaxing switch (bsdtar: no -P; 7z: no -snld* and kin).
+  void testArchiveExtractionBsdtarSafeArguments();
+  void testArchiveExtraction7zSafeArguments();
 };
 
 #endif // KARTEND_TESTS_TEST_LAUNCHFLOW_H

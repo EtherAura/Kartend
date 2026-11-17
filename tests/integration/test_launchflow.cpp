@@ -19,6 +19,8 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QString>
 #include <QTemporaryDir>
@@ -190,6 +192,134 @@ QString scanAndResolveItemPath(MainWindow *win, const QString &uuid) {
 // nothing on a green run — QTRY returns as soon as the row appears.
 constexpr int WORKER_WRITE_SETTLE_TIMEOUT_MS = 45000;
 
+#ifndef Q_OS_WIN
+/// One recorded stub-extractor invocation: its working directory and argv
+/// (without argv[0]).
+struct ToolInvocation {
+  QString cwd;
+  QStringList args;
+};
+
+/// Kartend-ecjq6: a stand-in for bsdtar / 7z that appends every invocation
+/// (physical cwd, then one `arg=` line per argument, then `end`) to @p logPath
+/// and then plays just enough of the tool's protocol for extractArchiveToTemp:
+/// a clean single-entry listing for the pre-extraction scan, and for anything
+/// else (the extraction) a `disc.iso` written into its cwd. Mode is picked
+/// from the listing argv alone, so an extraction argv that grows an extra
+/// switch still extracts and the argv assertions — not a stub failure — are
+/// what catch it. Shell builtins only, so the isolated PATH needs nothing else.
+QByteArray stubExtractorScript(const QString &tool, const QString &logPath) {
+  QByteArray script =
+      QByteArrayLiteral("#!/bin/sh\nlog='") + logPath.toUtf8() +
+      QByteArrayLiteral("'\n"
+                        "printf 'cwd=%s\\n' \"$(pwd -P)\" >> \"$log\"\n"
+                        "for a in \"$@\"; do printf 'arg=%s\\n' \"$a\" >> \"$log\"; "
+                        "done\n"
+                        "printf 'end\\n' >> \"$log\"\n");
+  if (tool == QLatin1String("bsdtar")) {
+    script += QByteArrayLiteral(
+        "case \"$1\" in\n"
+        "  -tvf) printf '%s\\n' '-rw-r--r--  0 0      0           3 Jan  1  2026 disc.iso' ;;\n"
+        "  -tf) printf '%s\\n' 'disc.iso' ;;\n"
+        "  *) printf 'ISO' > disc.iso ;;\n"
+        "esac\n");
+  } else {
+    script +=
+        QByteArrayLiteral("case \"$1\" in\n"
+                          "  l) printf '%s\\n' '' '--' 'Path = stub' 'Type = zip' '' '----------' "
+                          "'Path = disc.iso' 'Size = 3' 'Attributes = A_ -rw-r--r--' '' ;;\n"
+                          "  *) printf 'ISO' > disc.iso ;;\n"
+                          "esac\n");
+  }
+  script += QByteArrayLiteral("exit 0\n");
+  return script;
+}
+
+QList<ToolInvocation> readInvocationLog(const QString &logPath) {
+  QList<ToolInvocation> invocations;
+  QFile log(logPath);
+  if (!log.open(QIODevice::ReadOnly)) {
+    return invocations;
+  }
+  ToolInvocation current;
+  const QStringList lines =
+      QString::fromUtf8(log.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+  for (const QString &line : lines) {
+    if (line.startsWith(QLatin1String("cwd="))) {
+      current = ToolInvocation{line.mid(4), {}};
+    } else if (line.startsWith(QLatin1String("arg="))) {
+      current.args << line.mid(4);
+    } else if (line == QLatin1String("end")) {
+      invocations << current;
+    }
+  }
+  return invocations;
+}
+
+/// Everything one stubbed extraction run leaves behind for the assertions.
+struct StubbedExtraction {
+  QString archivePath;   // the archive handed to extractArchiveToTemp
+  QString extractionDir; // canonical per-archive dir it must extract into
+  QString resultPath;    // what extractArchiveToTemp returned (empty on error)
+  QString error;         // its error summary, if any
+  QList<ToolInvocation> invocations;
+};
+
+/// Runs the production extractArchiveToTemp with PATH narrowed to a temp dir
+/// holding only the @p tool stub, so that stub is the sole extractor found and
+/// no host tool or user archive is involved. All files live in @p root.
+StubbedExtraction runStubbedExtraction(const QTemporaryDir &root, const QString &tool) {
+  StubbedExtraction run;
+  const QDir rootDir(root.path());
+  if (!rootDir.mkpath(QStringLiteral("bin")) || !rootDir.mkpath(QStringLiteral("media"))) {
+    run.error = QStringLiteral("could not create the stub fixture dirs");
+    return run;
+  }
+  const QString logPath = rootDir.filePath(QStringLiteral("argv.log"));
+  run.archivePath =
+      QFileInfo(rootDir.filePath(QStringLiteral("media/game.zip"))).absoluteFilePath();
+  if (!writeFile(rootDir.filePath(QStringLiteral("bin/") + tool),
+                 stubExtractorScript(tool, logPath),
+                 /*executable=*/true) ||
+      !writeFile(run.archivePath, QByteArrayLiteral("not a real archive"), /*executable=*/false)) {
+    run.error = QStringLiteral("could not write the stub extractor or archive");
+    return run;
+  }
+  const QString cacheBase = rootDir.filePath(QStringLiteral("cache"));
+
+  const QByteArray oldPath = qgetenv("PATH");
+  qputenv("PATH", rootDir.filePath(QStringLiteral("bin")).toUtf8());
+  {
+    const auto restorePath = qScopeGuard([&oldPath]() { qputenv("PATH", oldPath); });
+    const auto result = LaunchManager::extractArchiveToTemp(
+        run.archivePath, QStringLiteral(".iso"), nullptr, /*maxDecompressedBytes=*/4096, cacheBase);
+    if (result.isError()) {
+      run.error = result.error().userFacingSummary();
+    } else {
+      run.resultPath = QFileInfo(result.value()).canonicalFilePath();
+    }
+  }
+  // <base>/kartend_extract/<archive completeBaseName>, as extractArchiveToTemp
+  // lays it out.
+  run.extractionDir =
+      QFileInfo(cacheBase + QStringLiteral("/kartend_extract/game")).canonicalFilePath();
+  run.invocations = readInvocationLog(logPath);
+  return run;
+}
+
+/// Common proof that the extraction itself ran: it produced the launchable
+/// file in the per-archive dir from the stub's write in its cwd.
+void verifyExtractionReached(const StubbedExtraction &run, const ToolInvocation &extraction) {
+  QVERIFY2(run.error.isEmpty(), qPrintable(run.error));
+  QVERIFY2(!run.extractionDir.isEmpty(), "the per-archive extraction dir was not created");
+  QCOMPARE(extraction.cwd, run.extractionDir);
+  QCOMPARE(run.resultPath, QDir(run.extractionDir).filePath(QStringLiteral("disc.iso")));
+  QFile extracted(run.resultPath);
+  QVERIFY(extracted.open(QIODevice::ReadOnly));
+  QCOMPARE(extracted.readAll(), QByteArrayLiteral("ISO"));
+}
+#endif
+
 } // namespace
 
 void TestLaunchFlow::testDetachedLaunchRecordsUsageStatsAndHistory() {
@@ -313,4 +443,78 @@ void TestLaunchFlow::testTrackedLaunchRecordsPlaySession() {
   QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 15000);
   QTRY_VERIFY_WITH_TIMEOUT(db->loadItemUsageStats(uuid, scannedPath).totalPlaySeconds >= 1,
                            WORKER_WRITE_SETTLE_TIMEOUT_MS);
+}
+
+void TestLaunchFlow::testArchiveExtractionBsdtarSafeArguments() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Kartend-dhhh6: extractArchiveToTemp forks the extractor synchronously on the test "
+        "thread, and fork() aborts libtsan; the recorded argv is the assertion.");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The argv-recording stub extractor is a POSIX shell script");
+#else
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const StubbedExtraction run = runStubbedExtraction(root, QStringLiteral("bsdtar"));
+
+  // Listing (the ArchiveSafety pre-scan) and extraction are separate runs of
+  // the same tool: two listings, then exactly one extraction.
+  QCOMPARE(run.invocations.size(), 3);
+  QCOMPARE(run.invocations.at(0).args, (QStringList{QStringLiteral("-tvf"), run.archivePath}));
+  QCOMPARE(run.invocations.at(1).args, (QStringList{QStringLiteral("-tf"), run.archivePath}));
+  const ToolInvocation &extraction = run.invocations.at(2);
+
+  // bsdtar's default extract refuses ".." and absolute paths and will not
+  // write through a symlink; -P (--absolute-paths) disables all three, and
+  // --insecure is its long-standing alias. A short-option cluster carrying P
+  // (e.g. -xPf) relaxes it just the same.
+  for (const QString &arg : extraction.args) {
+    QVERIFY2(arg != QLatin1String("--absolute-paths") && arg != QLatin1String("--insecure"),
+             qPrintable(QStringLiteral("unsafe bsdtar extraction switch: ") + arg));
+    const bool shortCluster =
+        arg.startsWith(QLatin1Char('-')) && !arg.startsWith(QLatin1String("--"));
+    QVERIFY2(!(shortCluster && arg.contains(QLatin1Char('P'))),
+             qPrintable(QStringLiteral("unsafe bsdtar extraction switch: ") + arg));
+  }
+  QCOMPARE(extraction.args, (QStringList{QStringLiteral("-xf"), run.archivePath}));
+
+  verifyExtractionReached(run, extraction);
+#endif
+}
+
+void TestLaunchFlow::testArchiveExtraction7zSafeArguments() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Kartend-dhhh6: extractArchiveToTemp forks the extractor synchronously on the test "
+        "thread, and fork() aborts libtsan; the recorded argv is the assertion.");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The argv-recording stub extractor is a POSIX shell script");
+#else
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const StubbedExtraction run = runStubbedExtraction(root, QStringLiteral("7z"));
+
+  // One listing (the ArchiveSafety pre-scan), then exactly one extraction.
+  QCOMPARE(run.invocations.size(), 2);
+  QCOMPARE(run.invocations.at(0).args,
+           (QStringList{QStringLiteral("l"), QStringLiteral("-slt"), run.archivePath}));
+  const ToolInvocation &extraction = run.invocations.at(1);
+
+  // 7z's link-relaxing switches: -snld (and -snld20 etc.) lets extracted
+  // symlinks point outside the target, -snl stores/restores links as links,
+  // -snh does the same for hardlinks, and -spf keeps absolute paths. Matched
+  // case-insensitively because 7z parses switches that way.
+  const QStringList forbiddenPrefixes{QStringLiteral("-snl"), QStringLiteral("-snh"),
+                                      QStringLiteral("-spf")};
+  for (const QString &arg : extraction.args) {
+    for (const QString &prefix : forbiddenPrefixes) {
+      QVERIFY2(!arg.startsWith(prefix, Qt::CaseInsensitive),
+               qPrintable(QStringLiteral("unsafe 7z extraction switch: ") + arg));
+    }
+  }
+  QCOMPARE(extraction.args,
+           (QStringList{QStringLiteral("x"), QStringLiteral("-y"), run.archivePath}));
+
+  verifyExtractionReached(run, extraction);
+#endif
 }
