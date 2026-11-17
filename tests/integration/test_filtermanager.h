@@ -37,6 +37,12 @@ private slots:
   // Re-running the active filter keeps a subcollection filter a subcollection
   // filter instead of turning it into a text search on its name (Kartend-3ve3n).
   void testReapplyKeepsSubcollectionFilterSemantics();
+  // The other reapplyActiveFilter branches (Kartend-z2tza): a search re-runs
+  // against the current source data, a subcollection whose index fell out of
+  // the collection list clears, and no active filter stays unfiltered.
+  void testReapplyRerunsSearchAgainstNewSourceData();
+  void testReapplyClearsStaleSubcollectionFilter();
+  void testReapplyWithoutActiveFilterStaysUnfiltered();
 
   // applySubcollectionFilter directly (Kartend-kie1n): early-return guards,
   // unconditional prefix bands, media-only counts and the artwork predicate.
