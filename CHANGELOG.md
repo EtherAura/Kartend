@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Exported .kart files import again when games share artwork.** A
+  collection where several files share a name, such as a `Game.bin` and
+  `Game.cue` pair, put the shared artwork, video and manual into the bundle
+  once per file, and importing that bundle then failed with a duplicate
+  entry error. Each shared file is now stored once, and every game still
+  shows it.
 - **Heroic imports now use the titles and covers you edited in Heroic.**
   Heroic 2.22 lets you rename a game and pick its own card or cover image,
   but imported collections kept showing the store's title and art. A
