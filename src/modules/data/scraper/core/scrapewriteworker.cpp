@@ -11,6 +11,7 @@
 #include <QStandardPaths>
 
 #include "databaseschema.h"
+#include "scrapenotfound.h"
 #include "scrapepersistence.h"
 
 Q_LOGGING_CATEGORY(lcScrapeWriteWorker, "kartend.scrape.writeworker", QtWarningMsg)
@@ -92,7 +93,8 @@ void ScrapeWriteWorker::closeConnection() {
 
 void ScrapeWriteWorker::performWrite(quint64 requestId, const QString &collectionUuid,
                                      const QString &sourcePath, const Scraper::ScrapedItem &scraped,
-                                     const Scraper::NonStandardArtworkList &nonStandardArtwork) {
+                                     const Scraper::NonStandardArtworkList &nonStandardArtwork,
+                                     const QString &clearNoEntryProvider) {
   // Lazy open guard — covers the case where the runner posts the first
   // write before the queued openConnection slot has run (the Qt event
   // loop on the worker thread should always run openConnection first
@@ -102,7 +104,35 @@ void ScrapeWriteWorker::performWrite(quint64 requestId, const QString &collectio
   }
   const bool ok = Scraper::saveScrapedMetadataDirect(m_db, collectionUuid, sourcePath, scraped,
                                                      nonStandardArtwork);
+  if (ok && !clearNoEntryProvider.isEmpty()) {
+    const auto removed =
+        ScrapeNotFoundStore::remove(m_db, collectionUuid, sourcePath, clearNoEntryProvider);
+    if (removed.isError()) {
+      qCWarning(lcScrapeWriteWorker) << "clearing not-found stamp failed for provider"
+                                     << clearNoEntryProvider << ":" << removed.error().message;
+    }
+  }
   emit writeCompleted(requestId, ok);
+}
+
+void ScrapeWriteWorker::recordNoEntry(quint64 requestId, const QString &collectionUuid,
+                                      const QString &sourcePath, const QString &provider,
+                                      const QString &lookupKey, const QDateTime &missedAt) {
+  if (!m_db.isValid() || !m_db.isOpen()) {
+    openConnection();
+  }
+  ScrapeNotFoundStore::Stamp stamp;
+  stamp.collectionUuid = collectionUuid;
+  stamp.path = sourcePath;
+  stamp.provider = provider;
+  stamp.lookupKey = lookupKey;
+  stamp.missedAt = missedAt;
+  const auto recorded = ScrapeNotFoundStore::record(m_db, stamp);
+  if (recorded.isError()) {
+    qCWarning(lcScrapeWriteWorker) << "recording not-found stamp failed for provider" << provider
+                                   << ":" << recorded.error().message;
+  }
+  emit noEntryRecorded(requestId, recorded.isOk());
 }
 
 } // namespace Scraper

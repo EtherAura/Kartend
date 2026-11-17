@@ -60,6 +60,7 @@ public:
 
   [[nodiscard]] QString id() const override { return QStringLiteral("screenscraper"); }
   [[nodiscard]] QString displayName() const override { return QStringLiteral("ScreenScraper.fr"); }
+  [[nodiscard]] std::optional<QString> takeNoEntryLookupKey(const QString &filePath) override;
   [[nodiscard]] QStringList categories() const override { return {QStringLiteral("games")}; }
   [[nodiscard]] Capabilities capabilities() const override {
     return Capability::WebSearch | Capability::MetadataLookup | Capability::MediaFetch;
@@ -138,8 +139,8 @@ private:
   /// (or skipped, when filePath was empty). Reads DAT cache, fires
   /// systems-catalog + jeuInfos requests, threads everything through
   /// the same async chain the original synchronous-hash code used.
-  void runLookupAfterHash(const QString &query, const RomHasher::Result &hashes,
-                          LookupCallback callback);
+  void runLookupAfterHash(const QString &query, const QString &filePath,
+                          const RomHasher::Result &hashes, LookupCallback callback);
 
   /// Issue the jeuInfos.php GET and route the response. Delegates to
   /// ProviderBase::getWithRetry, so a transient failure (timeout / 5xx /
@@ -147,8 +148,8 @@ private:
   /// same idempotent URL (Kartend-1rtrt, loop hoisted to the base by
   /// Kartend-jjyst.10); permanent errors and successes fall straight
   /// through to handleJeuInfosResponse.
-  void fetchJeuInfos(const QUrl &url, const QString &filenameRegionOverride,
-                     LookupCallback callback);
+  void fetchJeuInfos(const QUrl &url, const QString &filePath,
+                     const QString &filenameRegionOverride, LookupCallback callback);
 
   /// HTTP-response tail of runLookupAfterHash. Lifted out of the
   /// deeply-nested HttpClient::get lambda so the lookup chain stops
@@ -157,9 +158,12 @@ private:
   /// body (HTTP 200 + French error message on auth/quota failure);
   /// optional KARTEND_SCRAPER_DUMP_JSON diagnostic dump; quota
   /// refresh; and the search/detail parse-and-cache step that feeds
-  /// fetchDetail() without a second roundtrip.
-  void handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response,
-                              const LookupCallback &callback,
+  /// fetchDetail() without a second roundtrip. A genuine "no entry"
+  /// answer (HTTP 404, or a well-formed reply with no `jeu`) also
+  /// remembers @p lookupKey for @p filePath (Kartend-bb8df, see
+  /// takeNoEntryLookupKey); every other outcome remembers nothing.
+  void handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response, const QString &filePath,
+                              const QString &lookupKey, const LookupCallback &callback,
                               const QString &filenameRegionOverride);
 
   /// Snapshot the user's current scraper preferences (image cap, JPG
@@ -230,6 +234,13 @@ private:
   static constexpr int kMaxDetailCacheEntries = 64;
   mutable QHash<QString, Scraper::ScrapedItem> m_detailCache;
   mutable QStringList m_detailCacheOrder; // insertion order for FIFO eviction
+
+  /// Kartend-bb8df: file path → jeuInfos lookup key of that item's latest
+  /// lookup, present only while its answer was a genuine "no entry" and the
+  /// runner has not yet taken it. Cleared when a new lookup for the path
+  /// starts, so a stale miss never outlives the next attempt. Main thread
+  /// only (lookup and every HttpClient completion run there).
+  QHash<QString, QString> m_noEntryLookupKeys;
 
   /// Live per-account quota, refreshed from the `ssuser` block of
   /// every jeuInfos.php response by m_quota.updateFromResponse().

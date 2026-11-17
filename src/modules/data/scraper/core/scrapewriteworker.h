@@ -1,6 +1,7 @@
 #ifndef SCRAPEWRITEWORKER_H
 #define SCRAPEWRITEWORKER_H
 
+#include <QDateTime>
 #include <QList>
 #include <QObject>
 #include <QPair>
@@ -64,15 +65,34 @@ public slots:
   /// opaque token chosen by the runner so it can correlate the reply
   /// back to the right pending item (with itemConcurrency > 1 several
   /// requests are in flight).
+  ///
+  /// When @p clearNoEntryProvider is non-empty and the save succeeded, that
+  /// provider's not-found stamp for (collectionUuid, sourcePath) is removed
+  /// afterwards (Kartend-bb8df): the provider has just matched the item.
+  /// Other providers' stamps are untouched. A failed removal is logged and
+  /// does not change `ok` — the metadata itself was saved.
   void performWrite(quint64 requestId, const QString &collectionUuid, const QString &sourcePath,
                     const Scraper::ScrapedItem &scraped,
-                    const Scraper::NonStandardArtworkList &nonStandardArtwork);
+                    const Scraper::NonStandardArtworkList &nonStandardArtwork,
+                    const QString &clearNoEntryProvider = QString());
+
+  /// Record (insert or refresh) @p provider's not-found stamp for
+  /// (collectionUuid, sourcePath) via ScrapeNotFoundStore::record on the
+  /// worker connection (Kartend-bb8df). Writes nothing else — no
+  /// item_metadata row, no sidecar. Emits `noEntryRecorded(requestId, ok)`
+  /// once the statement has run (or failed).
+  void recordNoEntry(quint64 requestId, const QString &collectionUuid, const QString &sourcePath,
+                     const QString &provider, const QString &lookupKey, const QDateTime &missedAt);
 
 signals:
   /// Emitted on the worker thread after `performWrite` finishes. Crosses
   /// the thread boundary as a queued signal so the runner observes it on
   /// its own (main) thread.
   void writeCompleted(quint64 requestId, bool ok);
+
+  /// Emitted on the worker thread after `recordNoEntry` finishes; queued to
+  /// the runner like `writeCompleted`.
+  void noEntryRecorded(quint64 requestId, bool ok);
 
 private:
   QString m_connectionName;

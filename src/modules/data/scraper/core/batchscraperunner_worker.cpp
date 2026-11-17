@@ -11,13 +11,18 @@
 
 #include <QDateTime>
 #include <QFileInfo>
+#include <QLoggingCategory>
 #include <QThread>
+#include <QTimer>
 
 #include "idatabasemanager.h"
 #include "loggingcategories.h"
 #include "scrapewriteworker.h"
 
 namespace Scraper {
+
+// Defined in batchscraperunner.cpp (shared like in batchscraperunner_watchdog.cpp).
+Q_DECLARE_LOGGING_CATEGORY(lcBatchScrape)
 
 namespace {
 /// Bounded join for the write worker thread. Ample for the worst case
@@ -73,6 +78,8 @@ void BatchScrapeRunner::ensureWriteWorkerStarted() {
   // threaded.
   QObject::connect(m_writeWorker, &ScrapeWriteWorker::writeCompleted, this,
                    &BatchScrapeRunner::onWriteCompleted);
+  QObject::connect(m_writeWorker, &ScrapeWriteWorker::noEntryRecorded, this,
+                   &BatchScrapeRunner::onNoEntryRecorded);
 
   m_writeThread->start();
   // Open the SQLite connection ON the worker thread (Qt SQL pins a
@@ -180,7 +187,60 @@ void BatchScrapeRunner::onMediaWriteFinished(const std::shared_ptr<ItemState> &s
   QMetaObject::invokeMethod(m_writeWorker, "performWrite", Qt::QueuedConnection,
                             Q_ARG(quint64, requestId), Q_ARG(QString, m_collectionUuid),
                             Q_ARG(QString, state->path), Q_ARG(Scraper::ScrapedItem, effective),
-                            Q_ARG(Scraper::NonStandardArtworkList, writeRes.nonStandardArtwork));
+                            Q_ARG(Scraper::NonStandardArtworkList, writeRes.nonStandardArtwork),
+                            // Kartend-bb8df: a valid match clears this provider's
+                            // not-found stamp for the item, in the same worker call.
+                            Q_ARG(QString, m_provider ? m_provider->id() : QString()));
+}
+
+void BatchScrapeRunner::finishNotFound(const QString &itemPath,
+                                       const std::optional<QString> &noEntryKey) {
+  ++m_summary.notFound;
+  // The provider answered normally — a healthy outcome for breaker purposes.
+  resetFatalStreak();
+  // Terminal: a not-found won't succeed on retry, so it leaves the resume list.
+  m_remainingPaths.removeOne(itemPath);
+
+  if (!noEntryKey || noEntryKey->isEmpty() || !m_provider || !dbMgr() || !m_writeWorker) {
+    itemFinished();
+    return;
+  }
+  // Kartend-bb8df: persist the provider's not-found stamp on the write
+  // worker's own connection (the stamp table lives in the same media.db) and
+  // hold the item's slot until the worker confirms, so `finished` — and
+  // therefore teardown — only follows a stored stamp. The timestamp is taken
+  // here, when the answer arrived, in UTC.
+  const quint64 requestId = ++m_nextWriteId;
+  // Stall guard: a stamp write wedged on stalled storage must not pin the
+  // slot forever. The stamp is only a hint, so on fire the item just frees
+  // its slot (no error is counted) and a late reply is ignored.
+  auto *guard = new QTimer(this);
+  guard->setSingleShot(true);
+  connect(guard, &QTimer::timeout, this, [this, requestId]() {
+    QTimer *timer = m_pendingNoEntryWrites.take(requestId);
+    if (!timer) return;
+    timer->deleteLater();
+    qCWarning(lcBatchScrape) << "BatchScrapeRunner: not-found stamp write exceeded"
+                             << stepWatchdogMs() << "ms; advancing without it";
+    itemFinished();
+  });
+  m_pendingNoEntryWrites[requestId] = guard;
+  guard->start(stepWatchdogMs());
+  QMetaObject::invokeMethod(
+      m_writeWorker, "recordNoEntry", Qt::QueuedConnection, Q_ARG(quint64, requestId),
+      Q_ARG(QString, m_collectionUuid), Q_ARG(QString, itemPath), Q_ARG(QString, m_provider->id()),
+      Q_ARG(QString, *noEntryKey), Q_ARG(QDateTime, QDateTime::currentDateTimeUtc()));
+}
+
+void BatchScrapeRunner::onNoEntryRecorded(quint64 requestId, bool ok) {
+  QTimer *guard = m_pendingNoEntryWrites.take(requestId);
+  if (!guard) return; // the stall guard already freed the slot
+  guard->stop();
+  guard->deleteLater();
+  if (!ok) {
+    qCWarning(lcBatchScrape) << "BatchScrapeRunner: not-found stamp could not be stored";
+  }
+  itemFinished();
 }
 
 QStringList BatchScrapeRunner::resolveThumbnailPaths(const QString &baseName,

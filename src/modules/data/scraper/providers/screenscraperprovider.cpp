@@ -20,6 +20,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
 #include <QLocale>
 #include <QLoggingCategory>
 #include <QSqlDatabase>
@@ -519,6 +522,9 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
                                       const std::shared_ptr<std::atomic<bool>> &cancelToken,
                                       LookupCallback callback) {
   if (!callback) return;
+  // Kartend-bb8df: a new attempt supersedes any miss its predecessor left
+  // untaken — only this attempt's own answer may leave a key behind.
+  m_noEntryLookupKeys.remove(filePath);
   const QString trimmed = query.trimmed();
   if (trimmed.isEmpty()) {
     callback(QList<Scraper::ScrapeCandidate>{});
@@ -536,7 +542,7 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
 
   // No file → no hashing, jump straight to the main-thread tail.
   if (filePath.isEmpty()) {
-    runLookupAfterHash(trimmed, RomHasher::Result{}, std::move(callback));
+    runLookupAfterHash(trimmed, filePath, RomHasher::Result{}, std::move(callback));
     return;
   }
 
@@ -553,7 +559,7 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
     }
   }
   if (hashMode == ScraperOptions::ScraperHashMode::Never) {
-    runLookupAfterHash(trimmed, RomHasher::Result{}, std::move(callback));
+    runLookupAfterHash(trimmed, filePath, RomHasher::Result{}, std::move(callback));
     return;
   }
   if (hashMode == ScraperOptions::ScraperHashMode::SizeGated) {
@@ -564,7 +570,7 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
           << "Skipping ROM hash for " << filePath << " (" << sizeBytes
           << " bytes) — over the user's maxHashableSizeMB=" << maxHashableSizeMB
           << " limit. Falling back to filename-based matching.";
-      runLookupAfterHash(trimmed, RomHasher::Result{}, std::move(callback));
+      runLookupAfterHash(trimmed, filePath, RomHasher::Result{}, std::move(callback));
       return;
     }
   }
@@ -612,27 +618,28 @@ void ScreenScraperProvider::runLookup(const QString &query, const QString &fileP
   // close-mid-hash teardown instead of a multi-minute block (Kartend-37ei3).
   auto *watcher = new QFutureWatcher<RomHasher::Result>();
   m_inFlightHashes.insert(watcher, cancelToken);
-  QObject::connect(watcher, &QFutureWatcher<RomHasher::Result>::finished, watcher,
-                   [this, watcher, trimmed, cancelToken, callback = std::move(callback)]() mutable {
-                     const RomHasher::Result hashes = watcher->result();
-                     m_inFlightHashes.remove(watcher);
-                     watcher->deleteLater();
-                     if (m_stageReporter) {
-                       m_stageReporter(QString());
-                     }
-                     // Cancel/skip flipped the token mid-hash: resolve cancelled
-                     // instead of firing a filename-only jeuInfos request — that
-                     // burned one quota request per skipped item, dispatched
-                     // AFTER the runner's clearPending already ran.
-                     if (cancelToken && cancelToken->load(std::memory_order_acquire)) {
-                       callback(ErrorUtils::ErrorContext::error(
-                           ErrorUtils::ErrorCode::OperationCancelled,
-                           QStringLiteral("Lookup cancelled during ROM hashing"),
-                           "ScreenScraperProvider::runLookup"));
-                       return;
-                     }
-                     runLookupAfterHash(trimmed, hashes, std::move(callback));
-                   });
+  QObject::connect(
+      watcher, &QFutureWatcher<RomHasher::Result>::finished, watcher,
+      [this, watcher, trimmed, filePath, cancelToken, callback = std::move(callback)]() mutable {
+        const RomHasher::Result hashes = watcher->result();
+        m_inFlightHashes.remove(watcher);
+        watcher->deleteLater();
+        if (m_stageReporter) {
+          m_stageReporter(QString());
+        }
+        // Cancel/skip flipped the token mid-hash: resolve cancelled
+        // instead of firing a filename-only jeuInfos request — that
+        // burned one quota request per skipped item, dispatched
+        // AFTER the runner's clearPending already ran.
+        if (cancelToken && cancelToken->load(std::memory_order_acquire)) {
+          callback(
+              ErrorUtils::ErrorContext::error(ErrorUtils::ErrorCode::OperationCancelled,
+                                              QStringLiteral("Lookup cancelled during ROM hashing"),
+                                              "ScreenScraperProvider::runLookup"));
+          return;
+        }
+        runLookupAfterHash(trimmed, filePath, hashes, std::move(callback));
+      });
   watcher->setFuture(
       QtConcurrent::run([wantInnerHash, filePath, cancelToken]() -> RomHasher::Result {
         auto r = (wantInnerHash && RomHasher::isArchivePath(filePath))
@@ -700,7 +707,7 @@ ErrorUtils::Result<RomHasher::Result> ScreenScraperProvider::hashRegularFileCach
   return RomHasher::hashFile(filePath, cancelToken);
 }
 
-void ScreenScraperProvider::runLookupAfterHash(const QString &query,
+void ScreenScraperProvider::runLookupAfterHash(const QString &query, const QString &filePath,
                                                const RomHasher::Result &hashes,
                                                LookupCallback callback) {
   if (!callback) return;
@@ -731,7 +738,7 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
   // extra roundtrip the first time the user scrapes (and every
   // CACHE_TTL_DAYS afterward); subsequent scrapes hit the disk
   // cache and skip straight to the real query.
-  m_catalog.ensureSystemsCatalog([this, trimmed, creds, hashes, datCanonicalName, hasUser,
+  m_catalog.ensureSystemsCatalog([this, trimmed, filePath, creds, hashes, datCanonicalName, hasUser,
                                   alive = std::weak_ptr<int>(m_lifetimeToken),
                                   callback = std::move(callback)](
                                      const QList<ScreenScraperSystems::System> &systems) mutable {
@@ -807,17 +814,21 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query,
       filenameRegionOverride = ScreenScraperRegion::detectFromFilename(trimmed);
     }
 
-    fetchJeuInfos(url, filenameRegionOverride, std::move(callback));
+    fetchJeuInfos(url, filePath, filenameRegionOverride, std::move(callback));
   });
 }
 
-void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filenameRegionOverride,
+void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filePath,
+                                          const QString &filenameRegionOverride,
                                           LookupCallback callback) {
+  // Derived from the URL actually dispatched, so a recorded miss names exactly
+  // what was sent — and never the credentials riding in the same query.
+  const QString lookupKey = ScreenScraperUrls::jeuInfosLookupKey(url);
   // Kartend-1rtrt retry, hoisted: ProviderBase::getWithRetry owns the bounded
   // transient-retry loop (classification via RetryPolicy::isTransient, tracked
   // per-retry timers); this handler only sees the final Result.
   getWithRetry(userAgentHeader(), url,
-               [this, filenameRegionOverride, callback = std::move(callback),
+               [this, filePath, lookupKey, filenameRegionOverride, callback = std::move(callback),
                 alive = std::weak_ptr<int>(m_lifetimeToken)](
                    ErrorUtils::Result<QByteArray> response) mutable {
                  // Kartend audit cr950: the provider can be destroyed (cancel during a
@@ -833,7 +844,8 @@ void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filena
                        "ScreenScraperProvider::fetchJeuInfos"));
                    return;
                  }
-                 handleJeuInfosResponse(std::move(response), callback, filenameRegionOverride);
+                 handleJeuInfosResponse(std::move(response), filePath, lookupKey, callback,
+                                        filenameRegionOverride);
                },
                Scraper::HttpClient::kDefaultMaxResponseBytes,
                // No Content-Type constraint: api2 returns JSON (output=json) but SS
@@ -849,11 +861,36 @@ void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filena
                {QString::fromLatin1(ScreenScraperUrls::SS_MEDIA_HOST_SUFFIX)});
 }
 
+std::optional<QString> ScreenScraperProvider::takeNoEntryLookupKey(const QString &filePath) {
+  const auto it = m_noEntryLookupKeys.constFind(filePath);
+  if (it == m_noEntryLookupKeys.constEnd()) return std::nullopt;
+  const QString key = it.value();
+  m_noEntryLookupKeys.erase(it);
+  return key;
+}
+
 void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response,
+                                                   const QString &filePath,
+                                                   const QString &lookupKey,
                                                    const LookupCallback &callback,
                                                    const QString &filenameRegionOverride) {
+  // Kartend-bb8df: remember the sent key only for a genuine "no entry" answer.
+  // HTTP 430/431 (quota), 429, 5xx, timeouts, cancellation, "Erreur" bodies
+  // and unparseable replies say nothing about whether the game exists, so
+  // they must never mark the item as missing.
+  const auto rememberNoEntry = [this, &filePath, &lookupKey]() {
+    if (!filePath.isEmpty() && !lookupKey.isEmpty()) {
+      m_noEntryLookupKeys[filePath] = lookupKey;
+    }
+  };
   if (response.isError()) {
-    callback(ScreenScraperUrls::mapScreenScraperHttpError(response.error()));
+    const ErrorUtils::ErrorContext mapped =
+        ScreenScraperUrls::mapScreenScraperHttpError(response.error());
+    if (response.error().httpStatus == 404 &&
+        mapped.code == ErrorUtils::ErrorCode::RemoteResourceNotFound) {
+      rememberNoEntry();
+    }
+    callback(mapped);
     return;
   }
   // SS returns HTTP 200 with a plain-text French error body
@@ -934,6 +971,17 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
     // parseSearchResponse's benign-empty contract so the dialog shows "No
     // matches" instead of an error popup, and surface real errors otherwise.
     if (detail.error().code == ErrorUtils::ErrorCode::FileNotFound) {
+      // The parser also lands here for a JSON object that merely lacks
+      // `response.jeu` (e.g. `{}` or a truncated envelope). Only a strictly
+      // well-formed reply carrying a `response` object is SS saying "no such
+      // game"; anything looser keeps the benign empty result but records no
+      // miss.
+      QJsonParseError strictErr;
+      const QJsonDocument strictDoc = QJsonDocument::fromJson(bytes, &strictErr);
+      if (strictErr.error == QJsonParseError::NoError && strictDoc.isObject() &&
+          strictDoc.object().value(QStringLiteral("response")).isObject()) {
+        rememberNoEntry();
+      }
       callback(QList<Scraper::ScrapeCandidate>{});
     } else {
       callback(detail.error());

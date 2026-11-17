@@ -51,6 +51,16 @@ void addCommonQueryParams(QUrlQuery &q, const QString &devId, const QString &dev
 [[nodiscard]] QUrl buildJeuInfosUrl(const Credentials &creds, const QString &romnom, int systemeid,
                                     const RomHasher::Result &hashes, bool hasUser);
 
+/// Credential-free lookup key of a jeuInfos.php URL built by buildJeuInfosUrl
+/// (Kartend-bb8df not-found stamps): the game-identifying parameters actually
+/// sent, in the fixed order systemeid, romnom, crc, md5, sha1, romtaille, as
+/// `name=value` pairs joined by '&'. Each value is fully percent-encoded, so
+/// no separator inside a ROM name can make two different lookups collide;
+/// a parameter that was not sent is left out. devid / devpassword / ssid /
+/// sspassword / softname / output never appear. Empty when the URL carries
+/// neither systemeid nor romnom.
+[[nodiscard]] QString jeuInfosLookupKey(const QUrl &jeuInfosUrl);
+
 /// Build a mediaSysteme.php URL for one platform media type (Kartend-ckepd.4).
 /// Media (bytes) endpoint — no output=json.
 ///

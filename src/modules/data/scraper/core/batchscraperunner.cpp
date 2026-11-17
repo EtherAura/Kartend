@@ -412,10 +412,19 @@ bool BatchScrapeRunner::isPlaceholderCandidate(const Scraper::ScrapeCandidate &c
 void BatchScrapeRunner::onLookupComplete(
     const std::shared_ptr<ItemState> &state,
     const ErrorUtils::Result<QList<Scraper::ScrapeCandidate>> &result) {
+  // Kartend-bb8df: always take the provider's no-entry key first, so a key
+  // left by an answer this runner then discards (cancel / skip) never lingers.
+  const std::optional<QString> noEntryKey = m_provider->takeNoEntryLookupKey(state->path);
   if (cancelledFinish()) return;
   if (skippedByToken(state)) return;
   if (result.isError()) {
-    recordError(state->path, result.error());
+    const ErrorUtils::ErrorContext &err = result.error();
+    if (noEntryKey &&
+        (err.code == ErrorUtils::ErrorCode::RemoteResourceNotFound || err.httpStatus == 404)) {
+      finishNotFound(state->path, noEntryKey);
+      return;
+    }
+    recordError(state->path, err);
     return;
   }
   QList<Scraper::ScrapeCandidate> candidates = result.value();
@@ -432,11 +441,10 @@ void BatchScrapeRunner::onLookupComplete(
     // with an empty candidate list; ScreenScraper signals it as a 404, handled
     // in recordError.) Terminal: a not-found won't succeed on retry, so it
     // leaves the resume list. The provider answered normally, so it also
-    // resets the fatal-error breaker streak.
-    ++m_summary.notFound;
-    resetFatalStreak();
-    m_remainingPaths.removeOne(state->path);
-    itemFinished();
+    // resets the fatal-error breaker streak. Only a list the provider returned
+    // empty is a stampable miss: a list emptied of non-game placeholders means
+    // the provider DID recognise the file.
+    finishNotFound(state->path, result.value().isEmpty() ? noEntryKey : std::nullopt);
     return;
   }
   if (m_quotaStopped) {

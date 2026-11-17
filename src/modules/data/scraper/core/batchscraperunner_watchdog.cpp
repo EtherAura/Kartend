@@ -141,13 +141,9 @@ void BatchScrapeRunner::recordError(const QString &itemPath, const ErrorUtils::E
   // it out of the failure list (and out of failedPaths — not-found items won't
   // succeed on retry against the same provider).
   if (err.code == ErrorUtils::ErrorCode::RemoteResourceNotFound || err.httpStatus == 404) {
-    ++m_summary.notFound;
-    // The provider answered normally — a healthy outcome for breaker purposes.
-    resetFatalStreak();
-    // Terminal like the empty-candidates branch: a not-found won't succeed on
-    // retry, so it leaves the resume list.
-    m_remainingPaths.removeOne(itemPath);
-    itemFinished();
+    // No provider-vouched lookup key reaches this overload (onLookupComplete
+    // routes those to finishNotFound itself), so nothing is stamped here.
+    finishNotFound(itemPath, std::nullopt);
     return;
   }
   // Kartend-oa1ry: a quota-exhaustion response — as classified by the

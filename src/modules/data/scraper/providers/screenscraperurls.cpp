@@ -3,6 +3,7 @@
 // unit-tested without the provider or the network.
 #include "screenscraperurls.h"
 
+#include <QStringList>
 #include <QUrlQuery>
 
 namespace {
@@ -65,6 +66,23 @@ QUrl buildJeuInfosUrl(const Credentials &creds, const QString &romnom, int syste
   }
   url.setQuery(q);
   return url;
+}
+
+QString jeuInfosLookupKey(const QUrl &jeuInfosUrl) {
+  const QUrlQuery q(jeuInfosUrl);
+  if (!q.hasQueryItem(QStringLiteral("systemeid")) && !q.hasQueryItem(QStringLiteral("romnom"))) {
+    return {};
+  }
+  static const QStringList kKeyParams = {QStringLiteral("systemeid"), QStringLiteral("romnom"),
+                                         QStringLiteral("crc"),       QStringLiteral("md5"),
+                                         QStringLiteral("sha1"),      QStringLiteral("romtaille")};
+  QStringList parts;
+  for (const QString &name : kKeyParams) {
+    if (!q.hasQueryItem(name)) continue;
+    const QString value = q.queryItemValue(name, QUrl::FullyDecoded);
+    parts << name + QLatin1Char('=') + QString::fromLatin1(QUrl::toPercentEncoding(value));
+  }
+  return parts.join(QLatin1Char('&'));
 }
 
 QUrl buildSystemeMediaUrl(const Credentials &creds, int systemeid, const QString &mediaToken,
