@@ -72,6 +72,10 @@ private slots:
   // bundle — the sibling scan alone cannot see files linked from outside
   // the artwork directory.
   void testPrepareBundlesHandLinkedArtwork();
+  // Kartend-kn1ub: media sharing a basename (Game.bin + Game.cue) resolve to
+  // the same sibling artwork/video; the payload must be bundled once or the
+  // extractor's duplicate-entry guard rejects the export.
+  void testPrepareSharedSiblingAssetsRoundTrip();
 };
 
 void TestKartWriter::testExtensionShouldCompress() {
@@ -551,6 +555,90 @@ void TestKartWriter::testPrepareBundlesHandLinkedArtwork() {
   db.close();
   db = QSqlDatabase();
   QSqlDatabase::removeDatabase(conn);
+}
+
+void TestKartWriter::testPrepareSharedSiblingAssetsRoundTrip() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  QDir rootDir(root.path());
+  rootDir.mkpath("media");
+  rootDir.mkpath("artwork");
+  rootDir.mkpath("video");
+  rootDir.mkpath("manual");
+
+  QDir mDir(rootDir.filePath("media"));
+  QDir aDir(rootDir.filePath("artwork"));
+  QDir vDir(rootDir.filePath("video"));
+  QDir manDir(rootDir.filePath("manual"));
+  writeFile(mDir, "Game.bin", "bin-bytes");
+  writeFile(mDir, "Game.cue", "cue-bytes");
+  const QByteArray artBytes(64, 'p');
+  const QByteArray videoBytes(128, 'v');
+  const QByteArray manualBytes("manual-bytes");
+  writeFile(aDir, "Game.png", artBytes);
+  writeFile(vDir, "Game.mp4", videoBytes);
+  writeFile(manDir, "Game.pdf", manualBytes);
+
+  CollectionConfig cfg;
+  cfg.name = "PSX";
+  cfg.mediaDirectory = mDir.absolutePath();
+  cfg.artworkDirectory = aDir.absolutePath();
+  cfg.videoDirectory = vDir.absolutePath();
+  cfg.manualDirectory = manDir.absolutePath();
+  cfg.extensions = {"bin", "cue"};
+
+  auto res = KartWriter::prepareFromCollection(cfg, "kn1ub-uuid", {}, nullptr);
+  QVERIFY2(res.isOk(), qPrintable(res.error().message));
+  auto params = res.value();
+  QCOMPARE(params.items.size(), 2);
+  // Both items keep the shared manifest references.
+  for (const KartWriter::ItemSource &it : params.items) {
+    QCOMPARE(it.manifestItem.artworkPath, QString("artwork/Game.png"));
+    QCOMPARE(it.manifestItem.videoPath, QString("video/Game.mp4"));
+    QCOMPARE(it.manifestItem.manualPath, QString("manual/Game.pdf"));
+  }
+
+  params.preferredCompression = KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd
+                                                                 : KartFormat::Compression_Zlib;
+  QTemporaryDir outDir;
+  const QString kartPath = QDir(outDir.path()).filePath("shared.kart");
+  KartWriter::Writer w;
+  auto wr = w.writeKart(kartPath, params);
+  QVERIFY2(wr.isOk(), qPrintable(wr.error().message));
+
+  QTemporaryDir extractDir;
+  KartReader::Extractor r;
+  auto rd = r.extractTo(kartPath, extractDir.path());
+  QVERIFY2(rd.isOk(), qPrintable(rd.error().message));
+
+  QFile art(QDir(extractDir.path()).filePath("artwork/Game.png"));
+  QVERIFY(art.open(QIODevice::ReadOnly));
+  QCOMPARE(art.readAll(), artBytes);
+  QFile video(QDir(extractDir.path()).filePath("video/Game.mp4"));
+  QVERIFY(video.open(QIODevice::ReadOnly));
+  QCOMPARE(video.readAll(), videoBytes);
+  QFile manual(QDir(extractDir.path()).filePath("manual/Game.pdf"));
+  QVERIFY(manual.open(QIODevice::ReadOnly));
+  QCOMPARE(manual.readAll(), manualBytes);
+
+  int artCount = 0;
+  int videoCount = 0;
+  int manualCount = 0;
+  for (const KartReader::ExtractedFile &f : rd.value().files) {
+    if (f.relPath == "artwork/Game.png") ++artCount;
+    if (f.relPath == "video/Game.mp4") ++videoCount;
+    if (f.relPath == "manual/Game.pdf") ++manualCount;
+  }
+  QCOMPARE(artCount, 1);
+  QCOMPARE(videoCount, 1);
+  QCOMPARE(manualCount, 1);
+  QCOMPARE(rd.value().files.size(), 5); // two media + one each of artwork/video/manual
+  QCOMPARE(rd.value().manifest.items.size(), 2);
+  for (const KartManifest::Item &mi : rd.value().manifest.items) {
+    QCOMPARE(mi.artworkPath, QString("artwork/Game.png"));
+    QCOMPARE(mi.videoPath, QString("video/Game.mp4"));
+    QCOMPARE(mi.manualPath, QString("manual/Game.pdf"));
+  }
 }
 
 QTEST_MAIN(TestKartWriter)

@@ -522,6 +522,20 @@ ErrorUtils::Result<WriterParams> prepareFromCollection(const CollectionConfig &c
   const QStringList &kArtworkExts = ExtensionUtils::imageBaseExtensions();
   const QStringList &kVideoExts = ExtensionUtils::videoBaseExtensions();
 
+  // Kartend-kn1ub: media sharing a basename (Game.bin + Game.cue) resolve to
+  // the same sibling artwork/video/manual. Every item keeps its manifest
+  // reference, but only the first carries the source payload — writeKart
+  // skips an empty *Abs and totalEntries counts *Abs, so the entry is written
+  // once and progress stays consistent. The key mirrors the extractor's
+  // duplicate-entry guard so this writer never produces a bundle it rejects.
+  QSet<QString> bundledSiblings;
+  auto claimSibling = [&bundledSiblings](const QString &relPath) -> bool {
+    const QString key = QDir::cleanPath(relPath).toLower();
+    if (bundledSiblings.contains(key)) return false;
+    bundledSiblings.insert(key);
+    return true;
+  };
+
   for (const QFileInfo &mediaInfo : mediaFiles) {
     ItemSource item;
     item.mediaAbs = mediaInfo.absoluteFilePath();
@@ -533,22 +547,22 @@ ErrorUtils::Result<WriterParams> prepareFromCollection(const CollectionConfig &c
     if (artworkDir.exists()) {
       const QString aw = findSibling(artworkDir, base, kArtworkExts);
       if (!aw.isEmpty()) {
-        item.artworkAbs = aw;
         item.manifestItem.artworkPath = "artwork/" + QFileInfo(aw).fileName();
+        if (claimSibling(item.manifestItem.artworkPath)) item.artworkAbs = aw;
       }
     }
     if (videoDir.exists()) {
       const QString v = findSibling(videoDir, base, kVideoExts);
       if (!v.isEmpty()) {
-        item.videoAbs = v;
         item.manifestItem.videoPath = "video/" + QFileInfo(v).fileName();
+        if (claimSibling(item.manifestItem.videoPath)) item.videoAbs = v;
       }
     }
     if (manualDir.exists()) {
       const QString m = ItemMetadataStore::findManualForBaseName(base, manualDir.absolutePath());
       if (!m.isEmpty()) {
-        item.manualAbs = m;
         item.manifestItem.manualPath = "manual/" + QFileInfo(m).fileName();
+        if (claimSibling(item.manifestItem.manualPath)) item.manualAbs = m;
       }
     }
 
