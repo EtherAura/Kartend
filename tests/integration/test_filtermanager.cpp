@@ -838,3 +838,102 @@ void TestFilterManager::testHideMissingArtworkHandLinkAnswersEvenOnAColdCascade(
 
   ArtworkUtils::DirectoryCache::instance().clear();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Display-name cache invalidation (Kartend-1d0h0). getDisplayNameForMediaItem
+// caches by raw entry, so the same raw path is searched before and after the
+// name source changes. Raw basenames ("disc-07", "disc-08") contain none of the
+// needles, so a basename fallback can never satisfy an assertion, and every
+// first search runs over all items, so the cache is fully populated before the
+// data or context is replaced.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestFilterManager::testSetSourceDataDropsCachedDisplayNames() {
+  // Declared before the manager so they outlive it (setSourceData stores
+  // pointers).
+  const QStringList paths = {
+      QStringLiteral("/library/disc-07.img"),
+      QStringLiteral("/library/disc-08.img"),
+  };
+  const QHash<QString, QString> firstNames = {
+      {paths.at(0), QStringLiteral("Nebula Quest")},
+      {paths.at(1), QStringLiteral("Harbor Lights")},
+  };
+  // Same raw entries, swapped-around names: a stale cache would keep matching
+  // "nebula" on disc-07.
+  const QHash<QString, QString> secondNames = {
+      {paths.at(0), QStringLiteral("Copper Canyon")},
+      {paths.at(1), QStringLiteral("Nebula Rising")},
+  };
+
+  CollectionContext ctx;
+  ctx.config.showAllSubcollectionItems = true;
+
+  FilterManager mgr;
+  mgr.setContext(ctx);
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &firstNames, &seedEmptySubcollections(),
+                    &seedEmptyFolders());
+  mgr.applyFilter(QStringLiteral("nebula"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
+  mgr.applyFilter(QStringLiteral("harbor"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{1}));
+
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &secondNames, &seedEmptySubcollections(),
+                    &seedEmptyFolders());
+  mgr.applyFilter(QStringLiteral("nebula"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{1}));
+  mgr.applyFilter(QStringLiteral("copper"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
+  mgr.applyFilter(QStringLiteral("harbor"));
+  QVERIFY(mgr.filteredIndices().isEmpty());
+}
+
+void TestFilterManager::testSetContextSwitchesDisplayNameSource() {
+  // Per-collection mode looks names up by the entry resolved against the media
+  // directory; build the keys the same way so the test holds on every platform.
+  const QString mediaDir = QStringLiteral("/library/roms");
+  const QStringList paths = {
+      QStringLiteral("disc-07.img"),
+      QStringLiteral("disc-08.img"),
+  };
+  const QHash<QString, QString> fileNames = {
+      {QDir(mediaDir).absoluteFilePath(paths.at(0)), QStringLiteral("Orbit Patrol")},
+      {QDir(mediaDir).absoluteFilePath(paths.at(1)), QStringLiteral("Lantern Bay")},
+  };
+  const QHash<QString, QString> showAllNames = {
+      {paths.at(0), QStringLiteral("Nebula Quest")},
+      {paths.at(1), QStringLiteral("Harbor Lights")},
+  };
+
+  CollectionContext showAll;
+  showAll.config.showAllSubcollectionItems = true;
+  showAll.config.mediaDirectory = mediaDir;
+  CollectionContext perCollection;
+  perCollection.config.showAllSubcollectionItems = false;
+  perCollection.config.mediaDirectory = mediaDir;
+
+  FilterManager mgr;
+  mgr.setContext(showAll);
+  mgr.setSourceData(&paths, &fileNames, &showAllNames, &seedEmptySubcollections(),
+                    &seedEmptyFolders());
+  mgr.applyFilter(QStringLiteral("nebula"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
+  mgr.applyFilter(QStringLiteral("orbit"));
+  QVERIFY(mgr.filteredIndices().isEmpty());
+
+  // Per-collection mode: the fileNames map is the active source.
+  mgr.setContext(perCollection);
+  mgr.applyFilter(QStringLiteral("orbit"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
+  mgr.applyFilter(QStringLiteral("lantern"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{1}));
+  mgr.applyFilter(QStringLiteral("nebula"));
+  QVERIFY(mgr.filteredIndices().isEmpty());
+
+  // And back: the per-collection names cached above must not survive.
+  mgr.setContext(showAll);
+  mgr.applyFilter(QStringLiteral("harbor"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{1}));
+  mgr.applyFilter(QStringLiteral("lantern"));
+  QVERIFY(mgr.filteredIndices().isEmpty());
+}

@@ -61,6 +61,13 @@ private slots:
   // artwork subdirectory, which is where the render path looks (Kartend-7f76f).
   void testHideMissingArtworkMirrorsSubfolderIntoArtworkTree();
   void testHideMissingArtworkWithoutMirroringStillUsesTheRoot();
+
+  // The search's display-name cache is keyed by raw entry and must be dropped
+  // whenever its other inputs change (Kartend-1d0h0): the display-name maps
+  // (setSourceData) and showAllSubcollectionItems / mediaDirectory
+  // (setContext).
+  void testSetSourceDataDropsCachedDisplayNames();
+  void testSetContextSwitchesDisplayNameSource();
 };
 
 #endif // KARTEND_TESTS_TEST_FILTERMANAGER_H
