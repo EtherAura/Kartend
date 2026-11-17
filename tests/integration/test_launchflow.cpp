@@ -439,7 +439,7 @@ QStringList snapshotTree(const QString &rootPath) {
   return paths;
 }
 
-/// Everything one real-bsdtar extraction run leaves behind for the assertions.
+/// Everything one real-extractor run leaves behind for the assertions.
 struct RealBsdtarRun {
   QString setupError;
   QString archivePath;      // the archive handed to extractArchiveToTemp
@@ -449,14 +449,17 @@ struct RealBsdtarRun {
   QString errorMessage;
   QString errorDetails;
   QList<ToolInvocation> invocations;
+  QStringList extractorsOnPath; // "bsdtar"/"7z" as findExecutable saw them on the narrowed PATH
 };
 
 /// Writes @p tar as media/@p archiveFileName under @p root and runs the
 /// production extractArchiveToTemp with PATH narrowed to root/bin, which holds
-/// only the realBsdtarWrapperScript — so bsdtar is the sole extractor found (7z
-/// never joins the fallback) and the bytes are written by @p realBsdtar.
-RealBsdtarRun runRealBsdtarExtraction(const QTemporaryDir &root, const QString &realBsdtar,
-                                      const QString &archiveFileName, const QByteArray &tar) {
+/// only @p wrapper named @p tool — so @p tool is the sole extractor found (the
+/// other one never joins the fallback) and the bytes are written by the real
+/// binary the wrapper execs.
+RealBsdtarRun runRealExtraction(const QTemporaryDir &root, const QString &tool,
+                                const QByteArray &wrapper, const QString &logPath,
+                                const QString &archiveFileName, const QByteArray &tar) {
   RealBsdtarRun run;
   const QDir rootDir(root.path());
   if (tar.isEmpty() || !rootDir.mkpath(QStringLiteral("bin")) ||
@@ -464,13 +467,12 @@ RealBsdtarRun runRealBsdtarExtraction(const QTemporaryDir &root, const QString &
     run.setupError = QStringLiteral("could not build the archive or create the fixture dirs");
     return run;
   }
-  const QString logPath = rootDir.filePath(QLatin1String(kInvocationLogName));
   run.archivePath =
       QFileInfo(rootDir.filePath(QStringLiteral("media/") + archiveFileName)).absoluteFilePath();
-  if (!writeFile(rootDir.filePath(QStringLiteral("bin/bsdtar")),
-                 realBsdtarWrapperScript(realBsdtar, logPath), /*executable=*/true) ||
+  if (!writeFile(rootDir.filePath(QStringLiteral("bin/") + tool), wrapper, /*executable=*/true) ||
       !writeFile(run.archivePath, tar, /*executable=*/false)) {
-    run.setupError = QStringLiteral("could not write the bsdtar wrapper or the archive");
+    run.setupError =
+        QStringLiteral("could not write the ") + tool + QStringLiteral(" wrapper or the archive");
     return run;
   }
   const QString cacheBase = rootDir.filePath(QStringLiteral("cache"));
@@ -481,6 +483,11 @@ RealBsdtarRun runRealBsdtarExtraction(const QTemporaryDir &root, const QString &
   qputenv("PATH", rootDir.filePath(QStringLiteral("bin")).toUtf8());
   {
     const auto restorePath = qScopeGuard([&oldPath]() { qputenv("PATH", oldPath); });
+    for (const QString &candidate : {QStringLiteral("bsdtar"), QStringLiteral("7z")}) {
+      if (!QStandardPaths::findExecutable(candidate).isEmpty()) {
+        run.extractorsOnPath << candidate;
+      }
+    }
     const auto result =
         LaunchManager::extractArchiveToTemp(run.archivePath, QStringLiteral(".iso"), nullptr,
                                             /*maxDecompressedBytes=*/1 << 20, cacheBase);
@@ -497,6 +504,14 @@ RealBsdtarRun runRealBsdtarExtraction(const QTemporaryDir &root, const QString &
   return run;
 }
 
+RealBsdtarRun runRealBsdtarExtraction(const QTemporaryDir &root, const QString &realBsdtar,
+                                      const QString &archiveFileName, const QByteArray &tar) {
+  const QString logPath = QDir(root.path()).filePath(QLatin1String(kInvocationLogName));
+  return runRealExtraction(root, QStringLiteral("bsdtar"),
+                           realBsdtarWrapperScript(realBsdtar, logPath), logPath, archiveFileName,
+                           tar);
+}
+
 /// The run went through the wrapper exactly as production drives bsdtar: both
 /// pre-scan listings, then one forwarded extraction in the per-archive dir with
 /// the plain `-xf <archive>` argv (never -P).
@@ -510,6 +525,35 @@ void verifyRealExtractionInvoked(const RealBsdtarRun &run) {
   QVERIFY2(!run.extractionParent.isEmpty(), "the extraction root was never created");
   QCOMPARE(extraction.cwd,
            run.extractionParent + QLatin1Char('/') + QFileInfo(run.extractionDir).fileName());
+}
+
+/// The sandbox at @p rootPath, minus the per-archive extraction dir and the
+/// exactly-named artifacts this harness and extractArchiveToTemp create
+/// (wrapper @p tool, its @p logName, the archive, the cache dirs), is the same
+/// list of paths — files, dirs and unfollowed links — as @p treeBefore.
+void verifyTreeOutsideExtractionUnchanged(const RealBsdtarRun &run, const QString &rootPath,
+                                          const QStringList &treeBefore, const QString &tool,
+                                          const QString &logName) {
+  const QString base = QFileInfo(run.extractionDir).fileName();
+  const QString baseRel = QStringLiteral("cache/kartend_extract/") + base;
+  const QStringList harnessOwned{QStringLiteral("bin"),
+                                 QStringLiteral("bin/") + tool,
+                                 QStringLiteral("media"),
+                                 QStringLiteral("media/") + QFileInfo(run.archivePath).fileName(),
+                                 logName,
+                                 QStringLiteral("cache"),
+                                 QStringLiteral("cache/kartend_extract")};
+  const auto outsideExtraction = [&](const QStringList &tree) {
+    QStringList kept;
+    for (const QString &path : tree) {
+      if (!harnessOwned.contains(path) && path != baseRel &&
+          !path.startsWith(baseRel + QLatin1Char('/'))) {
+        kept << path;
+      }
+    }
+    return kept;
+  };
+  QCOMPARE(outsideExtraction(snapshotTree(rootPath)), outsideExtraction(treeBefore));
 }
 
 /// Shared proof for the hostile cases: the real extractor was reached and
@@ -533,23 +577,11 @@ void verifyHostileExtractionContained(const RealBsdtarRun &run, const QString &r
   // Atomic-on-failure cleanup removed the per-archive dir (links included,
   // never followed); whatever remains must be the fixture plus the dirs and
   // log this harness itself creates.
-  const QString base = QFileInfo(run.extractionDir).fileName();
-  const QString baseRel = QStringLiteral("cache/kartend_extract/") + base;
-  const QStringList harnessOwned{QStringLiteral("bin"),
-                                 QStringLiteral("bin/bsdtar"),
-                                 QStringLiteral("media"),
-                                 QStringLiteral("media/") + QFileInfo(run.archivePath).fileName(),
-                                 QLatin1String(kInvocationLogName),
-                                 QStringLiteral("cache"),
-                                 QStringLiteral("cache/kartend_extract")};
-  QStringList treeAfter;
-  for (const QString &path : snapshotTree(rootPath)) {
-    if (!harnessOwned.contains(path) && path != baseRel &&
-        !path.startsWith(baseRel + QLatin1Char('/'))) {
-      treeAfter << path;
-    }
+  verifyTreeOutsideExtractionUnchanged(run, rootPath, treeBefore, QStringLiteral("bsdtar"),
+                                       QLatin1String(kInvocationLogName));
+  if (QTest::currentTestFailed()) {
+    return;
   }
-  QCOMPARE(treeAfter, treeBefore);
 
   QFile sentinel(QDir(rootPath).filePath(QLatin1String(kOutsideDirName)) +
                  QStringLiteral("/sentinel.txt"));
@@ -568,6 +600,99 @@ QStringList plantOutsideSentinel(const QTemporaryDir &root) {
     return {};
   }
   return snapshotTree(root.path());
+}
+
+constexpr auto k7zInvocationLogName = "7z invocations.log";
+
+/// Kartend-ecjq6: the 7z counterpart of realBsdtarWrapperScript. It logs every
+/// invocation, answers ONLY the ArchiveSafety listing argv (`l -slt <archive>`)
+/// with a clean one-entry listing so the hostile members get past the
+/// pre-scan, and execs @p real7z for every other invocation — the extraction —
+/// with argv, cwd, stdio and exit status untouched. It never writes extraction
+/// output itself.
+QByteArray real7zWrapperScript(const QString &real7z, const QString &logPath) {
+  return QByteArrayLiteral("#!/bin/sh\nlog=") + shellSingleQuoted(logPath) +
+         QByteArrayLiteral("\nreal=") + shellSingleQuoted(real7z) +
+         QByteArrayLiteral("\n"
+                           "printf 'cwd=%s\\n' \"$(pwd -P)\" >> \"$log\"\n"
+                           "for a in \"$@\"; do printf 'arg=%s\\n' \"$a\" >> \"$log\"; done\n"
+                           "printf 'end\\n' >> \"$log\"\n"
+                           "if [ \"$1\" = l ] && [ \"$2\" = -slt ] && [ \"$#\" -eq 3 ]; then\n"
+                           "  printf '%s\\n' '' '--' 'Path = listing' 'Type = zip' '' "
+                           "'----------' 'Path = disc.iso' 'Size = 3' "
+                           "'Attributes = A_ -rw-r--r--' ''\n"
+                           "  exit 0\n"
+                           "fi\n"
+                           "exec \"$real\" \"$@\"\n");
+}
+
+/// The installed 7z, resolved on the unmodified PATH (before any test narrows
+/// it) to its canonical binary — on this kind of host /usr/bin/7z is a link to
+/// 7zz — so the wrapper execs the real tool and never itself. Empty when absent.
+QString resolveReal7z() {
+  const QString found = QStandardPaths::findExecutable(QStringLiteral("7z"));
+  return found.isEmpty() ? QString() : QFileInfo(found).canonicalFilePath();
+}
+
+/// The "7-Zip ..." banner line 7z prints when run without a command.
+QString real7zVersion(const QString &real7z) {
+  QProcess probe;
+  probe.start(real7z, {});
+  if (!probe.waitForFinished(10000)) {
+    return QStringLiteral("<no answer>");
+  }
+  for (const QString &line : QString::fromUtf8(probe.readAllStandardOutput()).split('\n')) {
+    if (line.contains(QLatin1String("7-Zip"))) {
+      return line.trimmed();
+    }
+  }
+  return QStringLiteral("<no banner>");
+}
+
+RealBsdtarRun runReal7zExtraction(const QTemporaryDir &root, const QString &real7z,
+                                  const QString &archiveFileName, const QByteArray &tar) {
+  const QString logPath = QDir(root.path()).filePath(QLatin1String(k7zInvocationLogName));
+  return runRealExtraction(root, QStringLiteral("7z"), real7zWrapperScript(real7z, logPath),
+                           logPath, archiveFileName, tar);
+}
+
+/// The run went through the wrapper exactly as production drives 7z: 7z was
+/// the only extractor on PATH (no bsdtar fallback), one pre-scan listing, then
+/// one forwarded extraction in the per-archive dir with the plain
+/// `x -y <archive>` argv (no -snld or other link-relaxing switch).
+void verifyReal7zExtractionInvoked(const RealBsdtarRun &run) {
+  QVERIFY2(run.setupError.isEmpty(), qPrintable(run.setupError));
+  QCOMPARE(run.extractorsOnPath, QStringList{QStringLiteral("7z")});
+  QCOMPARE(run.invocations.size(), 2);
+  QCOMPARE(run.invocations.at(0).args,
+           (QStringList{QStringLiteral("l"), QStringLiteral("-slt"), run.archivePath}));
+  const ToolInvocation &extraction = run.invocations.at(1);
+  QCOMPARE(extraction.args,
+           (QStringList{QStringLiteral("x"), QStringLiteral("-y"), run.archivePath}));
+  QVERIFY2(!run.extractionParent.isEmpty(), "the extraction root was never created");
+  QCOMPARE(extraction.cwd,
+           run.extractionParent + QLatin1Char('/') + QFileInfo(run.extractionDir).fileName());
+  qInfo().noquote() << "7z extraction argv:" << extraction.args.join(QLatin1Char(' '))
+                    << "cwd:" << extraction.cwd;
+}
+
+/// Resolves the real 7z for one case; empty (and the case fails) when the
+/// binary sits inside @p sandboxPath, which would let the wrapper exec itself.
+QString real7zOutside(const QString &real7z, const QString &sandboxPath) {
+  const QString sandbox = QFileInfo(sandboxPath).canonicalFilePath();
+  if (real7z.isEmpty() || sandbox.isEmpty() || real7z.startsWith(sandbox + QLatin1Char('/'))) {
+    return {};
+  }
+  return real7z;
+}
+
+/// True when the lexical landing path of archive member @p name, extracted at
+/// @p destination without any sanitising, stays inside @p sandboxPath — the
+/// bound every hostile member is checked against BEFORE the run.
+bool landsInsideSandbox(const QString &destination, const QByteArray &name,
+                        const QString &sandboxPath) {
+  const QString landing = QDir::cleanPath(destination + QLatin1Char('/') + QString::fromUtf8(name));
+  return landing.startsWith(QDir::cleanPath(sandboxPath) + QLatin1Char('/'));
 }
 #endif
 
@@ -917,6 +1042,276 @@ void TestLaunchFlow::testArchiveExtractionRealBsdtarRefusesDotDotEscape() {
   // The layer the wrapper bypassed: the real pre-scan refuses this archive.
   const auto scan =
       ArchiveSafety::scanArchiveEntriesWithTool(run.archivePath, QStringLiteral("bsdtar"));
+  QVERIFY(scan.isError());
+  QVERIFY(ArchiveSafety::isSecurityRejection(scan.error()));
+#endif
+}
+
+// Kartend-ecjq6: the three cases below are the 7z counterparts — the production
+// extractArchiveToTemp into the INSTALLED 7z via real7zWrapperScript, with the
+// same one-QTemporaryDir sandbox. Everything runs synchronously on the test
+// thread: it creates and destroys the sandbox, narrows and restores PATH, and
+// waits on every child process, so nothing else touches them meanwhile.
+
+void TestLaunchFlow::testArchiveExtractionReal7zExtractsBenignArchive() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Kartend-dhhh6: extractArchiveToTemp forks the extractor synchronously on the test "
+        "thread, and fork() aborts libtsan.");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The 7z wrapper is a POSIX shell script");
+#else
+  const QString real7zFound = resolveReal7z();
+  if (real7zFound.isEmpty()) {
+    QSKIP("7z is not installed");
+  }
+  qInfo().noquote() << "real 7z:" << real7zFound << "-" << real7zVersion(real7zFound);
+  QTemporaryDir root(QDir::tempPath() + QStringLiteral("/kartend ecjq6 7z XXXXXX"));
+  QVERIFY(root.isValid());
+  const QString real7z = real7zOutside(real7zFound, root.path());
+  QVERIFY2(!real7z.isEmpty(), qPrintable(real7zFound));
+
+  // Bytes the wrapper never writes: finding them extracted proves the real 7z
+  // ran, so a missing tool or a broken wrapper cannot pass as "containment"
+  // in the hostile cases.
+  const QByteArray payload = QByteArrayLiteral("payload written by the real 7z\n");
+  const QByteArray nested = QByteArrayLiteral("nested member\n");
+  const QByteArray tar = buildTar({{QByteArrayLiteral("disc.iso"), '0', {}, payload},
+                                   {QByteArrayLiteral("extras dir/read me.txt"), '0', {}, nested}});
+  const RealBsdtarRun run =
+      runReal7zExtraction(root, real7z, QStringLiteral("benign game.tar"), tar);
+
+  verifyReal7zExtractionInvoked(run);
+  if (QTest::currentTestFailed()) {
+    return;
+  }
+  QVERIFY2(run.errorMessage.isEmpty(),
+           qPrintable(run.errorMessage + QStringLiteral(": ") + run.errorDetails));
+  const QString extractionDir = QFileInfo(run.extractionDir).canonicalFilePath();
+  QVERIFY(!extractionDir.isEmpty());
+  QCOMPARE(run.resultPath, extractionDir + QStringLiteral("/disc.iso"));
+  QFile disc(run.resultPath);
+  QVERIFY(disc.open(QIODevice::ReadOnly));
+  QCOMPARE(disc.readAll(), payload);
+  QFile readMe(extractionDir + QStringLiteral("/extras dir/read me.txt"));
+  QVERIFY(readMe.open(QIODevice::ReadOnly));
+  QCOMPARE(readMe.readAll(), nested);
+
+  // The production pre-scan passes this archive with the real 7z too.
+  QVERIFY(
+      !ArchiveSafety::scanArchiveEntriesWithTool(run.archivePath, QStringLiteral("7z")).isError());
+#endif
+}
+
+void TestLaunchFlow::testArchiveExtractionReal7zRefusesSymlinkChainEscape() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Kartend-dhhh6: extractArchiveToTemp forks the extractor synchronously on the test "
+        "thread, and fork() aborts libtsan.");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The 7z wrapper is a POSIX shell script");
+#else
+  const QString real7zFound = resolveReal7z();
+  if (real7zFound.isEmpty()) {
+    QSKIP("7z is not installed");
+  }
+  qInfo().noquote() << "real 7z:" << real7zFound << "-" << real7zVersion(real7zFound);
+  QTemporaryDir root(QDir::tempPath() + QStringLiteral("/kartend ecjq6 7z XXXXXX"));
+  QVERIFY(root.isValid());
+  const QString real7z = real7zOutside(real7zFound, root.path());
+  QVERIFY2(!real7z.isEmpty(), qPrintable(real7zFound));
+  const QStringList treeBefore = plantOutsideSentinel(root);
+  QVERIFY(!treeBefore.isEmpty());
+
+  // hop1 -> hop2 -> hop3 -> ../../../outside dir, exactly as in the bsdtar
+  // case: from <root>/cache/kartend_extract/<base> the chain ends at the
+  // sentinel dir, and both writes through it stay inside the sandbox.
+  const QString archiveName = QStringLiteral("symlink chain.tar");
+  const QByteArray escape = QByteArrayLiteral("../../../") + kOutsideDirName;
+  const QString destination =
+      QDir(root.path()).filePath(QStringLiteral("cache/kartend_extract/symlink chain"));
+  const QString outsideDir = QDir(root.path()).filePath(QLatin1String(kOutsideDirName));
+  QCOMPARE(QDir::cleanPath(destination + QLatin1Char('/') + QString::fromUtf8(escape)),
+           QDir::cleanPath(outsideDir));
+  QVERIFY(landsInsideSandbox(destination, escape + QByteArrayLiteral("/escaped.txt"), root.path()));
+  QVERIFY(
+      landsInsideSandbox(destination, escape + QByteArrayLiteral("/sentinel.txt"), root.path()));
+
+  const QByteArray tar = buildTar({
+      {QByteArrayLiteral("disc.iso"), '0', {}, QByteArrayLiteral("ISO")},
+      {QByteArrayLiteral("hop1"), '2', QByteArrayLiteral("hop2"), {}},
+      {QByteArrayLiteral("hop2"), '2', QByteArrayLiteral("hop3"), {}},
+      {QByteArrayLiteral("hop3"), '2', escape, {}},
+      // Written THROUGH the chain: a new file, and an overwrite of the sentinel.
+      {QByteArrayLiteral("hop1/escaped.txt"), '0', {}, QByteArrayLiteral("ESCAPED")},
+      {QByteArrayLiteral("hop1/sentinel.txt"), '0', {}, QByteArrayLiteral("OVERWRITTEN")},
+  });
+  const RealBsdtarRun run = runReal7zExtraction(root, real7z, archiveName, tar);
+
+  verifyReal7zExtractionInvoked(run);
+  if (QTest::currentTestFailed()) {
+    return;
+  }
+  // The real 7z ran and failed: a non-zero exit with 7z's own "ERROR:" lines
+  // on stderr — neither the pre-scan (the wrapper answered it) nor a failure
+  // to start the tool, which report different messages.
+  QVERIFY2(run.resultPath.isEmpty(),
+           qPrintable(QStringLiteral("hostile archive extracted to ") + run.resultPath));
+  QCOMPARE(run.errorMessage, QStringLiteral("Archive extraction failed"));
+  QVERIFY2(run.errorDetails.startsWith(QLatin1String("7z exit code: ")) &&
+               !run.errorDetails.startsWith(QLatin1String("7z exit code: 0,")) &&
+               run.errorDetails.contains(QLatin1String("ERROR: ")),
+           qPrintable(run.errorDetails));
+  qInfo().noquote() << "real 7z refused the symlink chain:" << run.errorDetails;
+
+  // Atomic-on-failure cleanup removed the per-archive dir; everything else is
+  // the fixture plus exactly-named harness artifacts, the sentinel unchanged.
+  QVERIFY(!QFileInfo::exists(run.extractionDir));
+  verifyTreeOutsideExtractionUnchanged(run, root.path(), treeBefore, QStringLiteral("7z"),
+                                       QLatin1String(k7zInvocationLogName));
+  QVERIFY(!QFileInfo::exists(outsideDir + QStringLiteral("/escaped.txt")));
+  QFile sentinel(outsideDir + QStringLiteral("/sentinel.txt"));
+  QVERIFY(sentinel.open(QIODevice::ReadOnly));
+  QCOMPARE(sentinel.readAll(), QByteArrayLiteral("SENTINEL"));
+
+  // The layer the wrapper bypassed: the real 7z listing pre-scan refuses it.
+  const auto scan =
+      ArchiveSafety::scanArchiveEntriesWithTool(run.archivePath, QStringLiteral("7z"));
+  QVERIFY(scan.isError());
+  QVERIFY(ArchiveSafety::isSecurityRejection(scan.error()));
+#endif
+}
+
+void TestLaunchFlow::testArchiveExtractionReal7zContainsDotDotEntries() {
+#if defined(__SANITIZE_THREAD__) || (defined(__has_feature) && __has_feature(thread_sanitizer))
+  QSKIP("Kartend-dhhh6: extractArchiveToTemp forks the extractor synchronously on the test "
+        "thread, and fork() aborts libtsan.");
+#endif
+#ifdef Q_OS_WIN
+  QSKIP("The 7z wrapper is a POSIX shell script");
+#else
+  const QString real7zFound = resolveReal7z();
+  if (real7zFound.isEmpty()) {
+    QSKIP("7z is not installed");
+  }
+  qInfo().noquote() << "real 7z:" << real7zFound << "-" << real7zVersion(real7zFound);
+  QTemporaryDir root(QDir::tempPath() + QStringLiteral("/kartend ecjq6 7z XXXXXX"));
+  QVERIFY(root.isValid());
+  const QString real7z = real7zOutside(real7zFound, root.path());
+  QVERIFY2(!real7z.isEmpty(), qPrintable(real7zFound));
+  QVERIFY(!plantOutsideSentinel(root).isEmpty());
+
+  // A sentinel at each ".." depth, so every depth has an overwrite target as
+  // well as a creation target: depth 1 is kartend_extract, depth 2 is cache,
+  // depth 3 (the sandbox root) is the "outside dir" sentinel.
+  const QDir rootDir(root.path());
+  QVERIFY(rootDir.mkpath(QStringLiteral("cache/kartend_extract")));
+  QVERIFY(writeFile(rootDir.filePath(QStringLiteral("cache/kartend_extract/d1 sentinel.txt")),
+                    QByteArrayLiteral("SENTINEL1"), /*executable=*/false));
+  QVERIFY(writeFile(rootDir.filePath(QStringLiteral("cache/d2 sentinel.txt")),
+                    QByteArrayLiteral("SENTINEL2"), /*executable=*/false));
+  const QStringList treeBefore = snapshotTree(root.path());
+
+  struct DotDotMember {
+    QByteArray name;
+    QByteArray payload;
+    QString unsanitisedRel; // where it would land with the ".." honoured
+    QString strippedRel;    // where it lands with the ".." stripped
+  };
+  const QByteArray up3 = QByteArrayLiteral("../../../") + kOutsideDirName;
+  const QString outsideRel = QLatin1String(kOutsideDirName);
+  const QList<DotDotMember> members{
+      {"../d1.txt", "CREATE depth 1", "cache/kartend_extract/d1.txt", "d1.txt"},
+      {"../d1 sentinel.txt", "OVERWRITE depth 1", "cache/kartend_extract/d1 sentinel.txt",
+       "d1 sentinel.txt"},
+      {"../../d2.txt", "CREATE depth 2", "cache/d2.txt", "d2.txt"},
+      {"../../d2 sentinel.txt", "OVERWRITE depth 2", "cache/d2 sentinel.txt", "d2 sentinel.txt"},
+      {up3 + "/escaped.txt", "CREATE depth 3", outsideRel + "/escaped.txt",
+       outsideRel + "/escaped.txt"},
+      {up3 + "/sentinel.txt", "OVERWRITE depth 3", outsideRel + "/sentinel.txt",
+       outsideRel + "/sentinel.txt"},
+  };
+  const QString destination = rootDir.filePath(QStringLiteral("cache/kartend_extract/dot dot"));
+  QList<TarMember> tarMembers{{QByteArrayLiteral("disc.iso"), '0', {}, QByteArrayLiteral("ISO")}};
+  for (const DotDotMember &m : members) {
+    QVERIFY2(landsInsideSandbox(destination, m.name, root.path()), m.name.constData());
+    QCOMPARE(QDir::cleanPath(destination + QLatin1Char('/') + QString::fromUtf8(m.name)),
+             rootDir.filePath(m.unsanitisedRel));
+    tarMembers << TarMember{m.name, '0', {}, m.payload};
+  }
+  const RealBsdtarRun run =
+      runReal7zExtraction(root, real7z, QStringLiteral("dot dot.tar"), buildTar(tarMembers));
+
+  verifyReal7zExtractionInvoked(run);
+  if (QTest::currentTestFailed()) {
+    return;
+  }
+
+  // Whichever way 7z handles "..", nothing outside the destination may be
+  // created or changed: the same paths as before, sentinels byte-identical,
+  // and no creation target present.
+  verifyTreeOutsideExtractionUnchanged(run, root.path(), treeBefore, QStringLiteral("7z"),
+                                       QLatin1String(k7zInvocationLogName));
+  const QList<std::pair<QString, QByteArray>> sentinels{
+      {QStringLiteral("cache/kartend_extract/d1 sentinel.txt"), QByteArrayLiteral("SENTINEL1")},
+      {QStringLiteral("cache/d2 sentinel.txt"), QByteArrayLiteral("SENTINEL2")},
+      {outsideRel + QStringLiteral("/sentinel.txt"), QByteArrayLiteral("SENTINEL")}};
+  for (const auto &[rel, bytes] : sentinels) {
+    QFile sentinel(rootDir.filePath(rel));
+    QVERIFY2(sentinel.open(QIODevice::ReadOnly), qPrintable(rel));
+    QCOMPARE(sentinel.readAll(), bytes);
+  }
+  for (const DotDotMember &m : members) {
+    if (m.payload.startsWith("CREATE")) {
+      QVERIFY2(!QFileInfo::exists(rootDir.filePath(m.unsanitisedRel)),
+               qPrintable(m.unsanitisedRel));
+    }
+  }
+
+  if (run.resultPath.isEmpty()) {
+    // Refusal: the real 7z ran and exited non-zero, and the failed
+    // extraction was removed.
+    QCOMPARE(run.errorMessage, QStringLiteral("Archive extraction failed"));
+    QVERIFY2(run.errorDetails.startsWith(QLatin1String("7z exit code: ")) &&
+                 !run.errorDetails.startsWith(QLatin1String("7z exit code: 0,")),
+             qPrintable(run.errorDetails));
+    QVERIFY(!QFileInfo::exists(run.extractionDir));
+    qInfo().noquote() << "real 7z REFUSED the dot-dot archive:" << run.errorDetails;
+  } else {
+    // Approved safe rewriting (not a refusal): 7z stripped every ".." and
+    // extracted the members inside the destination. The tree there must be
+    // exactly the stripped paths plus disc.iso and production's source
+    // marker, every payload a regular file at its stripped path.
+    QVERIFY2(run.errorMessage.isEmpty(),
+             qPrintable(run.errorMessage + QStringLiteral(": ") + run.errorDetails));
+    const QString extractionDir = QFileInfo(run.extractionDir).canonicalFilePath();
+    QVERIFY(!extractionDir.isEmpty());
+    QCOMPARE(run.resultPath, extractionDir + QStringLiteral("/disc.iso"));
+    QStringList expectedInside{QStringLiteral(".kartend-source"), QStringLiteral("disc.iso"),
+                               outsideRel};
+    for (const DotDotMember &m : members) {
+      expectedInside << m.strippedRel;
+    }
+    expectedInside.sort();
+    QCOMPARE(snapshotTree(extractionDir), expectedInside);
+    for (const DotDotMember &m : members) {
+      const QString landed = extractionDir + QLatin1Char('/') + m.strippedRel;
+      const QFileInfo info(landed);
+      QVERIFY2(info.isFile() && !info.isSymLink(), qPrintable(landed));
+      QCOMPARE(info.canonicalFilePath(), landed);
+      QFile f(landed);
+      QVERIFY(f.open(QIODevice::ReadOnly));
+      QCOMPARE(f.readAll(), m.payload);
+    }
+    qInfo().noquote() << "real 7z SANITISED the dot-dot archive (stripped \"..\", extracted "
+                         "inside the destination):"
+                      << snapshotTree(extractionDir).join(QStringLiteral(", "));
+  }
+
+  // The layer the wrapper bypassed: the real 7z listing shows the ".."
+  // members, and the pre-scan refuses the archive on them.
+  const auto scan =
+      ArchiveSafety::scanArchiveEntriesWithTool(run.archivePath, QStringLiteral("7z"));
   QVERIFY(scan.isError());
   QVERIFY(ArchiveSafety::isSecurityRejection(scan.error()));
 #endif
