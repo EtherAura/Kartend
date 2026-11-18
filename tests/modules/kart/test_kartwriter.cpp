@@ -79,6 +79,9 @@ private slots:
   // Kartend-xx1g5: prepareFromCollection picks the strongest codec the build
   // supports, so an export with no caller override works without zstd.
   void testPrepareFromCollectionUsesBuildCodec();
+  // Kartend-znj4y: only presets referenced by an additional launcher travel
+  // in the bundle, and an exported subcollection is flattened to a root.
+  void testPrepareInlinesOnlyReferencedPresets();
 };
 
 void TestKartWriter::testExtensionShouldCompress() {
@@ -684,6 +687,61 @@ void TestKartWriter::testPrepareFromCollectionUsesBuildCodec() {
   QFile readBack(QDir(extractDir.path()).filePath("media/Codec.bin"));
   QVERIFY(readBack.open(QIODevice::ReadOnly));
   QCOMPARE(readBack.readAll(), rom);
+}
+
+void TestKartWriter::testPrepareInlinesOnlyReferencedPresets() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  QDir rootDir(root.path());
+  rootDir.mkpath("media");
+  QDir mDir(rootDir.filePath("media"));
+  writeFile(mDir, "Preset.bin", QByteArray("preset-rom"));
+
+  CollectionConfig cfg;
+  cfg.name = "Presets";
+  cfg.mediaDirectory = mDir.absolutePath();
+  cfg.extensions = {"bin"};
+  cfg.parentCollectionIndex = 3;
+  cfg.isSubcollection = true;
+  cfg.additionalParentNames = {"X"};
+  LauncherConfig extra;
+  extra.name = "Extra";
+  extra.presetId = "p1";
+  cfg.launcher.additionalLaunchers.append(extra);
+
+  LauncherPreset p1;
+  p1.id = "p1";
+  p1.name = "Preset One";
+  p1.launcherPath = "/opt/fake/one";
+  LauncherPreset p2;
+  p2.id = "p2";
+  p2.name = "Preset Two";
+  p2.launcherPath = "/opt/fake/two";
+
+  auto res = KartWriter::prepareFromCollection(cfg, "znj4y-uuid", {p1, p2}, nullptr);
+  QVERIFY2(res.isOk(), qPrintable(res.error().message));
+  const auto &params = res.value();
+  QCOMPARE(params.launchers.size(), 1);
+  QCOMPARE(params.launchers.first(), p1);
+  QCOMPARE(params.collectionConfig.parentCollectionIndex, -1);
+  QCOMPARE(params.collectionConfig.isSubcollection, false);
+  QVERIFY(params.collectionConfig.additionalParentNames.isEmpty());
+
+  QTemporaryDir outDir;
+  QVERIFY(outDir.isValid());
+  const QString kartPath = QDir(outDir.path()).filePath("presets.kart");
+  KartWriter::Writer w;
+  auto wr = w.writeKart(kartPath, params);
+  QVERIFY2(wr.isOk(), qPrintable(wr.error().message));
+
+  QTemporaryDir extractDir;
+  QVERIFY(extractDir.isValid());
+  KartReader::Extractor r;
+  auto rd = r.extractTo(kartPath, extractDir.path());
+  QVERIFY2(rd.isOk(), qPrintable(rd.error().message));
+  const QList<LauncherPreset> &persisted = rd.value().manifest.launchers;
+  QCOMPARE(persisted.size(), 1);
+  QCOMPARE(persisted.first(), p1);
 }
 
 QTEST_MAIN(TestKartWriter)
