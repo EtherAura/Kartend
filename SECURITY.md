@@ -41,7 +41,7 @@ Enabled on this repository, and verifiable from the outside:
 ## Verifying a Release Download
 
 Every release asset that this project *builds* — the source tarball, the
-`.deb`, the Windows `.zip` and the Windows `setup.exe` — carries a
+`.deb`, the AppImage, the Windows `.zip` and the Windows `setup.exe` — carries a
 [Sigstore-backed build provenance attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds)
 recording which workflow, at which commit, produced those exact bytes.
 Check a download with the GitHub CLI:
@@ -71,10 +71,13 @@ you cannot trace back to its build is worth little:
 |-------|--------|
 | `Kartend-<version>-linux-x64.cdx.json` | The `.deb` and the source tarball — the same source at the same commit, with the `.deb` carrying the resolved dependency data. |
 | `Kartend-<version>-windows-x64.cdx.json` | The portable `.zip` and the installer — both ship the same staged tree, so one document covers the Qt runtime and the vcpkg-built SDL2 and zstd libraries bundled beside the executable. |
+| `Kartend-<version>-x86_64.AppImage.cdx.json` | The AppImage — the file itself with its SHA-256, the Ubuntu 22.04 packages its bundled system libraries were copied from (SDL2, libarchive, zstd, OpenSSL, libsecret and their dependencies), the Qt 6.8 modules and the FFmpeg that Qt ships, the statically linked QtKeychain, and the AppImage runtime. |
 
 The Windows document is the one that closes a real gap: a Windows user has
 no package manager to ask what is inside the download, whereas on Debian
-`dpkg` already answers most of the same question.
+`dpkg` already answers most of the same question. The AppImage document
+closes the same gap on Linux: an AppImage carries its libraries with it, so
+no package manager on the user's system knows what they are.
 
 ## Security Considerations
 
