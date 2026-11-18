@@ -105,14 +105,55 @@ runs:
       # No retry after the kill — a SIGTERM mid-dpkg can leave dpkg needing
       # `--configure -a`, and a blind rerun would fail more confusingly than
       # the labelled timeout does.
+      #
+      # Kartend-b128j: build-no-libarchive-maintenance still hit that 600s
+      # kill on a crawling mirror, so the download is now split out as an
+      # `--download-only` phase that never runs dpkg. Only that phase is
+      # retried, once, and only on a timeout (exit 124) — a fresh connection
+      # can land on a healthier mirror backend, and debs already fetched stay
+      # in /var/cache/apt/archives so the retry resumes rather than restarts.
+      # Any other download failure is fatal at once. The dpkg phase then
+      # installs from the cache, runs exactly once, and its failure (timeout
+      # included) stays fatal. Everything shares ONE deadline of
+      # INSTALL_TIMEOUT seconds: each download attempt is capped at a third
+      # of it, and the install gets whatever remains, so the step's total
+      # wall-clock bound is unchanged.
       run: |
+        packages=(${{ inputs.packages }})
+        apt_install=(sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $RECOMMENDS_OPT install -y)
+        now_us() { echo "${EPOCHREALTIME//[!0-9]/}"; }
+        deadline_us=$(( $(now_us) + INSTALL_TIMEOUT * 1000000 ))
+        # bounded <cap_us> cmd... — run cmd under `timeout`, capped at cap_us
+        # and at whatever is left of the shared deadline.
+        bounded() {
+          local cap_us=$1 left_us
+          shift
+          left_us=$(( deadline_us - $(now_us) ))
+          if [ "$left_us" -lt "$cap_us" ]; then cap_us=$left_us; fi
+          if [ "$cap_us" -le 0 ]; then return 124; fi
+          timeout "$(( cap_us / 1000000 )).$(printf '%06d' $(( cap_us % 1000000 )))" "$@"
+        }
+        timed_out() {
+          echo "::error title=apt install timed out::Dependency $1 exceeded ${INSTALL_TIMEOUT}s — the apt mirror is crawling (Kartend-wym32). Re-run the job to get a different mirror backend."
+        }
+
         status=0
-        timeout "$INSTALL_TIMEOUT" \
-          sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $RECOMMENDS_OPT install -y \
-          ${{ inputs.packages }} || status=$?
-        if [ "$status" -eq 124 ]; then
-          echo "::error title=apt install timed out::Dependency install exceeded ${INSTALL_TIMEOUT}s — the apt mirror is crawling (Kartend-wym32). Re-run the job to get a different mirror backend."
+        for attempt in 1 2; do
+          status=0
+          bounded $(( INSTALL_TIMEOUT * 1000000 / 3 )) \
+            "${apt_install[@]}" --download-only "${packages[@]}" || status=$?
+          if [ "$status" -ne 124 ] || [ "$attempt" -eq 2 ]; then break; fi
+          echo "::warning title=apt download timed out::Package download attempt $attempt timed out; retrying once on a fresh connection (nothing was installed yet)."
+        done
+        if [ "$status" -ne 0 ]; then
+          if [ "$status" -eq 124 ]; then timed_out download; fi
+          exit "$status"
         fi
+
+        status=0
+        bounded $(( INSTALL_TIMEOUT * 1000000 )) \
+          "${apt_install[@]}" "${packages[@]}" || status=$?
+        if [ "$status" -eq 124 ]; then timed_out install; fi
         exit "$status"
       env:
         APT_OPTS: >-

@@ -355,6 +355,16 @@ target_link_libraries(bench_sortfiles PRIVATE kartend_data_static kartend_api_st
 add_test(NAME BenchSortFiles COMMAND bench_sortfiles)
 set_tests_properties(BenchSortFiles PROPERTIES LABELS "benchmark")
 
+# Offline regression for the CI install-deps action's bounded download retry
+# (Kartend-b128j): runs the action's real install script against fake
+# sudo/apt-get in a temp dir. Linux-only because the action itself only runs
+# on ubuntu runners and the script needs bash + coreutils `timeout`.
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_package(Python3 COMPONENTS Interpreter REQUIRED)
+  add_test(NAME InstallDepsActionTest
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/.scripts/tests/test_install_deps.py)
+endif()
+
 # GamepadHelpers tests (pure helpers extracted from GamepadManager)
 kartend_add_test(NAME GamepadHelpers
   SOURCES modules/gamepad/test_gamepadhelpers.cpp
