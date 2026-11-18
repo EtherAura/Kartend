@@ -45,6 +45,26 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    # Kartend-wym32 / Kartend-b128j: the image's first apt mirror can serve a
+    # trickle for hours (2026-11-17: us-east-2.ec2.archive.ubuntu.com at about
+    # 60 kB/s for five hours, main red, every re-run on the same mirror). apt
+    # leaves a mirror only when it FAILS, and the bounds below can only turn a
+    # trickle into a labelled failure. So before apt runs, time each listed
+    # mirror and put the fastest first. A healthy first mirror changes nothing,
+    # and the script exits 0 whatever happens: it may only help.
+    - name: Prefer a responsive apt mirror
+      shell: bash
+      # Found by either path, so a wrong GITHUB_ACTION_PATH inside a nested
+      # composite action (script-lint calls this one) cannot fail the job.
+      run: |
+        script="${GITHUB_ACTION_PATH:-}/pick-mirror.sh"
+        [ -f "$script" ] || script="$GITHUB_WORKSPACE/.github/actions/install-deps/pick-mirror.sh"
+        if [ -f "$script" ]; then
+          bash "$script"
+        else
+          echo "pick-mirror.sh was not found: the mirror list is left as it is"
+        fi
+
     # Refresh apt lists before install. Real GHA runners ship with a populated
     # apt index, but act's catthehacker/ubuntu:full-24.04 image prunes the
     # lists, so a truly fresh `act` run would fail with "Unable to locate
@@ -111,7 +131,7 @@ runs:
           sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $RECOMMENDS_OPT install -y \
           ${{ inputs.packages }} || status=$?
         if [ "$status" -eq 124 ]; then
-          echo "::error title=apt install timed out::Dependency install exceeded ${INSTALL_TIMEOUT}s — the apt mirror is crawling (Kartend-wym32). Re-run the job to get a different mirror backend."
+          echo "::error title=apt install timed out::Dependency install exceeded ${INSTALL_TIMEOUT}s — the apt mirror is crawling (Kartend-wym32). The 'Prefer a responsive apt mirror' step above shows each mirror's measured speed."
         fi
         exit "$status"
       env:
