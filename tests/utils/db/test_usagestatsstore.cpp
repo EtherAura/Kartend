@@ -1,13 +1,16 @@
 // Tests for UsageStatsStore.
 //
 // Uses an in-memory SQLite database with the full migration chain applied so
-// the schema mirrors what the live app sees.
+// the schema mirrors what the live app sees. The Most Launched tie-break case
+// uses the shared on-disk MigratedDb fixture (production bootstrap).
+#include <QFileInfo>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QString>
 #include <QTest>
 
+#include "../../support/migrateddb.h"
 #include "dbmigrations.h"
 #include "usagestatsstore.h"
 
@@ -58,6 +61,7 @@ private slots:
   void recordPlaySession_rejectsNonPositiveDuration();
   void loadAggregate_summarizesAcrossLibrary();
   void loadTopPlayed_filtersUnplayedAndSortsDescending();
+  void loadTopPlayed_equalCountsOrderByLastPlayedDesc();
   void loadRecentlyPlayed_filtersUnplayedAndSortsByLastPlayed();
   void loadNeverPlayed_returnsItemsWithZeroOrNullPlayCount();
   void countPlayedSince_filtersByCutoff();
@@ -181,6 +185,59 @@ void TestUsageStatsStore::loadTopPlayed_filtersUnplayedAndSortsDescending() {
   QCOMPARE(rows[1].playCount, qint64(1));
 
   closeAndRemove(db, conn);
+}
+
+void TestUsageStatsStore::loadTopPlayed_equalCountsOrderByLastPlayedDesc() {
+  // Kartend-zcexs: File > Most Launched breaks play_count ties on
+  // last_played DESC. Real on-disk SQLite through the production bootstrap.
+  KartendTest::MigratedDb fixture(KartendTest::MigratedDb::OnDisk);
+  QVERIFY(fixture.isOpen());
+  QVERIFY(!fixture.databasePath().isEmpty());
+  auto db = fixture.database();
+  QVERIFY(db.isOpen());
+  QCOMPARE(db.databaseName(), fixture.databasePath());
+  QVERIFY(QFileInfo::exists(fixture.databasePath()));
+
+  QSqlQuery q(db);
+  QVERIFY(q.exec("INSERT INTO collections (id, name, last_scanned, uuid) "
+                 "VALUES (1, 'Games', '2026-01-01', 'u1')"));
+
+  // The older tied item sorts first by path and name. Without the
+  // last_played key, SQLite's LIMIT sorter emits the later-inserted of two
+  // tied rows first, so the newer tied item is inserted BEFORE the older one;
+  // only the last_played key then puts it first. The higher-count item is
+  // inserted last and played longest ago.
+  struct Seed {
+    const char *path;
+    const char *name;
+    int playCount;
+    const char *lastPlayed;
+  };
+  const Seed seeds[] = {
+      {"/g/b-tied-newer", "B Tied Newer", 2, "2026-05-01T00:00:00Z"},
+      {"/g/a-tied-older", "A Tied Older", 2, "2026-04-01T00:00:00Z"},
+      {"/g/c-most", "C Most", 5, "2026-03-01T00:00:00Z"},
+  };
+  for (const auto &seed : seeds) {
+    q.prepare("INSERT INTO items (collection_id, collection_uuid, path, name, last_modified, "
+              "play_count, last_played) VALUES (1, 'u1', ?, ?, '2026-01-01', ?, ?)");
+    q.addBindValue(QString::fromUtf8(seed.path));
+    q.addBindValue(QString::fromUtf8(seed.name));
+    q.addBindValue(seed.playCount);
+    q.addBindValue(QString::fromUtf8(seed.lastPlayed));
+    QVERIFY2(q.exec(), qPrintable(q.lastError().text()));
+  }
+
+  auto result = UsageStatsStore::loadTopPlayed(db, 10);
+  QVERIFY(result.isOk());
+  const auto rows = result.value();
+  QCOMPARE(rows.size(), 3);
+  QCOMPARE(rows[0].path, QStringLiteral("/g/c-most"));
+  QCOMPARE(rows[0].playCount, qint64(5));
+  QCOMPARE(rows[1].path, QStringLiteral("/g/b-tied-newer"));
+  QCOMPARE(rows[1].lastPlayed, QStringLiteral("2026-05-01T00:00:00Z"));
+  QCOMPARE(rows[2].path, QStringLiteral("/g/a-tied-older"));
+  QCOMPARE(rows[2].lastPlayed, QStringLiteral("2026-04-01T00:00:00Z"));
 }
 
 void TestUsageStatsStore::loadRecentlyPlayed_filtersUnplayedAndSortsByLastPlayed() {

@@ -107,9 +107,10 @@ loadForItem(QSqlDatabase &db, const QString &collectionUuid, const QString &path
 /// two are `SUM`s. Returns zeros when the table is empty.
 [[nodiscard]] ErrorUtils::Result<AggregateStats> loadAggregate(QSqlDatabase &db);
 
-/// Top items by play_count, descending. Items with zero play_count are
-/// filtered out. `limit` is clamped to [1, 1000] internally so callers can
-/// pass user-driven values without sanitizing.
+/// Top items by play_count, descending; items with equal play_count are
+/// ordered by `last_played` descending (most recent first). Items with zero
+/// play_count are filtered out. `limit` is clamped to [1, 1000] internally so
+/// callers can pass user-driven values without sanitizing.
 [[nodiscard]] ErrorUtils::Result<QList<ItemUsageRow>> loadTopPlayed(QSqlDatabase &db, int limit);
 
 /// Most recently played items (descending `last_played`). Items that have
