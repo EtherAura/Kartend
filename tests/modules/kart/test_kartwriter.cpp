@@ -72,6 +72,10 @@ private slots:
   // bundle — the sibling scan alone cannot see files linked from outside
   // the artwork directory.
   void testPrepareBundlesHandLinkedArtwork();
+  // Kartend-l2lfj: link payload names are sanitized from the type string,
+  // collisions are bumped, and Windows device names are prefixed — while the
+  // manifest keeps every exact type.
+  void testPrepareSanitizesAndDedupesArtworkLinkNames();
   // Kartend-kn1ub: media sharing a basename (Game.bin + Game.cue) resolve to
   // the same sibling artwork/video; the payload must be bundled once or the
   // extractor's duplicate-entry guard rejects the export.
@@ -560,6 +564,115 @@ void TestKartWriter::testPrepareBundlesHandLinkedArtwork() {
 
   db.close();
   db = QSqlDatabase();
+  QSqlDatabase::removeDatabase(conn);
+}
+
+void TestKartWriter::testPrepareSanitizesAndDedupesArtworkLinkNames() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  QDir rootDir(root.path());
+  rootDir.mkpath("media");
+  rootDir.mkpath("artwork");
+  rootDir.mkpath("elsewhere");
+
+  QDir mDir(rootDir.filePath("media"));
+  QDir eDir(rootDir.filePath("elsewhere"));
+  const QString mediaAbs = writeFile(mDir, "Sonic.bin", "rom-bytes");
+
+  // Distinct, deterministic payloads of distinct sizes: a swapped or dropped
+  // link cannot pass the byte-for-byte comparison below.
+  auto fixtureBytes = [](int size, int seed) {
+    QByteArray bytes(size, '\0');
+    for (int i = 0; i < size; ++i) bytes[i] = static_cast<char>((i * 7 + seed) & 0xFF);
+    return bytes;
+  };
+  struct Fixture {
+    QString type;
+    QString expectedPath;
+    QByteArray bytes;
+    QString abs;
+  };
+  QList<Fixture> fixtures = {
+      {"Front Cover", "item_artwork/0/front_cover.png", fixtureBytes(101, 11), {}},
+      {"front_cover", "item_artwork/0/2-front_cover.png", fixtureBytes(157, 53), {}},
+      {"CON", "item_artwork/0/t_con.png", fixtureBytes(211, 97), {}},
+  };
+  for (int i = 0; i < fixtures.size(); ++i) {
+    fixtures[i].abs = writeFile(eDir, QStringLiteral("link-%1.png").arg(i), fixtures[i].bytes);
+  }
+
+  CollectionConfig cfg;
+  cfg.name = "Genesis";
+  cfg.mediaDirectory = mDir.absolutePath();
+  cfg.artworkDirectory = rootDir.filePath("artwork");
+  cfg.extensions = {"bin"};
+
+  // Real on-disk SQLite file, migrated the way the app migrates it.
+  QTemporaryDir dbDir;
+  QVERIFY(dbDir.isValid());
+  const QString conn = "l2lfj-writer";
+  {
+    QSqlDatabase db = QSqlDatabase::addDatabase("QSQLITE", conn);
+    db.setDatabaseName(QDir(dbDir.path()).filePath("kartend.db"));
+    QVERIFY(db.open());
+    {
+      // Same seed as testPrepareBundlesHandLinkedArtwork: migrations assume
+      // the base tables the DatabaseManager bootstraps.
+      QSqlQuery q(db);
+      QVERIFY(q.exec("CREATE TABLE collections (id INTEGER PRIMARY KEY, name TEXT)"));
+      QVERIFY(q.exec("CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, "
+                     "path TEXT, last_modified TEXT)"));
+    }
+    DbMigrations::applySchemaMigrations(db, "test");
+
+    for (const Fixture &f : fixtures) {
+      ItemArtworkStore::ItemArtwork row;
+      row.collectionUuid = "l2lfj-uuid";
+      row.path = mediaAbs;
+      row.artworkType = f.type;
+      row.manualPath = f.abs;
+      QVERIFY(ItemArtworkStore::save(db, row).isOk());
+    }
+
+    auto res = KartWriter::prepareFromCollection(cfg, "l2lfj-uuid", {}, &db);
+    QVERIFY2(res.isOk(), qPrintable(res.error().message));
+    QCOMPARE(res.value().items.size(), 1);
+    const auto &item = res.value().items.first();
+    const auto &links = item.manifestItem.artworkLinks;
+    QCOMPARE(links.size(), fixtures.size());
+    QCOMPARE(item.artworkLinkAbs.size(), fixtures.size());
+    for (int i = 0; i < fixtures.size(); ++i) {
+      QCOMPARE(links.at(i).type, fixtures.at(i).type);
+      QCOMPARE(links.at(i).path, fixtures.at(i).expectedPath);
+      QCOMPARE(item.artworkLinkAbs.at(i), fixtures.at(i).abs);
+    }
+
+    auto params = res.value();
+    params.preferredCompression = KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd
+                                                                   : KartFormat::Compression_Zlib;
+    QTemporaryDir outDir;
+    const QString kartPath = QDir(outDir.path()).filePath("names.kart");
+    KartWriter::Writer w;
+    auto wr = w.writeKart(kartPath, params);
+    QVERIFY2(wr.isOk(), qPrintable(wr.error().message));
+
+    QTemporaryDir extractDir;
+    KartReader::Extractor r;
+    auto rd = r.extractTo(kartPath, extractDir.path());
+    QVERIFY2(rd.isOk(), qPrintable(rd.error().message));
+    QCOMPARE(rd.value().manifest.items.size(), 1);
+    const auto &readLinks = rd.value().manifest.items.first().artworkLinks;
+    QCOMPARE(readLinks.size(), fixtures.size());
+    for (int i = 0; i < fixtures.size(); ++i) {
+      QCOMPARE(readLinks.at(i).type, fixtures.at(i).type);
+      QCOMPARE(readLinks.at(i).path, fixtures.at(i).expectedPath);
+      QFile extracted(QDir(extractDir.path()).filePath(fixtures.at(i).expectedPath));
+      QVERIFY2(extracted.open(QIODevice::ReadOnly), qPrintable(fixtures.at(i).expectedPath));
+      QCOMPARE(extracted.readAll(), fixtures.at(i).bytes);
+    }
+
+    db.close();
+  }
   QSqlDatabase::removeDatabase(conn);
 }
 
