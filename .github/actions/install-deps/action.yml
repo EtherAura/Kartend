@@ -84,60 +84,33 @@ runs:
           -o Acquire::http::Timeout=30
           -o Acquire::https::Timeout=30
 
-    # Kartend-wym32 / Kartend-b128j: the image's first apt mirror can serve
-    # package files at a trickle for hours (2026-11-17:
-    # us-east-2.ec2.archive.ubuntu.com at about 100 kB/s for five hours, main
-    # red, every re-run on the same mirror) while it serves the index above at
-    # full speed. apt leaves a mirror only when it FAILS, and the bounds here
-    # can only turn a trickle into a labelled failure. So between the index
-    # refresh and the install, time one of this job's own package files on each
-    # listed mirror and put the fastest first. A healthy first mirror changes
-    # nothing, and the script exits 0 whatever happens: it may only help.
-    - name: Prefer a responsive apt mirror
-      shell: bash
-      # Found by either path, so a wrong GITHUB_ACTION_PATH inside a nested
-      # composite action (script-lint calls this one) cannot fail the job.
-      run: |
-        script="${GITHUB_ACTION_PATH:-}/pick-mirror.sh"
-        [ -f "$script" ] || script="$GITHUB_WORKSPACE/.github/actions/install-deps/pick-mirror.sh"
-        if [ -f "$script" ]; then
-          bash "$script" $RECOMMENDS_OPT ${{ inputs.packages }}
-        else
-          echo "pick-mirror.sh was not found: the mirror list is left as it is"
-        fi
-      env:
-        RECOMMENDS_OPT: ${{ inputs.no-install-recommends == 'true' && '--no-install-recommends' || '' }}
-
     - name: Install apt packages
       shell: bash
-      # DEBIAN_FRONTEND=noninteractive prevents tzdata/etc. from prompting if
-      # any of the requested packages pulls them in transitively. Recommends
-      # are left at apt's default (installed) unless a caller opts out via
-      # no-install-recommends — the previous cache wrapper also installed
-      # them, and dropping them for everyone would silently change the
-      # dependency closure each job sees. APT_OPTS mirrors the update step
-      # (Kartend-cqnsi) so the package downloads get the same retry/timeout
-      # resilience as the index refresh.
-      # Kartend-wym32: the Acquire timeouts fire only on INACTIVITY and
-      # Acquire::Retries only on FAILURE, so a slow-but-alive mirror trickling
-      # bytes trips neither — build-no-zstd once burned its entire 30-minute
-      # job budget inside this step and died as an unexplained "cancelled".
-      # GitHub does not support timeout-minutes on composite-action steps, so
-      # an explicit `timeout` bounds the install instead: a healthy install
-      # takes ~1-3 min, and on the 600s kill the step fails as a clearly
-      # labelled dependency problem rather than an opaque job cancellation.
-      # No retry after the kill — a SIGTERM mid-dpkg can leave dpkg needing
-      # `--configure -a`, and a blind rerun would fail more confusingly than
-      # the labelled timeout does.
+      # install-packages.sh (beside this file) holds the steps and the reasons.
+      # In short: DEBIAN_FRONTEND=noninteractive keeps tzdata and the like
+      # from prompting; recommends stay at apt's default (installed) unless a
+      # caller opts out; APT_OPTS mirrors the update step (Kartend-cqnsi).
+      #
+      # Kartend-wym32 / Kartend-b128j: apt leaves a mirror only when it FAILS.
+      # A mirror that hangs on some files (2026-11-17: the image's first
+      # mirror sat on a 25 MB package for five minutes after delivering a
+      # 14 MB one in a second; main was red for hours) trips neither the
+      # Acquire timeouts nor Acquire::Retries. So the script downloads first,
+      # with a short bound per mirror, and on a timeout moves the first mirror
+      # to the end of the list and carries on; what is already fetched stays
+      # in apt's cache. The install itself then runs once, from that cache,
+      # and is never retried (a stop mid-dpkg can leave dpkg needing
+      # `--configure -a`). GitHub does not support timeout-minutes on
+      # composite-action steps, so `timeout` bounds both; on the bound the
+      # step fails as a labelled dependency problem, not an opaque cancellation.
+      #
+      # The script is found by either path, so a wrong GITHUB_ACTION_PATH
+      # inside a nested composite action (script-lint calls this one) cannot
+      # lose it.
       run: |
-        status=0
-        timeout "$INSTALL_TIMEOUT" \
-          sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $RECOMMENDS_OPT install -y \
-          ${{ inputs.packages }} || status=$?
-        if [ "$status" -eq 124 ]; then
-          echo "::error title=apt install timed out::Dependency install exceeded ${INSTALL_TIMEOUT}s — the apt mirror is crawling (Kartend-wym32). The 'Prefer a responsive apt mirror' step above shows each mirror's measured speed."
-        fi
-        exit "$status"
+        script="${GITHUB_ACTION_PATH:-}/install-packages.sh"
+        [ -f "$script" ] || script="$GITHUB_WORKSPACE/.github/actions/install-deps/install-packages.sh"
+        bash "$script" ${{ inputs.packages }}
       env:
         APT_OPTS: >-
           -o Acquire::Retries=3
