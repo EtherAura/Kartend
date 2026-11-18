@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   once per file, and importing that bundle then failed with a duplicate
   entry error. Each shared file is now stored once, and every game still
   shows it.
+- **Exporting a .kart file works again on builds without zstd.** A Kartend
+  build made without zstd support still asked for zstd compression, so
+  exporting any collection with a compressible file (such as a `.bin`,
+  `.cue` or `.txt`) failed. Those builds now compress with zlib instead.
+  Builds with zstd are unchanged.
 - **Heroic imports now use the titles and covers you edited in Heroic.**
   Heroic 2.22 lets you rename a game and pick its own card or cover image,
   but imported collections kept showing the store's title and art. A

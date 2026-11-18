@@ -481,6 +481,11 @@ ErrorUtils::Result<WriterParams> prepareFromCollection(const CollectionConfig &c
   params.name = cfg.name;
   params.uuid = collectionUuid;
   params.launchers = allPresets;
+  // Strongest codec this build supports: a build without zstd writes zlib
+  // instead of failing every compressible entry (Kartend-xx1g5). Callers may
+  // still override the field before writeKart.
+  params.preferredCompression = KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd
+                                                                 : KartFormat::Compression_Zlib;
   params.collectionConfig.parentCollectionIndex = -1;
   params.collectionConfig.isSubcollection = false;
   params.collectionConfig.additionalParentNames.clear();
