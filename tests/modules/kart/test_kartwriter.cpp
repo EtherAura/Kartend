@@ -76,6 +76,9 @@ private slots:
   // the same sibling artwork/video; the payload must be bundled once or the
   // extractor's duplicate-entry guard rejects the export.
   void testPrepareSharedSiblingAssetsRoundTrip();
+  // Kartend-xx1g5: prepareFromCollection picks the strongest codec the build
+  // supports, so an export with no caller override works without zstd.
+  void testPrepareFromCollectionUsesBuildCodec();
 };
 
 void TestKartWriter::testExtensionShouldCompress() {
@@ -639,6 +642,48 @@ void TestKartWriter::testPrepareSharedSiblingAssetsRoundTrip() {
     QCOMPARE(mi.videoPath, QString("video/Game.mp4"));
     QCOMPARE(mi.manualPath, QString("manual/Game.pdf"));
   }
+}
+
+void TestKartWriter::testPrepareFromCollectionUsesBuildCodec() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  QDir rootDir(root.path());
+  rootDir.mkpath("media");
+  QDir mDir(rootDir.filePath("media"));
+  // Compressible, so the entry really goes through the chosen codec instead
+  // of falling back to Compression_None.
+  QByteArray rom(8192, '\0');
+  for (int i = 0; i < rom.size(); ++i) rom[i] = static_cast<char>((i / 64) & 0xFF);
+  writeFile(mDir, "Codec.bin", rom);
+
+  CollectionConfig cfg;
+  cfg.name = "Codec";
+  cfg.mediaDirectory = mDir.absolutePath();
+  cfg.extensions = {"bin"};
+
+  auto res = KartWriter::prepareFromCollection(cfg, "xx1g5-uuid", {}, nullptr);
+  QVERIFY2(res.isOk(), qPrintable(res.error().message));
+  const auto &params = res.value();
+  QCOMPARE(params.items.size(), 1);
+  QCOMPARE(params.preferredCompression, KartCompression::zstdAvailable()
+                                            ? KartFormat::Compression_Zstd
+                                            : KartFormat::Compression_Zlib);
+
+  // No codec override: the params go to the writer exactly as production
+  // callers pass them.
+  QTemporaryDir outDir;
+  const QString kartPath = QDir(outDir.path()).filePath("codec.kart");
+  KartWriter::Writer w;
+  auto wr = w.writeKart(kartPath, params);
+  QVERIFY2(wr.isOk(), qPrintable(wr.error().message));
+
+  QTemporaryDir extractDir;
+  KartReader::Extractor r;
+  auto rd = r.extractTo(kartPath, extractDir.path());
+  QVERIFY2(rd.isOk(), qPrintable(rd.error().message));
+  QFile readBack(QDir(extractDir.path()).filePath("media/Codec.bin"));
+  QVERIFY(readBack.open(QIODevice::ReadOnly));
+  QCOMPARE(readBack.readAll(), rom);
 }
 
 QTEST_MAIN(TestKartWriter)
