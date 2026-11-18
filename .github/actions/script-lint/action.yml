@@ -56,12 +56,15 @@ runs:
       # lib files are linted directly too; each documents a
       # disable=SC2154,SC2034 because those two checks can't see the
       # build.sh-owned globals when a module is linted in isolation.
+      # packaging/appimage/*.sh build the release AppImage (Kartend-g84cb):
+      # a quoting slip there would otherwise first show on a tag.
       shell: bash
       run: |
         shellcheck --version
         shellcheck -x .scripts/*.sh .scripts/lib/*.sh \
           .scripts/git-hooks/pre-commit .scripts/git-hooks/pre-push .scripts/git-hooks/install.sh \
-          .github/actions/install-deps/install-packages.sh
+          .github/actions/install-deps/install-packages.sh \
+          packaging/appimage/*.sh
 
     - name: clang-format check (v19 pin)
       # Kartend-cifqk: moved out of maintenance-check — the format check is
