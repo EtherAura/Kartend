@@ -5,7 +5,8 @@ The script reorders the runner's apt mirror list when the first mirror is slow.
 A wrong reorder would break every Linux job's dependency install, and the real
 thing only runs on hosted runners, so these tests run the real script against
 local HTTP servers: one that answers at once, one that trickles, one that
-answers 404. They assert the list file it leaves behind.
+answers 404. They assert the list file it leaves behind, and that the file it
+times is a package of the job (a stand-in apt-get names them).
 
 stdlib unittest — pytest is not available in CI. Run directly
 (`python3 .scripts/tests/test_pick_mirror.py`) or via `python3 -m unittest`.
@@ -30,12 +31,13 @@ class Mirror:
     """A local mirror: 'fast' answers at once, 'slow' trickles about 50 kB/s, 'missing' answers 404."""
 
     def __init__(self, kind: str):
-        self.kind, self.hits = kind, 0
+        self.kind, self.hits, self.paths = kind, 0, []
         outer = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):  # noqa: N802 (http.server's name)
                 outer.hits += 1
+                outer.paths.append(self.path)
                 if outer.kind == "missing":
                     self.send_error(404)
                     return
@@ -85,14 +87,21 @@ class PickMirror(unittest.TestCase):
         self.list.write_text(text)
         return text
 
-    def run_script(self, fallbacks: str = "", **env: str) -> subprocess.CompletedProcess:
+    def run_script(self, fallbacks: str = "", args: tuple[str, ...] = (), **env: str) -> subprocess.CompletedProcess:
         settings = {
             "APT_MIRRORS_FILE": str(self.list), "APT_MIRROR_SUDO": "", "APT_MIRROR_PROBE_PATH": "probe.bin",
             "APT_MIRROR_PROBE_SECONDS": "1", "APT_MIRROR_HEALTHY_BPS": "1000000", "APT_MIRROR_FALLBACKS": fallbacks,
         }
         settings.update(env)
-        return subprocess.run(["bash", str(SCRIPT)], env=dict(os.environ, **settings), capture_output=True,
+        return subprocess.run(["bash", str(SCRIPT), *args], env=dict(os.environ, **settings), capture_output=True,
                               text=True, check=False, timeout=60)
+
+    def apt_get(self, lines: str, rc: int = 0, name: str = "apt-get") -> str:
+        """A stand-in apt-get: records its arguments, prints `lines` (apt's --print-uris output), exits rc."""
+        path = pathlib.Path(self.tmp.name) / name
+        path.write_text(f"#!/bin/sh\necho \"$@\" > '{self.tmp.name}/apt-args'\ncat <<'EOF'\n{lines}EOF\nexit {rc}\n")
+        path.chmod(0o755)
+        return str(path)
 
     def urls(self) -> list[str]:
         return [line.split("\t")[0] for line in self.list.read_text().splitlines()]
@@ -166,6 +175,39 @@ class PickMirror(unittest.TestCase):
         done = self.run_script()
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertEqual(self.list.read_text(), "# nothing here\n\n")
+
+    URIS = (
+        "'mirror+file:/etc/apt/apt-mirrors.txt/pool/main/e/expat/libexpat1_2.6.1_amd64.deb' libexpat1_2.6.1_amd64.deb 98940 MD5Sum:c1\n"
+        "'mirror+file:/etc/apt/apt-mirrors.txt/pool/universe/q/qt6-base/qt6-base-dev-tools_6.4.2%2bdfsg-21_amd64.deb' qt6-base-dev-tools_6.4.2+dfsg-21_amd64.deb 1104522 MD5Sum:c2\n"
+        "'http://archive.ubuntu.com/ubuntu/pool/universe/c/codec2/libcodec2-1.2_1.2.0-2build1_amd64.deb' libcodec2-1.2_1.2.0-2build1_amd64.deb 8998000 MD5Sum:c3\n"
+        "'mirror+file:/etc/apt/apt-mirrors.txt/dists/noble/InRelease' InRelease 1000000 MD5Sum:c4\n"
+    )
+
+    def test_the_file_timed_is_the_jobs_package_nearest_one_megabyte(self):
+        slow, fast = self.mirror("slow"), self.mirror("fast")
+        self.write_list(slow.url, fast.url)
+        done = self.run_script(args=("--no-install-recommends", "cmake", "qt6-base-dev"), APT_MIRROR_PROBE_PATH="",
+                               APT_MIRROR_APT_GET=self.apt_get(self.URIS))
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        want = "/ubuntu/pool/universe/q/qt6-base/qt6-base-dev-tools_6.4.2%2bdfsg-21_amd64.deb"
+        # curl may write the escape in upper case (%2B); the mirror reads both the same
+        self.assertEqual([path.lower() for path in slow.paths], [want.lower()])
+        self.assertEqual([path.lower() for path in fast.paths], [want.lower()])
+        self.assertEqual(self.urls(), [fast.url, slow.url])
+        args = (pathlib.Path(self.tmp.name) / "apt-args").read_text().strip()
+        self.assertEqual(args, "install --print-uris -qq -y --no-install-recommends cmake qt6-base-dev")
+
+    def test_no_package_file_named_leaves_the_list(self):
+        slow, fast = self.mirror("slow"), self.mirror("fast")
+        before = self.write_list(slow.url, fast.url)
+        for apt_get, args in ((self.apt_get("", rc=100, name="apt-get-fails"), ("cmake",)),
+                              (self.apt_get(self.URIS, name="apt-get-not-asked"), ()),
+                              (str(pathlib.Path(self.tmp.name) / "no-such-apt-get"), ("cmake",))):
+            done = self.run_script(args=args, APT_MIRROR_PROBE_PATH="", APT_MIRROR_APT_GET=apt_get)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            self.assertEqual(self.list.read_text(), before)
+            self.assertIn("apt named no package file to time", done.stdout)
+        self.assertEqual(slow.hits + fast.hits, 0)
 
     def test_other_fields_of_a_line_do_not_confuse_it(self):
         slow, fast = self.mirror("slow"), self.mirror("fast")
