@@ -26,6 +26,14 @@ struct CollectionBackground {
   BackgroundType backgroundType = BackgroundType::Color;
   QString backgroundColor; // Background color (hex like #1a1a2e)
   QString backgroundImage; // Background image path
+  /// Explicit user choice of the wallpaper (Kartend-ji94z): non-empty only
+  /// when the user picked `backgroundImage` themselves, and then equal to that
+  /// exact path, so a retained `_shared` platform image can be marked as
+  /// user-owned without inferring anything from where the file lives. Empty
+  /// means unmarked (including every INI written before this key existed).
+  /// Persistence drops a marker that does not match the saved, sanitised
+  /// backgroundImage, so a changed or cleared wallpaper never inherits it.
+  QString backgroundImageChosenPath;
   /// looping muted background video path. Active only when
   /// backgroundType == Video; empty disables the video and falls back to
   /// the system bg until the user picks a file. Sanitised on save like
@@ -74,10 +82,11 @@ struct CollectionBackground {
 
   bool operator==(const CollectionBackground &other) const {
     return backgroundType == other.backgroundType && backgroundColor == other.backgroundColor &&
-           backgroundImage == other.backgroundImage && backgroundVideo == other.backgroundVideo &&
-           primaryColor == other.primaryColor && toolbarColorSource == other.toolbarColorSource &&
-           tileColor == other.tileColor && selectionColor == other.selectionColor &&
-           headerLogoImage == other.headerLogoImage &&
+           backgroundImage == other.backgroundImage &&
+           backgroundImageChosenPath == other.backgroundImageChosenPath &&
+           backgroundVideo == other.backgroundVideo && primaryColor == other.primaryColor &&
+           toolbarColorSource == other.toolbarColorSource && tileColor == other.tileColor &&
+           selectionColor == other.selectionColor && headerLogoImage == other.headerLogoImage &&
            headerLogoPosition == other.headerLogoPosition &&
            vignetteEnabled == other.vignetteEnabled &&
            vignetteIntensity == other.vignetteIntensity &&
@@ -95,11 +104,12 @@ struct CollectionBackground {
 // exists since Qt 6.5 and CI pins Qt 6.4.2.
 inline size_t qHash(const CollectionBackground &key, size_t seed = 0) {
   return qHashMulti(seed, static_cast<int>(key.backgroundType), key.backgroundColor,
-                    key.backgroundImage, key.backgroundVideo, key.primaryColor,
-                    static_cast<int>(key.toolbarColorSource), key.tileColor, key.selectionColor,
-                    key.headerLogoImage, static_cast<int>(key.headerLogoPosition),
-                    key.vignetteEnabled, key.vignetteIntensity, key.wallpaperParallax,
-                    key.parallaxStrength, key.toolbarBackdropBlur, key.backdropBlurRadius);
+                    key.backgroundImage, key.backgroundImageChosenPath, key.backgroundVideo,
+                    key.primaryColor, static_cast<int>(key.toolbarColorSource), key.tileColor,
+                    key.selectionColor, key.headerLogoImage,
+                    static_cast<int>(key.headerLogoPosition), key.vignetteEnabled,
+                    key.vignetteIntensity, key.wallpaperParallax, key.parallaxStrength,
+                    key.toolbarBackdropBlur, key.backdropBlurRadius);
 }
 
 #endif

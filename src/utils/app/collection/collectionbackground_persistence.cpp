@@ -25,8 +25,16 @@ void load(QSettings &settings, CollectionBackground &bg, const QString &collecti
     bg.backgroundType = BackgroundType::Color;
   }
   bg.backgroundColor = settings.value(keys::kBackgroundColor).toString();
-  bg.backgroundImage = sanitize(settings.value(keys::kBackgroundImage).toString(),
-                                QStringLiteral("backgroundImage"));
+  const QString rawBackgroundImage = settings.value(keys::kBackgroundImage).toString();
+  bg.backgroundImage = sanitize(rawBackgroundImage, QStringLiteral("backgroundImage"));
+  // Kartend-ji94z: the explicit-choice marker only counts when it names the
+  // exact stored wallpaper AND that wallpaper survived the sanitizer. An
+  // absent key (legacy INI), a stale value or a rejected wallpaper all load
+  // unmarked; nothing is inferred from the path's location.
+  const QString storedChoice = settings.value(keys::kBackgroundImageChosenPath).toString();
+  bg.backgroundImageChosenPath =
+      (!bg.backgroundImage.isEmpty() && storedChoice == rawBackgroundImage) ? bg.backgroundImage
+                                                                            : QString();
   bg.backgroundVideo = sanitize(settings.value(keys::kBackgroundVideo).toString(),
                                 QStringLiteral("backgroundVideo"));
   bg.primaryColor = settings.value(keys::kPrimaryColor).toString();
@@ -64,8 +72,18 @@ void save(QSettings &settings, const CollectionBackground &bg, const PathSanitiz
   }
   settings.setValue(keys::kBackgroundType, bgTypeStr);
   settings.setValue(keys::kBackgroundColor, bg.backgroundColor);
-  settings.setValue(keys::kBackgroundImage,
-                    sanitize(bg.backgroundImage, QStringLiteral("backgroundImage")));
+  const QString savedBackgroundImage =
+      sanitize(bg.backgroundImage, QStringLiteral("backgroundImage"));
+  settings.setValue(keys::kBackgroundImage, savedBackgroundImage);
+  // Kartend-ji94z: persist the marker only for the wallpaper actually saved.
+  // Otherwise remove it explicitly — the INI may be reused with preserved keys
+  // replayed before this save, and a leftover marker must not attach itself to
+  // a changed, cleared or rejected wallpaper.
+  if (!savedBackgroundImage.isEmpty() && bg.backgroundImageChosenPath == bg.backgroundImage) {
+    settings.setValue(keys::kBackgroundImageChosenPath, savedBackgroundImage);
+  } else {
+    settings.remove(keys::kBackgroundImageChosenPath);
+  }
   settings.setValue(keys::kBackgroundVideo,
                     sanitize(bg.backgroundVideo, QStringLiteral("backgroundVideo")));
   settings.setValue(keys::kPrimaryColor, bg.primaryColor);

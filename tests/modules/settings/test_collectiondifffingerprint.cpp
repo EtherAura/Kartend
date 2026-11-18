@@ -153,6 +153,10 @@ void TestCollectionDiffFingerprint::backgroundHashTracksEachField() {
   hashDetects<T>("backgroundType", [](T &c) { c.backgroundType = BackgroundType::Image; });
   hashDetects<T>("backgroundColor", [](T &c) { c.backgroundColor = QStringLiteral("#1a1a2e"); });
   hashDetects<T>("backgroundImage", [](T &c) { c.backgroundImage = QStringLiteral("/tmp/x.png"); });
+  // Kartend-ji94z: marker-only change — picking the already-shown wallpaper
+  // must still fire collectionBackgroundChanged.
+  hashDetects<T>("backgroundImageChosenPath",
+                 [](T &c) { c.backgroundImageChosenPath = QStringLiteral("/tmp/x.png"); });
   hashDetects<T>("backgroundVideo", [](T &c) { c.backgroundVideo = QStringLiteral("/tmp/x.mp4"); });
   hashDetects<T>("primaryColor", [](T &c) { c.primaryColor = QStringLiteral("#333333"); });
   // Kartend-5lzvl: this field was in NEITHER operator== nor qHash — the same

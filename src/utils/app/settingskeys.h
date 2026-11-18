@@ -31,6 +31,7 @@ inline constexpr auto kAttractModeScrollSpeed = "attractModeScrollSpeed";
 inline constexpr auto kBackdropBlurRadius = "backdropBlurRadius";
 inline constexpr auto kBackgroundColor = "backgroundColor";
 inline constexpr auto kBackgroundImage = "backgroundImage";
+inline constexpr auto kBackgroundImageChosenPath = "backgroundImageChosenPath";
 inline constexpr auto kBackgroundType = "backgroundType";
 inline constexpr auto kBackgroundVideo = "backgroundVideo";
 inline constexpr auto kBatchItemConcurrency = "batchItemConcurrency";
