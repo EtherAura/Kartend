@@ -66,6 +66,10 @@ private slots:
   void testRoundTripStoresIncompressibleMultiChunkEntry();
   void testWriterEmitsProgress();
   void testWriterCanCancel();
+  // Kartend-bfvpk: writeKart only commits its QSaveFile on success, so a
+  // cancelled or failed write leaves no new .kart and keeps an existing one.
+  void testWriterCancelMidStreamLeavesNoOutput();
+  void testWriterFailureKeepsExistingOutput();
   void testPrepareFromCollectionScansDirs();
   void testExtractedPayloadIsNeverExecutable();
   // Kartend-fh3ab: hand-linked artwork (item_artwork rows) travels in the
@@ -404,6 +408,102 @@ void TestKartWriter::testWriterCanCancel() {
   auto wr = w.writeKart(QDir(outDir.path()).filePath("c.kart"), p);
   QVERIFY(wr.isError());
   QVERIFY(wr.hasErrorCode(ErrorUtils::ErrorCode::OperationCancelled));
+}
+
+void TestKartWriter::testWriterCancelMidStreamLeavesNoOutput() {
+  QTemporaryDir src;
+  QVERIFY(src.isValid());
+  QDir d(src.path());
+  KartWriter::WriterParams p;
+  p.uuid = "x";
+  p.name = "CancelMid";
+  p.collectionConfig.name = "CancelMid";
+  p.preferredCompression = KartCompression::zstdAvailable() ? KartFormat::Compression_Zstd
+                                                            : KartFormat::Compression_Zlib;
+  for (int i = 0; i < 3; ++i) {
+    const QByteArray data(512, static_cast<char>('m' + i));
+    const QString name = QString("m%1.bin").arg(i);
+    const QString abs = writeFile(d, name, data);
+    QFile check(abs);
+    QVERIFY2(check.open(QIODevice::ReadOnly), qPrintable(check.errorString()));
+    QCOMPARE(check.readAll(), data);
+    KartWriter::ItemSource it;
+    it.mediaAbs = abs;
+    it.manifestItem.mediaPath = "media/" + name;
+    it.manifestItem.title = name;
+    p.items.append(it);
+  }
+
+  QTemporaryDir outDir;
+  QVERIFY(outDir.isValid());
+  const QString kartPath = QDir(outDir.path()).filePath("mid.kart");
+  QVERIFY(!QFileInfo::exists(kartPath));
+
+  KartWriter::Writer w;
+  QSignalSpy spy(&w, &KartWriter::Writer::progress);
+  // writeKart runs on this thread and emits progress synchronously after each
+  // completed entry; the direct connection cancels before the second entry.
+  connect(&w, &KartWriter::Writer::progress, &w, [&w]() { w.cancel(); }, Qt::DirectConnection);
+  auto wr = w.writeKart(kartPath, p);
+  QVERIFY(wr.isError());
+  QVERIFY(wr.hasErrorCode(ErrorUtils::ErrorCode::OperationCancelled));
+  QCOMPARE(spy.size(), 1);
+  QVERIFY(!QFileInfo::exists(kartPath));
+}
+
+void TestKartWriter::testWriterFailureKeepsExistingOutput() {
+  QTemporaryDir src;
+  QVERIFY(src.isValid());
+  QDir d(src.path());
+  const QByteArray firstData("first source payload, intentionally valid");
+  const QString firstAbs = d.absoluteFilePath("first.bin");
+  {
+    QFile f(firstAbs);
+    QVERIFY2(f.open(QIODevice::WriteOnly), qPrintable(f.errorString()));
+    QCOMPARE(f.write(firstData), static_cast<qint64>(firstData.size()));
+    f.close();
+    QCOMPARE(f.error(), QFileDevice::NoError);
+  }
+  {
+    QFile f(firstAbs);
+    QVERIFY2(f.open(QIODevice::ReadOnly), qPrintable(f.errorString()));
+    QCOMPARE(f.readAll(), firstData);
+  }
+  const QString missingAbs = d.absoluteFilePath("missing.bin");
+  QVERIFY(!QFileInfo::exists(missingAbs));
+
+  KartWriter::WriterParams p = makeMinimalParams(firstAbs, "first.bin");
+  KartWriter::ItemSource second;
+  second.mediaAbs = missingAbs;
+  second.manifestItem.mediaPath = "media/missing.bin";
+  second.manifestItem.title = "Missing";
+  p.items.append(second);
+
+  QTemporaryDir outDir;
+  QVERIFY(outDir.isValid());
+  const QString kartPath = QDir(outDir.path()).filePath("existing.kart");
+  const QByteArray original("previous kart bytes that a failed write must not replace");
+  {
+    QFile f(kartPath);
+    QVERIFY2(f.open(QIODevice::WriteOnly), qPrintable(f.errorString()));
+    QCOMPARE(f.write(original), static_cast<qint64>(original.size()));
+    f.close();
+    QCOMPARE(f.error(), QFileDevice::NoError);
+  }
+  {
+    QFile f(kartPath);
+    QVERIFY2(f.open(QIODevice::ReadOnly), qPrintable(f.errorString()));
+    QCOMPARE(f.readAll(), original);
+  }
+
+  KartWriter::Writer w;
+  auto wr = w.writeKart(kartPath, p);
+  QVERIFY(wr.isError());
+  QVERIFY(wr.hasErrorCode(ErrorUtils::ErrorCode::FileReadError));
+
+  QFile after(kartPath);
+  QVERIFY2(after.open(QIODevice::ReadOnly), qPrintable(after.errorString()));
+  QCOMPARE(after.readAll(), original);
 }
 
 void TestKartWriter::testPrepareFromCollectionScansDirs() {
