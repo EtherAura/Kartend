@@ -7,9 +7,16 @@
 # dependencies could not finish inside the install step's 600 s bound in about half of all Linux jobs, main stayed
 # red, and every re-run drew the same mirror again.
 #
-# This times one fixed fetch (the main package index, about 1.4 MB) from every listed mirror and from two public
-# fallbacks. A healthy first mirror leaves the list exactly as it is. Otherwise the list is rewritten fastest
-# first. Whatever goes wrong here, the list stays as it was and the step exits 0: it may only help.
+# This times one fetch of a real package file from every listed mirror and from two public fallbacks. A healthy
+# first mirror leaves the list exactly as it is. Otherwise the list is rewritten fastest first. Whatever goes
+# wrong here, the list stays as it was and the step exits 0: it may only help.
+#
+# The file timed is one of the packages this very job is about to download (the arguments are the job's package
+# list; apt names the files and their sizes), about 1 MB. It must be a package file: that day the slow mirror
+# served its package INDEX at 3 MB/s and the packages themselves at 100 kB/s, so a first version of this script
+# that timed the index called the mirror healthy and changed nothing.
+#
+#     pick-mirror.sh [PACKAGE...]      run after `apt-get update`, before `apt-get install`
 #
 # Environment (all optional; the tests set them):
 #   APT_MIRRORS_FILE          the mirror list                          default /etc/apt/apt-mirrors.txt
@@ -18,7 +25,8 @@
 #                             does 10 to 100 times this)
 #   APT_MIRROR_PROBE_SECONDS  time limit of one timing fetch           default 5
 #   APT_MIRROR_FALLBACKS      mirrors timed besides the listed ones    default azure.archive and archive.ubuntu.com
-#   APT_MIRROR_PROBE_PATH     path fetched below each mirror           default dists/<codename>/main/binary-<arch>/Packages.xz
+#   APT_MIRROR_PROBE_PATH     path fetched below each mirror           default a package file of this job (see above)
+#   APT_MIRROR_APT_GET        the apt-get that names the job's files   default apt-get
 #   APT_MIRROR_SUDO           command that may write the list          default sudo ("" writes as the caller)
 set -u
 
@@ -37,16 +45,27 @@ if ! command -v curl >/dev/null 2>&1; then
     exit 0
 fi
 
+# The file to time: of everything apt would download for this job's packages, the one nearest 1 MB (big enough to
+# show a trickle inside the time limit, small enough to cost a healthy mirror a fraction of a second). apt prints
+# one line per file: 'URI' name size hash; the path from pool/ on is the same on every mirror.
+APT_GET="${APT_MIRROR_APT_GET:-apt-get}"
 probe_path="${APT_MIRROR_PROBE_PATH:-}"
-if [ -z "$probe_path" ]; then
-    codename="$(. /etc/os-release 2>/dev/null && echo "${VERSION_CODENAME:-}")"
-    arch="$(dpkg --print-architecture 2>/dev/null || true)"
-    if [ -z "$codename" ] || [ -z "$arch" ]; then
-        echo "pick-mirror: the release or the architecture could not be read: the mirror list is left as it is"
-        exit 0
-    fi
-    probe_path="dists/$codename/main/binary-$arch/Packages.xz"
+if [ -z "$probe_path" ] && [ "$#" -gt 0 ]; then
+    probe_path="$("$APT_GET" install --print-uris -qq -y "$@" 2>/dev/null | awk '
+        {
+            uri = $1; size = $3 + 0
+            if (!match(uri, /\/pool\/[^\047]+\.deb/)) next
+            path = substr(uri, RSTART + 1, RLENGTH - 1)
+            distance = size > 1000000 ? size - 1000000 : 1000000 - size
+            if (best == "" || distance < best_distance) { best = path; best_distance = distance }
+        }
+        END { print best }')"
 fi
+if [ -z "$probe_path" ]; then
+    echo "pick-mirror: apt named no package file to time: the mirror list is left as it is"
+    exit 0
+fi
+echo "pick-mirror: timing $probe_path on each mirror"
 
 # The listed mirrors in their order (first field of each line), then the fallbacks that are not listed.
 mirrors=()
