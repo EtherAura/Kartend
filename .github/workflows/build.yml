@@ -1141,6 +1141,50 @@ jobs:
       - name: ccache stats
         run: ccache --show-stats
 
+  # Kartend-g84cb: the Linux AppImage, on every change. release.yml's
+  # appimage-release job attaches Kartend-<version>-x86_64.AppImage to a
+  # tagged release; it runs only on a tag, where a failure is a red release
+  # that cannot be re-tagged. So the same composite action runs here first:
+  # it builds the AppImage from this tree inside the release base container
+  # (ubuntu:22.04), lets packaging/appimage/build-appimage.sh validate its
+  # own output, starts the result headless on Ubuntu 22.04, Ubuntu 26.04 and
+  # Fedora 45 (and under X11 and Wayland on the last two), and writes the
+  # SBOM. A change that would break the release build breaks this job.
+  #
+  # Not a ccache job on purpose: the build inside is a clean Release build
+  # with the base's own compiler, the same as the release makes. Only what is
+  # downloaded (CMake, Qt, QtKeychain, the packaging tools) is cached.
+  appimage:
+    runs-on: ubuntu-24.04
+    # Measured cold (nothing cached): 12 min. About 1.5 to set up the
+    # container, CMake, Qt and QtKeychain, 7 for the Release build on the
+    # runner's 4 cores, 3 for the three test containers, the rest bundling,
+    # checks and the SBOM. 45 matches the other build jobs and leaves room
+    # for a slow mirror.
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build and test the AppImage
+        id: appimage
+        uses: ./.github/actions/appimage
+        with:
+          cache: 'true'
+
+      - name: Upload preview artifact
+        # The AppImage of this very commit, to try before it is released,
+        # with the SBOM that would go out beside it. Not a release: it has no
+        # provenance attestation. The run number keeps downloads apart.
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kartend-appimage-x86_64-preview-r${{ github.run_number }}
+          path: |
+            ${{ steps.appimage.outputs.appimage }}
+            ${{ steps.appimage.outputs.sbom }}
+          retention-days: 14
+          if-no-files-found: error
+
   # Kartend-elluw: macOS smoke build. Mirrors the Windows job's
   # install-qt-action → build → offscreen-ctest shape, adapted to Homebrew +
   # clang. zstd comes from brew; Qt6Keychain and SDL2 are optional
