@@ -297,7 +297,7 @@ kartend_add_test(NAME SmartPlaylistEvaluator
 # UsageStatsStore tests
 kartend_add_test(NAME UsageStatsStore
   SOURCES utils/db/test_usagestatsstore.cpp
-  LINK kartend_utils
+  LINK kartend_utils kartend_data
 )
 
 # KartendDb::DbTransaction contract tests against real SQLite (Kartend-c0dwd):
