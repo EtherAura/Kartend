@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Kartend now comes as an AppImage.** Each release has a
+  `Kartend-<version>-x86_64.AppImage`: one file that runs on Fedora,
+  openSUSE, the Steam Deck and any other distribution without a Kartend
+  package, as long as it has glibc 2.35 or newer (Ubuntu 22.04, Debian 12
+  and later). Make it executable and run it; nothing is installed and no
+  FUSE library is needed. It carries its own Qt 6.8 with X11 and Wayland
+  support and FFmpeg for video and audio, and has the same optional
+  features as the `.deb`: gamepad input, zstd compression for `.kart`
+  packages, in-process archive reading and keychain storage for scraper
+  credentials. Like the other downloads it comes with a `.sha256`, an SBOM
+  and a build provenance attestation.
 - **ES-DE imports now bring in the game videos ES-DE downloaded.** A video
   saved in ES-DE's `videos` media folder (for example `.mp4` or `.mkv`) is
   copied into the imported game's video folder, next to its cover and other
