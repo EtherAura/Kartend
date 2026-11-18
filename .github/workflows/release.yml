@@ -615,3 +615,92 @@ jobs:
             ${{ steps.installer_sha.outputs.sha }}
             Kartend-${{ needs.release.outputs.version }}-windows-x64.cdx.json
           fail_on_unmatched_files: true
+
+  # ─── Linux AppImage ─────────────────────────────────────────────────
+  # Kartend-g84cb. Kartend-<version>-x86_64.AppImage: one file that runs on
+  # distributions without a Kartend package (Fedora, openSUSE, the Steam
+  # Deck, ...), bundling Qt and the same optional backends as the .deb.
+  #
+  # Built from the tag by packaging/appimage/build-appimage.sh inside the
+  # release base container that script's common.sh names (ubuntu:22.04, the
+  # oldest distribution the AppImage supports), through the SAME composite
+  # action build.yml's `appimage` job runs on every pull request, so the two
+  # cannot drift and a tag is never the first time this build is tried. The
+  # action also starts the AppImage in clean Ubuntu and Fedora containers
+  # and generates its SBOM; a failure in any of that ends the job before
+  # anything is attached.
+  #
+  # Like windows-release, this attaches to the release the linux job above
+  # created: softprops/action-gh-release upserts files on the release at
+  # this tag.
+  appimage-release:
+    needs: release
+    runs-on: ubuntu-24.04
+    # Measured on build.yml's appimage job with nothing cached, which is how
+    # this job always runs: 12 min. 45 turns a hung download into a clear
+    # failure well before the default 6 hours.
+    timeout-minutes: 45
+    # contents: write attaches the assets. id-token + attestations back the
+    # provenance step, exactly as in the two jobs above (Kartend-r8tko);
+    # neither grants repo write access.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build and test the AppImage
+        id: appimage
+        # No cache: a release downloads CMake, Qt, QtKeychain and the
+        # packaging tools fresh. The tool and CMake downloads are checked
+        # against the SHA-256 pinned in packaging/appimage/common.sh, Qt's
+        # archives by aqtinstall against the checksums download.qt.io
+        # publishes, and QtKeychain against its pinned commit.
+        uses: ./.github/actions/appimage
+
+      - name: Stage the AppImage + sha256
+        id: package
+        # Copies the AppImage to the workspace root under the name the release
+        # page advertises (the script derives it from the VERSION file, which
+        # the linux job above has already checked against the tag; the
+        # comparison here keeps a renamed output from being published) and
+        # writes the checksum sidecar the same way the other assets get theirs.
+        run: |
+          set -euo pipefail
+          NAME="${{ steps.appimage.outputs.file-name }}"
+          WANT="Kartend-${{ needs.release.outputs.version }}-x86_64.AppImage"
+          if [ "$NAME" != "$WANT" ]; then
+            echo "::error::The build produced '$NAME', but this release is expected to ship '$WANT'."
+            exit 1
+          fi
+          cp "${{ steps.appimage.outputs.appimage }}" "$NAME"
+          sha256sum "$NAME" | tee "$NAME.sha256"
+          echo "appimage=$NAME" >> "$GITHUB_OUTPUT"
+          echo "sha=$NAME.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance (AppImage + SBOM)
+        # Kartend-r8tko, AppImage half: the same Sigstore-backed attestation
+        # as the other built assets, over the AppImage and its SBOM (the
+        # .sha256 is derived, not built). Before the upload on purpose, like
+        # the linux job: an asset without its attestation is a claim with no
+        # evidence behind it. Verify a download with:
+        #
+        #     gh attestation verify Kartend-<version>-x86_64.AppImage --repo EtherAura/Kartend
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ steps.package.outputs.appimage }}
+            ${{ steps.appimage.outputs.sbom }}
+
+      - name: Attach the AppImage to the release
+        # fail_on_unmatched_files keeps a packaging bug from publishing a
+        # release that silently lacks one of the three files.
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          files: |
+            ${{ steps.package.outputs.appimage }}
+            ${{ steps.package.outputs.sha }}
+            ${{ steps.appimage.outputs.sbom }}
+          fail_on_unmatched_files: true
