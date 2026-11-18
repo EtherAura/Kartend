@@ -61,7 +61,7 @@ runs:
         shellcheck --version
         shellcheck -x .scripts/*.sh .scripts/lib/*.sh \
           .scripts/git-hooks/pre-commit .scripts/git-hooks/pre-push .scripts/git-hooks/install.sh \
-          .github/actions/install-deps/pick-mirror.sh
+          .github/actions/install-deps/install-packages.sh
 
     - name: clang-format check (v19 pin)
       # Kartend-cifqk: moved out of maintenance-check — the format check is
@@ -114,12 +114,13 @@ runs:
       shell: bash
       run: python3 .scripts/tests/test_lint_scripts.py
 
-    - name: Self-test the apt mirror picker
-      # Runs the real pick-mirror.sh against local HTTP servers (fast, slow,
-      # missing) and checks the mirror list it leaves. A wrong reorder would
-      # break every Linux job's dependency install (Kartend-wym32).
+    - name: Self-test the dependency install script
+      # Runs the real install-packages.sh with stand-ins for apt-get and the
+      # mirror list: a mirror that hangs is left behind, apt's own failures
+      # are not retried, the install runs once. Every Linux job's dependency
+      # install goes through that script (Kartend-wym32).
       shell: bash
-      run: python3 .scripts/tests/test_pick_mirror.py
+      run: python3 .scripts/tests/test_install_deps.py
 
     - name: Validate AppStream + desktop metadata
       shell: bash
