@@ -314,10 +314,6 @@ void inlineLauncherPresets(WriterParams &params) {
   auto collect = [&](const LauncherConfig &lc) {
     if (!lc.presetId.isEmpty()) referenced.insert(lc.presetId);
   };
-  if (!params.collectionConfig.launcher.launcherPath.isEmpty() ||
-      !params.collectionConfig.launcher.launcherName.isEmpty()) {
-    // legacy primary launcher has no preset id
-  }
   for (const LauncherConfig &lc : params.collectionConfig.launcher.additionalLaunchers) {
     collect(lc);
   }
