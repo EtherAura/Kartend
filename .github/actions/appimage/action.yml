@@ -1,0 +1,163 @@
+name: 'Build and test the Kartend AppImage'
+description: >-
+  Shared AppImage pipeline for build.yml's `appimage` job and release.yml's
+  `appimage-release` job (Kartend-g84cb), so the AppImage a release attaches
+  is made by exactly the steps every pull request has already run.
+
+  Builds Kartend-<version>-x86_64.AppImage from the checked-out tree inside
+  the release base container (ubuntu:22.04, named once in
+  packaging/appimage/common.sh), then starts it in clean containers of three
+  distributions, and writes the CycloneDX SBOM of what is inside.
+
+  All the logic is in packaging/appimage/*.sh; this action only calls those
+  scripts, the same way a developer does locally:
+
+      packaging/appimage/build-in-container.sh
+      packaging/appimage/smoke-test-in-container.sh fedora:45 build/appimage/Kartend-<version>-x86_64.AppImage
+
+  build-appimage.sh (run by the first) validates its own output before the
+  file gets its name: every bundled library resolves inside the bundle or is
+  on the short list expected from the user's system, nothing needs a newer
+  glibc than the base's, the file is an x86_64 type-2 AppImage whose payload
+  unpacks to exactly the tree that went in, and it starts headless and
+  passes the probe (SQLite, TLS, image formats, playing an H.264 and a VP9
+  clip through the bundled FFmpeg).
+
+  The caller must check out the repository first, and keeps its own tail:
+  build.yml uploads the AppImage as a workflow artifact; release.yml writes
+  the .sha256, attests and attaches to the release.
+
+inputs:
+  cache:
+    description: >-
+      "true" keeps CMake, Qt, QtKeychain and the packaging tools (about 2 GB,
+      everything prepare-build-env.sh and the tool pins download) in the
+      Actions cache between runs, keyed on the two files that decide their
+      versions. That saves a few minutes and, more to the point, keeps a
+      slow or unreachable download.qt.io from failing an unrelated pull
+      request. A release passes "false" and fetches everything fresh; each
+      download is still checked against its pinned checksum.
+    default: 'false'
+
+outputs:
+  appimage:
+    description: 'Path of the AppImage, relative to the workspace.'
+    value: ${{ steps.build.outputs.appimage }}
+  file-name:
+    description: 'File name of the AppImage: Kartend-<version>-x86_64.AppImage.'
+    value: ${{ steps.build.outputs.file-name }}
+  sbom:
+    description: 'Path of the CycloneDX SBOM, relative to the workspace: <file-name>.cdx.json in the workspace root.'
+    value: ${{ steps.build.outputs.sbom }}
+
+runs:
+  using: composite
+  steps:
+    - name: Restore CMake, Qt, QtKeychain and the packaging tools
+      if: inputs.cache == 'true'
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: build/appimage-prefix
+        # Nothing else decides what is in the prefix: common.sh holds every
+        # version and checksum, prepare-build-env.sh how they are installed.
+        key: appimage-prefix-${{ hashFiles('packaging/appimage/common.sh', 'packaging/appimage/prepare-build-env.sh') }}
+
+    - name: Build the AppImage in the release base container
+      id: build
+      shell: bash
+      run: |
+        path="$(packaging/appimage/build-in-container.sh)"
+        name="$(basename "$path")"
+        {
+          echo "appimage=${path#"$GITHUB_WORKSPACE"/}"
+          echo "file-name=$name"
+          echo "sbom=$name.cdx.json"
+        } >> "$GITHUB_OUTPUT"
+        {
+          echo "### AppImage"
+          echo
+          echo "\`$name\`, $(du -h "$path" | cut -f1), SHA-256 \`$(sha256sum "$path" | cut -d' ' -f1)\`"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    # Three clean containers, none of them the one the AppImage was built in:
+    # the oldest distribution it claims to run on, the newest Ubuntu LTS, and
+    # a non-Debian one. Each gets only the libraries a desktop install has
+    # (KARTEND_APPIMAGE_HOST_LIBRARIES); see smoke-test-in-container.sh.
+    # --x11 / --wayland also start it against a real display server (Xvfb,
+    # Weston headless), so both platform plugins are proven to connect.
+    #
+    # The tags are releases, not `latest`, so a new distribution release is a
+    # commit here and not a surprise on an unrelated pull request. When one
+    # goes out of support its package repositories move, and the step fails
+    # at "installing packages": move the tag forward then.
+    - name: Start it on Ubuntu 22.04 (the oldest it supports)
+      shell: bash
+      run: packaging/appimage/smoke-test-in-container.sh ubuntu:22.04 "${{ steps.build.outputs.appimage }}"
+
+    - name: Start it on Ubuntu 26.04 (headless, X11, Wayland)
+      shell: bash
+      run: packaging/appimage/smoke-test-in-container.sh --x11 --wayland ubuntu:26.04 "${{ steps.build.outputs.appimage }}"
+
+    - name: Start it on Fedora 45 (headless, X11, Wayland)
+      shell: bash
+      run: packaging/appimage/smoke-test-in-container.sh --x11 --wayland fedora:45 "${{ steps.build.outputs.appimage }}"
+
+    - name: Generate SBOM (AppImage)
+      # CycloneDX JSON by the same action and syft as the .deb and Windows
+      # SBOMs in release.yml. It scans the directory build-appimage.sh laid
+      # out for it (the exact files in the AppImage, the package records of
+      # the bundled system libraries, and a list of what no file can tell:
+      # the AppImage file with its SHA-256, Kartend, the Qt modules,
+      # QtKeychain, the runtime), because the AppImage itself is one opaque
+      # file to a scanner. syft.yaml makes syft read that list.
+      #
+      # upload-artifact / upload-release-assets off, as in release.yml: the
+      # callers publish; a second upload path could disagree about what shipped.
+      uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+      with:
+        path: build/appimage/sbom-root
+        config: packaging/appimage/syft.yaml
+        format: cyclonedx-json
+        output-file: ${{ steps.build.outputs.sbom }}
+        upload-artifact: false
+        upload-release-assets: false
+
+    - name: Check the SBOM names the AppImage and what is inside
+      # An SBOM that leaves out the file it is for, or lists nothing of the
+      # bundle, is worse than none: it looks like coverage. So the release
+      # file (with its SHA-256), the application, Qt and at least a handful of
+      # the base's packages have to be in it.
+      shell: bash
+      env:
+        SBOM: ${{ steps.build.outputs.sbom }}
+        APPIMAGE: ${{ steps.build.outputs.appimage }}
+      run: |
+        python3 - <<'EOF'
+        import hashlib, json, os, sys
+
+        sbom = json.load(open(os.environ["SBOM"], encoding="utf-8"))
+        appimage = os.environ["APPIMAGE"]
+        sha256 = hashlib.sha256(open(appimage, "rb").read()).hexdigest()
+        components = sbom.get("components", [])
+        names = {c.get("name") for c in components}
+        purls = [c.get("purl", "") for c in components]
+
+        problems = []
+        if not any(c.get("name") == os.path.basename(appimage) and sha256 in c.get("purl", "") for c in components):
+            problems.append(f"no component for {os.path.basename(appimage)} with SHA-256 {sha256}")
+        for wanted in ("kartend", "qtbase", "qtmultimedia", "qtkeychain", "type2-runtime"):
+            if wanted not in names:
+                problems.append(f"no component named {wanted}")
+        debs = [p for p in purls if p.startswith("pkg:deb/")]
+        if len(debs) < 20:
+            problems.append(f"only {len(debs)} packages of the base are listed (expected the bundled system libraries)")
+        for wanted in ("libsdl2", "libarchive", "libzstd", "libssl", "libsecret"):
+            if not any(f"/{wanted}" in p for p in debs):
+                problems.append(f"no package of the base matching {wanted}")
+
+        print(f"SBOM: {len(components)} components, {len(debs)} of them packages of the base")
+        if problems:
+            for problem in problems:
+                print(f"::error::SBOM {os.environ['SBOM']}: {problem}")
+            sys.exit(1)
+        EOF
