@@ -1,0 +1,11 @@
+# syft configuration for the AppImage's SBOM (the `config` input of
+# anchore/sbom-action in the workflows).
+#
+# build-appimage.sh leaves a small CycloneDX file in the directory that gets
+# scanned (sbom-root/kartend-appimage.cdx.json, written by sbom-components.py)
+# naming what no file on disk can tell syft: the AppImage file with its
+# SHA-256, Kartend itself, the Qt modules, the statically linked QtKeychain
+# and the AppImage runtime. syft reads SBOM files it finds only when its SBOM
+# cataloger is switched on; for a directory scan it is off by default.
+select-catalogers:
+  - "+sbom-cataloger"
