@@ -82,6 +82,7 @@ private slots:
   void archiveOptions();
   void attractSettings();
   void collectionBackground();
+  void collectionBackgroundChoiceMarker();
   void collectionFilterPreferences();
   void collectionScalars();
   void folderBrowsingOptions();
@@ -226,6 +227,7 @@ void TestSettingsPersistenceRoundtrip::collectionBackground() {
   in.backgroundType = BackgroundType::Image;
   in.backgroundColor = QStringLiteral("#0a0a0a");
   in.backgroundImage = QStringLiteral("/tmp/bg.png");
+  in.backgroundImageChosenPath = in.backgroundImage;
   in.backgroundVideo = QStringLiteral("/tmp/bg.mp4");
   in.primaryColor = QStringLiteral("#111111");
   in.tileColor = QStringLiteral("#222222");
@@ -246,6 +248,122 @@ void TestSettingsPersistenceRoundtrip::collectionBackground() {
       [](QSettings &s, CollectionBackground &v) {
         CollectionBackgroundPersistence::load(s, v, QStringLiteral("TestCol"), identitySanitize);
       });
+}
+
+// Kartend-ji94z: the explicit wallpaper-choice marker. Not a plain round trip:
+// these pin that a marker only loads when it names the exact saved, sanitised
+// wallpaper, and that reusing an INI never lets a stale marker survive.
+void TestSettingsPersistenceRoundtrip::collectionBackgroundChoiceMarker() {
+  namespace keys = kartend::settings::keys;
+  // Test-controlled sanitizer: refuses one synthetic value, passes the rest.
+  const QString refused = QStringLiteral("refused-wallpaper.png");
+  const auto sanitize = [&refused](const QString &value, const QString &) {
+    return value == refused ? QString() : value;
+  };
+  const auto saveTo = [&sanitize](const QString &path, const CollectionBackground &bg) {
+    QSettings out(path, QSettings::IniFormat);
+    CollectionBackgroundPersistence::save(out, bg, sanitize);
+    out.sync();
+    QCOMPARE(out.status(), QSettings::NoError);
+  };
+  const auto loadFrom = [&sanitize](const QString &path) {
+    QSettings in(path, QSettings::IniFormat);
+    CollectionBackground bg;
+    CollectionBackgroundPersistence::load(in, bg, QStringLiteral("TestCol"), sanitize);
+    return bg;
+  };
+  const auto hasMarkerKey = [](const QString &path) {
+    return QSettings(path, QSettings::IniFormat).contains(keys::kBackgroundImageChosenPath);
+  };
+  const QString shared = m_tmp.filePath(QStringLiteral("_shared/wallpaper/platform_1.png"));
+  const QString other = m_tmp.filePath(QStringLiteral("_shared/wallpaper/platform_2.png"));
+
+  // A matching choice of a retained _shared image survives save -> load.
+  const QString reused = freshIniPath();
+  CollectionBackground chosen;
+  chosen.backgroundType = BackgroundType::Image;
+  chosen.backgroundImage = shared;
+  chosen.backgroundImageChosenPath = shared;
+  saveTo(reused, chosen);
+  CollectionBackground loaded = loadFrom(reused);
+  QCOMPARE(loaded.backgroundImage, shared);
+  QCOMPARE(loaded.backgroundImageChosenPath, shared);
+
+  // Changing the wallpaper on the reused INI drops the old marker, even when
+  // the preserved old marker is replayed into the file before the save.
+  {
+    QSettings replay(reused, QSettings::IniFormat);
+    replay.setValue(keys::kBackgroundImageChosenPath, shared);
+  }
+  CollectionBackground changed = chosen;
+  changed.backgroundImage = other;
+  saveTo(reused, changed);
+  loaded = loadFrom(reused);
+  QCOMPARE(loaded.backgroundImage, other);
+  QVERIFY(loaded.backgroundImageChosenPath.isEmpty());
+  QVERIFY(!hasMarkerKey(reused));
+
+  // Clearing the choice while keeping the wallpaper drops the marker.
+  saveTo(reused, chosen);
+  QVERIFY(hasMarkerKey(reused));
+  CollectionBackground cleared = chosen;
+  cleared.backgroundImageChosenPath.clear();
+  saveTo(reused, cleared);
+  loaded = loadFrom(reused);
+  QCOMPARE(loaded.backgroundImage, shared);
+  QVERIFY(loaded.backgroundImageChosenPath.isEmpty());
+  QVERIFY(!hasMarkerKey(reused));
+
+  // Emptying the wallpaper drops the marker.
+  saveTo(reused, chosen);
+  CollectionBackground emptied = chosen;
+  emptied.backgroundImage.clear();
+  saveTo(reused, emptied);
+  loaded = loadFrom(reused);
+  QVERIFY(loaded.backgroundImage.isEmpty());
+  QVERIFY(loaded.backgroundImageChosenPath.isEmpty());
+  QVERIFY(!hasMarkerKey(reused));
+
+  // A wallpaper the sanitizer refuses on save is not a valid choice.
+  CollectionBackground rejected;
+  rejected.backgroundType = BackgroundType::Image;
+  rejected.backgroundImage = refused;
+  rejected.backgroundImageChosenPath = refused;
+  saveTo(reused, rejected);
+  loaded = loadFrom(reused);
+  QVERIFY(loaded.backgroundImage.isEmpty());
+  QVERIFY(loaded.backgroundImageChosenPath.isEmpty());
+  QVERIFY(!hasMarkerKey(reused));
+
+  // Hand-written INIs: a legacy wallpaper-only _shared image stays unmarked;
+  // a stored mismatch, or a marker on a wallpaper the sanitizer refuses on
+  // load, does not load as chosen.
+  const auto writeRaw = [](const QString &path, const QString &image, const QString &marker) {
+    QSettings out(path, QSettings::IniFormat);
+    out.setValue(keys::kBackgroundType, QStringLiteral("image"));
+    out.setValue(keys::kBackgroundImage, image);
+    if (!marker.isEmpty()) {
+      out.setValue(keys::kBackgroundImageChosenPath, marker);
+    }
+  };
+  const QString legacy = freshIniPath();
+  writeRaw(legacy, shared, QString());
+  loaded = loadFrom(legacy);
+  QVERIFY(loaded.backgroundType == BackgroundType::Image);
+  QCOMPARE(loaded.backgroundImage, shared);
+  QVERIFY(loaded.backgroundImageChosenPath.isEmpty());
+
+  const QString mismatch = freshIniPath();
+  writeRaw(mismatch, shared, other);
+  loaded = loadFrom(mismatch);
+  QCOMPARE(loaded.backgroundImage, shared);
+  QVERIFY(loaded.backgroundImageChosenPath.isEmpty());
+
+  const QString refusedOnLoad = freshIniPath();
+  writeRaw(refusedOnLoad, refused, refused);
+  loaded = loadFrom(refusedOnLoad);
+  QVERIFY(loaded.backgroundImage.isEmpty());
+  QVERIFY(loaded.backgroundImageChosenPath.isEmpty());
 }
 
 void TestSettingsPersistenceRoundtrip::collectionFilterPreferences() {
