@@ -245,6 +245,14 @@ kartend_add_test(NAME WikidataPlatformPhoto
   LINK kartend_data kartend_api kartend_utils
 )
 
+# Explicit platform wallpaper choice (Kartend-ji94z): the real entity
+# coordinator offline with a synthetic Background-role platform asset keeps a
+# marked wallpaper and replaces unmarked or stale-marked ones as before.
+kartend_add_test(NAME EntityArtBackgroundChoice
+  SOURCES modules/scraper/test_entityartbackgroundchoice.cpp
+  LINK kartend_data kartend_api kartend_utils
+)
+
 # Wikidata units-sold-only platform retention (Kartend-5b5r1): the real
 # provider offline through the fetch seam keeps an entity whose only usable
 # data is the parsed P2664 quantity; an empty entity stays not-found.
