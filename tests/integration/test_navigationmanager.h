@@ -55,6 +55,11 @@ private slots:
   // must ignore OTHER collections' invalidations (routine background noise
   // since Kartend-xkdxn) and fire only on its own uuid's echo.
   void testForceRescanWaitsForItsOwnCacheInvalidation();
+
+  // Kartend-rxaru: the start-up load (cached-viewport fast path) must hand the
+  // session's remembered selection to the restore, not the viewport's first
+  // visible index. Registered on its own as startup_selection_restore_session.
+  void testStartupLoadSchedulesSavedSelectionRestore();
 };
 
 #endif // KARTEND_TESTS_TEST_NAVIGATIONMANAGER_H

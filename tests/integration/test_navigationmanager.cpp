@@ -16,17 +16,22 @@
 #include "mocks/mockedmainwindowfixture.h"
 #include "navigationmanager.h"
 #include "navigationstackmanager.h"
+#include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "sessionmanager.h"
 #include "settingsutils.h"
 
 #include <QCoreApplication>
 #include <QEvent>
+#include <QFile>
+#include <QHash>
 #include <QLabel>
 #include <QList>
 #include <QObject>
 #include <QPointer>
 #include <QString>
+#include <QStringList>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QWidget>
 
@@ -512,4 +517,59 @@ void TestNavigationManager::testForceRescanWaitsForItsOwnCacheInvalidation() {
       cfg.name, SettingsUtils::expandConfigVariables(cfg.mediaDirectory, cfg.name));
   emit db->cacheInvalidated(uuid);
   QCOMPARE(nav->pendingRescanCollectionIndexForTesting(), -1);
+}
+
+// Kartend-rxaru: closing with the fifth of six items selected saves index 4,
+// yet the next launch selected the first item. The start-up load takes the
+// cached-viewport fast path, which scheduled the restore for the cached
+// viewport's FIRST VISIBLE index (0 when all six tiles fit) instead of the
+// remembered selection. Drive the real start-up entry (showCollectionItems
+// with no current collection yet) and pin the index handed to the restore.
+void TestNavigationManager::testStartupLoadSchedulesSavedSelectionRestore() {
+  constexpr int kItemCount = 6;
+  constexpr int kSavedIndex = 4;
+
+  QTemporaryDir mediaDir;
+  QVERIFY(mediaDir.isValid());
+  QStringList filePaths;
+  QHash<QString, QString> fileNames;
+  for (int i = 0; i < kItemCount; ++i) {
+    const QString name = QStringLiteral("item%1.rom").arg(i);
+    const QString path = mediaDir.filePath(name);
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.close();
+    filePaths.append(path);
+    fileNames[path] = name;
+  }
+
+  KartendTest::MockedMainWindowFixture fixture;
+  MainWindow *win = fixture.window();
+  auto *appMgr = win->getApplicationManager();
+  NavigationManager *nav = appMgr->getNavigationManager();
+  auto *session = appMgr->getSessionManager();
+  QVERIFY(nav);
+  QVERIFY(session);
+  QVERIFY(appMgr->getScrollManager());
+
+  CollectionConfig cfg = makeCollectionStub(QStringLiteral("Library"));
+  cfg.mediaDirectory = mediaDir.path();
+  win->m_collections.append(cfg);
+  win->m_currentCollectionIndex = -1;
+  win->m_generalSettings.input.rememberSelection = true;
+  win->rebuildHierarchyCache();
+
+  // The session as the previous run left it: the fifth item remembered, and a
+  // cached viewport whose first visible tile is item 0.
+  const QString key =
+      CollectionUtils::hierarchicalNameFor(win->m_collections[0], win->m_collections);
+  session->setLastSelected(key, kSavedIndex, QStringLiteral("item4"));
+  session->setCachedViewport(key, 0, kItemCount, filePaths, fileNames, {});
+  QCOMPARE(session->getLastSelectedIndex(key), kSavedIndex);
+
+  QVERIFY(nav->showCollectionItems(0));
+
+  // The fast path really ran (the mock DB never answers the count query).
+  QCOMPARE(appMgr->getScrollManager()->getTotalItems(), kItemCount);
+  QCOMPARE(nav->startupSelectionRestoreIndexForTesting(), kSavedIndex);
 }

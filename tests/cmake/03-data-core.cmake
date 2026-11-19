@@ -472,3 +472,16 @@ target_include_directories(test_collectionutils_icon PRIVATE
   ${_kartend_collectionutils_test_includes}
 )
 
+# Start-up selection restore from the session (Kartend-rxaru): with
+# rememberSelection on and a remembered index past 0, the start-up load
+# (cached-viewport fast path) must schedule the restore for that index. One
+# slot of the shared integration binary (built in tests/integration/, same
+# kartend_core guard); this directory's per-test HOME loop isolates it, and it
+# takes the integration classes' explicit 900s TIMEOUT (full MainWindow boot).
+if (TARGET kartend_core)
+  add_test(NAME startup_selection_restore_session
+           COMMAND test_integration TestNavigationManager
+                   testStartupLoadSchedulesSavedSelectionRestore)
+  set_tests_properties(startup_selection_restore_session PROPERTIES TIMEOUT 900)
+endif()
+

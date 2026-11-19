@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **The item you had selected is selected again when Kartend starts.** With
+  "Remember selection per collection" turned on, Kartend saved the selected
+  item when you closed it but started on the first item of that collection
+  the next time, whenever all of the collection's items fit on screen. It now
+  starts on the item you left selected.
+
 ## [0.0.22] - 2026-11-18
 
 ### Added

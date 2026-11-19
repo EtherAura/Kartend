@@ -140,6 +140,12 @@ public:
   [[nodiscard]] int pendingRescanCollectionIndexForTesting() const {
     return m_pendingRescanCollectionIndex;
   }
+  /// Kartend-rxaru test seam: the index the cached-viewport start-up path
+  /// (tryUseCachedCountForStartup) last handed to scheduleSelectionRestore(),
+  /// -1 before that path runs. Set only there; no other path records it.
+  [[nodiscard]] int startupSelectionRestoreIndexForTesting() const {
+    return m_startupSelectionRestoreIndex;
+  }
 
 public slots:
   bool showCollectionItems(int collectionIndex) override;
@@ -364,6 +370,7 @@ private:
   QList<CollectionConfig> *m_collections = nullptr;
   bool m_isRescanInProgress = false;       // Track when force rescan is active
   int m_pendingRescanCollectionIndex = -1; // Collection to reload after cache invalidation
+  int m_startupSelectionRestoreIndex = -1; // See startupSelectionRestoreIndexForTesting
   QMetaObject::Connection m_cacheInvalidatedConnection; // One-shot connection for cache
                                                         // invalidation
 
