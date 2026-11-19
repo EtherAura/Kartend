@@ -147,7 +147,7 @@ them; the grid stays interactive while the launched app runs.
 | Effect | Detail |
 |--------|--------|
 | Now Playing overlay | Renders while child process is alive |
-| Time-played tracking | `launch_history.duration_seconds` is populated, sidebar shows accurate play times |
+| Time-played tracking | Each session's runtime is added to the item's play-time total (`items.total_play_seconds`); sessions launched before it was turned on are not counted. Sidebar shows accurate play times |
 | Attract mode suspension | [Attract](Attract-Mode.md) won't scroll behind a launched window |
 | Process-aware quit | Kartend can detect crashed launches and surface error dialogs |
 
