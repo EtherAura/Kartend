@@ -39,9 +39,10 @@ QList<Candidate> rank(const QString &itemBaseName, const QStringList &candidateF
     }
     out.append(Candidate{path, s});
   }
-  // Sort high score first; secondary stable sort by path so identical
-  // scores produce a deterministic order across runs (helps with tests
-  // and predictable UI).
+  // Sort high score first. The comparator looks at the score only; there is
+  // no secondary sort by path. std::stable_sort keeps candidates with equal
+  // scores in their input (candidateFiles) order, so ties stay deterministic
+  // for a given input (helps with tests and predictable UI).
   std::stable_sort(out.begin(), out.end(),
                    [](const Candidate &a, const Candidate &b) { return a.score > b.score; });
   if (out.size() > maxResults) {
