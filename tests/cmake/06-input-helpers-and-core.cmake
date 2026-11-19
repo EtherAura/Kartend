@@ -492,3 +492,14 @@ kartend_add_test(NAME Integration.TestMameBiosScan
   SOURCES integration/test_mamebiosscan.cpp
   LINK kartend_data kartend_api kartend_utils
 )
+
+# AppImage libarchive version check (Kartend-e34yo): the stdlib-only script that
+# reads the version string out of one staged libarchive file and fails below
+# the approved floor, exercised against temporary ELF-shaped fixtures.
+find_package(Python3 COMPONENTS Interpreter)
+if (Python3_Interpreter_FOUND)
+  add_test(NAME AppImageBundledLibarchiveCheck
+    COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../.scripts/tests/test_check_appimage_libarchive.py
+  )
+endif()
