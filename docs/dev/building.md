@@ -5,7 +5,11 @@
 
 ## Requirements
 
-- **CMake 3.20+**
+- **CMake 3.20+** to configure. That is the version `cmake_minimum_required`
+  declares, not a promise that the default build succeeds with it: the
+  default Ninja build uses precompiled headers, and that build is known to
+  fail on CMake 3.22.1 (Ubuntu 22.04's package). See
+  [Older CMake and precompiled headers](#older-cmake-and-precompiled-headers).
 - **C++23 compiler** — Clang 16+ or GCC 12+
 - **Qt 6.4 LTS or later** — CI pins Qt 6.4.2; newer versions build
   fine, but APIs introduced after 6.4 (`QDateTime::setTimeSpec`,
@@ -407,6 +411,30 @@ Reconfigure to fix it: re-run `.scripts/build.sh` after touching the module's
 CI configure always moc's it correctly — this is purely an incremental
 build-dir artifact, not a code or `CMakeLists` bug.
 
+## Older CMake and precompiled headers
+
+By default the build precompiles the common Qt headers for each `src/` area
+library (`KARTEND_ENABLE_PCH=ON`, see [CMake Options](#cmake-options)). On
+CMake 3.22.1 with Ninja, that default build configures but then stops: Ninja
+reports that the `cmake_pch.hxx.gch` precompiled header of `kartend_api` is
+missing but needed by the AUTOMOC compilation (`mocs_compilation`) of that
+target. The error does not mention the CMake version. CMake 3.28.3 built the
+same tree in the same setup. Those are the only two versions checked, so
+3.28.3 is not a new minimum and versions between them are unknown.
+
+If you see this error, upgrading CMake is the first thing to try. If you
+cannot upgrade, turn precompiled headers off and build from a clean
+directory:
+
+```bash
+bash .scripts/build.sh --clean --cmake-arg=-DKARTEND_ENABLE_PCH=OFF
+```
+
+This only removes a build speed-up: every file then parses the Qt headers
+itself, so cold builds take longer; the option changes nothing else.
+It has not been tried with CMake 3.20 or 3.22, so it is a step to try rather
+than a confirmed fix there.
+
 ## CMake Options
 
 | Option | Default | Description |
@@ -415,6 +443,7 @@ build-dir artifact, not a code or `CMakeLists` bug.
 | `KARTEND_MAINTENANCE` | `OFF` | Enable `-Werror` for CI/maintenance builds |
 | `KARTEND_BUILD_TESTS` | `OFF` | Build unit test executables |
 | `KARTEND_ENABLE_CCACHE` | `ON` | Use `ccache` if available (faster rebuilds) |
+| `KARTEND_ENABLE_PCH` | `ON` | Precompile the common Qt headers for the `src/` area libraries (faster cold builds; always off under `KARTEND_MAINTENANCE`). Turn it off when the PCH build fails on an older CMake — see [Older CMake and precompiled headers](#older-cmake-and-precompiled-headers) |
 | `KARTEND_ENABLE_SANITIZERS` | `OFF` | Enable ASan+UBSan (requires `Debug`; configure errors otherwise) |
 | `KARTEND_ENABLE_TSAN` | `OFF` | Enable ThreadSanitizer (requires `Debug`; **mutually exclusive** with `KARTEND_ENABLE_SANITIZERS`) |
 | `KARTEND_ENABLE_COVERAGE` | `OFF` | Enable gcov/lcov instrumentation (Debug only) |
