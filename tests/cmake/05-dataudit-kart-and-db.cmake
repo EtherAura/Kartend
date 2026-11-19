@@ -291,7 +291,7 @@ kartend_add_test(NAME SmartFilter
 # SmartPlaylistEvaluator tests
 kartend_add_test(NAME SmartPlaylistEvaluator
   SOURCES utils/db/test_smartplaylistevaluator.cpp
-  LINK kartend_utils
+  LINK kartend_utils kartend_data
 )
 
 # UsageStatsStore tests
