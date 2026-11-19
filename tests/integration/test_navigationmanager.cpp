@@ -1,5 +1,6 @@
 #include "test_navigationmanager.h"
 
+#include "applicationcontext.h"
 #include "applicationmanager.h"
 #include "collection/collectionconfig.h"
 #include "collection/hierarchyhelpers.h"
@@ -10,8 +11,11 @@
 #include "interactionmanager.h"
 #include "isettingsmanager.h"
 #include "mainwindow.h"
-// Kartend-xrj9r: this suite asserts only on in-memory coordinator state
-// (never on persisted rows/INI), so it runs against the mocked fixture —
+// Kartend-rxaru: the after-count start-up restore needs the real count reply,
+// so that one slot runs on the real on-disk SQLite fixture instead.
+#include "mainwindowfixture.h"
+// Kartend-xrj9r: the rest of this suite asserts only on in-memory coordinator
+// state (never on persisted rows/INI), so it runs against the mocked fixture —
 // no SQLite/QSettings setup per slot.
 #include "mocks/mockedmainwindowfixture.h"
 #include "navigationmanager.h"
@@ -19,16 +23,20 @@
 #include "scrollmanager.h"
 #include "selectionmanager.h"
 #include "sessionmanager.h"
+#include "settingsmanager.h"
 #include "settingsutils.h"
 
 #include <QCoreApplication>
+#include <QDir>
 #include <QEvent>
 #include <QFile>
+#include <QFileInfo>
 #include <QHash>
 #include <QLabel>
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QSignalSpy>
 #include <QString>
 #include <QStringList>
 #include <QTemporaryDir>
@@ -572,4 +580,118 @@ void TestNavigationManager::testStartupLoadSchedulesSavedSelectionRestore() {
   // The fast path really ran (the mock DB never answers the count query).
   QCOMPARE(appMgr->getScrollManager()->getTotalItems(), kItemCount);
   QCOMPARE(nav->startupSelectionRestoreIndexForTesting(), kSavedIndex);
+}
+
+// Kartend-rxaru follow-up: the handoff test above stops at the value given to
+// the restore, because its mock DB never answers the background count query.
+// Here the window's own start-up timer drives the load against the real
+// sandboxed SQLite database: the cached viewport renders first, the worker
+// scans and answers the count, and the remembered item must be the selection
+// once that reply has been applied and the restore has finished.
+void TestNavigationManager::testStartupSelectionRestoredAfterCountReply() {
+  constexpr int kItemCount = 12;
+  constexpr int kSavedIndex = 9;
+  // The cached viewport covers items 2..6: its first visible tile is neither
+  // item 0 nor the saved item, and the saved item lies outside its range, so
+  // only a range load from the database can supply the saved item's path.
+  constexpr int kViewportStart = 2;
+  constexpr int kViewportSize = 5;
+
+  QTemporaryDir mediaDir;
+  QVERIFY(mediaDir.isValid());
+  QStringList filePaths;
+  for (int i = 0; i < kItemCount; ++i) {
+    // Zero-padded names, so the name sort matches the creation order.
+    const QString path =
+        QDir(mediaDir.path())
+            .filePath(QStringLiteral("clip%1.mp4").arg(i, 2, 10, QLatin1Char('0')));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("fake video bytes");
+    file.close();
+    filePaths.append(path);
+  }
+
+  CollectionConfig cfg;
+  cfg.name = QStringLiteral("Clips");
+  cfg.type = QStringLiteral("video");
+  cfg.mediaDirectory = mediaDir.path();
+  cfg.extensions = QStringList{QStringLiteral("mp4")};
+
+  // The collection must be in the sandbox INI before MainWindow loads it: an
+  // empty-collections start-up queues a modal prompt instead of the load.
+  KartendTest::MainWindowFixture fixture([&cfg]() {
+    ApplicationContext seedCtx; // saveCollections never reads ctx
+    SettingsManager seedSettings(&seedCtx);
+    if (seedSettings.saveCollections({cfg}).isError()) {
+      qFatal("failed to seed the sandbox collection INI");
+    }
+  });
+  MainWindow *win = fixture.window();
+  auto *appMgr = win->getApplicationManager();
+  NavigationManager *nav = appMgr->getNavigationManager();
+  InteractionManager *im = appMgr->getInteractionManager();
+  ScrollManager *scroll = appMgr->getScrollManager();
+  auto *session = appMgr->getSessionManager();
+  IDatabaseManager *db = appMgr->getDatabaseManager();
+  QVERIFY(nav);
+  QVERIFY(im);
+  QVERIFY(im->selectionManager());
+  QVERIFY(scroll);
+  QVERIFY(session);
+  QVERIFY(db);
+  QCOMPARE(win->m_collections.size(), 1);
+
+  // Start-up has not run yet: it is queued on the event loop, which nothing
+  // has pumped since construction, and no collection is current.
+  QCOMPARE(win->m_currentCollectionIndex, -1);
+  QCOMPARE(nav->startupSelectionRestoreIndexForTesting(), -1);
+
+  // The session as the previous run left it: item 9 remembered, and a cached
+  // viewport of items 2..6.
+  win->m_generalSettings.input.rememberSelection = true;
+  const QString key =
+      CollectionUtils::hierarchicalNameFor(win->m_collections[0], win->m_collections);
+  QStringList viewportPaths;
+  QHash<QString, QString> viewportNames;
+  for (int i = kViewportStart; i < kViewportStart + kViewportSize; ++i) {
+    viewportPaths.append(filePaths[i]);
+    viewportNames[filePaths[i]] = QFileInfo(filePaths[i]).completeBaseName();
+  }
+  session->setLastSelected(key, kSavedIndex, QStringLiteral("clip09"));
+  session->setCachedViewport(key, kViewportStart, kItemCount, viewportPaths, viewportNames, {});
+  QCOMPARE(session->getLastSelectedIndex(key), kSavedIndex);
+
+  QSignalSpy countReplies(db, &IDatabaseManager::itemCountLoadedWithToken);
+  QVERIFY(countReplies.isValid());
+
+  // Let the start-up timer fire: showCollectionItems with no current
+  // collection, the cached-viewport fast path, then the background count.
+  QTRY_COMPARE_WITH_TIMEOUT(nav->startupSelectionRestoreIndexForTesting(), kSavedIndex, 10000);
+  QCOMPARE(win->m_currentCollectionIndex, 0);
+
+  // The worker's count reply for this (only) collection: the full item count.
+  const auto sawFullCount = [&countReplies]() {
+    for (const QList<QVariant> &reply : countReplies) {
+      if (reply.at(0).toInt() == kItemCount) {
+        return true;
+      }
+    }
+    return false;
+  };
+  QTRY_VERIFY_WITH_TIMEOUT(sawFullCount(), 30000);
+
+  // Settle: a selection exists, the restore has finished, and the saved item's
+  // row has been loaded from the database (it is outside the cached viewport).
+  SelectionManager *sel = im->selectionManager();
+  QTRY_VERIFY_WITH_TIMEOUT(sel->currentSelectedIndex() >= 0 && !sel->isRestoringSelection() &&
+                               scroll->filePathForVisualIndex(kSavedIndex) ==
+                                   filePaths[kSavedIndex],
+                           30000);
+
+  QCOMPARE(scroll->getTotalItems(), kItemCount);
+  QCOMPARE(sel->currentSelectedIndex(), kSavedIndex);
+  QCOMPARE(scroll->filePathForVisualIndex(sel->currentSelectedIndex()), filePaths[kSavedIndex]);
+  QVERIFY(sel->currentSelectedIndex() != 0);
+  QVERIFY(sel->currentSelectedIndex() != kViewportStart);
 }

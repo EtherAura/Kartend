@@ -483,5 +483,11 @@ if (TARGET kartend_core)
            COMMAND test_integration TestNavigationManager
                    testStartupLoadSchedulesSavedSelectionRestore)
   set_tests_properties(startup_selection_restore_session PROPERTIES TIMEOUT 900)
+  # The same start-up on the real sandboxed SQLite database (MainWindowFixture),
+  # checked after the worker's count reply and the finished restore.
+  add_test(NAME startup_selection_restore_after_count
+           COMMAND test_integration TestNavigationManager
+                   testStartupSelectionRestoredAfterCountReply)
+  set_tests_properties(startup_selection_restore_after_count PROPERTIES TIMEOUT 900)
 endif()
 

@@ -60,6 +60,10 @@ private slots:
   // session's remembered selection to the restore, not the viewport's first
   // visible index. Registered on its own as startup_selection_restore_session.
   void testStartupLoadSchedulesSavedSelectionRestore();
+  // Kartend-rxaru follow-up: the same start-up on the real on-disk database,
+  // checked after the background count reply has landed and the restore has
+  // finished. Registered on its own as startup_selection_restore_after_count.
+  void testStartupSelectionRestoredAfterCountReply();
 };
 
 #endif // KARTEND_TESTS_TEST_NAVIGATIONMANAGER_H
