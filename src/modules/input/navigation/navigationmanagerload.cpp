@@ -182,8 +182,11 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
   ++m_itemsViewGeneration;
   m_pendingRangeGenerations.clear();
 
-  // Use the cached start index as our selection position
-  int selIdx = cachedVp.startIndex;
+  // Kartend-rxaru: restore the remembered selection from the session store,
+  // the same lookup (and clamp) onItemsLoaded uses. cachedVp.startIndex is
+  // only the first VISIBLE tile — 0 whenever the whole collection fits on
+  // screen — so using it here restarted the selection at the first item.
+  int selIdx = calculateSelectionIndex(totalItems);
   if (selIdx < 0 || selIdx >= totalItems) {
     selIdx = 0;
   }
@@ -218,6 +221,7 @@ auto NavigationManager::tryUseCachedCountForStartup(const CollectionContext &con
 
   // Schedule selection restore
   if (selIdx >= 0 && interactionMgr()) {
+    m_startupSelectionRestoreIndex = selIdx;
     scheduleSelectionRestore(selIdx, UIConstants::Selection::RESTORE_MAX_DELAY_MS);
   }
 
