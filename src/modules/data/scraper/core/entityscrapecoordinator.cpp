@@ -747,8 +747,20 @@ QString EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectio
       changed = true;
     }
   }
-  if (!background.isEmpty() && writable(cfg.background.backgroundImage, background)) {
+  // Kartend-ji94z: a wallpaper the user explicitly picked (the marker names
+  // that exact path) is kept even when it is itself a `_shared/` platform
+  // image the scope rules would let this scrape refresh. The incoming file
+  // still lands on disk above, so it stays available to pick later.
+  const QString &currentBackground = cfg.background.backgroundImage;
+  const bool backgroundChosen =
+      !currentBackground.isEmpty() && cfg.background.backgroundImageChosenPath == currentBackground;
+  if (!background.isEmpty() && !backgroundChosen &&
+      writable(cfg.background.backgroundImage, background)) {
     cfg.background.backgroundImage = background;
+    // Any marker left here did not match the replaced wallpaper, so it is
+    // stale; drop it so one naming the incoming path cannot turn this
+    // scraper-driven write into an apparent user choice.
+    cfg.background.backgroundImageChosenPath.clear();
     changed = true;
   }
   if (!changed) return logo;
