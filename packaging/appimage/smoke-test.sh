@@ -31,6 +31,15 @@
 #      (Xvfb, or Weston's headless backend), which proves that platform
 #      plugin connects.
 #
+# With --check-extract-cache present|absent, only one other check runs, and
+# none of the above: whether `--appimage-extract-and-run`, the documented
+# start without FUSE, leaves its unpacked copy (an appimage_extracted_*
+# directory) in TMPDIR after the app exits. The AppImage is started once with
+# `--version`, offscreen, with a new empty TMPDIR of its own, a throwaway home
+# and NO_CLEANUP unset. The start has to exit 0 and print exactly the version
+# line "kartend X.Y.Z"; then that TMPDIR must hold such a directory (present)
+# or no appimage_extracted_* entry at all, not even a file or symlink (absent).
+#
 # Exit status: 0 when every check passed, 1 otherwise.
 set -euo pipefail
 
@@ -50,6 +59,22 @@ Usage: smoke-test.sh [options] APPIMAGE
   --run-ms N               how long the started app runs before it quits itself
                            (default: 4000)
   -h, --help               show this help
+
+Extract-cache mode (runs only this check, not the ones above):
+
+  --check-extract-cache present|absent
+                           start `APPIMAGE --appimage-extract-and-run --version`
+                           offscreen, with a new empty TMPDIR, a throwaway home
+                           and NO_CLEANUP unset. The start must exit 0 and print
+                           exactly one line, "kartend X.Y.Z". Then that TMPDIR
+                           must still hold an unpacked appimage_extracted_*
+                           directory (present; a file or symlink of that name
+                           does not count), or must hold no appimage_extracted_*
+                           entry of any type (absent). --expect-version applies
+                           to this start too and must equal X.Y.Z exactly.
+  --extract-timeout N      whole seconds that start may take, 1 to 999999,
+                           without a leading 0 (default: 120); only together
+                           with --check-extract-cache
 EOF
 }
 
@@ -59,15 +84,27 @@ TEST_X11=0
 TEST_WAYLAND=0
 RUN_MS=4000
 APPIMAGE=""
+CHECK_EXTRACT_CACHE=""
+CHECK_EXTRACT_CACHE_GIVEN=0
+EXTRACT_TIMEOUT=120
+EXTRACT_TIMEOUT_GIVEN=0
 
 while (($# > 0)); do
   case "$1" in
-    --expect-version | --run-ms | --probe)
+    --expect-version | --run-ms | --probe | --check-extract-cache | --extract-timeout)
       (($# >= 2)) || kartend_appimage_die "$1 needs a value"
       case "$1" in
         --expect-version) EXPECT_VERSION=$2 ;;
         --run-ms) RUN_MS=$2 ;;
         --probe) PROBE=$2 ;;
+        --check-extract-cache)
+          CHECK_EXTRACT_CACHE=$2
+          CHECK_EXTRACT_CACHE_GIVEN=1
+          ;;
+        --extract-timeout)
+          EXTRACT_TIMEOUT=$2
+          EXTRACT_TIMEOUT_GIVEN=1
+          ;;
       esac
       shift 2
       ;;
@@ -98,6 +135,21 @@ done
 note() { kartend_appimage_note "$@"; }
 die() { kartend_appimage_die "$@"; }
 
+# The extract-cache options are checked before anything starts, so that a bad
+# one never falls through to the other checks. The timeout is compared as
+# text, never in Bash arithmetic, which would read a leading 0 as octal.
+if ((CHECK_EXTRACT_CACHE_GIVEN)); then
+  case "$CHECK_EXTRACT_CACHE" in
+    present | absent) ;;
+    *) die "--check-extract-cache needs 'present' or 'absent', not '$CHECK_EXTRACT_CACHE'" ;;
+  esac
+  if ! [[ "$EXTRACT_TIMEOUT" =~ ^[1-9][0-9]{0,5}$ ]]; then
+    die "--extract-timeout needs whole seconds from 1 to 999999, written without a leading 0, not '$EXTRACT_TIMEOUT'"
+  fi
+elif ((EXTRACT_TIMEOUT_GIVEN)); then
+  die "--extract-timeout applies only to --check-extract-cache present|absent"
+fi
+
 [ -n "$APPIMAGE" ] || {
   usage >&2
   die "no AppImage given"
@@ -112,6 +164,138 @@ if [ -n "$PROBE" ]; then
   [ -f "$PROBE" ] || die "the probe $PROBE does not exist"
   PROBE="$(readlink -f "$PROBE")"
 fi
+
+# --- Only the extract-cache check, on request ------------------------------------------
+# `--appimage-extract-and-run` unpacks the AppImage to
+# $TMPDIR/appimage_extracted_<hash> and runs it from there. This looks at what
+# one real start leaves behind, in a TMPDIR that nothing else writes to.
+if ((CHECK_EXTRACT_CACHE_GIVEN)); then
+  if [ -n "$PROBE" ] || ((TEST_X11)) || ((TEST_WAYLAND)); then
+    die "--check-extract-cache runs only the extract-cache check; leave out --probe, --x11 and --wayland"
+  fi
+  for tool in find timeout; do
+    command -v "$tool" >/dev/null 2>&1 || die "'$tool' is not installed"
+  done
+
+  # Everything this mode creates is under CACHE_WORK, and only CACHE_WORK is
+  # removed on exit, also when a check failed. Directories get write
+  # permission back first, since an unpacked copy may contain read-only ones.
+  # Neither find nor rm follows a symlink, so a link the start left behind is
+  # removed itself and whatever it points to stays untouched.
+  CACHE_WORK="$(mktemp -d "${TMPDIR:-/tmp}/kartend-extract-cache.XXXXXX")"
+  cleanup_cache_work() {
+    find "$CACHE_WORK" -type d ! -perm -0700 -exec chmod u+rwx {} \; 2>/dev/null || true
+    rm -rf "$CACHE_WORK"
+  }
+  trap cleanup_cache_work EXIT
+  mkdir -p "$CACHE_WORK/tmp" "$CACHE_WORK/home" "$CACHE_WORK/runtime"
+  chmod 0700 "$CACHE_WORK/tmp" "$CACHE_WORK/runtime"
+
+  # NO_CLEANUP asks the runtime to keep the unpacked copy, so it must not
+  # leak in from this session; nor may another temporary directory.
+  status=0
+  env -u NO_CLEANUP -u APPIMAGE_EXTRACT_AND_RUN -u TMP -u TEMP \
+    -u QT_QPA_PLATFORM -u QT_QPA_PLATFORMTHEME -u QT_STYLE_OVERRIDE -u QT_DEBUG_PLUGINS \
+    -u QT_LOGGING_RULES -u LD_LIBRARY_PATH -u LD_PRELOAD -u DISPLAY -u WAYLAND_DISPLAY \
+    "HOME=$CACHE_WORK/home" \
+    "XDG_CONFIG_HOME=$CACHE_WORK/home/.config" \
+    "XDG_DATA_HOME=$CACHE_WORK/home/.local/share" \
+    "XDG_CACHE_HOME=$CACHE_WORK/home/.cache" \
+    "XDG_STATE_HOME=$CACHE_WORK/home/.local/state" \
+    "XDG_RUNTIME_DIR=$CACHE_WORK/runtime" \
+    "TMPDIR=$CACHE_WORK/tmp" \
+    QT_QPA_PLATFORM=offscreen \
+    timeout -k 5 "$EXTRACT_TIMEOUT" "$APPIMAGE" --appimage-extract-and-run --version \
+    </dev/null >"$CACHE_WORK/version.out" 2>"$CACHE_WORK/version.err" || status=$?
+  version_out="$(cat "$CACHE_WORK/version.out")"
+
+  # Every top-level appimage_extracted_* entry, whatever its type: find's %y
+  # names the entry itself (d, f, l, ...) and never follows a symlink, so a
+  # link counts as a link, also when it dangles or points at a directory.
+  # find writes its list to a file first and that list is read only when find
+  # succeeded: a TMPDIR that could not be listed is a failure of its own, never
+  # an empty cache, even if find printed some entries before it failed.
+  leftovers=""
+  extracted_dirs=""
+  scan_ok=1
+  find -P "$CACHE_WORK/tmp" -mindepth 1 -maxdepth 1 -name 'appimage_extracted_*' -printf '%y/%f\0' \
+    >"$CACHE_WORK/scan.list" 2>"$CACHE_WORK/scan.err" || scan_ok=0
+  if ((!scan_ok)); then
+    : >"$CACHE_WORK/scan.list"
+  fi
+  while IFS= read -r -d '' entry; do
+    entry_type=${entry%%/*}
+    entry_name=${entry#*/}
+    case "$entry_type" in
+      d)
+        entry_kind="directory"
+        extracted_dirs+="${extracted_dirs:+, }$entry_name"
+        ;;
+      f) entry_kind="regular file" ;;
+      l) entry_kind="symlink" ;;
+      *) entry_kind="special file" ;;
+    esac
+    leftovers+="${leftovers:+, }$entry_name ($entry_kind)"
+  done <"$CACHE_WORK/scan.list"
+
+  # QCommandLineParser::addVersionOption() prints applicationName(), a space
+  # and applicationVersion() on stdout: "kartend X.Y.Z", APP_NAME and the
+  # VERSION triple that the top-level CMakeLists.txt enforces. Nothing else
+  # may be on stdout, and --expect-version has to equal the whole version.
+  version_re='^kartend ([0-9]+\.[0-9]+\.[0-9]+)$'
+  cache_fail() { printf '%s: FAIL: %s\n' "$KARTEND_APPIMAGE_PROG" "$*" >&2; }
+  started=0
+  if [ "$status" -ne 0 ]; then
+    tail -n 40 "$CACHE_WORK/version.err" >&2
+    if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+      cache_fail "--appimage-extract-and-run --version did not finish within ${EXTRACT_TIMEOUT} s"
+    else
+      cache_fail "--appimage-extract-and-run --version exited with status $status"
+    fi
+  elif [[ "$version_out" == *$'\n'* ]] || ! [[ "$version_out" =~ $version_re ]]; then
+    cache_fail "--appimage-extract-and-run --version printed '$version_out'," \
+      "not the single version line 'kartend X.Y.Z'"
+  elif [ -n "$EXPECT_VERSION" ] && [ "${BASH_REMATCH[1]}" != "$EXPECT_VERSION" ]; then
+    cache_fail "--appimage-extract-and-run --version reported version ${BASH_REMATCH[1]}," \
+      "expected exactly $EXPECT_VERSION"
+  else
+    printf '%s: ok: --appimage-extract-and-run --version: %s\n' "$KARTEND_APPIMAGE_PROG" "$version_out" >&2
+    started=1
+  fi
+
+  if ((!started)); then
+    if ((scan_ok)); then
+      note "the extract cache was not judged, because the start failed (left in TMPDIR: ${leftovers:-nothing})"
+    else
+      note "the extract cache was not judged, because the start failed (TMPDIR could not be listed either)"
+    fi
+    note "FAILED: $APPIMAGE"
+    exit 1
+  fi
+  if ((!scan_ok)); then
+    tail -n 20 "$CACHE_WORK/scan.err" >&2
+    cache_fail "could not list the TMPDIR of the start after the app exited, so whether an" \
+      "appimage_extracted_* entry stayed is unknown"
+    note "the extract cache was not judged, because the scan failed"
+    note "FAILED: $APPIMAGE"
+    exit 1
+  fi
+  if [ "$CHECK_EXTRACT_CACHE" = absent ] && [ -n "$leftovers" ]; then
+    cache_fail "an appimage_extracted_* entry stayed after the app exited: TMPDIR still holds $leftovers" \
+      "(NO_CLEANUP was not set; absent expects no such entry of any type)"
+  elif [ "$CHECK_EXTRACT_CACHE" = present ] && [ -z "$extracted_dirs" ]; then
+    cache_fail "TMPDIR holds no unpacked appimage_extracted_* directory after the app exited" \
+      "(entries found: ${leftovers:-none}), but present expects the unpacked copy to stay"
+  else
+    printf '%s: ok: extract cache %s after exit (%s)\n' "$KARTEND_APPIMAGE_PROG" \
+      "$CHECK_EXTRACT_CACHE" "${leftovers:-no appimage_extracted_* entry}" >&2
+    note "passed: $APPIMAGE"
+    exit 0
+  fi
+  note "FAILED: $APPIMAGE"
+  exit 1
+fi
+
 for tool in ldd find timeout grep; do
   command -v "$tool" >/dev/null 2>&1 || die "'$tool' is not installed"
 done

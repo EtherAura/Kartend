@@ -211,6 +211,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/03-data-core.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/04-scraper-and-dat.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/05-dataudit-kart-and-db.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/06-input-helpers-and-core.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/07-appimage.cmake)
 
 # Integration test harness for UI-coordinator managers.
 # Only built when the per-area OBJECT libs are available (i.e. when
