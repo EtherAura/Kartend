@@ -373,3 +373,17 @@ kartend_add_test(NAME ScraperCredentialsPanel
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# Kartend-5ugor: the AppImage's AppRun executes usr/bin/kartend itself, so the
+# process is named kartend, not AppRun.wrapped. Starts a temporary AppDir's
+# launcher before and after packaging/appimage/apprun-handoff.py and reads
+# /proc for the name, the forwarded arguments and the scrubbed Qt variables.
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_package(Python3 COMPONENTS Interpreter)
+  if (Python3_Interpreter_FOUND)
+    add_test(NAME AppImageLauncherProcess
+      COMMAND ${Python3_EXECUTABLE}
+              ${CMAKE_CURRENT_SOURCE_DIR}/../.scripts/tests/test_appimage_launcher_process.py
+    )
+  endif()
+endif()
+
