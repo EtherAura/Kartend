@@ -19,7 +19,8 @@
 #   3. Installs into an AppDir with the project's own install rules.
 #   4. Copies in the Qt plugins Kartend needs (a fixed list, below), Qt's
 #      translations and a qt.conf; linuxdeploy then bundles every library
-#      those and the executable depend on.
+#      those and the executable depend on. AppRun is then made to start
+#      usr/bin/kartend itself, so the process is named kartend.
 #   5. Checks the AppDir: the expected files are there, every library either
 #      is in the bundle or is one the user's system is expected to provide,
 #      and nothing asks for a newer C or C++ runtime than the release base has.
@@ -425,6 +426,15 @@ LD_LIBRARY_PATH="$QT_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" NO_STRIP=1 \
   --icon-file "$ICON_FILE" \
   "${deps_args[@]}" "${runtime_loaded_args[@]}" >&2
 
+# linuxdeploy's AppRun sources the hooks and then executes AppRun.wrapped, a
+# link to usr/bin/kartend. The kernel names the process after the file it ran,
+# so Kartend would show up as "AppRun.wrapped" in process lists, its usage line
+# and its X11 window class. apprun-handoff.py makes AppRun execute
+# usr/bin/kartend directly, keeping the hooks and the arguments, and stops the
+# build if AppRun is not the script it expects.
+python3 "$HERE/apprun-handoff.py" "$APPDIR" ||
+  die "AppRun is not the launcher linuxdeploy is expected to write; see the message above"
+
 # ------------------------------------------------------------------------------
 step "5/9 check the AppDir"
 
@@ -437,6 +447,9 @@ case "$(readlink -f "$APPDIR/AppRun")" in
   "$APPDIR_REAL"/*) ;;
   *) die "AppRun points outside the AppDir: $(readlink -f "$APPDIR/AppRun")" ;;
 esac
+# shellcheck disable=SC2016 # the line is matched as written, not expanded
+grep -qxF 'exec "$this_dir/usr/bin/kartend" "$@"' "$APPDIR/AppRun" ||
+  die "AppRun does not start usr/bin/kartend"
 for plugin in "${QT_PLUGINS[@]}"; do
   [ -s "$APPDIR/usr/plugins/$plugin" ] || die "the AppDir lost the Qt plugin $plugin"
 done

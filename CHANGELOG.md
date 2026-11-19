@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   platform could replace a wallpaper you had picked from its own scraped
   artwork with another scraped image. A wallpaper marked as your choice is now
   kept; the newly scraped image is still saved so you can pick it later.
+- **The AppImage runs under the name `kartend`.** Started from the AppImage,
+  Kartend showed up as `AppRun.wrapped` in process lists, in its usage line
+  and as its window class, so `pgrep kartend` or a window rule for Kartend did
+  not find it. It now runs as `kartend`, as the other packages do.
 
 ## [0.0.22] - 2026-11-18
 
