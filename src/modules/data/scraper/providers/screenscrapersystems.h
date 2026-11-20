@@ -121,6 +121,16 @@ struct System {
 [[nodiscard]] int autodetect(const QString &collectionName, const QString &collectionType,
                              const QStringList &extensions, const QList<System> &systems);
 
+/// The systemeid a ScreenScraper scrape uses for one collection: its explicit
+/// per-collection override when set (>= 0, returned verbatim), otherwise
+/// autodetect() over `systems`; 0 when neither resolves. Shared by
+/// ScreenScraperProvider::resolveSystemId (the game and platform scrapes) and
+/// the platform-background source (Kartend-ji94z) so both name the same
+/// `platform_<systemeid>` files.
+[[nodiscard]] int resolveForCollection(int overrideSystemId, const QString &collectionName,
+                                       const QString &collectionType, const QStringList &extensions,
+                                       const QList<System> &systems);
+
 /// Look up a system by id within the supplied catalog; returns
 /// nullptr when no entry matches.
 [[nodiscard]] const System *find(const QList<System> &systems, int systemeid);
