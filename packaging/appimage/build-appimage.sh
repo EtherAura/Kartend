@@ -443,6 +443,11 @@ python3 "$HERE/apprun-handoff.py" "$APPDIR" ||
 step "5/9 check the AppDir"
 
 python3 "$HERE/check-libarchive.py" --appdir "$APPDIR"
+archive_build_id="$(readelf -n "$LIBARCHIVE_DIR/lib/libarchive.so.13" | sed -n 's/^[[:space:]]*Build ID: //p')"
+staged_archive_build_id="$(readelf -n "$APPDIR/usr/lib/libarchive.so.13" | sed -n 's/^[[:space:]]*Build ID: //p')"
+[ -n "$archive_build_id" ] && [ "$archive_build_id" = "$staged_archive_build_id" ] ||
+  die "the staged libarchive does not match the pinned source build"
+
 install -D -m 0644 "$LIBARCHIVE_DIR/share/licenses/libarchive/COPYING" \
   "$APPDIR/usr/share/licenses/libarchive/COPYING"
 
@@ -673,6 +678,8 @@ if command -v dpkg-query >/dev/null 2>&1 && [ -s /var/lib/dpkg/status ]; then
     # Qt's own libraries (and the FFmpeg and ICU it ships) are not from a
     # package of the base; sbom-components.py and syft's own detection cover them.
     [ -e "$QT_LIB_DIR/$name" ] && continue
+    # The checked source-built libarchive is recorded by sbom-components.py.
+    [ "$name" = libarchive.so.13 ] && continue
     # dpkg-query exits non-zero when nothing owns the file; that is an answer
     # here (the name goes on the unknown list), not an error.
     owners="$({ dpkg-query --search "*/$name" 2>/dev/null || true; } | sed -n 's|: /.*$||p' | tr ',' '\n' | tr -d ' ' | sort -u)"
@@ -704,6 +711,9 @@ python3 "$HERE/sbom-components.py" \
   --qt-lib-dir "$QT_LIB_DIR" \
   --qtkeychain-tag "$KARTEND_APPIMAGE_QTKEYCHAIN_TAG" \
   --qtkeychain-commit "$KARTEND_APPIMAGE_QTKEYCHAIN_COMMIT" \
+  --libarchive-version "$KARTEND_APPIMAGE_LIBARCHIVE_VERSION" \
+  --libarchive-url "$KARTEND_APPIMAGE_LIBARCHIVE_URL" \
+  --libarchive-source-sha256 "$KARTEND_APPIMAGE_LIBARCHIVE_SHA256" \
   --runtime-tag "$runtime_tag" \
   --runtime-sha256 "$KARTEND_APPIMAGE_RUNTIME_SHA256" \
   --output "$SBOM_ROOT/kartend-appimage.cdx.json"
