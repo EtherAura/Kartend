@@ -97,7 +97,7 @@ KARTEND_APPIMAGE_DEFAULT_PREFIX="/opt/kartend-appimage"
 #      have to be installed for linuxdeploy to find and bundle them.
 KARTEND_APPIMAGE_APT_PACKAGES=(
   # 1. toolchain and tools (CMake is not here: see the CMake pin above)
-  g++-12 ninja-build pkg-config git ca-certificates curl file binutils
+  g++-12 ninja-build pkg-config git ca-certificates curl file binutils xz-utils
   python3 python3-venv desktop-file-utils
   # 2. Kartend's own dependencies
   libzstd-dev libsdl2-dev libsecret-1-dev libssl-dev libbz2-dev liblzma-dev
