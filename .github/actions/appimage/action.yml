@@ -145,13 +145,13 @@ runs:
         problems = []
         if not any(c.get("name") == os.path.basename(appimage) and sha256 in c.get("purl", "") for c in components):
             problems.append(f"no component for {os.path.basename(appimage)} with SHA-256 {sha256}")
-        for wanted in ("kartend", "qtbase", "qtmultimedia", "qtkeychain", "type2-runtime"):
+        for wanted in ("kartend", "qtbase", "qtmultimedia", "qtkeychain", "libarchive", "type2-runtime"):
             if wanted not in names:
                 problems.append(f"no component named {wanted}")
         debs = [p for p in purls if p.startswith("pkg:deb/")]
         if len(debs) < 20:
             problems.append(f"only {len(debs)} packages of the base are listed (expected the bundled system libraries)")
-        for wanted in ("libsdl2", "libarchive", "libzstd", "libssl", "libsecret"):
+        for wanted in ("libsdl2", "libzstd", "libssl", "libsecret"):
             if not any(f"/{wanted}" in p for p in debs):
                 problems.append(f"no package of the base matching {wanted}")
 

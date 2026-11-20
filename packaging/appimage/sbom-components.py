@@ -11,6 +11,7 @@ file that syft merges in (packaging/appimage/syft.yaml switches that on):
   - the AppImage file itself, with its SHA-256;
   - Kartend, the application inside;
   - QtKeychain, which is linked into the kartend executable;
+  - libarchive, built from a pinned source archive and bundled as a shared library;
   - the Qt modules beyond qtbase, each only if one of its files is bundled;
   - the ICU that the Qt build ships with it;
   - the AppImage runtime, the small program at the front of the file.
@@ -73,6 +74,9 @@ def main():
     parser.add_argument("--qt-lib-dir", required=True, help="lib directory of the Qt that was bundled")
     parser.add_argument("--qtkeychain-tag", required=True)
     parser.add_argument("--qtkeychain-commit", required=True)
+    parser.add_argument("--libarchive-version", required=True)
+    parser.add_argument("--libarchive-url", required=True)
+    parser.add_argument("--libarchive-source-sha256", required=True)
     parser.add_argument("--runtime-tag", required=True, help="type2-runtime release tag")
     parser.add_argument("--runtime-sha256", required=True)
     parser.add_argument("--output", required=True, help="CycloneDX JSON file to write")
@@ -80,6 +84,7 @@ def main():
 
     file_name = os.path.basename(args.appimage)
     file_sha256 = sha256_of(args.appimage)
+    archive_sha256 = sha256_of(os.path.join(args.appdir, "usr", "lib", "libarchive.so.13"))
 
     components = [
         # syft keeps the purl of a component it reads from an SBOM file but
@@ -102,6 +107,20 @@ def main():
             "name": "qtkeychain",
             "version": args.qtkeychain_tag,
             "purl": f"pkg:github/frankosterfeld/qtkeychain@{args.qtkeychain_commit}",
+        },
+        {
+            "type": "library",
+            "name": "libarchive",
+            "version": args.libarchive_version,
+            "purl": f"pkg:github/libarchive/libarchive@v{args.libarchive_version}",
+            "hashes": [{"alg": "SHA-256", "content": archive_sha256}],
+            "externalReferences": [
+                {
+                    "type": "distribution",
+                    "url": args.libarchive_url,
+                    "hashes": [{"alg": "SHA-256", "content": args.libarchive_source_sha256}],
+                }
+            ],
         },
         {
             "type": "application",

@@ -406,7 +406,7 @@ packaging/appimage/smoke-test-in-container.sh --x11 --wayland fedora:45 \
 | `smoke-test.sh` | Starts an AppImage headless on the system it is run on and checks it used its own Qt. |
 | `smoke-test-in-container.sh` | Runs `smoke-test.sh` in a clean container of a given distribution. |
 | `probe/` | A small test program, built against the bundled Qt and run inside the unpacked AppImage: SQLite, TLS, image formats, and playback of two one-second test clips (H.264 with AAC, VP9 with Opus). Not shipped. |
-| `sbom-components.py`, `syft.yaml` | What the SBOM scanner cannot see by itself, and the setting that makes it read that. |
+| `sbom-components.py`, `syft.yaml` | Adds libarchive source metadata and other details the SBOM scanner cannot infer. |
 
 The base image decides the oldest distribution the AppImage runs on: it is
 built against that image's glibc, and `build-appimage.sh` refuses a result
