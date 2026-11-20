@@ -234,6 +234,8 @@ done
 
 QT_DIR="$PREFIX/qt/$KARTEND_APPIMAGE_QT_VERSION/$KARTEND_APPIMAGE_QT_ARCH_DIR"
 KEYCHAIN_DIR="$PREFIX/qtkeychain/$KARTEND_APPIMAGE_QTKEYCHAIN_TAG-qt$KARTEND_APPIMAGE_QT_VERSION"
+LIBARCHIVE_DIR="$PREFIX/libarchive/$KARTEND_APPIMAGE_LIBARCHIVE_VERSION"
+[ -f "$LIBARCHIVE_DIR/lib/libarchive.so.13" ] || die "run prepare-build-env.sh to build libarchive"
 [ -x "$QT_DIR/bin/qmake" ] || die "no Qt in $QT_DIR; run prepare-build-env.sh first"
 [ "$("$QT_DIR/bin/qmake" -query QT_VERSION)" = "$KARTEND_APPIMAGE_QT_VERSION" ] ||
   die "$QT_DIR is not Qt $KARTEND_APPIMAGE_QT_VERSION"
@@ -298,7 +300,8 @@ if [ -n "$COMPILER_LAUNCHER" ]; then
   launcher_args=("-DCMAKE_C_COMPILER_LAUNCHER=$COMPILER_LAUNCHER" "-DCMAKE_CXX_COMPILER_LAUNCHER=$COMPILER_LAUNCHER")
 fi
 rm -rf "$CMAKE_DIR/CMakeCache.txt"
-cmake -S "$REPO_ROOT" -B "$CMAKE_DIR" -G Ninja \
+PKG_CONFIG_PATH="$LIBARCHIVE_DIR/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" \
+  cmake -S "$REPO_ROOT" -B "$CMAKE_DIR" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX=/usr \
   -DCMAKE_PREFIX_PATH="$QT_DIR;$KEYCHAIN_DIR" \
@@ -420,7 +423,7 @@ done
 # which are not in a system directory. NO_STRIP: Qt's and the base's
 # libraries are stripped already, kartend was stripped by the install step,
 # and linuxdeploy's built-in strip is too old for some newer libraries.
-LD_LIBRARY_PATH="$QT_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" NO_STRIP=1 \
+LD_LIBRARY_PATH="$QT_LIB_DIR:$LIBARCHIVE_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" NO_STRIP=1 \
   "$LINUXDEPLOY" --appdir "$APPDIR" \
   --desktop-file "$DESKTOP_FILE" \
   --icon-file "$ICON_FILE" \
@@ -438,6 +441,10 @@ python3 "$HERE/apprun-handoff.py" "$APPDIR" ||
 
 # ------------------------------------------------------------------------------
 step "5/9 check the AppDir"
+
+python3 "$HERE/check-libarchive.py" --appdir "$APPDIR"
+install -D -m 0644 "$LIBARCHIVE_DIR/share/licenses/libarchive/COPYING" \
+  "$APPDIR/usr/share/licenses/libarchive/COPYING"
 
 APPDIR_REAL="$(readlink -f "$APPDIR")"
 for path in AppRun "$APP_ID.desktop" "$APP_ID.svg" usr/bin/kartend usr/bin/qt.conf; do

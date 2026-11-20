@@ -1,8 +1,7 @@
 # Installation
 
 Every [release](https://github.com/EtherAura/Kartend/releases/latest)
-ships a binary `.deb`, an AppImage for every other distribution, plus the
-canonical Arch and Gentoo recipes:
+includes Linux, FreeBSD and Windows downloads, plus the Arch and Gentoo recipes.
 
 | Platform | Asset | Install |
 |--------|-------|---------|
@@ -10,6 +9,7 @@ canonical Arch and Gentoo recipes:
 | Fedora, openSUSE, Steam Deck, any other Linux | `Kartend-<version>-x86_64.AppImage` | Make it executable and run it; see [AppImage](#appimage) |
 | Arch Linux | `PKGBUILD` | Drop in a clean dir, `makepkg -si` |
 | Gentoo | `kartend-<version>.ebuild` | Place under your local overlay's category dir; `emerge kartend` |
+| FreeBSD 15 amd64 | `kartend-<version>-freebsd15-amd64.pkg` | As root, run `pkg install ./kartend-<version>-freebsd15-amd64.pkg` |
 | Windows (installer) | `Kartend-<version>-windows-x64-setup.exe` | Run the installer; Apps & Features-managed uninstall |
 | Windows (portable) | `Kartend-<version>-windows-x64.zip` | Unzip anywhere, run `kartend.exe` |
 
@@ -25,6 +25,7 @@ than a mirror or a rebuild — see
 
 ```bash
 gh attestation verify kartend_<version>_amd64.deb --repo EtherAura/Kartend
+gh attestation verify kartend-<version>-freebsd15-amd64.pkg --repo EtherAura/Kartend
 gh attestation verify Kartend-<version>-x86_64.AppImage --repo EtherAura/Kartend
 ```
 

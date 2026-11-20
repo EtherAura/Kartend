@@ -64,6 +64,12 @@ KARTEND_APPIMAGE_QTKEYCHAIN_REPO="https://github.com/frankosterfeld/qtkeychain.g
 KARTEND_APPIMAGE_QTKEYCHAIN_TAG="0.15.0"
 KARTEND_APPIMAGE_QTKEYCHAIN_COMMIT="ad7344c45a86a4f66cbafc4b081b5f7b876cb0b7"
 
+# --- libarchive ---------------------------------------------------------------
+# Build on the AppImage base to retain the existing glibc compatibility floor.
+KARTEND_APPIMAGE_LIBARCHIVE_VERSION="3.8.11"
+KARTEND_APPIMAGE_LIBARCHIVE_URL="https://github.com/libarchive/libarchive/releases/download/v$KARTEND_APPIMAGE_LIBARCHIVE_VERSION/libarchive-$KARTEND_APPIMAGE_LIBARCHIVE_VERSION.tar.xz"
+KARTEND_APPIMAGE_LIBARCHIVE_SHA256="a3dc0872b1b39da34dc18ef1b944f0f11ffd37425d70ae04be679279f1cf43d2"
+
 # --- Packaging tools ----------------------------------------------------------
 # Tagged upstream releases, never `continuous` (that tag is rebuilt in place,
 # so a checksum of it holds only until the next upstream push). Each download
@@ -94,7 +100,8 @@ KARTEND_APPIMAGE_APT_PACKAGES=(
   g++-12 ninja-build pkg-config git ca-certificates curl file binutils
   python3 python3-venv desktop-file-utils
   # 2. Kartend's own dependencies
-  libzstd-dev libarchive-dev libsdl2-dev libsecret-1-dev libssl3
+  libzstd-dev libsdl2-dev libsecret-1-dev libssl-dev libbz2-dev liblzma-dev
+  zlib1g-dev liblz4-dev liblzo2-dev libxml2-dev libacl1-dev libattr1-dev
   # 3. what Qt and its plugins need
   libgl1-mesa-dev libegl1 libpulse-dev libxkbcommon-dev libxkbcommon-x11-0
   libfontconfig1 libfreetype6 libdbus-1-3 libglib2.0-0 libgssapi-krb5-2

@@ -200,4 +200,23 @@ else
   trap - EXIT
 fi
 
+LIBARCHIVE_DIR="$PREFIX/libarchive/$KARTEND_APPIMAGE_LIBARCHIVE_VERSION"
+if [ ! -f "$LIBARCHIVE_DIR/lib/libarchive.so.13" ]; then
+  WORK="$(mktemp -d "$PREFIX/libarchive-build.XXXXXX")"
+  trap 'rm -rf "$WORK"' EXIT
+  archive="$WORK/libarchive.tar.xz"
+  kartend_appimage_fetch "$KARTEND_APPIMAGE_LIBARCHIVE_URL" "$KARTEND_APPIMAGE_LIBARCHIVE_SHA256" "$archive"
+  mkdir "$WORK/src"
+  tar -xJf "$archive" -C "$WORK/src" --strip-components=1
+  cmake -S "$WORK/src" -B "$WORK/build" -G Ninja \
+    -DCMAKE_C_COMPILER="${CC_BIN:-cc}" -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$LIBARCHIVE_DIR" -DCMAKE_INSTALL_LIBDIR=lib \
+    -DENABLE_TEST=OFF -DENABLE_TAR=OFF -DENABLE_CPIO=OFF -DENABLE_CAT=OFF -DENABLE_UNZIP=OFF
+  cmake --build "$WORK/build" --parallel "$JOBS"
+  cmake --install "$WORK/build"
+  install -D -m 0644 "$WORK/src/COPYING" "$LIBARCHIVE_DIR/share/licenses/libarchive/COPYING"
+  rm -rf "$WORK"
+  trap - EXIT
+fi
+
 kartend_appimage_note "ready: CMake in $CMAKE_DIR, Qt in $QT_DIR, QtKeychain in $KEYCHAIN_DIR"

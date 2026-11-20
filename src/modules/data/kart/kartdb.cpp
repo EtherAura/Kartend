@@ -5,6 +5,8 @@
 #include <QSqlQuery>
 #include <QStandardPaths>
 
+#include "databaseschema.h"
+
 namespace kart {
 
 ErrorUtils::Result<QSqlDatabase> openMediaDbConnection(const QString &connectionName) {
@@ -25,6 +27,8 @@ ErrorUtils::Result<QSqlDatabase> openMediaDbConnection(const QString &connection
   }
   QSqlQuery pragma(db);
   pragma.exec("PRAGMA foreign_keys = ON");
+  // Headless import can open a new library before DatabaseManager exists.
+  DatabaseSchema::createTables(db);
   return db;
 }
 
