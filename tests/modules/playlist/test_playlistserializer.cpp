@@ -23,6 +23,7 @@ private slots:
   void testJsonRoundTrip_staticPlaylist();
   void testJsonRoundTrip_smartPlaylist();
   void testJsonRoundTrip_unicodeAndSpacesSurvive();
+  void testJsonRoundTrip_samePathInTwoCollectionsStaysSeparate();
   void testRoundTrip_pathVariants_data();
   void testRoundTrip_pathVariants();
   void testJsonExport_omitsReservedKind();
@@ -127,6 +128,29 @@ void TestPlaylistSerializer::testJsonRoundTrip_unicodeAndSpacesSurvive() {
   QVERIFY(!parsed.isError());
   QCOMPARE(parsed.value().name, row.name);
   QCOMPARE(parsed.value().items[0].sourcePath, items[0].sourcePath);
+}
+
+void TestPlaylistSerializer::testJsonRoundTrip_samePathInTwoCollectionsStaysSeparate() {
+  // JSON keeps the full item identity (source_collection_uuid + source_path),
+  // unlike M3U (Kartend-kuwxf): one path bound to two collections must come
+  // back as two entries, in order, each with its own collection uuid.
+  const QString out = path(QStringLiteral("shared.json"));
+  QList<PlaylistItemRef> items = makeItems();
+  items[0].sourcePath = QStringLiteral("/media/shared.mkv");
+  items[1].sourcePath = QStringLiteral("/media/shared.mkv");
+
+  const auto exported = PlaylistSerializer::exportJson(makeRow(), items, out);
+  QVERIFY2(!exported.isError(), "exportJson failed");
+  QCOMPARE(exported.value(), 2);
+
+  const auto parsed = PlaylistSerializer::parseJsonFile(out);
+  QVERIFY2(!parsed.isError(), "parseJsonFile failed");
+  const auto &pl = parsed.value();
+  QCOMPARE(pl.items.size(), 2);
+  QCOMPARE(pl.items[0].sourceCollectionUuid, QStringLiteral("uuid-a"));
+  QCOMPARE(pl.items[0].sourcePath, QStringLiteral("/media/shared.mkv"));
+  QCOMPARE(pl.items[1].sourceCollectionUuid, QStringLiteral("uuid-b"));
+  QCOMPARE(pl.items[1].sourcePath, QStringLiteral("/media/shared.mkv"));
 }
 
 void TestPlaylistSerializer::testRoundTrip_pathVariants_data() {
