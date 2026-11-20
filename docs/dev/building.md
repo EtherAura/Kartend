@@ -11,7 +11,7 @@
   and one setup with CMake 3.22.1 (Ubuntu 22.04's package) was reported to
   configure but not build. See
   [Older CMake and precompiled headers](#older-cmake-and-precompiled-headers)
-  for that setup and how to tell whether yours has the same failure.
+  for that setup and how to tell whether yours matches it.
 - **C++23 compiler** — Clang 16+ or GCC 12+
 - **Qt 6.4 LTS or later** — CI pins Qt 6.4.2; newer versions build
   fine, but APIs introduced after 6.4 (`QDateTime::setTimeSpec`,
@@ -433,12 +433,16 @@ CMake 3.22.1: other compilers, Qt versions, build types or generators with
 them are unknown. The declared 3.20 minimum is what configure accepts, not a
 version a full build has been verified on.
 
-Your build likely has the same failure if it stops with that missing
-`cmake_pch.hxx.gch` error for `kartend_api` (or another `src/` area library)
-on a CMake older than 3.28.3 with precompiled headers on. A different error,
-or this one on CMake 3.28.3 or later, is not covered by this report. If yours
-matches, upgrading CMake is the first thing to try. If you cannot upgrade,
-turn precompiled headers off and build from a clean directory:
+Your build matches the report only if it is that setup (CMake 3.22.1, Ninja,
+GCC 12, Qt 6.8.3, `Release`, `KARTEND_BUILD_TESTS=OFF`, precompiled headers
+on) and stops with that missing `cmake_pch.hxx.gch` error for `kartend_api`.
+In that setup CMake 3.28.3 is known to build the tree, so upgrading to it is
+one thing to try. A similar missing-PCH error anywhere else — for another
+`src/` area library, with another compiler, Qt version, build type or
+generator, or on any other CMake version — is a similar symptom, not
+evidence of the same cause, and says nothing about which CMake versions are
+affected. In either case you can try turning precompiled headers off and
+building from a clean directory:
 
 ```bash
 bash .scripts/build.sh --clean --cmake-arg=-DKARTEND_ENABLE_PCH=OFF
@@ -457,7 +461,7 @@ other, so it is a step to try rather than a confirmed fix there.
 | `KARTEND_MAINTENANCE` | `OFF` | Enable `-Werror` for CI/maintenance builds |
 | `KARTEND_BUILD_TESTS` | `OFF` | Build unit test executables |
 | `KARTEND_ENABLE_CCACHE` | `ON` | Use `ccache` if available (faster rebuilds) |
-| `KARTEND_ENABLE_PCH` | `ON` | Precompile the common Qt headers for the `src/` area libraries (faster cold builds; always off under `KARTEND_MAINTENANCE`). Turn it off when the PCH build fails on an older CMake — see [Older CMake and precompiled headers](#older-cmake-and-precompiled-headers) |
+| `KARTEND_ENABLE_PCH` | `ON` | Precompile the common Qt headers for the `src/` area libraries (faster cold builds; always off under `KARTEND_MAINTENANCE`). Turning it off is something to try when the PCH build fails — see [Older CMake and precompiled headers](#older-cmake-and-precompiled-headers) |
 | `KARTEND_ENABLE_SANITIZERS` | `OFF` | Enable ASan+UBSan (requires `Debug`; configure errors otherwise) |
 | `KARTEND_ENABLE_TSAN` | `OFF` | Enable ThreadSanitizer (requires `Debug`; **mutually exclusive** with `KARTEND_ENABLE_SANITIZERS`) |
 | `KARTEND_ENABLE_COVERAGE` | `OFF` | Enable gcov/lcov instrumentation (Debug only) |
