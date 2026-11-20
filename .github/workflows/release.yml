@@ -38,7 +38,9 @@ jobs:
             set -eu
             export LC_ALL=C.UTF-8
             version=$(tr -d '[:space:]' < VERSION)
-            build=$(mktemp -d)
+            # CTest puts its isolated home and cache directories in the build tree.
+            # LaunchManager checks that its default cache is outside Qt's /tmp.
+            build=$(mktemp -d /var/tmp/kartend-build.XXXXXXXX)
             trap 'rm -rf "$build"' EXIT
             cmake -S . -B "$build" -G Ninja -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX=/usr/local -DKARTEND_PORTABLE_RELEASE=ON -DKARTEND_BUILD_TESTS=ON
