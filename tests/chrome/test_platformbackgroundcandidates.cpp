@@ -11,6 +11,10 @@
 #include "platformbackgroundcandidates.h"
 #include "platformbackgroundchoice.h"
 
+#include "collection/collectionconfig.h"
+#include "collectionplatformbackgrounds.h"
+#include "screenscrapersystems.h"
+
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
@@ -73,6 +77,32 @@ CollectionBackground videoBackgroundWithEverythingSet() {
   return bg;
 }
 
+/// A two-row synthetic systems catalog: autodetect lands on 1 for a
+/// "megadrive" collection scanning .md and on 2 for "snes" / .sfc.
+QList<ScreenScraperSystems::System> syntheticSystems() {
+  ScreenScraperSystems::System md;
+  md.id = 1;
+  md.displayName = QStringLiteral("Mega Drive");
+  md.extensions = {QStringLiteral("md")};
+  md.aliases = {QStringLiteral("megadrive")};
+  ScreenScraperSystems::System snes;
+  snes.id = 2;
+  snes.displayName = QStringLiteral("Super Nintendo");
+  snes.extensions = {QStringLiteral("sfc")};
+  snes.aliases = {QStringLiteral("snes")};
+  return {md, snes};
+}
+
+CollectionConfig collectionAt(const QString &name, const QString &artworkDir, int overrideId,
+                              const QStringList &extensions = {}) {
+  CollectionConfig cfg;
+  cfg.name = name;
+  cfg.artworkDirectory = artworkDir;
+  cfg.extensions = extensions;
+  cfg.scraperOverrides.screenscraperSystemId = overrideId;
+  return cfg;
+}
+
 } // namespace
 
 class TestPlatformBackgroundCandidates : public QObject {
@@ -90,6 +120,9 @@ private slots:
   void choiceSwitchesToImageAndMarksExactPath();
   void choiceOfDisplayedUnmarkedImageRecordsMarker();
   void choiceRejectsEmptyMissingStaleAndOtherPlatformPaths();
+  void collectionSourceListsOnlyItsOwnPlatformAndRoot();
+  void collectionSourceResolvesTheScrapeSystemId();
+  void collectionSourceUnmappedOrRootlessYieldsNothing();
 };
 
 void TestPlatformBackgroundCandidates::backgroundTypesMirrorProviderPriority() {
@@ -357,6 +390,140 @@ void TestPlatformBackgroundCandidates::choiceRejectsEmptyMissingStaleAndOtherPla
   QVERIFY(!choose(fresh, stalePath).has_value());
 
   QCOMPARE(current, original);
+}
+
+void TestPlatformBackgroundCandidates::collectionSourceListsOnlyItsOwnPlatformAndRoot() {
+  // Two collections' art roots. Root A holds platform 1 AND platform 2 art in
+  // the same _shared tree; root B holds identically named platform 1 files.
+  QTemporaryDir rootA;
+  QTemporaryDir rootB;
+  QVERIFY(rootA.isValid());
+  QVERIFY(rootB.isValid());
+  const QString sharedA = QDir(rootA.path()).filePath(QStringLiteral("_shared"));
+  const QString sharedB = QDir(rootB.path()).filePath(QStringLiteral("_shared"));
+  touch(sharedA, QStringLiteral("background/platform_1.jpg"));
+  touch(sharedA, QStringLiteral("illustration/platform_1.png"));
+  touch(sharedA, QStringLiteral("wheel/platform_1.png")); // not a background role
+  touch(sharedA, QStringLiteral("photo/platform_2.png"));
+  touch(sharedA, QStringLiteral("illustration/platform_2.png"));
+  touch(sharedB, QStringLiteral("illustration/platform_1.png"));
+  touch(sharedB, QStringLiteral("photo/platform_1.png"));
+  const QMap<QString, QByteArray> beforeA = snapshot(rootA.path());
+
+  const QList<ScreenScraperSystems::System> systems = syntheticSystems();
+  const CollectionConfig cfgA = collectionAt(QStringLiteral("Genesis"), rootA.path(), 1);
+
+  QCOMPARE(CollectionPlatformBackgrounds::sharedRoot(cfgA), sharedA);
+  QCOMPARE(CollectionPlatformBackgrounds::systemId(cfgA, systems), 1);
+  const QList<Candidate> got = CollectionPlatformBackgrounds::forCollection(cfgA, systems);
+  const QDir a(sharedA);
+  const QList<Candidate> want{
+      {QStringLiteral("illustration"), a.filePath(QStringLiteral("illustration/platform_1.png"))},
+      {QStringLiteral("background"), a.filePath(QStringLiteral("background/platform_1.jpg"))},
+  };
+  QCOMPARE(got, want);
+  // Exactly the enumerator's answer for the resolved root/id: same order,
+  // same paths, same supported types.
+  QCOMPARE(got, PlatformBackgroundCandidates::enumerate(sharedA, QStringLiteral("1")));
+  for (const Candidate &c : got) {
+    QVERIFY2(c.path.startsWith(sharedA + QLatin1Char('/')), qPrintable(c.path));
+    QVERIFY(!c.path.contains(QStringLiteral("platform_2")));
+  }
+  QCOMPARE(snapshot(rootA.path()), beforeA);
+
+  // The same platform under the other root lists root B's files only.
+  const CollectionConfig cfgB = collectionAt(QStringLiteral("Mega Drive B"), rootB.path(), 1);
+  const QDir b(sharedB);
+  const QList<Candidate> wantB{
+      {QStringLiteral("illustration"), b.filePath(QStringLiteral("illustration/platform_1.png"))},
+      {QStringLiteral("photo"), b.filePath(QStringLiteral("photo/platform_1.png"))},
+  };
+  QCOMPARE(CollectionPlatformBackgrounds::forCollection(cfgB, systems), wantB);
+
+  // Platform 2 in root A sees platform 2's art, never platform 1's.
+  const CollectionConfig cfgA2 = collectionAt(QStringLiteral("SFC"), rootA.path(), 2);
+  const QList<Candidate> wantA2{
+      {QStringLiteral("illustration"), a.filePath(QStringLiteral("illustration/platform_2.png"))},
+      {QStringLiteral("photo"), a.filePath(QStringLiteral("photo/platform_2.png"))},
+  };
+  QCOMPARE(CollectionPlatformBackgrounds::forCollection(cfgA2, systems), wantA2);
+}
+
+void TestPlatformBackgroundCandidates::collectionSourceResolvesTheScrapeSystemId() {
+  // No override: the id comes from the same override → autodetect resolver
+  // ScreenScraperProvider::resolveSystemId delegates to.
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString shared = QDir(root.path()).filePath(QStringLiteral("_shared"));
+  touch(shared, QStringLiteral("photo/platform_1.png"));
+  touch(shared, QStringLiteral("photo/platform_2.png"));
+  const QList<ScreenScraperSystems::System> systems = syntheticSystems();
+
+  const CollectionConfig snes =
+      collectionAt(QStringLiteral("snes"), root.path(), -1, {QStringLiteral("sfc")});
+  QCOMPARE(ScreenScraperSystems::resolveForCollection(-1, snes.name, snes.type, snes.extensions,
+                                                      systems),
+           2);
+  QCOMPARE(CollectionPlatformBackgrounds::systemId(snes, systems), 2);
+  const QList<Candidate> want{
+      {QStringLiteral("photo"), QDir(shared).filePath(QStringLiteral("photo/platform_2.png"))}};
+  QCOMPARE(CollectionPlatformBackgrounds::forCollection(snes, systems), want);
+
+  // An explicit override wins over what the name would autodetect to.
+  const CollectionConfig pinned =
+      collectionAt(QStringLiteral("snes"), root.path(), 1, {QStringLiteral("sfc")});
+  QCOMPARE(CollectionPlatformBackgrounds::systemId(pinned, systems), 1);
+  const QList<Candidate> wantPinned{
+      {QStringLiteral("photo"), QDir(shared).filePath(QStringLiteral("photo/platform_1.png"))}};
+  QCOMPARE(CollectionPlatformBackgrounds::forCollection(pinned, systems), wantPinned);
+}
+
+void TestPlatformBackgroundCandidates::collectionSourceUnmappedOrRootlessYieldsNothing() {
+  QTemporaryDir root;
+  QVERIFY(root.isValid());
+  const QString shared = QDir(root.path()).filePath(QStringLiteral("_shared"));
+  touch(shared, QStringLiteral("illustration/platform_0.png"));
+  touch(shared, QStringLiteral("illustration/platform_1.png"));
+  touch(shared, QStringLiteral("illustration/platform_2.png"));
+  const QList<ScreenScraperSystems::System> systems = syntheticSystems();
+
+  // Unmapped: no override and nothing autodetects.
+  const CollectionConfig unmapped =
+      collectionAt(QStringLiteral("Something Else"), root.path(), -1, {QStringLiteral("xyz")});
+  QCOMPARE(CollectionPlatformBackgrounds::systemId(unmapped, systems), 0);
+  QVERIFY(CollectionPlatformBackgrounds::forCollection(unmapped, systems).isEmpty());
+
+  // Autodetectable name, but no catalog loaded: nothing is guessed.
+  const CollectionConfig noCatalog =
+      collectionAt(QStringLiteral("snes"), root.path(), -1, {QStringLiteral("sfc")});
+  QVERIFY(CollectionPlatformBackgrounds::forCollection(noCatalog, {}).isEmpty());
+
+  // Override 0 is the "any system" sentinel, not a platform: platform_0 is
+  // never offered.
+  QVERIFY(CollectionPlatformBackgrounds::forCollection(
+              collectionAt(QStringLiteral("Any"), root.path(), 0), systems)
+              .isEmpty());
+
+  // A playlist has no single platform even with an override.
+  CollectionConfig playlist = collectionAt(QStringLiteral("Favourites"), root.path(), 1);
+  playlist.isPlaylist = true;
+  QVERIFY(CollectionPlatformBackgrounds::forCollection(playlist, systems).isEmpty());
+
+  // No artwork directory of its own: no root is borrowed from another
+  // collection (root above holds platform_1 art), so nothing is listed.
+  const CollectionConfig rootless = collectionAt(QStringLiteral("Genesis"), QString(), 1);
+  QVERIFY(CollectionPlatformBackgrounds::sharedRoot(rootless).isEmpty());
+  QVERIFY(CollectionPlatformBackgrounds::forCollection(rootless, systems).isEmpty());
+
+  // An artwork directory that does not exist, or one without _shared/.
+  const CollectionConfig missing = collectionAt(
+      QStringLiteral("Genesis"), QDir(root.path()).filePath(QStringLiteral("gone")), 1);
+  QVERIFY(CollectionPlatformBackgrounds::forCollection(missing, systems).isEmpty());
+  QTemporaryDir bare;
+  QVERIFY(bare.isValid());
+  QVERIFY(CollectionPlatformBackgrounds::forCollection(
+              collectionAt(QStringLiteral("Genesis"), bare.path(), 1), systems)
+              .isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestPlatformBackgroundCandidates)

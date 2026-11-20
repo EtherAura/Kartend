@@ -483,18 +483,12 @@ int ScreenScraperProvider::resolveSystemId(
   if (!m_collectionAccessor) return 0;
   const CollectionConfig *cfg = m_collectionAccessor();
   if (!cfg) return 0;
-  if (cfg->scraperOverrides.screenscraperSystemId >= 0) {
-    return cfg->scraperOverrides.screenscraperSystemId;
-  }
-  // Autodetect runs over the runtime-fetched catalog. When the
-  // catalog is empty (offline / fetch failed / no creds) autodetect
-  // returns -1 and we fall through to the SS "any system" sentinel.
-  const int autodetected =
-      ScreenScraperSystems::autodetect(cfg->name, cfg->type, cfg->extensions, systems);
-  if (autodetected > 0) {
-    return autodetected;
-  }
-  return 0;
+  // Override first, then autodetect over the runtime-fetched catalog. When the
+  // catalog is empty (offline / fetch failed / no creds) autodetect returns -1
+  // and this falls through to the SS "any system" sentinel 0. Shared with the
+  // platform-background source so both resolve the same systemeid.
+  return ScreenScraperSystems::resolveForCollection(cfg->scraperOverrides.screenscraperSystemId,
+                                                    cfg->name, cfg->type, cfg->extensions, systems);
 }
 
 // ensureSystemsCatalog + ensureMediaTypeCatalog moved to

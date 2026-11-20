@@ -56,6 +56,16 @@ const System *find(const QList<System> &systems, int systemeid) {
   return nullptr;
 }
 
+int resolveForCollection(int overrideSystemId, const QString &collectionName,
+                         const QString &collectionType, const QStringList &extensions,
+                         const QList<System> &systems) {
+  if (overrideSystemId >= 0) return overrideSystemId;
+  // An empty catalog makes autodetect return -1; that and any other
+  // non-positive score fall through to 0 ("no system").
+  const int autodetected = autodetect(collectionName, collectionType, extensions, systems);
+  return autodetected > 0 ? autodetected : 0;
+}
+
 int autodetect(const QString &collectionName, const QString &collectionType,
                const QStringList &extensions, const QList<System> &systems) {
   if (systems.isEmpty()) {

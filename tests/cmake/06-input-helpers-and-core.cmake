@@ -40,10 +40,11 @@ target_include_directories(test_scrollbarhiding PRIVATE ${SRC_DIR}/chrome/overla
 
 # Platform-background candidates (Kartend-ji94z): the read-only lister of a
 # platform's retained illustration/photo/background art under _shared/, over a
-# real QTemporaryDir tree. Header-only helper; no widgets, no database.
+# real QTemporaryDir tree. No widgets, no database. Links kartend_media for the
+# collection-facing CollectionPlatformBackgrounds resolver.
 kartend_add_test(NAME PlatformBackgroundCandidates
   SOURCES chrome/test_platformbackgroundcandidates.cpp
-  LINK kartend_chrome kartend_api kartend_utils
+  LINK kartend_media kartend_data kartend_chrome kartend_api kartend_utils
 )
 target_include_directories(test_platformbackgroundcandidates PRIVATE ${SRC_DIR}/chrome/overlays)
 
