@@ -430,8 +430,9 @@ LD_LIBRARY_PATH="$QT_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" NO_STRIP=1 \
 # link to usr/bin/kartend. The kernel names the process after the file it ran,
 # so Kartend would show up as "AppRun.wrapped" in process lists, its usage line
 # and its X11 window class. apprun-handoff.py makes AppRun execute
-# usr/bin/kartend directly, keeping the hooks and the arguments, and stops the
-# build if AppRun is not the script it expects.
+# usr/bin/kartend directly under the name kartend (the usage line shows that
+# name, not the temporary mount path), keeping the hooks and the arguments,
+# and stops the build if AppRun is not the script it expects.
 python3 "$HERE/apprun-handoff.py" "$APPDIR" ||
   die "AppRun is not the launcher linuxdeploy is expected to write; see the message above"
 
@@ -448,7 +449,7 @@ case "$(readlink -f "$APPDIR/AppRun")" in
   *) die "AppRun points outside the AppDir: $(readlink -f "$APPDIR/AppRun")" ;;
 esac
 # shellcheck disable=SC2016 # the line is matched as written, not expanded
-grep -qxF 'exec "$this_dir/usr/bin/kartend" "$@"' "$APPDIR/AppRun" ||
+grep -qxF 'exec -a kartend "$this_dir/usr/bin/kartend" "$@"' "$APPDIR/AppRun" ||
   die "AppRun does not start usr/bin/kartend"
 for plugin in "${QT_PLUGINS[@]}"; do
   [ -s "$APPDIR/usr/plugins/$plugin" ] || die "the AppDir lost the Qt plugin $plugin"

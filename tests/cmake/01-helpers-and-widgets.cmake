@@ -377,12 +377,17 @@ kartend_add_test(NAME ScraperCredentialsPanel
 # process is named kartend, not AppRun.wrapped. Starts a temporary AppDir's
 # launcher before and after packaging/appimage/apprun-handoff.py and reads
 # /proc for the name, the forwarded arguments and the scrubbed Qt variables.
+# With the built kartend in a temporary AppDir it also checks that the first
+# line of `AppRun --help` names kartend, not AppRun.wrapped or the mount path.
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
   find_package(Python3 COMPONENTS Interpreter)
   if (Python3_Interpreter_FOUND)
     add_test(NAME AppImageLauncherProcess
       COMMAND ${Python3_EXECUTABLE}
-              ${CMAKE_CURRENT_SOURCE_DIR}/../.scripts/tests/test_appimage_launcher_process.py
+              ${CMAKE_CURRENT_SOURCE_DIR}/../.scripts/tests/test_appimage_launcher_process.py -v
+    )
+    set_tests_properties(AppImageLauncherProcess PROPERTIES
+      ENVIRONMENT "KARTEND_EXECUTABLE=$<TARGET_FILE:kartend>"
     )
   endif()
 endif()

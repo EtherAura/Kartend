@@ -13,11 +13,14 @@ after the file that was executed, so Kartend ran as "AppRun.wrapped": in its
 usage line, in process lists and as its X11 window class. This script replaces
 that one line with
 
-    exec "$this_dir/usr/bin/kartend" "$@"
+    exec -a kartend "$this_dir/usr/bin/kartend" "$@"
 
 and leaves everything above it (set -e, this_dir, the hooks) and the argument
 forwarding as they were. The path is the AppDir's own file, never looked up
-through PATH.
+through PATH. `-a kartend` only sets argument zero: Qt's usage line in --help
+names argument zero, which would otherwise be the path inside the AppImage's
+temporary mount directory. Qt finds its own files through /proc/self/exe, not
+argument zero.
 
 It changes nothing and exits 1 when AppRun is not the wrapper it expects: a
 missing or non-regular file, no hook being sourced, the exec line absent,
@@ -39,7 +42,7 @@ import tempfile
 EXECUTABLE = "usr/bin/kartend"
 WRAPPED = "AppRun.wrapped"
 OLD_EXEC = 'exec "$this_dir"/AppRun.wrapped "$@"'
-NEW_EXEC = 'exec "$this_dir/usr/bin/kartend" "$@"'
+NEW_EXEC = 'exec -a kartend "$this_dir/usr/bin/kartend" "$@"'
 HOOK = "kartend-own-qt.sh"
 
 
