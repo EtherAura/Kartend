@@ -5,8 +5,11 @@
 // collection background. The helper under test lists the retained
 // illustration / photo / background candidates for ONE platform so a later
 // picker can show them; these tests pin what it returns (and what it must not
-// leak) against a real on-disk shared-art tree of synthetic files.
+// leak) against a real on-disk shared-art tree of synthetic files. The
+// PlatformBackgroundChoice cases then feed that real list to the value-level
+// pick operation and check the proposed CollectionBackground.
 #include "platformbackgroundcandidates.h"
+#include "platformbackgroundchoice.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -46,6 +49,30 @@ QMap<QString, QByteArray> snapshot(const QString &root) {
   return out;
 }
 
+/// A background with every field moved off its default, so a choice that
+/// clobbers anything besides the three wallpaper fields shows up in QCOMPARE.
+CollectionBackground videoBackgroundWithEverythingSet() {
+  CollectionBackground bg;
+  bg.backgroundType = BackgroundType::Video;
+  bg.backgroundColor = QStringLiteral("#1a1a2e");
+  bg.backgroundImage = QStringLiteral("/old/wallpaper.png");
+  bg.backgroundImageChosenPath = QString();
+  bg.backgroundVideo = QStringLiteral("/old/loop.mp4");
+  bg.primaryColor = QStringLiteral("#223344");
+  bg.toolbarColorSource = ToolbarColorSource::CollectionPrimary;
+  bg.tileColor = QStringLiteral("#556677");
+  bg.selectionColor = QStringLiteral("#8899aa");
+  bg.headerLogoImage = QStringLiteral("/old/header-logo.png");
+  bg.headerLogoPosition = HeaderLogoPosition::TopLeft;
+  bg.vignetteEnabled = true;
+  bg.vignetteIntensity = 41;
+  bg.wallpaperParallax = true;
+  bg.parallaxStrength = 77;
+  bg.toolbarBackdropBlur = true;
+  bg.backdropBlurRadius = 19;
+  return bg;
+}
+
 } // namespace
 
 class TestPlatformBackgroundCandidates : public QObject {
@@ -60,6 +87,9 @@ private slots:
   void platformWithoutArtYieldsNothing();
   void rejectsNonNumericIds();
   void repeatedEnumerationIsDeterministicAndReadOnly();
+  void choiceSwitchesToImageAndMarksExactPath();
+  void choiceOfDisplayedUnmarkedImageRecordsMarker();
+  void choiceRejectsEmptyMissingStaleAndOtherPlatformPaths();
 };
 
 void TestPlatformBackgroundCandidates::backgroundTypesMirrorProviderPriority() {
@@ -221,6 +251,112 @@ void TestPlatformBackgroundCandidates::repeatedEnumerationIsDeterministicAndRead
   QCOMPARE(first.at(3).path, QDir(shared).filePath(QStringLiteral("background/platform_8.jpg")));
 
   QCOMPARE(snapshot(tmp.path()), before);
+}
+
+void TestPlatformBackgroundCandidates::choiceSwitchesToImageAndMarksExactPath() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString shared = QDir(tmp.path()).filePath(QStringLiteral("_shared"));
+  touch(shared, QStringLiteral("illustration/platform_57.png"));
+  touch(shared, QStringLiteral("photo/platform_57.jpg"));
+  const QList<Candidate> candidates =
+      PlatformBackgroundCandidates::enumerate(shared, QStringLiteral("57"));
+  QCOMPARE(candidates.size(), 2);
+  const QString picked = candidates.at(1).path;
+
+  const CollectionBackground current = videoBackgroundWithEverythingSet();
+  const CollectionBackground original = current;
+  const std::optional<CollectionBackground> got =
+      PlatformBackgroundChoice::choose(current, candidates, picked);
+  QVERIFY(got.has_value());
+  QCOMPARE(current, original);
+
+  QCOMPARE(got->backgroundType, BackgroundType::Image);
+  QCOMPARE(got->backgroundImage, picked);
+  QCOMPARE(got->backgroundImageChosenPath, picked);
+
+  // Everything else — header logo and the prior video path included — kept.
+  CollectionBackground want = original;
+  want.backgroundType = BackgroundType::Image;
+  want.backgroundImage = picked;
+  want.backgroundImageChosenPath = picked;
+  QCOMPARE(*got, want);
+  QCOMPARE(got->headerLogoImage, QStringLiteral("/old/header-logo.png"));
+  QCOMPARE(got->headerLogoPosition, HeaderLogoPosition::TopLeft);
+  QCOMPARE(got->backgroundVideo, QStringLiteral("/old/loop.mp4"));
+}
+
+void TestPlatformBackgroundCandidates::choiceOfDisplayedUnmarkedImageRecordsMarker() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString shared = QDir(tmp.path()).filePath(QStringLiteral("_shared"));
+  touch(shared, QStringLiteral("background/platform_3.png"));
+  const QList<Candidate> candidates =
+      PlatformBackgroundCandidates::enumerate(shared, QStringLiteral("3"));
+  QCOMPARE(candidates.size(), 1);
+  const QString displayed = candidates.at(0).path;
+
+  // The scrape already wired this file in, but nobody chose it.
+  CollectionBackground current = videoBackgroundWithEverythingSet();
+  current.backgroundType = BackgroundType::Image;
+  current.backgroundImage = displayed;
+  current.backgroundImageChosenPath.clear();
+
+  const std::optional<CollectionBackground> got =
+      PlatformBackgroundChoice::choose(current, candidates, displayed);
+  QVERIFY(got.has_value());
+  QVERIFY(*got != current);
+  CollectionBackground want = current;
+  want.backgroundImageChosenPath = displayed;
+  QCOMPARE(*got, want);
+}
+
+void TestPlatformBackgroundCandidates::choiceRejectsEmptyMissingStaleAndOtherPlatformPaths() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString shared = QDir(tmp.path()).filePath(QStringLiteral("_shared"));
+  touch(shared, QStringLiteral("illustration/platform_1.png"));
+  touch(shared, QStringLiteral("photo/platform_1.png"));
+  touch(shared, QStringLiteral("illustration/platform_2.png"));
+  const QDir s(shared);
+
+  const QList<Candidate> platform1 =
+      PlatformBackgroundCandidates::enumerate(shared, QStringLiteral("1"));
+  const QList<Candidate> platform2 =
+      PlatformBackgroundCandidates::enumerate(shared, QStringLiteral("2"));
+  QCOMPARE(platform1.size(), 2);
+  QCOMPARE(platform2.size(), 1);
+
+  const CollectionBackground original = videoBackgroundWithEverythingSet();
+  const CollectionBackground current = original;
+  const auto choose = [&](const QList<Candidate> &list, const QString &path) {
+    return PlatformBackgroundChoice::choose(current, list, path);
+  };
+
+  // Cancelled pick.
+  QVERIFY(!choose(platform1, QString()).has_value());
+  // Path that was never a candidate (and does not exist), and look-alikes that
+  // share the extension, directory prefix or file name of a real candidate.
+  QVERIFY(!choose(platform1, s.filePath(QStringLiteral("background/platform_1.png"))).has_value());
+  QVERIFY(!choose(platform1, s.filePath(QStringLiteral("illustration"))).has_value());
+  QVERIFY(!choose(platform1, QStringLiteral("platform_1.png")).has_value());
+  QVERIFY(!choose(platform1, platform1.at(0).path + QStringLiteral(".png")).has_value());
+  QVERIFY(
+      !choose(platform1, platform1.at(0).path.left(platform1.at(0).path.size() - 1)).has_value());
+  // Another platform's candidate against this platform's list.
+  QVERIFY(!choose(platform1, platform2.at(0).path).has_value());
+  // Empty list: nothing can match.
+  QVERIFY(!choose({}, platform1.at(0).path).has_value());
+
+  // Stale: the file was listed earlier but is gone from a fresh enumeration.
+  const QString stalePath = s.filePath(QStringLiteral("photo/platform_1.png"));
+  QVERIFY(QFile::remove(stalePath));
+  const QList<Candidate> fresh =
+      PlatformBackgroundCandidates::enumerate(shared, QStringLiteral("1"));
+  QCOMPARE(fresh.size(), 1);
+  QVERIFY(!choose(fresh, stalePath).has_value());
+
+  QCOMPARE(current, original);
 }
 
 QTEST_GUILESS_MAIN(TestPlatformBackgroundCandidates)
