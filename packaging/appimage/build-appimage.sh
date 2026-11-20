@@ -445,8 +445,9 @@ step "5/9 check the AppDir"
 python3 "$HERE/check-libarchive.py" --appdir "$APPDIR"
 archive_build_id="$(readelf -n "$LIBARCHIVE_DIR/lib/libarchive.so.13" | sed -n 's/^[[:space:]]*Build ID: //p')"
 staged_archive_build_id="$(readelf -n "$APPDIR/usr/lib/libarchive.so.13" | sed -n 's/^[[:space:]]*Build ID: //p')"
-[ -n "$archive_build_id" ] && [ "$archive_build_id" = "$staged_archive_build_id" ] ||
+if [ -z "$archive_build_id" ] || [ "$archive_build_id" != "$staged_archive_build_id" ]; then
   die "the staged libarchive does not match the pinned source build"
+fi
 
 install -D -m 0644 "$LIBARCHIVE_DIR/share/licenses/libarchive/COPYING" \
   "$APPDIR/usr/share/licenses/libarchive/COPYING"
