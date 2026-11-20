@@ -16,6 +16,14 @@ name), cmdline (the forwarded arguments) and environ (the scrubbed Qt
 variables). Every started process is killed and reaped in cleanup. Wrappers
 that are not the expected one must be refused and left unchanged.
 
+Qt's usage line ("Usage: %1 [options]") names argument zero, not the file
+the kernel ran, so the rewritten AppRun also sets argument zero to kartend
+(`exec -a`). When KARTEND_EXECUTABLE names the built kartend (CMake passes
+it), the --help tests copy it into a second AppDir under a directory named
+like the AppImage runtime's mount point (.mount_...), run AppRun --help with
+a private HOME and XDG directories on the offscreen platform, and check the
+first line of its stdout.
+
 No AppImage is built, mounted or run here.
 
 stdlib unittest — pytest is not available in CI. Run directly
@@ -29,6 +37,7 @@ import pathlib
 import platform
 import re
 import select
+import shutil
 import signal
 import stat
 import struct
@@ -46,7 +55,13 @@ BUILDER = APPIMAGE_DIR / "build-appimage.sh"
 HOOK_NAME = "kartend-own-qt.sh"
 QT_VARIABLES = ("QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH", "QML_IMPORT_PATH", "QML2_IMPORT_PATH")
 OLD_EXEC = 'exec "$this_dir"/AppRun.wrapped "$@"'
-NEW_EXEC = 'exec "$this_dir/usr/bin/kartend" "$@"'
+NEW_EXEC = 'exec -a kartend "$this_dir/usr/bin/kartend" "$@"'
+# The line the first handoff wrote: the right file, but the mount path as argument zero.
+PATH_EXEC = 'exec "$this_dir/usr/bin/kartend" "$@"'
+# The built kartend, for the --help tests; set by the AppImageLauncherProcess registration.
+KARTEND_EXECUTABLE = os.environ.get("KARTEND_EXECUTABLE", "")
+# Like the AppImage runtime's mount point, /tmp/.mount_<name><random>.
+MOUNT_DIR = ".mount_KartenQ1w2E3"
 
 # What linuxdeploy writes as AppRun when the AppDir has apprun-hooks.
 GENERATED_APPRUN = f"""#! /usr/bin/env bash
@@ -163,6 +178,7 @@ class TestAppImageLauncherProcess(unittest.TestCase):
             if key in QT_VARIABLES or key == MARKER:
                 environ[key] = value
         return {
+            "exe": os.readlink(proc / "exe"),
             "comm": (proc / "comm").read_text().strip(),
             "argv": [arg.decode() for arg in (proc / "cmdline").read_bytes().split(b"\0")[:-1]],
             "environ": environ,
@@ -227,9 +243,81 @@ class TestAppImageLauncherProcess(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         seen = self.launch()
         self.assertEqual(seen["comm"], "kartend")
-        self.assertEqual(seen["argv"], [str(self.appdir.resolve() / "usr" / "bin" / "kartend"), *ARGUMENTS])
+        # The file run is still the AppDir's own (launch() checks /proc/<pid>/exe); only argument zero is the name.
+        self.assertEqual(seen["exe"], str(self.appdir.resolve() / "usr" / "bin" / "kartend"))
+        self.assertEqual(seen["argv"], ["kartend", *ARGUMENTS])
         self.assert_hook_ran(seen)
         self.assertFalse((pathlib.Path(self._tmp.name) / "injected").exists())
+
+    def help_appdir(self) -> pathlib.Path:
+        """An AppDir under a .mount_-like directory with the built kartend as usr/bin/kartend."""
+        if not KARTEND_EXECUTABLE:
+            self.skipTest("KARTEND_EXECUTABLE is not set (the CMake registration sets it)")
+        source = pathlib.Path(KARTEND_EXECUTABLE)
+        self.assertTrue(source.is_file() and os.access(source, os.X_OK), f"not an executable file: {source}")
+        appdir = pathlib.Path(self._tmp.name) / MOUNT_DIR
+        (appdir / "usr" / "bin").mkdir(parents=True)
+        (appdir / "apprun-hooks").mkdir()
+        shutil.copy2(source, appdir / "usr" / "bin" / "kartend")
+        os.symlink("usr/bin/kartend", appdir / "AppRun.wrapped")
+        (appdir / "apprun-hooks" / HOOK_NAME).write_text(builder_hook_text(), encoding="utf-8")
+        (appdir / "AppRun").write_text(GENERATED_APPRUN, encoding="utf-8")
+        (appdir / "AppRun").chmod(0o755)
+        return appdir
+
+    def help_first_line(self, appdir: pathlib.Path) -> str:
+        """Run AppRun --help offscreen with private HOME/XDG paths; return the first stdout line."""
+        private = pathlib.Path(self._tmp.name) / "home"
+        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(private), "LANG": "C.UTF-8"}
+        for key, sub in (("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"),
+                         ("XDG_CACHE_HOME", "cache"), ("XDG_STATE_HOME", "state"), ("XDG_RUNTIME_DIR", "run")):
+            env[key] = str(private / sub)
+            (private / sub).mkdir(parents=True, mode=0o700, exist_ok=True)
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        for key in QT_VARIABLES:
+            env[key] = "/caller/system-qt/plugins"  # the hook must drop these
+        result = subprocess.run(
+            [str(appdir / "AppRun"), "--help"], env=env, cwd=self._tmp.name,
+            stdin=subprocess.DEVNULL, capture_output=True, check=False, timeout=DEADLINE,
+        )
+        stdout = result.stdout.decode(errors="replace")
+        self.assertEqual(result.returncode, 0, f"--help exited {result.returncode}; "
+                         f"stderr: {result.stderr.decode(errors='replace')[-2000:]}")
+        self.assertTrue(stdout, "--help wrote nothing to stdout")
+        line = stdout.splitlines()[0]
+        print(f"\n  --help first line: {line.replace(self._tmp.name, '<tmp>')}", file=sys.stderr)
+        return line
+
+    @staticmethod
+    def usage_problem(line: str) -> str | None:
+        """Why this usage line does not name kartend plainly, or None."""
+        if not line.startswith("Usage: "):
+            return "not a usage line"
+        if "AppRun.wrapped" in line:
+            return "names AppRun.wrapped"
+        if ".mount_" in line or "/" in line:
+            return "names a path in the mount directory"
+        if line != "Usage: kartend [options]":
+            return "does not name kartend"
+        return None
+
+    def test_help_usage_line_before_and_after_the_handoff(self) -> None:
+        appdir = self.help_appdir()
+        apprun = appdir / "AppRun"
+        generated = self.help_first_line(appdir)
+        self.assertEqual(self.usage_problem(generated), "names AppRun.wrapped", generated)
+        apprun.write_text(GENERATED_APPRUN.replace(OLD_EXEC, PATH_EXEC), encoding="utf-8")
+        first_handoff = self.help_first_line(appdir)
+        self.assertEqual(self.usage_problem(first_handoff), "names a path in the mount directory", first_handoff)
+        apprun.write_text(GENERATED_APPRUN, encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "-I", str(HANDOFF), str(appdir)],
+            capture_output=True, text=True, check=False, timeout=DEADLINE,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(NEW_EXEC, apprun.read_text(encoding="utf-8").split("\n"))
+        fixed = self.help_first_line(appdir)
+        self.assertIsNone(self.usage_problem(fixed), fixed)
 
     def test_rewrite_changes_only_the_exec_line_and_keeps_the_mode(self) -> None:
         self.write_apprun(GENERATED_APPRUN, mode=0o750)
@@ -257,6 +345,7 @@ class TestAppImageLauncherProcess(unittest.TestCase):
             "other use of AppRun.wrapped": GENERATED_APPRUN.replace("set -e", 'set -e\nls "$this_dir"/AppRun.wrapped'),
             "hook not sourced": GENERATED_APPRUN.replace(hook_line + "\n", ""),
             "already rewritten": GENERATED_APPRUN.replace(OLD_EXEC, NEW_EXEC),
+            "rewritten by the first handoff": GENERATED_APPRUN.replace(OLD_EXEC, PATH_EXEC),
             "not a shell script": "\x7fELF" + GENERATED_APPRUN,
         }
         for reason, text in cases.items():
