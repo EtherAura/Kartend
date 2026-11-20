@@ -10,7 +10,7 @@
 [![Release](https://img.shields.io/github/v/release/EtherAura/Kartend?include_prereleases)](https://github.com/EtherAura/Kartend/releases)
 [![GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
 
-A Qt frontend for films, music, books and games on **Linux and Windows**.
+A Qt frontend for films, music, books and games on **Linux, FreeBSD and Windows**.
 Bring your folders, choose your launchers, and make the library yours.
 
 [**Download**](https://github.com/EtherAura/Kartend/releases/latest) · [**Get started**](docs/user/Getting-Started.md) · [**User guide**](https://github.com/EtherAura/Kartend/wiki) · [**Feature tour**](docs/user/Features.md)
@@ -32,7 +32,7 @@ https://github.com/user-attachments/assets/f4298240-68d6-435a-8276-84d223e5e30a
 
 ## Install
 
-Pick a Linux package or Windows download from [Releases](https://github.com/EtherAura/Kartend/releases/latest), then follow the New Library Wizard.
+Pick a Linux, FreeBSD or Windows download from [Releases](https://github.com/EtherAura/Kartend/releases/latest), then follow the New Library Wizard.
 On Fedora, openSUSE, the Steam Deck or any other distribution without a Kartend package, take the AppImage: one file, make it executable and run it.
 [Installation and verification](docs/user/Installation.md) covers packages, the AppImage, unsigned Windows builds and download provenance.
 

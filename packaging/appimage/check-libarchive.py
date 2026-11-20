@@ -3,6 +3,7 @@
 
     python3 packaging/appimage/check-libarchive.py STAGED_LIBARCHIVE_ELF
     python3 packaging/appimage/check-libarchive.py --appdir STAGED_APPDIR
+    python3 packaging/appimage/check-libarchive.py --dll STAGED_ARCHIVE_DLL
 
 The caller names the one staged libarchive file to check, or a staged (or
 already unpacked) AppDir. In an AppDir the checked file is the entry
@@ -21,7 +22,7 @@ The observed version is always printed, also when it is too old. Exit status:
 
   0  the version is at least MINIMUM_VERSION;
   1  the version is older than MINIMUM_VERSION;
-  2  the file cannot be read, is not an ELF file, or does not carry exactly one
+  2  the file cannot be read, has the wrong binary format, or does not carry exactly one
      libarchive version string; or, with --appdir, the entry cannot be
      resolved to a regular file inside the AppDir.
 
@@ -137,10 +138,11 @@ def read_regular_file(path):
         return handle.read()
 
 
-def check_data(name, label, data):
+def check_data(name, label, data, magic=ELF_MAGIC):
     """Print the version data carries and return the exit status."""
-    if not data.startswith(ELF_MAGIC):
-        print("%s: %s: not an ELF file" % (name, label), file=sys.stderr)
+    if not data.startswith(magic):
+        expected = "an ELF file" if magic == ELF_MAGIC else "a Windows DLL"
+        print("%s: %s: not %s" % (name, label, expected), file=sys.stderr)
         return 2
 
     versions = find_versions(data)
@@ -197,19 +199,21 @@ def main(argv=None):
         metavar="STAGED_APPDIR",
         help="a staged or unpacked AppDir; checks its %s" % APPDIR_ENTRY,
     )
+    target.add_argument("--dll", metavar="ARCHIVE_DLL", help="the staged Windows libarchive DLL")
     args = parser.parse_args(argv)
 
     name = "check-libarchive"
     if args.appdir is not None:
         return check_appdir(name, args.appdir)
 
+    path = args.dll or args.library
     try:
-        with open(args.library, "rb") as handle:
+        with open(path, "rb") as handle:
             data = handle.read()
     except OSError as error:
-        print("%s: %s: cannot read: %s" % (name, args.library, error.strerror), file=sys.stderr)
+        print("%s: %s: cannot read: %s" % (name, path, error.strerror), file=sys.stderr)
         return 2
-    return check_data(name, args.library, data)
+    return check_data(name, path, data, b"MZ" if args.dll else ELF_MAGIC)
 
 
 if __name__ == "__main__":

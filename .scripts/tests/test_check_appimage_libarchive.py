@@ -69,6 +69,18 @@ class TestCheckLibarchive(unittest.TestCase):
         self.assertIn("libarchive 3.8.10", result.stdout)
         self.assertIn("too old", result.stdout)
 
+    def test_windows_dll_uses_the_same_version_floor(self) -> None:
+        for version, status in ((b"3.8.10", 1), (b"3.8.11", 0)):
+            with self.subTest(version=version), tempfile.TemporaryDirectory() as temp:
+                dll = pathlib.Path(temp) / "archive.dll"
+                dll.write_bytes(fake_library(b"libarchive " + version, header=b"MZ"))
+                result = subprocess.run(
+                    [sys.executable, str(CHECK), "--dll", str(dll)],
+                    capture_output=True, text=True, check=False,
+                )
+                self.assertEqual(result.returncode, status, result.stderr)
+                self.assertIn(version.decode(), result.stdout)
+
     def test_much_older_version_is_rejected(self) -> None:
         result = self.run_check(self.stage(fake_library(b"libarchive 3.7.2")))
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)

@@ -505,6 +505,13 @@ endif()
 # kartend_apply_area_flags() above (cmake/CompilerFlags.cmake). The matching
 # LINK options on the kartend EXECUTABLE are target-specific, so they stay
 # here.
+# FreeBSD's compiler does not emit PIE by default for the executable's own sources.
+if (CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+  target_compile_options(kartend PRIVATE
+    $<$<NOT:$<CONFIG:Debug>>:${HARDENING_COMPILE_OPTS}>
+  )
+endif()
+
 target_link_options(kartend PRIVATE
   $<$<NOT:$<CONFIG:Debug>>:${HARDENING_LINK_OPTS}>
   $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:${RELEASE_PERF_LINK_OPTS}>

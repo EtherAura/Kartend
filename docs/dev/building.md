@@ -139,6 +139,41 @@ Optional but recommended (matches CI's optional-backend set):
 emerge --ask app-arch/zstd app-arch/libarchive media-libs/libsdl2
 ```
 
+### FreeBSD (amd64)
+
+The source build and desktop startup were exercised on FreeBSD 15.1 with Clang
+19 and Qt 6.11. SDL2 supplies the gamepad backend when Qt6Gamepad is absent.
+
+```bash
+pkg install cmake-core ninja qt6-base qt6-multimedia qt6-tools qt6-svg qt6-base_sqldriver-sqlite sdl2
+```
+
+From the source checkout, as a regular user:
+
+```bash
+cmake -S . -B build/freebsd -G Ninja -DCMAKE_BUILD_TYPE=Release -DKARTEND_PORTABLE_RELEASE=ON
+cmake --build build/freebsd --target kartend
+cmake --install build/freebsd --prefix "$HOME/.local"
+"$HOME/.local/bin/kartend" --version
+```
+
+To build a native `.pkg` from that build directory, install `python3` and run
+the packager. It uses the linked FreeBSD packages and records the Qt SQLite
+and SVG plugins used at runtime.
+
+```bash
+python3 packaging/build-freebsd-pkg.py build/freebsd --output-dir build/freebsd/pkg
+```
+
+Install the resulting `.pkg` on a test FreeBSD host with `pkg install ./<package>`. With
+`xorg-vfbserver` and `xdotool` installed, run the release smoke as a regular
+user. It exports a fixture, imports it into a fresh profile, opens Kartend,
+and verifies that its launcher receives the extracted path.
+
+```bash
+sh packaging/test-freebsd-installed.sh
+```
+
 ### Windows (MSVC)
 
 Native Windows builds use **MSVC 2019 or 2022 + Qt 6.7 LTS + Ninja**.

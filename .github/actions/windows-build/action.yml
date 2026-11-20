@@ -80,7 +80,7 @@ runs:
         path: |
           C:\vcpkg\downloads
           ${{ github.workspace }}\vcpkg-cache
-        key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json') }}
+        key: ${{ runner.os }}-vcpkg-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'packaging/vcpkg-overlays/**') }}
         restore-keys: |
           ${{ runner.os }}-vcpkg-
 
@@ -178,3 +178,5 @@ runs:
         if (Test-Path "$vcpkgBin\SDL2.dll")  { Copy-Item "$vcpkgBin\SDL2.dll"  dist\kartend\ }
         if (Test-Path "$vcpkgBin\zstd.dll")  { Copy-Item "$vcpkgBin\zstd.dll"  dist\kartend\ }
         Write-Host "Staged DLLs:"; Get-ChildItem dist\kartend\*.dll | Select-Object -ExpandProperty Name
+        python packaging/appimage/check-libarchive.py --dll dist/kartend/archive.dll
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
