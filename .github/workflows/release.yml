@@ -44,14 +44,15 @@ jobs:
               -DCMAKE_INSTALL_PREFIX=/usr/local -DKARTEND_PORTABLE_RELEASE=ON -DKARTEND_BUILD_TESTS=ON
             cmake --build "$build" --parallel 2 --target kartend test_cliargs test_launchmanager \
               test_collectionfilesystemwatcher test_platformbackgroundcandidates test_kartreader test_kartwriter
-            ctest --test-dir "$build" --output-on-failure --no-tests=error \
-              -R '^(CliArgs|LaunchManager|CollectionFilesystemWatcher|PlatformBackgroundCandidates|KartReader|KartWriter)$'
             python3 packaging/build-freebsd-pkg.py "$build"
             asset="kartend-$version-freebsd15-amd64.pkg"
             mv "dist/kartend-$version.pkg" "dist/$asset"
             pkg install -y "./dist/$asset"
             pkg check -ds kartend
-            chmod 755 "$build"
+            chown -R nobody "$build"
+            suites='^(CliArgs|LaunchManager|CollectionFilesystemWatcher|PlatformBackgroundCandidates|KartReader|KartWriter)$'
+            su -m nobody -c "env QT_QPA_PLATFORM=offscreen ctest --test-dir '$build' \
+              --output-on-failure --no-tests=error -R '$suites'"
             install -m 0555 packaging/test-freebsd-installed.sh "$build/installed-smoke.sh"
             su -m nobody -c "sh '$build/installed-smoke.sh'"
             (cd dist && sha256 -r "$asset" > "$asset.sha256")
