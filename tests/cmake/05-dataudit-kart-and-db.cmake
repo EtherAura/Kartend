@@ -272,6 +272,17 @@ target_include_directories(test_colorcontrast PRIVATE
   ${SRC_DIR}/utils/view
   ${SRC_DIR}/utils
 )
+
+# Kartend-2mysn: DurationFormat::formatDurationMs, the header-only "Ns" /
+# M:SS / H:MM:SS formatter behind the scrape dialogs' Elapsed/ETA text.
+kartend_add_test(NAME DurationFormat
+  SOURCES utils/view/test_durationformat.cpp
+  LINK Qt6::Core
+)
+target_include_directories(test_durationformat PRIVATE
+  ${SRC_DIR}/utils/view
+)
+
 target_include_directories(test_kdecolorscheme PRIVATE
   ${SRC_DIR}/utils/app
   ${SRC_DIR}/utils/db
