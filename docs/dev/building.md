@@ -402,6 +402,7 @@ packaging/appimage/smoke-test-in-container.sh --x11 --wayland fedora:45 \
 | `common.sh` | Every pin, once: the base image, CMake, Qt, QtKeychain, the packaging tools with their checksums, the base's package list, and the list of libraries the AppImage expects from the user's system. |
 | `prepare-build-env.sh` | Run inside the base image: installs the packages, CMake and Qt, and builds QtKeychain. |
 | `build-appimage.sh` | Run inside the base image: builds Kartend, bundles, packs, and validates the AppImage before it gets its name. |
+| `qt-plugins.sh` | The fixed list of Qt plugins in the AppImage, and the steps of `build-appimage.sh` that copy them from the pinned Qt and check them. |
 | `build-in-container.sh` | Runs the two above in the base image with Docker. |
 | `smoke-test.sh` | Starts an AppImage headless on the system it is run on and checks it used its own Qt. |
 | `smoke-test-in-container.sh` | Runs `smoke-test.sh` in a clean container of a given distribution. |
@@ -414,8 +415,8 @@ that needs a newer one. Ubuntu 22.04 gives glibc 2.35.
 
 Things that change what is bundled, and where to change them:
 
-- **A new Qt plugin** (say, another image format): the `QT_PLUGINS` list in
-  `build-appimage.sh`. The list is fixed on purpose; a plugin that is not on
+- **A new Qt plugin** (say, another image format): the
+  `KARTEND_APPIMAGE_QT_PLUGINS` list in `qt-plugins.sh`. The list is fixed on purpose; a plugin that is not on
   it is not in the AppImage, whatever the Qt install has.
 - **A new library Kartend links**: add its `-dev` package to
   `KARTEND_APPIMAGE_APT_PACKAGES` in `common.sh`. linuxdeploy bundles the

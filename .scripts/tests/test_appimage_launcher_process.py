@@ -24,6 +24,15 @@ like the AppImage runtime's mount point (.mount_...), run AppRun --help with
 a private HOME and XDG directories on the offscreen platform, and check the
 first line of its stdout.
 
+The same tests start AppRun with and without QT_QPA_PLATFORMTHEME: the hook
+passes a caller's theme on and supplies none of its own.
+
+TestAppImageQtPluginStaging runs the Qt plugin steps of build-appimage.sh
+(qt-plugins.sh, sourced as the builder sources it) on a fixture plugin tree:
+the XDG desktop portal theme lands at usr/plugins/platformthemes, a plugin the
+selected Qt lacks stops the staging instead of being taken from a host Qt, and
+the post-bundling check notices a lost one.
+
 No AppImage is built, mounted or run here.
 
 stdlib unittest — pytest is not available in CI. Run directly
@@ -83,6 +92,13 @@ ARGUMENTS = ["--help", "two words", "*", "$HOME", "", "; touch injected", "--"]
 DEADLINE = 10.0
 # Set for the launched process; the hook must leave it alone.
 MARKER = "KARTEND_TEST_UNRELATED"
+# The caller's choice of Qt platform theme; the hook must pass it on and never set one.
+THEME_VARIABLE = "QT_QPA_PLATFORMTHEME"
+
+# The plugin staging build-appimage.sh sources, and the pins it needs.
+COMMON = APPIMAGE_DIR / "common.sh"
+PLUGIN_STEPS = APPIMAGE_DIR / "qt-plugins.sh"
+PORTAL_THEME = "platformthemes/libqxdgdesktopportal.so"
 
 
 # What the fixture ELF writes to its stdout once it runs in userspace.
@@ -155,12 +171,17 @@ class TestAppImageLauncherProcess(unittest.TestCase):
             capture_output=True, text=True, check=False, timeout=DEADLINE,
         )
 
-    def launch(self) -> dict:
-        """Start AppRun, wait for the ELF's READY on that child's stdout, then read its /proc entry."""
-        env = {key: value for key, value in os.environ.items() if key not in QT_VARIABLES}
+    def launch(self, theme: str | None = None) -> dict:
+        """Start AppRun, wait for the ELF's READY on that child's stdout, then read its /proc entry.
+
+        theme: the caller's QT_QPA_PLATFORMTHEME, or None to start without one.
+        """
+        env = {key: value for key, value in os.environ.items() if key not in QT_VARIABLES and key != THEME_VARIABLE}
         for key in QT_VARIABLES:
             env[key] = "/caller/system-qt/plugins"
         env[MARKER] = "kept"
+        if theme is not None:
+            env[THEME_VARIABLE] = theme
         process = subprocess.Popen(
             [str(self.apprun), *ARGUMENTS], env=env, cwd=self._tmp.name,
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -175,7 +196,7 @@ class TestAppImageLauncherProcess(unittest.TestCase):
         environ = {}
         for entry in (proc / "environ").read_bytes().split(b"\0"):
             key, _, value = entry.decode().partition("=")
-            if key in QT_VARIABLES or key == MARKER:
+            if key in QT_VARIABLES or key in (MARKER, THEME_VARIABLE):
                 environ[key] = value
         return {
             "exe": os.readlink(proc / "exe"),
@@ -248,6 +269,22 @@ class TestAppImageLauncherProcess(unittest.TestCase):
         self.assertEqual(seen["argv"], ["kartend", *ARGUMENTS])
         self.assert_hook_ran(seen)
         self.assertFalse((pathlib.Path(self._tmp.name) / "injected").exists())
+
+    def test_caller_theme_passes_through_and_none_is_added(self) -> None:
+        # The portal theme is bundled for callers who ask for it; the hook neither drops
+        # an explicit choice nor makes one when the caller has none.
+        for handoff in (False, True):
+            with self.subTest(handoff=handoff):
+                if handoff:
+                    result = self.run_handoff()
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                for theme in ("xdgdesktopportal", "gtk3"):
+                    seen = self.launch(theme=theme)
+                    self.assertEqual(seen["environ"].get(THEME_VARIABLE), theme)
+                    self.assert_hook_ran(seen)
+                seen = self.launch(theme=None)
+                self.assertNotIn(THEME_VARIABLE, seen["environ"], "the hook supplied a platform theme")
+                self.assert_hook_ran(seen)
 
     def help_appdir(self) -> pathlib.Path:
         """An AppDir under a .mount_-like directory with the built kartend as usr/bin/kartend."""
@@ -380,6 +417,131 @@ class TestAppImageLauncherProcess(unittest.TestCase):
         self.assertLess(handoff, checks)
         self.assertEqual(text.count("apprun-handoff.py"), 2)  # the call and its comment
         self.assertIn(f"grep -qxF '{NEW_EXEC}' \"$APPDIR/AppRun\"", text)
+
+
+@unittest.skipUnless(sys.platform.startswith("linux"), "the AppImage is built on Linux")
+class TestAppImageQtPluginStaging(unittest.TestCase):
+    """The Qt plugin steps of build-appimage.sh (qt-plugins.sh), run on a fixture Qt plugin tree.
+
+    The functions run in bash exactly as the builder sources them. The fixture
+    root holds one small file per listed plugin, each with its own content, so
+    a copy from anywhere else would show. A second tree stands for a Qt on
+    the host (named by QT_PLUGIN_PATH and placed next to the fixture root);
+    it must never be used.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="kartend-qt-plugins-")
+        self.addCleanup(self._tmp.cleanup)
+        base = pathlib.Path(self._tmp.name)
+        self.root = base / "qt" / "plugins"
+        self.host = base / "host-qt" / "plugins"
+        self.appdir = base / "AppDir"
+        self.plugins = self.listed_plugins()
+        for plugin in self.plugins:
+            self.write_plugin(self.root, plugin, f"pinned {plugin}\n")
+            self.write_plugin(self.host, plugin, f"host {plugin}\n")
+
+    @staticmethod
+    def write_plugin(root: pathlib.Path, plugin: str, text: str) -> None:
+        path = root / plugin
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        path.chmod(0o644)
+
+    def run_steps(self, snippet: str, *args: str) -> subprocess.CompletedProcess:
+        """Source common.sh and qt-plugins.sh as build-appimage.sh does (set -euo pipefail), then run snippet."""
+        script = 'set -euo pipefail; . "$1"; . "$2"; shift 2; ' + snippet
+        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "LANG": "C.UTF-8",
+               "QT_PLUGIN_PATH": str(self.host), "KARTEND_APPIMAGE_PROG": "build-appimage"}
+        return subprocess.run(
+            ["bash", "-c", script, "bash", str(COMMON), str(PLUGIN_STEPS), *args],
+            env=env, cwd=self._tmp.name, capture_output=True, text=True, check=False, timeout=DEADLINE,
+        )
+
+    def listed_plugins(self) -> list[str]:
+        """The plugin list as the sourced script defines it."""
+        result = self.run_steps('printf "%s\\n" "${KARTEND_APPIMAGE_QT_PLUGINS[@]}"')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.split()
+
+    def stage(self) -> subprocess.CompletedProcess:
+        """Stage from the fixture root; on success stdout lists the plugin directories for linuxdeploy."""
+        return self.run_steps(
+            'kartend_appimage_stage_qt_plugins "$1" "$2"; printf "%s\\n" "${KARTEND_APPIMAGE_QT_PLUGIN_DIRS[@]}"',
+            str(self.root), str(self.appdir),
+        )
+
+    def check(self) -> subprocess.CompletedProcess:
+        return self.run_steps('kartend_appimage_check_qt_plugins "$1"', str(self.appdir))
+
+    def test_the_portal_theme_is_on_the_list(self) -> None:
+        self.assertIn(PORTAL_THEME, self.plugins)
+        self.assertEqual(len(self.plugins), len(set(self.plugins)))
+
+    def test_staging_copies_the_portal_theme_from_the_selected_qt(self) -> None:
+        result = self.stage()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        staged = self.appdir / "usr" / "plugins" / PORTAL_THEME
+        self.assertEqual(staged.read_text(encoding="utf-8"), f"pinned {PORTAL_THEME}\n")
+        self.assertEqual(stat.S_IMODE(staged.stat().st_mode), 0o755)
+        for plugin in self.plugins:
+            with self.subTest(plugin=plugin):
+                self.assertEqual((self.appdir / "usr" / "plugins" / plugin).read_text(encoding="utf-8"),
+                                 f"pinned {plugin}\n")
+        # linuxdeploy is told to bundle what the theme needs (QtDBus) through this list.
+        dirs = result.stdout.split("\n")[:-1]
+        self.assertIn(str(self.appdir / "usr" / "plugins" / "platformthemes"), dirs)
+        self.assertEqual(len(dirs), len(set(dirs)))
+        check = self.check()
+        self.assertEqual(check.returncode, 0, check.stderr)
+
+    def test_staging_stops_when_the_selected_qt_lacks_the_portal_theme(self) -> None:
+        (self.root / PORTAL_THEME).unlink()
+        result = self.stage()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn(f"has no plugin {PORTAL_THEME}", result.stderr)
+        self.assertFalse((self.appdir / "usr" / "plugins" / PORTAL_THEME).exists(),
+                         "the portal theme was taken from somewhere other than the selected Qt")
+        self.assertEqual(result.stdout, "")
+
+    def test_staging_refuses_a_missing_plugin_root(self) -> None:
+        shutil.rmtree(self.root)
+        result = self.stage()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("does not exist", result.stderr)
+        self.assertFalse((self.appdir / "usr" / "plugins").exists())
+
+    def test_check_detects_a_lost_or_empty_portal_theme(self) -> None:
+        staged = self.appdir / "usr" / "plugins" / PORTAL_THEME
+        for damage in ("removed", "emptied", "replaced by a directory"):
+            with self.subTest(damage=damage):
+                result = self.stage()
+                self.assertEqual(result.returncode, 0, result.stderr)
+                if damage == "removed":
+                    staged.unlink()
+                elif damage == "emptied":
+                    staged.write_bytes(b"")
+                else:
+                    staged.unlink()
+                    staged.mkdir()
+                    (staged / "x").write_text("x", encoding="utf-8")
+                check = self.check()
+                self.assertEqual(check.returncode, 1, check.stdout + check.stderr)
+                self.assertIn(f"the AppDir lost the Qt plugin {PORTAL_THEME}", check.stderr)
+                shutil.rmtree(self.appdir)
+
+    def test_builder_stages_and_checks_through_these_steps(self) -> None:
+        text = BUILDER.read_text(encoding="utf-8")
+        self.assertIn('. "$HERE/qt-plugins.sh"', text)
+        stage = text.index('kartend_appimage_stage_qt_plugins "$QT_PLUGIN_DIR" "$APPDIR"')
+        bundling = text.index('"$LINUXDEPLOY" --appdir "$APPDIR"')
+        check = text.index('kartend_appimage_check_qt_plugins "$APPDIR"')
+        self.assertLess(stage, bundling)
+        self.assertLess(bundling, check)
+        self.assertIn('plugin_dirs=("${KARTEND_APPIMAGE_QT_PLUGIN_DIRS[@]}")', text)
+        # The plugin root is the pinned Qt's own, asked of its qmake.
+        self.assertIn('QT_PLUGIN_DIR="$("$QT_DIR/bin/qmake" -query QT_INSTALL_PLUGINS)"', text)
 
 
 if __name__ == "__main__":

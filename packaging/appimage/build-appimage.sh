@@ -17,7 +17,7 @@
 #      portable flags, zstd, libarchive, SDL2 gamepad) plus QtKeychain, and
 #      refuses to go on if one of those backends was not found.
 #   3. Installs into an AppDir with the project's own install rules.
-#   4. Copies in the Qt plugins Kartend needs (a fixed list, below), Qt's
+#   4. Copies in the Qt plugins Kartend needs (a fixed list, qt-plugins.sh), Qt's
 #      translations and a qt.conf; linuxdeploy then bundles every library
 #      those and the executable depend on. AppRun is then made to start
 #      usr/bin/kartend itself, so the process is named kartend.
@@ -47,47 +47,10 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
 readonly APP_ID="io.github.EtherAura.Kartend"
 
-# Qt plugins that go into the AppImage, relative to Qt's plugins directory.
-# A fixed list, not "whatever the Qt install has": the official Qt build also
-# ships plugins Kartend has no use for and whose own dependencies are not on
-# the base (GStreamer, MySQL, PostgreSQL, ODBC, GTK), and a list that is
-# spelled out is one a Qt update cannot silently change. A file missing from
-# the Qt install fails the build.
-readonly QT_PLUGINS=(
-  # X11, Wayland and the windowless platforms (offscreen is what tests use)
-  platforms/libqxcb.so
-  platforms/libqwayland-generic.so
-  platforms/libqwayland-egl.so
-  platforms/libqoffscreen.so
-  platforms/libqminimal.so
-  xcbglintegrations/libqxcb-glx-integration.so
-  xcbglintegrations/libqxcb-egl-integration.so
-  wayland-shell-integration/libxdg-shell.so
-  wayland-graphics-integration-client/libqt-plugin-wayland-egl.so
-  wayland-decoration-client/libbradient.so
-  wayland-decoration-client/libadwaita.so
-  # input methods
-  platforminputcontexts/libcomposeplatforminputcontextplugin.so
-  platforminputcontexts/libibusplatforminputcontextplugin.so
-  # artwork formats and the SVG icon engine
-  imageformats/libqgif.so
-  imageformats/libqicns.so
-  imageformats/libqico.so
-  imageformats/libqjpeg.so
-  imageformats/libqsvg.so
-  imageformats/libqtga.so
-  imageformats/libqtiff.so
-  imageformats/libqwbmp.so
-  imageformats/libqwebp.so
-  iconengines/libqsvgicon.so
-  # the library database
-  sqldrivers/libqsqlite.so
-  # HTTPS for scrapers and artwork downloads
-  tls/libqopensslbackend.so
-  tls/libqcertonlybackend.so
-  # video and audio playback through FFmpeg (Qt ships the FFmpeg libraries)
-  multimedia/libffmpegmediaplugin.so
-)
+# The Qt plugins that go into the AppImage (a fixed list), and the steps that
+# copy them in and check them, are in qt-plugins.sh.
+# shellcheck source=packaging/appimage/qt-plugins.sh
+. "$HERE/qt-plugins.sh"
 
 # Libraries that must be inside the AppImage, by file name under usr/lib.
 # The Qt ones prove the plugins above pulled their Qt modules in; the rest are
@@ -342,17 +305,9 @@ compgen -G "$APPDIR/usr/share/kartend/translations/kartend_*.qm" >/dev/null ||
 # ------------------------------------------------------------------------------
 step "4/9 Qt plugins, translations and library bundling"
 
-plugin_dirs=()
-for plugin in "${QT_PLUGINS[@]}"; do
-  [ -f "$QT_PLUGIN_DIR/$plugin" ] ||
-    die "Qt $KARTEND_APPIMAGE_QT_VERSION has no plugin $plugin; the plugin list in this script needs a look"
-  install -D -m 0755 "$QT_PLUGIN_DIR/$plugin" "$APPDIR/usr/plugins/$plugin"
-  dir="$APPDIR/usr/plugins/${plugin%/*}"
-  case " ${plugin_dirs[*]:-} " in
-    *" $dir "*) ;;
-    *) plugin_dirs+=("$dir") ;;
-  esac
-done
+# Only from the pinned Qt's own plugins directory; a missing one stops here.
+kartend_appimage_stage_qt_plugins "$QT_PLUGIN_DIR" "$APPDIR"
+plugin_dirs=("${KARTEND_APPIMAGE_QT_PLUGIN_DIRS[@]}")
 
 # Qt's own strings (dialog buttons, file pickers), one catalogue per language.
 # Qt ships qt_<lang>.qm as a list of other catalogues that fails to load when
@@ -464,9 +419,7 @@ esac
 # shellcheck disable=SC2016 # the line is matched as written, not expanded
 grep -qxF 'exec -a kartend "$this_dir/usr/bin/kartend" "$@"' "$APPDIR/AppRun" ||
   die "AppRun does not start usr/bin/kartend"
-for plugin in "${QT_PLUGINS[@]}"; do
-  [ -s "$APPDIR/usr/plugins/$plugin" ] || die "the AppDir lost the Qt plugin $plugin"
-done
+kartend_appimage_check_qt_plugins "$APPDIR"
 for lib in "${REQUIRED_LIBRARIES[@]}"; do
   [ -s "$APPDIR/usr/lib/$lib" ] || die "the AppDir has no usr/lib/$lib"
 done
