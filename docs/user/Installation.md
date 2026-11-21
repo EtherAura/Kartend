@@ -1,7 +1,9 @@
 # Installation
 
-Every [release](https://github.com/EtherAura/Kartend/releases/latest)
-includes Linux, FreeBSD and Windows downloads, plus the Arch and Gentoo recipes.
+[Releases](https://github.com/EtherAura/Kartend/releases/latest) include Linux
+and Windows downloads, plus the Arch and Gentoo recipes. A FreeBSD 15 amd64
+package has passed install and launch tests. Use it when it appears in the
+release assets.
 
 | Platform | Asset | Install |
 |--------|-------|---------|
@@ -9,7 +11,7 @@ includes Linux, FreeBSD and Windows downloads, plus the Arch and Gentoo recipes.
 | Fedora, openSUSE, Steam Deck, any other Linux | `Kartend-<version>-x86_64.AppImage` | Make it executable and run it; see [AppImage](#appimage) |
 | Arch Linux | `PKGBUILD` | Drop in a clean dir, `makepkg -si` |
 | Gentoo | `kartend-<version>.ebuild` | Place under your local overlay's category dir; `emerge kartend` |
-| FreeBSD 15 amd64 | `kartend-<version>-freebsd15-amd64.pkg` | As root, run `pkg install ./kartend-<version>-freebsd15-amd64.pkg` |
+| FreeBSD 15 amd64 (when listed) | `kartend-<version>-freebsd15-amd64.pkg` | As root, run `pkg install ./kartend-<version>-freebsd15-amd64.pkg` |
 | Windows (installer) | `Kartend-<version>-windows-x64-setup.exe` | Run the installer; Apps & Features-managed uninstall |
 | Windows (portable) | `Kartend-<version>-windows-x64.zip` | Unzip anywhere, run `kartend.exe` |
 
