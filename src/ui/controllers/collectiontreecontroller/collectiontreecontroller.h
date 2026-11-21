@@ -161,6 +161,12 @@ private:
   /// because the icon prefs are per-collection. rebuildTree() itself ends by
   /// calling this, so build-time and refresh-time styling cannot drift.
   void refreshIcons();
+  /// Re-colour the chrome row (the topmost root collection) to the items
+  /// toolbar's CURRENT fill, without a re-bake (Kartend-b8955). Driven by the
+  /// toolbar's palette / published-fill changes, which is every way the bar
+  /// changes colour: a collection switch to a different toolbar colour source,
+  /// a settings edit, a desktop colour change.
+  void syncChromeRowFill();
   /// Right-click menu on a row (user request 2026-08-23: "right click context
   /// menu for the nav bar that would allow the user to add/remove/set custom
   /// logo/icon"). Acts on the row under the cursor, NOT the active collection

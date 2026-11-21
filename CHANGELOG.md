@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ScreenScraper no longer imports another platform's details or artwork just
   because a game title matches. A matching ROM hash still identifies the game.
+- **The toolbar keeps the titlebar colour after a desktop colour change.** In a
+  collection set to use its own toolbar colour with none chosen, the toolbar
+  could turn the window background colour, or an older titlebar colour, after
+  the desktop colours changed and you visited another collection. It stayed
+  that way until the desktop colours changed again. The top row of the
+  collection tree now always matches the toolbar, including while selected.
 
 ## [0.0.23] - 2026-11-20
 

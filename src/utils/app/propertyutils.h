@@ -25,6 +25,16 @@ inline constexpr const char *GlideAnimating = "_glide_animating";
 /// The name is the contract; OverlayScrollbars writes it, others only read.
 inline constexpr const char *OverlayScrollbarsAttached = "kartendOverlayScrollbars";
 
+/// QColor set on the items toolbar (itemsTopBar): the fill its stylesheet
+/// paints, or an invalid colour when no stylesheet fill is applied and the
+/// bar paints its palette's background role instead. The palette alone
+/// cannot answer "what colour is the bar?": MainWindow re-sets the bar's
+/// palette after the stylesheet on a desktop colour change, so the palette
+/// can hold the titlebar colour while the stylesheet paints another one.
+/// CollectionBackgroundController writes it; the collection tree reads it so
+/// its top row matches the bar (Kartend-b8955).
+inline constexpr const char *ToolbarChromeFill = "kartendToolbarChromeFill";
+
 } // namespace PropertyKeys
 
 #endif

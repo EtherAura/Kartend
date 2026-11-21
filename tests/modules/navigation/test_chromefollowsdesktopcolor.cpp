@@ -12,6 +12,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QImage>
 #include <QLineEdit>
 #include <QList>
 #include <QMenuBar>
@@ -24,6 +25,7 @@
 #include "collection/collectionconfig.h"
 #include "kdecolorscheme.h"
 #include "overlayscrollbars.h"
+#include "propertyutils.h"
 
 class TestChromeFollowsDesktopColor : public QObject {
   Q_OBJECT
@@ -32,6 +34,7 @@ private slots:
   void cleanupTestCase();
   void toolbarTintFollowsTitlebarWithoutRestart();
   void collectionTintedChromeIsLeftAlone();
+  void unsetOwnColourBarTakesTitlebarFromItsStyleSheet();
   void scrollbarHandleStaysVisibleOnATitlebarFilledRow();
 
 private:
@@ -130,6 +133,69 @@ void TestChromeFollowsDesktopColor::collectionTintedChromeIsLeftAlone() {
   QCOMPARE(topBar.styleSheet(), before);
   QVERIFY2(!topBar.styleSheet().contains(QColor(30, 110, 60).name(), Qt::CaseInsensitive),
            "a collection-tinted bar must not pick up the desktop colour");
+}
+
+void TestChromeFollowsDesktopColor::unsetOwnColourBarTakesTitlebarFromItsStyleSheet() {
+  // Kartend-b8955 (field report 2026-11-21): a collection on its OWN colour
+  // with none chosen (the user's "Games") used to get its titlebar fill only
+  // from the bar's palette, which Qt's style-sheet machinery replaces with a
+  // saved copy whenever the bar's style sheet changes. After a desktop colour
+  // change, a trip through a titlebar-sourced collection and back left the
+  // bar on the plain window colour. The fill now lives in the style sheet,
+  // where nothing can quietly put an old one back.
+  QScrollArea scrollArea;
+  QWidget topBar;
+  topBar.setObjectName(QStringLiteral("itemsTopBar"));
+  topBar.resize(200, 40);
+  QMenuBar menubar;
+  QLineEdit searchBar;
+
+  QList<CollectionConfig> collections;
+  CollectionConfig games;
+  games.background.toolbarColorSource = ToolbarColorSource::CollectionPrimary;
+  collections.append(games); // primaryColor left empty
+  CollectionConfig nintendo;
+  nintendo.background.toolbarColorSource = ToolbarColorSource::Titlebar;
+  collections.append(nintendo);
+  int currentIndex = 0;
+
+  writeTitlebarColor(QStringLiteral("190,70,20"));
+
+  CollectionBackgroundController controller;
+  CollectionBackgroundControllerSetup setup;
+  setup.itemScrollArea = &scrollArea;
+  setup.itemsTopBar = &topBar;
+  setup.menubar = &menubar;
+  setup.searchBar = &searchBar;
+  setup.currentCollectionIndex = &currentIndex;
+  setup.collections = &collections;
+  controller.setupReferences(setup);
+
+  const auto paintedFill = [&topBar]() {
+    const QImage frame = topBar.grab().toImage();
+    return frame.pixelColor(frame.width() / 2, frame.height() / 2).name();
+  };
+
+  controller.applyPrimaryColorForCollection(0);
+  QCOMPARE(paintedFill(), QColor(190, 70, 20).name());
+  QCOMPARE(topBar.property(PropertyKeys::ToolbarChromeFill).value<QColor>().name(),
+           QColor(190, 70, 20).name());
+  // Only the FILL falls back: the controls keep the untinted look this
+  // collection always had, so no control rules appear.
+  QVERIFY2(!topBar.styleSheet().contains(QStringLiteral("QToolButton")),
+           qPrintable(topBar.styleSheet()));
+
+  // The desktop colour changes: this bar is desktop-derived, so it repaints.
+  writeTitlebarColor(QStringLiteral("30,110,60"));
+  controller.refreshDesktopDerivedChrome();
+  QCOMPARE(paintedFill(), QColor(30, 110, 60).name());
+
+  // ...and survives the round trip that used to lose it.
+  currentIndex = 1;
+  controller.applyPrimaryColorForCollection(1);
+  currentIndex = 0;
+  controller.applyPrimaryColorForCollection(0);
+  QCOMPARE(paintedFill(), QColor(30, 110, 60).name());
 }
 
 void TestChromeFollowsDesktopColor::scrollbarHandleStaysVisibleOnATitlebarFilledRow() {

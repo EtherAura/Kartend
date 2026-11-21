@@ -9,6 +9,7 @@
 #include "keyboardmanager.h"
 #include "mainwindow.h"
 #include "mocks/mockedmainwindowfixture.h"
+#include "navigationmanager.h"
 #include "overlayscrollbars.h"
 
 #include <QDir>
@@ -1077,4 +1078,88 @@ void TestCollectionTreePanel::navPanel_matchesToolbarHeightAndTone_andHidesNativ
   QVERIFY(panel);
   QCOMPARE(topBar->palette().color(topBar->backgroundRole()),
            panel->palette().color(QPalette::Window));
+}
+
+namespace {
+/// What the user sees at the left edge of the tree's top row, pinned copy
+/// included — grabbed from the viewport, not read back from the model.
+QColor topRowPixel(QTreeWidget *tree) {
+  QTreeWidgetItem *top = tree->topLevelItem(0);
+  if (!top) {
+    return {};
+  }
+  const QRect row = tree->visualItemRect(top);
+  const QImage frame = tree->viewport()->grab().toImage();
+  const qreal dpr = frame.devicePixelRatio() > 0 ? frame.devicePixelRatio() : 1.0;
+  return frame.pixelColor(qRound(2 * dpr), qRound(row.center().y() * dpr));
+}
+
+/// What the toolbar paints at its left edge, inside the layout margin where
+/// no control sits — its own background, however it was set.
+QColor barPixel(QWidget *bar) {
+  const QImage frame = bar->grab().toImage();
+  const qreal dpr = frame.devicePixelRatio() > 0 ? frame.devicePixelRatio() : 1.0;
+  return frame.pixelColor(qRound(2 * dpr), qRound(bar->height() / 2.0 * dpr));
+}
+} // namespace
+
+void TestCollectionTreePanel::chromeRow_matchesTheToolbarFill_whateverItsSource() {
+  CollectionConfig games;
+  games.name = QStringLiteral("Games");
+  // The collection's own colour, which no desktop titlebar or palette will
+  // produce by accident — the row used to take the titlebar colour whatever
+  // the bar was painted.
+  games.background.toolbarColorSource = ToolbarColorSource::CollectionPrimary;
+  games.background.primaryColor = QStringLiteral("#3366cc");
+  games.collectionTree.treeIconDisplay = TreeIconDisplay::TextOnly;
+  CollectionConfig child;
+  child.name = QStringLiteral("Child");
+  child.parentCollectionIndex = 0;
+  KartendTest::MockedMainWindowFixture fixture({games, child});
+  MainWindow *win = fixture.window();
+  QVERIFY(win);
+  win->resize(1200, 700);
+  win->show();
+  QVERIFY(QTest::qWaitForWindowExposed(win));
+
+  auto *controller = win->findChild<CollectionTreeController *>();
+  QVERIFY(controller);
+  QWidget *panel = win->findChild<QWidget *>(QStringLiteral("collectionTreePanel"));
+  QVERIFY(panel);
+  if (!panel->isVisible()) {
+    controller->toggleVisible();
+  }
+  auto *tree = win->findChild<QTreeWidget *>(QStringLiteral("collectionTreeWidget"));
+  QVERIFY(tree);
+  QWidget *topBar = win->findChild<QWidget *>(QStringLiteral("itemsTopBar"));
+  QVERIFY(topBar);
+  NavigationManager *nav = win->getApplicationManager()->getNavigationManager();
+  QVERIFY(nav);
+
+  // Games is the ACTIVE collection, so its row is selected — the state the
+  // user looks at it in, and the one where the selection tint used to paint
+  // over the row's fill.
+  nav->applyPrimaryColorForCollection(0);
+  controller->onCollectionSwitched(0);
+  QTest::qWait(80);
+  QVERIFY(tree->topLevelItem(0));
+  QVERIFY2(tree->topLevelItem(0)->isSelected(), "the active collection's row must be selected");
+  QCOMPARE(topRowPixel(tree).name(), QColor(QStringLiteral("#3366cc")).name());
+  QCOMPARE(topRowPixel(tree).name(), barPixel(topBar).name());
+
+  // The bar changes colour with no tree rebuild in between (a settings edit,
+  // a desktop colour change): the row follows it.
+  win->m_collections[0].background.primaryColor = QStringLiteral("#cc6633");
+  nav->applyPrimaryColorForCollection(0);
+  QTest::qWait(30);
+  QCOMPARE(topRowPixel(tree).name(), QColor(QStringLiteral("#cc6633")).name());
+  QCOMPARE(topRowPixel(tree).name(), barPixel(topBar).name());
+
+  // The collection's own colour unset: the bar falls back (to the titlebar
+  // colour where the desktop has one, to its palette where it has not), and
+  // the row follows whichever it is.
+  win->m_collections[0].background.primaryColor.clear();
+  nav->applyPrimaryColorForCollection(0);
+  QTest::qWait(30);
+  QCOMPARE(topRowPixel(tree).name(), barPixel(topBar).name());
 }

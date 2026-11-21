@@ -76,7 +76,9 @@ public:
   /// rest of the app cannot touch it; it has to be rebuilt. Only
   /// desktop-derived collections repaint — one tinted from its own primary
   /// colour has nothing to refresh, and re-applying would needlessly
-  /// restart a video background.
+  /// restart a video background. A collection set to its own colour with
+  /// none chosen counts as desktop-derived: its bar falls back to the
+  /// titlebar colour (Kartend-b8955).
   void refreshDesktopDerivedChrome();
 
 private:
