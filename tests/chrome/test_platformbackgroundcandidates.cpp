@@ -11,6 +11,7 @@
 #include "platformbackgroundcandidates.h"
 #include "platformbackgroundchoice.h"
 
+#include "collection/collectionbackground_persistence.h"
 #include "collection/collectionconfig.h"
 #include "collectionplatformbackgrounds.h"
 #include "screenscrapersystemcache.h"
@@ -22,6 +23,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QMap>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -128,6 +130,7 @@ private slots:
   void cachedSourceListsTheCachedMatchingPlatformOffline();
   void cachedSourceOverrideWinsAndNeedsNoCache();
   void cachedSourceMissingMalformedOrEmptyCacheYieldsNothing();
+  void newPickReplacesSavedChoiceAndSurvivesReopen();
 };
 
 void TestPlatformBackgroundCandidates::backgroundTypesMirrorProviderPriority() {
@@ -653,6 +656,81 @@ void TestPlatformBackgroundCandidates::cachedSourceMissingMalformedOrEmptyCacheY
 
   QVERIFY(!QFileInfo::exists(missingCache));
   QCOMPARE(snapshot(tmp.path()), before);
+}
+
+void TestPlatformBackgroundCandidates::newPickReplacesSavedChoiceAndSurvivesReopen() {
+  // Integrated slice: the offline cache source lists the collection's retained
+  // platform art, the choice helper picks a different image than the one
+  // already saved as the user's, and the real collection-background
+  // serializer writes it over the same INI. Reopening must show the new pick
+  // as the marked wallpaper. This exercises the serializer, not the
+  // application's settings-manager caller or its path sanitizer: the
+  // sanitizer here is the identity used by the settings round-trip tests.
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString shared = writeSnesArtTree(tmp.path());
+  const QString cachePath = writeSyntheticCache(tmp.path());
+  QVERIFY(!cachePath.isEmpty());
+  const QString iniPath = QDir(tmp.path()).filePath(QStringLiteral("collection.ini"));
+  const auto identitySanitize = [](const QString &value, const QString &) { return value; };
+  const auto saveTo = [&](const CollectionBackground &bg) {
+    QSettings out(iniPath, QSettings::IniFormat);
+    CollectionBackgroundPersistence::save(out, bg, identitySanitize);
+    out.sync();
+    QCOMPARE(out.status(), QSettings::NoError);
+  };
+  const auto loadFrom = [&]() {
+    QSettings in(iniPath, QSettings::IniFormat);
+    CollectionBackground bg;
+    CollectionBackgroundPersistence::load(in, bg, QStringLiteral("snes"), identitySanitize);
+    return bg;
+  };
+
+  const QDir s(shared);
+  const QString oldPath = s.filePath(QStringLiteral("illustration/platform_2.png"));
+  const QString newPath = s.filePath(QStringLiteral("photo/platform_2.jpg"));
+
+  // An earlier user pick of the illustration, already marked, is saved.
+  CollectionBackground saved = videoBackgroundWithEverythingSet();
+  saved.backgroundType = BackgroundType::Image;
+  saved.backgroundImage = oldPath;
+  saved.backgroundImageChosenPath = oldPath;
+  saveTo(saved);
+  const CollectionBackground before = loadFrom();
+  QCOMPARE(before.backgroundType, BackgroundType::Image);
+  QCOMPARE(before.backgroundImage, oldPath);
+  QCOMPARE(before.backgroundImageChosenPath, oldPath);
+
+  // The collection's candidates, via the explicit-path offline cache entry
+  // point: no override, platform autodetected from the synthetic catalog.
+  const CollectionConfig snes = collectionAt(
+      QStringLiteral("snes"), placeholderArtworkDir(tmp.path()), -1, {QStringLiteral("sfc")});
+  const QList<Candidate> candidates =
+      CollectionPlatformBackgrounds::forCollectionFromCache(snes, cachePath);
+  const QList<Candidate> want{
+      {QStringLiteral("illustration"), oldPath},
+      {QStringLiteral("photo"), newPath},
+  };
+  QCOMPARE(candidates, want);
+
+  // Pick the other retained image and save the helper's result as-is.
+  const std::optional<CollectionBackground> picked =
+      PlatformBackgroundChoice::choose(before, candidates, newPath);
+  QVERIFY(picked.has_value());
+  saveTo(*picked);
+
+  // Reopen: the new pick replaced the old one, and is still the user's.
+  const CollectionBackground after = loadFrom();
+  QCOMPARE(after.backgroundType, BackgroundType::Image);
+  QCOMPARE(after.backgroundImage, newPath);
+  QCOMPARE(after.backgroundImageChosenPath, newPath);
+  QVERIFY(after.backgroundImageChosenPath != oldPath);
+  // Unrelated persisted fields are unchanged by the replacement.
+  QCOMPARE(after.headerLogoImage, before.headerLogoImage);
+  QCOMPARE(after.headerLogoImage, QStringLiteral("/old/header-logo.png"));
+  QCOMPARE(after.backgroundVideo, QStringLiteral("/old/loop.mp4"));
+  QCOMPARE(after.vignetteIntensity, 41);
+  QCOMPARE(after, *picked);
 }
 
 QTEST_GUILESS_MAIN(TestPlatformBackgroundCandidates)
