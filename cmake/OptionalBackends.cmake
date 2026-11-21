@@ -66,7 +66,9 @@ endif()
 # provider/field pairs exist. QtKeychain itself ships an
 # insecureFallback mode for headless / no-secret-service systems, so the
 # runtime degrades gracefully rather than refusing to start.
-find_package(Qt6Keychain QUIET)
+# Ubuntu 22.04's Qt6 package has the required job API in 0.13.2;
+# Ubuntu 24.04 CI supplies 0.14.2.
+find_package(Qt6Keychain 0.13.2 QUIET)
 
 # MSVC fallback: install-qt-action doesn't ship Qt6Keychain and the
 # vcpkg port's transitive Qt6 dep collides with install-qt-action's Qt
@@ -90,6 +92,9 @@ if (MSVC AND NOT TARGET Qt6Keychain::Qt6Keychain)
     # Manual-bump pin: FetchContent tags are outside Dependabot's ecosystems
     # (it watches Actions + pip), and this touches credential storage — review
     # for a newer tag during the quarterly dependency sweep.
+    # Windows 0.17+ changes Credential Manager targets from key to key@service.
+    # Before bumping, set USE_COMPAT_NAMING_SCHEME=ON or verify a migration of
+    # existing credentials. An installed package controls its own naming mode.
     GIT_TAG 0.15.0
     GIT_SHALLOW TRUE
   )
