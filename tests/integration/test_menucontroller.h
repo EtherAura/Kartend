@@ -9,7 +9,8 @@
  * MenuController via a stub context, and assert the sync methods set the
  * correct QAction::checked states. Covered: syncSortActions (incl. the
  * list-view-only modes that intentionally leave the prior selection) and
- * syncLayoutActions (exactly the active ViewType's entry checked).
+ * syncLayoutActions (exactly the active ViewType's entry checked), and the
+ * View → Show Status Bar toggle.
  */
 
 #ifndef KARTEND_TESTS_TEST_MENUCONTROLLER_H
@@ -32,6 +33,8 @@ private slots:
   void setupMenuBar_routesLibraryToolsToToolsMenu();
   void setupMenuBar_groupsImportAndExportIntoSubmenus();
   void setupMenuBar_bindsImportFromLauncherShortcut();
+  void showStatusBar_hiddenSettingSurvivesStatusMessages();
+  void showStatusBar_toggleShowsHidesAndPersists();
 };
 
 #endif // KARTEND_TESTS_TEST_MENUCONTROLLER_H

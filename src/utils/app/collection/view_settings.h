@@ -3,7 +3,8 @@
 
 // Leaf struct peeled out of GeneralSettings (Kartend-q1w6). Sort + list
 // column widths, collection-categorization filters, the View menu chrome
-// toggles (menubar/toolbar/fullscreen), and the placeholder-title overlay.
+// toggles (menubar/toolbar/status bar/fullscreen), and the placeholder-title
+// overlay.
 
 #include <QString>
 
@@ -28,6 +29,10 @@ struct ViewSettings {
   // "all visible, not fullscreen" state.
   bool showMenuBar = true;
   bool showToolbar = true;
+  /// View → Show Status Bar (user request 2026-11-21). The bar itself is
+  /// created lazily by the first status message, so `true` means "show it
+  /// once there is something to say", not "always reserve the strip".
+  bool showStatusBar = true;
   /// Scrollbars stay hidden until the pointer is over their area (user
   /// request 2026-08-18). Applies to the item grid, the collection tree
   /// and the details pane; keyboard/gamepad scrolling is unaffected since

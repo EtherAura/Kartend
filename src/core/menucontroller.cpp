@@ -25,6 +25,7 @@
 #include <QMenuBar>
 #include <QRandomGenerator>
 #include <QSize>
+#include <QStatusBar>
 #include <QToolButton>
 
 namespace {
@@ -141,6 +142,7 @@ void MenuController::setupMenuBar() {
   // --- View -------------------------------------------------------------
   setupActionShowMenuBar();
   setupActionShowToolbar();
+  setupActionShowStatusBar();
   setupActionShowSidebar();
   setupActionShowCollectionTree();
   setupLayoutActions();
@@ -214,6 +216,16 @@ void MenuController::setupActionShowToolbar() {
         }
       },
       &ViewSettings::showToolbar);
+}
+
+void MenuController::setupActionShowStatusBar() {
+  if (!m_ctx.ui || !m_ctx.mainWindow) return;
+  // statusBar() creates the bar when no status message has done so yet, so
+  // turning it on always gives the user the strip they asked for.
+  connectVisibilityToggle(
+      m_ctx.ui->actionShowStatusBar,
+      [this](bool checked) { m_ctx.mainWindow->statusBar()->setVisible(checked); },
+      &ViewSettings::showStatusBar);
 }
 
 void MenuController::setupActionShowSidebar() {
@@ -489,6 +501,17 @@ void MenuController::applyPersistedViewState() {
   if (m_ctx.ui && m_ctx.ui->actionShowToolbar && m_ctx.ui->itemsTopBar) {
     m_ctx.ui->actionShowToolbar->setChecked(settings->view.showToolbar);
     m_ctx.ui->itemsTopBar->setVisible(settings->view.showToolbar);
+  }
+
+  // Status bar: QMainWindow creates it on the first statusBar() call — the
+  // first status message — and a bar created that way is shown. So a hidden
+  // bar has to be created here, explicitly hidden, which later showMessage()
+  // calls leave alone. Shown stays lazy: no empty strip before any message.
+  if (m_ctx.ui && m_ctx.ui->actionShowStatusBar) {
+    m_ctx.ui->actionShowStatusBar->setChecked(settings->view.showStatusBar);
+    if (!settings->view.showStatusBar) {
+      m_ctx.mainWindow->statusBar()->hide();
+    }
   }
 
   // Fullscreen: called from setupMenuBar() during MainWindow construction —

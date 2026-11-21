@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **View → Show Status Bar hides the strip along the bottom of the window.**
+  After a background job such as a launcher sync reported there, the empty
+  bar stayed for the rest of the session. The choice is remembered across
+  restarts; while the bar is hidden, those messages are not shown.
+
 ### Fixed
 
 - ScreenScraper no longer imports another platform's details or artwork just

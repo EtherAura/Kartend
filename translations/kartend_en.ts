@@ -6540,7 +6540,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         </translation>
     </message>
     <message>
-        <location line="+73"/>
+        <location line="+79"/>
         <source>Launcher sync is already running.</source>
         <translation>Launcher sync is already running.</translation>
     </message>
@@ -7486,7 +7486,7 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
         <translation>&amp;Layout</translation>
     </message>
     <message>
-        <location line="+16"/>
+        <location line="+17"/>
         <source>&amp;Sort</source>
         <translation>&amp;Sort</translation>
     </message>
@@ -7547,6 +7547,11 @@ Click Next to continue, or Cancel to skip — you can re-run this wizard any tim
     </message>
     <message>
         <location line="+5"/>
+        <source>Show Status Bar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+11"/>
         <source>Show Menu Bar</source>
         <translation>Show Menu Bar</translation>
     </message>
@@ -8072,7 +8077,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>MenuController</name>
     <message>
-        <location filename="../src/core/menucontroller.cpp" line="+249"/>
+        <location filename="../src/core/menucontroller.cpp" line="+261"/>
         <source>Collection Tree Position</source>
         <translation>Collection Tree Position</translation>
     </message>
@@ -8082,7 +8087,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation>Fullscreen</translation>
     </message>
     <message>
-        <location line="+91"/>
+        <location line="+102"/>
         <source>Keyboard Shortcuts</source>
         <translation>Keyboard Shortcuts</translation>
     </message>
@@ -8219,7 +8224,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation>Details Pane Orientation</translation>
     </message>
     <message>
-        <location filename="../src/core/menucontroller.cpp" line="-427"/>
+        <location filename="../src/core/menucontroller.cpp" line="-438"/>
         <location filename="../src/core/menucontroller_dynamicmenus.cpp" line="+41"/>
         <source>Right</source>
         <translation>Right</translation>
@@ -8668,7 +8673,7 @@ The app will still load, but please fix these — collections that share an iden
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../src/modules/input/scroll/coverflowcontroller.cpp" line="+606"/>
+        <location filename="../src/modules/input/scroll/coverflowcontroller.cpp" line="+609"/>
         <source>Cover</source>
         <translation>Cover</translation>
     </message>
@@ -8763,7 +8768,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation>ScreenScraper is busy right now (%1) — expect slower downloads.</translation>
     </message>
     <message>
-        <location filename="../src/modules/data/scraper/providers/screenscraperprovider.cpp" line="+598"/>
+        <location filename="../src/modules/data/scraper/providers/screenscraperprovider.cpp" line="+601"/>
         <source>Extracting archive for hash ID…</source>
         <translation>Extracting archive for hash ID…</translation>
     </message>
@@ -8783,7 +8788,7 @@ The app will still load, but please fix these — collections that share an iden
         <translation>%1 would expand to &quot;%2&quot;, which the launcher would read as an option rather than a value.</translation>
     </message>
     <message>
-        <location line="+165"/>
+        <location line="+192"/>
         <source>Launcher executable not found: %1</source>
         <translation>Launcher executable not found: %1</translation>
     </message>
@@ -13445,7 +13450,7 @@ Continue?</translation>
 <context>
     <name>main</name>
     <message>
-        <location filename="../src/core/main.cpp" line="+319"/>
+        <location filename="../src/core/main.cpp" line="+320"/>
         <source>Kartend - Qt6/KDE multimedia collection launcher.</source>
         <translation>Kartend - Qt6/KDE multimedia collection launcher.</translation>
     </message>
