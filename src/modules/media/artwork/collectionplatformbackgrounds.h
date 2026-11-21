@@ -45,6 +45,20 @@ namespace CollectionPlatformBackgrounds {
 [[nodiscard]] QList<PlatformBackgroundCandidates::Candidate>
 forCollection(const CollectionConfig &cfg, const QList<ScreenScraperSystems::System> &systems);
 
+/// forCollection against the ScreenScraper systems catalog already on disk at
+/// @p cachePath (ScreenScraperSystemCache::loadCachedSystems), so the list is
+/// available offline. Read-only: never refreshes the cache, ignores its TTL
+/// (a stale but valid catalog still lists retained art), no network, no
+/// credentials. A missing, unreadable, malformed or empty cache is treated as
+/// an empty catalog: an explicit System ID override still resolves, and
+/// without one nothing is listed (nothing is guessed).
+[[nodiscard]] QList<PlatformBackgroundCandidates::Candidate>
+forCollectionFromCache(const CollectionConfig &cfg, const QString &cachePath);
+
+/// forCollectionFromCache at ScreenScraperSystemCache::defaultCachePath().
+[[nodiscard]] QList<PlatformBackgroundCandidates::Candidate>
+forCollectionFromCache(const CollectionConfig &cfg);
+
 } // namespace CollectionPlatformBackgrounds
 
 #endif // COLLECTIONPLATFORMBACKGROUNDS_H

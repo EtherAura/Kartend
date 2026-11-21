@@ -13,9 +13,11 @@
 
 #include "collection/collectionconfig.h"
 #include "collectionplatformbackgrounds.h"
+#include "screenscrapersystemcache.h"
 #include "screenscrapersystems.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -123,6 +125,9 @@ private slots:
   void collectionSourceListsOnlyItsOwnPlatformAndRoot();
   void collectionSourceResolvesTheScrapeSystemId();
   void collectionSourceUnmappedOrRootlessYieldsNothing();
+  void cachedSourceListsTheCachedMatchingPlatformOffline();
+  void cachedSourceOverrideWinsAndNeedsNoCache();
+  void cachedSourceMissingMalformedOrEmptyCacheYieldsNothing();
 };
 
 void TestPlatformBackgroundCandidates::backgroundTypesMirrorProviderPriority() {
@@ -524,6 +529,130 @@ void TestPlatformBackgroundCandidates::collectionSourceUnmappedOrRootlessYieldsN
   QVERIFY(CollectionPlatformBackgrounds::forCollection(
               collectionAt(QStringLiteral("Genesis"), bare.path(), 1), systems)
               .isEmpty());
+}
+
+namespace {
+
+/// A shared-art tree under `<base>/art/snes/_shared` holding platform 2 (the
+/// catalog's "snes") AND platform 1 art side by side, so a resolver that
+/// picked the wrong platform under the right root shows up as a wrong list.
+QString writeSnesArtTree(const QString &base) {
+  const QString shared = QDir(base).filePath(QStringLiteral("art/snes/_shared"));
+  touch(shared, QStringLiteral("photo/platform_2.jpg"));
+  touch(shared, QStringLiteral("illustration/platform_2.png"));
+  touch(shared, QStringLiteral("wheel/platform_2.png")); // not a background role
+  touch(shared, QStringLiteral("illustration/platform_1.png"));
+  touch(shared, QStringLiteral("background/platform_1.png"));
+  return shared;
+}
+
+/// The synthetic catalog persisted through the real cache writer.
+QString writeSyntheticCache(const QString &base) {
+  const QString path = QDir(base).filePath(QStringLiteral("cache/screenscraper-systems.json"));
+  if (!ScreenScraperSystemCache::saveSystems(path, syntheticSystems())) return {};
+  return path;
+}
+
+/// `<base>/art/%collection%` — the placeholder the scrape expands with the
+/// collection name.
+QString placeholderArtworkDir(const QString &base) {
+  return QDir(base).filePath(QStringLiteral("art/%collection%"));
+}
+
+} // namespace
+
+void TestPlatformBackgroundCandidates::cachedSourceListsTheCachedMatchingPlatformOffline() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString shared = writeSnesArtTree(tmp.path());
+  const QString cachePath = writeSyntheticCache(tmp.path());
+  QVERIFY(!cachePath.isEmpty());
+  // Age the cache past its TTL: listing retained art must still use it and
+  // must not refresh (rewrite) it.
+  QFile cacheFile(cachePath);
+  QVERIFY(cacheFile.open(QIODevice::ReadWrite));
+  QVERIFY(cacheFile.setFileTime(
+      QDateTime::currentDateTime().addDays(-(ScreenScraperSystemCache::CACHE_TTL_DAYS + 30)),
+      QFileDevice::FileModificationTime));
+  cacheFile.close();
+  QVERIFY(ScreenScraperSystemCache::isCacheStale(cachePath));
+  const QMap<QString, QByteArray> before = snapshot(tmp.path());
+  const QDateTime cacheMtime = QFileInfo(cachePath).lastModified();
+
+  // No override: the platform comes from the cached catalog's autodetect.
+  const CollectionConfig snes = collectionAt(
+      QStringLiteral("snes"), placeholderArtworkDir(tmp.path()), -1, {QStringLiteral("sfc")});
+  QCOMPARE(CollectionPlatformBackgrounds::sharedRoot(snes), shared);
+
+  const QList<Candidate> got =
+      CollectionPlatformBackgrounds::forCollectionFromCache(snes, cachePath);
+  const QDir s(shared);
+  const QList<Candidate> want{
+      {QStringLiteral("illustration"), s.filePath(QStringLiteral("illustration/platform_2.png"))},
+      {QStringLiteral("photo"), s.filePath(QStringLiteral("photo/platform_2.jpg"))},
+  };
+  QCOMPARE(got, want);
+  // Same answer as the catalog-in-hand entry point.
+  QCOMPARE(got, CollectionPlatformBackgrounds::forCollection(snes, syntheticSystems()));
+  for (const Candidate &c : got) QVERIFY(!c.path.contains(QStringLiteral("platform_1")));
+
+  // Repeatable, and nothing on disk (art or cache) was touched.
+  QCOMPARE(CollectionPlatformBackgrounds::forCollectionFromCache(snes, cachePath), want);
+  QCOMPARE(snapshot(tmp.path()), before);
+  QCOMPARE(QFileInfo(cachePath).lastModified(), cacheMtime);
+}
+
+void TestPlatformBackgroundCandidates::cachedSourceOverrideWinsAndNeedsNoCache() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  const QString shared = writeSnesArtTree(tmp.path());
+  const QString cachePath = writeSyntheticCache(tmp.path());
+  QVERIFY(!cachePath.isEmpty());
+  const QString missingCache = QDir(tmp.path()).filePath(QStringLiteral("nocache/systems.json"));
+  const QString malformedCache = QDir(tmp.path()).filePath(QStringLiteral("bad/systems.json"));
+  touch(tmp.path(), QStringLiteral("bad/systems.json"), "{ not json");
+
+  // The name autodetects to 2 against the cache, but the override pins 1.
+  const CollectionConfig pinned = collectionAt(
+      QStringLiteral("snes"), placeholderArtworkDir(tmp.path()), 1, {QStringLiteral("sfc")});
+  const QDir s(shared);
+  const QList<Candidate> want{
+      {QStringLiteral("illustration"), s.filePath(QStringLiteral("illustration/platform_1.png"))},
+      {QStringLiteral("background"), s.filePath(QStringLiteral("background/platform_1.png"))},
+  };
+  QCOMPARE(CollectionPlatformBackgrounds::forCollectionFromCache(pinned, cachePath), want);
+  QCOMPARE(CollectionPlatformBackgrounds::forCollectionFromCache(pinned, missingCache), want);
+  QCOMPARE(CollectionPlatformBackgrounds::forCollectionFromCache(pinned, QString()), want);
+  QCOMPARE(CollectionPlatformBackgrounds::forCollectionFromCache(pinned, malformedCache), want);
+  QVERIFY(!QFileInfo::exists(missingCache)); // never created
+}
+
+void TestPlatformBackgroundCandidates::cachedSourceMissingMalformedOrEmptyCacheYieldsNothing() {
+  QTemporaryDir tmp;
+  QVERIFY(tmp.isValid());
+  writeSnesArtTree(tmp.path());
+  const QString missingCache = QDir(tmp.path()).filePath(QStringLiteral("nocache/systems.json"));
+  touch(tmp.path(), QStringLiteral("bad/systems.json"), "{ not json");
+  const QString malformedCache = QDir(tmp.path()).filePath(QStringLiteral("bad/systems.json"));
+  const QString emptyCache = QDir(tmp.path()).filePath(QStringLiteral("empty/systems.json"));
+  QVERIFY(ScreenScraperSystemCache::saveSystems(emptyCache, {}));
+  // A directory where the cache file should be: exists, but cannot be read.
+  const QString dirCache = QDir(tmp.path()).filePath(QStringLiteral("dir/systems.json"));
+  QVERIFY(QDir().mkpath(dirCache));
+  const QMap<QString, QByteArray> before = snapshot(tmp.path());
+
+  // Autodetectable name and art for both platforms on disk, but no override
+  // and no usable catalog: nothing is guessed.
+  const CollectionConfig snes = collectionAt(
+      QStringLiteral("snes"), placeholderArtworkDir(tmp.path()), -1, {QStringLiteral("sfc")});
+  QVERIFY(CollectionPlatformBackgrounds::forCollectionFromCache(snes, missingCache).isEmpty());
+  QVERIFY(CollectionPlatformBackgrounds::forCollectionFromCache(snes, QString()).isEmpty());
+  QVERIFY(CollectionPlatformBackgrounds::forCollectionFromCache(snes, malformedCache).isEmpty());
+  QVERIFY(CollectionPlatformBackgrounds::forCollectionFromCache(snes, emptyCache).isEmpty());
+  QVERIFY(CollectionPlatformBackgrounds::forCollectionFromCache(snes, dirCache).isEmpty());
+
+  QVERIFY(!QFileInfo::exists(missingCache));
+  QCOMPARE(snapshot(tmp.path()), before);
 }
 
 QTEST_GUILESS_MAIN(TestPlatformBackgroundCandidates)

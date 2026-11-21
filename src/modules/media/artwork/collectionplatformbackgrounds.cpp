@@ -4,6 +4,7 @@
 
 #include "collection/collectionconfig.h"
 #include "pathutils.h"
+#include "screenscrapersystemcache.h"
 
 namespace CollectionPlatformBackgrounds {
 
@@ -33,6 +34,23 @@ forCollection(const CollectionConfig &cfg, const QList<ScreenScraperSystems::Sys
   const QString root = sharedRoot(cfg);
   if (root.isEmpty()) return {};
   return PlatformBackgroundCandidates::enumerate(root, QString::number(id));
+}
+
+QList<PlatformBackgroundCandidates::Candidate> forCollectionFromCache(const CollectionConfig &cfg,
+                                                                      const QString &cachePath) {
+  // loadCachedSystems already yields an empty list for an empty or missing
+  // path; a read or parse error degrades to the same empty catalog, under
+  // which resolveForCollection still honours an override and otherwise
+  // returns 0. isCacheStale is deliberately not consulted: listing art the
+  // scrape already retained does not need a fresh catalog.
+  const auto loaded = ScreenScraperSystemCache::loadCachedSystems(cachePath);
+  const QList<ScreenScraperSystems::System> systems =
+      loaded.isOk() ? loaded.value() : QList<ScreenScraperSystems::System>{};
+  return forCollection(cfg, systems);
+}
+
+QList<PlatformBackgroundCandidates::Candidate> forCollectionFromCache(const CollectionConfig &cfg) {
+  return forCollectionFromCache(cfg, ScreenScraperSystemCache::defaultCachePath());
 }
 
 } // namespace CollectionPlatformBackgrounds
