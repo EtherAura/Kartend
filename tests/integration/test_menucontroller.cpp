@@ -7,9 +7,11 @@
 
 #include <QAction>
 #include <QByteArray>
+#include <QCoreApplication>
 #include <QList>
 #include <QMainWindow>
 #include <QMenu>
+#include <QStatusBar>
 #include <QString>
 #include <QTest>
 
@@ -328,4 +330,70 @@ void TestMenuController::setupMenuBar_bindsImportFromLauncherShortcut() {
   });
   QVERIFY2(it != actions.end(), "Import from Launcher... is missing from the Import menu");
   QCOMPARE((*it)->shortcut(), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_I));
+}
+
+// View → Show Status Bar (user request 2026-11-21). QMainWindow builds its
+// status bar on the first statusBar() call, which is the first status
+// message, and shows a bar built that way — through a queued call, so each
+// check below drains events first or it would pass without the fix. A saved
+// "hidden" therefore has to survive a message that arrives after startup.
+
+void TestMenuController::showStatusBar_hiddenSettingSurvivesStatusMessages() {
+  QMainWindow win;
+  Ui_MainWindow ui;
+  ui.setupUi(&win);
+
+  GeneralSettings settings;
+  settings.view.showStatusBar = false;
+  MenuController controller;
+  MenuControllerContext ctx;
+  ctx.ui = &ui;
+  ctx.mainWindow = &win;
+  ctx.getGeneralSettings = [&settings] { return &settings; };
+  controller.setContext(ctx);
+
+  controller.setupMenuBar();
+  win.show();
+
+  QVERIFY(ui.actionShowStatusBar);
+  QVERIFY(!ui.actionShowStatusBar->isChecked());
+  QVERIFY(ui.menuView->actions().contains(ui.actionShowStatusBar));
+
+  // The same call the launcher-sync / DAT-audit closures make.
+  win.statusBar()->showMessage(QStringLiteral("Launcher collections are up to date."), 10000);
+  QCoreApplication::processEvents();
+  QVERIFY2(!win.statusBar()->isVisible(), "a status message re-showed a hidden status bar");
+}
+
+void TestMenuController::showStatusBar_toggleShowsHidesAndPersists() {
+  QMainWindow win;
+  Ui_MainWindow ui;
+  ui.setupUi(&win);
+
+  GeneralSettings settings; // showStatusBar defaults to true
+  MenuController controller;
+  MenuControllerContext ctx;
+  ctx.ui = &ui;
+  ctx.mainWindow = &win;
+  ctx.getGeneralSettings = [&settings] { return &settings; };
+  controller.setContext(ctx);
+
+  controller.setupMenuBar();
+  win.show();
+
+  QVERIFY(ui.actionShowStatusBar->isChecked());
+  // Shown stays lazy: no empty strip until something is reported.
+  QVERIFY2(!win.findChild<QStatusBar *>(), "the default must not create an empty status bar");
+
+  ui.actionShowStatusBar->trigger(); // off
+  QCoreApplication::processEvents();
+  QVERIFY(!ui.actionShowStatusBar->isChecked());
+  QVERIFY(!settings.view.showStatusBar);
+  QVERIFY(win.findChild<QStatusBar *>());
+  QVERIFY(!win.statusBar()->isVisible());
+
+  ui.actionShowStatusBar->trigger(); // back on
+  QVERIFY(ui.actionShowStatusBar->isChecked());
+  QVERIFY(settings.view.showStatusBar);
+  QVERIFY(win.statusBar()->isVisible());
 }

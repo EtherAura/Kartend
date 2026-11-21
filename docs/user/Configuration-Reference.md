@@ -163,6 +163,7 @@ Button names are the SDL / Qt6::Gamepad standard labels (`A`, `B`, `X`,
 |-----|------|---------|-------------|
 | `showMenuBar` | bool | `true` | Persistent state of `F10`. |
 | `showToolbar` | bool | `true` | Persistent state of `F8`. |
+| `showStatusBar` | bool | `true` | Persistent state of **View → Show Status Bar**. |
 | `fullscreen` | bool | `false` | Persistent state of `F11`. |
 
 ### Toolbar customization

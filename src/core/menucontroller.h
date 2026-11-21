@@ -120,10 +120,10 @@ public:
   /// pane edge.
   void syncOrientationActions(DetailsPanePosition position);
 
-  /// Restore persisted Show Menu Bar / Show Toolbar / Fullscreen states from
-  /// GeneralSettings. Called once from setupMenuBar() after every action has
-  /// been wired so checked states and widget visibility stay in lockstep on
-  /// startup.
+  /// Restore persisted Show Menu Bar / Show Toolbar / Show Status Bar /
+  /// Fullscreen states from GeneralSettings. Called once from setupMenuBar()
+  /// after every action has been wired so checked states and widget
+  /// visibility stay in lockstep on startup.
   void applyPersistedViewState();
 
   /// Build the command-palette registry: collection-switch entries (playlists
@@ -199,7 +199,7 @@ private:
   /// persists via SettingsManager. @p applyVisual receives the new
   /// checked state so the caller can flip the corresponding widget's
   /// visibility. Used by setupActionShowMenuBar / ShowToolbar /
-  /// FullscreenAction.
+  /// ShowStatusBar.
   bool connectVisibilityToggle(QAction *action, const std::function<void(bool)> &applyVisual,
                                bool ViewSettings::*field);
 
@@ -207,6 +207,7 @@ private:
   void setupActionExit();
   void setupActionShowMenuBar();
   void setupActionShowToolbar();
+  void setupActionShowStatusBar();
   void setupActionShowSidebar();
   void setupActionShowCollectionTree();
   void setupActionSettings();

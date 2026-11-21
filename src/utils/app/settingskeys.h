@@ -222,6 +222,7 @@ inline constexpr auto kShowAllSubcollectionItems = "showAllSubcollectionItems";
 inline constexpr auto kShowAllSubfolderItems = "showAllSubfolderItems";
 inline constexpr auto kShowHiddenFolders = "showHiddenFolders";
 inline constexpr auto kShowMenuBar = "showMenuBar";
+inline constexpr auto kShowStatusBar = "showStatusBar";
 inline constexpr auto kShowTitleInPlaceholder = "showTitleInPlaceholder";
 inline constexpr auto kShowToolbar = "showToolbar";
 inline constexpr auto kScrollbarsOnHoverOnly = "scrollbarsOnHoverOnly";

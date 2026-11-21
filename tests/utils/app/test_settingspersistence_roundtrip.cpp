@@ -738,6 +738,7 @@ void TestSettingsPersistenceRoundtrip::viewSettings() {
   in.showTitleInPlaceholder = !in.showTitleInPlaceholder;
   in.showMenuBar = !in.showMenuBar;
   in.showToolbar = !in.showToolbar;
+  in.showStatusBar = !in.showStatusBar;
   in.fullscreen = !in.fullscreen;
   verifyRoundTrip("ViewSettings", in, ViewSettingsPersistence::save, ViewSettingsPersistence::load);
 }

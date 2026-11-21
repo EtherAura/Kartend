@@ -112,6 +112,7 @@ side by side but stay distinct entries.
 |------|----------|--------|
 | **Show Menu Bar** | `F10` (checkable) | Persistent toggle for the menu bar. |
 | **Show Toolbar** | `F8` (checkable) | Persistent toggle for the items-page toolbar. |
+| **Show Status Bar** | (checkable) | Persistent toggle for the strip along the bottom of the window where background jobs (launcher sync, DAT catalogue matches, store downloads) report. Hidden, those messages are not shown at all. |
 | **Show Details Pane** | `F9` (checkable) | Persistent toggle for the sidebar (per-collection). |
 | (separator) |
 | **Layout ▶** | (submenu) | Choose Grid / List / Cover Flow / Horizontal. Mirrors `Ctrl+1..4`. |

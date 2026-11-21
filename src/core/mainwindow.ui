@@ -592,6 +592,7 @@
     </widget>
     <addaction name="actionShowMenuBar"/>
     <addaction name="actionShowToolbar"/>
+    <addaction name="actionShowStatusBar"/>
     <addaction name="actionShowSidebar"/>
     <addaction name="actionShowCollectionTree"/>
     <addaction name="separator"/>
@@ -679,6 +680,17 @@
    </property>
    <property name="shortcut">
     <string>F8</string>
+   </property>
+  </action>
+  <action name="actionShowStatusBar">
+   <property name="text">
+    <string>Show Status Bar</string>
+   </property>
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
    </property>
   </action>
   <action name="actionShowMenuBar">
