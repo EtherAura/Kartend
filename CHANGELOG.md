@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- ScreenScraper no longer imports another platform's details or artwork just
+  because a game title matches. A matching ROM hash still identifies the game.
+
 ## [0.0.23] - 2026-11-20
 
 ### Added

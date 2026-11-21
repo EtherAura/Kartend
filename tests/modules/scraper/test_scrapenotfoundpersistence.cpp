@@ -114,6 +114,8 @@ private slots:
   void genuineNotFoundRecordsOneScopedStamp();
   void validEmptyNoMatchRecordsStamp_data();
   void validEmptyNoMatchRecordsStamp();
+  void platformIdentityControlsPersistence_data();
+  void platformIdentityControlsPersistence();
   void repeatedMissUpdatesSameIdentityAndKeysFollowInputs();
   void transientAndQuotaFailuresNeverTouchStamps_data();
   void transientAndQuotaFailuresNeverTouchStamps();
@@ -165,6 +167,7 @@ void TestScrapeNotFoundPersistence::initTestCase() {
   ScreenScraperSystems::System snes;
   snes.id = 4;
   snes.displayName = QStringLiteral("Super Nintendo");
+  snes.aliases = {QStringLiteral("snes")};
   ScreenScraperSystems::System md;
   md.id = 1;
   md.displayName = QStringLiteral("Mega Drive");
@@ -210,6 +213,7 @@ void TestScrapeNotFoundPersistence::init() {
   m_cfg = CollectionConfig{};
   m_cfg.name = QStringLiteral("SNES");
   m_cfg.scraperOverrides.screenscraperSystemId = 4;
+  m_settings.scraper.options.hashMode = ScraperOptions::ScraperHashMode::Always;
   QSqlQuery q(m_reader);
   QVERIFY(q.exec(QStringLiteral("DELETE FROM scrape_not_found")));
   QVERIFY(q.exec(QStringLiteral("DELETE FROM item_metadata")));
@@ -414,6 +418,85 @@ void TestScrapeNotFoundPersistence::validEmptyNoMatchRecordsStamp() {
   QCOMPARE(stampCount(), 1);
   QCOMPARE(metadataRows(path), 0);
   verifyNoSidecar(1);
+}
+
+void TestScrapeNotFoundPersistence::platformIdentityControlsPersistence_data() {
+  QTest::addColumn<int>("requestSystem");
+  QTest::addColumn<QByteArray>("system");
+  QTest::addColumn<QByteArray>("rom");
+  QTest::addColumn<bool>("sendHash");
+  QTest::addColumn<bool>("accept");
+
+  QTest::newRow("same numeric system despite conflicting hash")
+      << 4 << QByteArray(R"({"id":4})") << QByteArray(R"({"romsha1":"bad"})") << true << true;
+  QTest::newRow("same system through collection alias")
+      << -1 << QByteArray(R"({"id":"004"})") << QByteArray("{}") << true << true;
+  QTest::newRow("declared arcade child")
+      << 75 << QByteArray(R"({"id":"56","parentid":75})") << QByteArray("{}") << true << true;
+  QTest::newRow("unrelated arcade system")
+      << 75 << QByteArray(R"({"id":"56","parentid":0})") << QByteArray("{}") << true << false;
+  QTest::newRow("console parent is not an alias for add-on")
+      << 1 << QByteArray(R"({"id":20,"parentid":1})") << QByteArray("{}") << true << false;
+  QTest::newRow("any system hash lookup")
+      << 0 << QByteArray(R"({"id":3})") << QByteArray("{}") << true << true;
+  QTest::newRow("missing system") << 4 << QByteArray() << QByteArray("{}") << true << true;
+  QTest::newRow("malformed system id is unknown")
+      << 4 << QByteArray(R"({"id":3.5})") << QByteArray("{}") << true << true;
+  QTest::newRow("wrong platform with identical name only")
+      << 106 << QByteArray(R"({"id":3,"parentid":0})")
+      << QByteArray(R"({"romfilename":"Synthetic.sfc"})") << false << false;
+  QTest::newRow("wrong platform with matching SHA-1")
+      << 106 << QByteArray(R"({"id":3})") << QByteArray(R"({"romsha1":"$sha1","rommd5":"bad"})")
+      << true << true;
+  QTest::newRow("weak hash cannot overrule a stronger mismatch")
+      << 106 << QByteArray(R"({"id":3})")
+      << QByteArray(R"({"romsha1":"bad","rommd5":"$md5","romcrc":"$crc"})") << true << false;
+  QTest::newRow("wrong platform with matching MD5")
+      << 106 << QByteArray(R"({"id":3})") << QByteArray(R"({"rommd5":"$md5"})") << true << true;
+  QTest::newRow("wrong platform with matching CRC")
+      << 106 << QByteArray(R"({"id":3})") << QByteArray(R"({"romcrc":"$crc"})") << true << true;
+  QTest::newRow("wrong platform with different CRC")
+      << 106 << QByteArray(R"({"id":3})") << QByteArray(R"({"romcrc":"DEADBEEF"})") << true
+      << false;
+}
+
+void TestScrapeNotFoundPersistence::platformIdentityControlsPersistence() {
+  QFETCH(int, requestSystem);
+  QFETCH(QByteArray, system);
+  QFETCH(QByteArray, rom);
+  QFETCH(bool, sendHash);
+  QFETCH(bool, accept);
+  m_cfg.scraperOverrides.screenscraperSystemId = requestSystem;
+  if (!sendHash) m_settings.scraper.options.hashMode = ScraperOptions::ScraperHashMode::Never;
+  const QString path = writeRom(QStringLiteral("Synthetic.sfc"), "synthetic ROM contents");
+  QVERIFY(!path.isEmpty());
+
+  const Run run = runBatch({path}, [system, rom](const QUrl &url) mutable {
+    const QUrlQuery query(url);
+    rom.replace("$sha1", query.queryItemValue(QStringLiteral("sha1")).toLatin1().toUpper());
+    rom.replace("$md5", query.queryItemValue(QStringLiteral("md5")).toLatin1().toUpper());
+    rom.replace("$crc", query.queryItemValue(QStringLiteral("crc")).toLatin1().toUpper());
+    QByteArray payload =
+        R"({"response":{"jeu":{"id":"42","noms":[{"region":"wor","text":"Synthetic"}])";
+    if (!system.isEmpty()) payload += R"(,"systeme":)" + system;
+    return Reply(payload + R"(,"rom":)" + rom + "}}}");
+  });
+  QVERIFY(run.finished);
+  QCOMPARE(run.urls.size(), 1);
+  QCOMPARE(QUrlQuery(run.urls.first()).queryItemValue(QStringLiteral("systemeid")),
+           QString::number(requestSystem == -1 ? 4 : requestSystem));
+  QCOMPARE(QUrlQuery(run.urls.first()).hasQueryItem(QStringLiteral("sha1")), sendHash);
+  QCOMPARE(run.summary.errors, 0);
+  QCOMPARE(metadataRows(path), accept ? 1 : 0);
+  QCOMPARE(run.summary.notFound, accept ? 0 : 1);
+  QCOMPARE(run.summary.scraped, accept ? 1 : 0);
+  QCOMPARE(stampCount(), accept ? 0 : 1);
+  if (!accept) {
+    const auto stamp = stampFor(path);
+    QVERIFY(stamp.has_value());
+    QCOMPARE(stamp->lookupKey, ScreenScraperUrls::jeuInfosLookupKey(run.urls.first()));
+    verifyNoSidecar(1);
+  }
 }
 
 void TestScrapeNotFoundPersistence::repeatedMissUpdatesSameIdentityAndKeysFollowInputs() {

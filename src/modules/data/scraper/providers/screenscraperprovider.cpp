@@ -31,6 +31,7 @@
 #include <QStandardPaths>
 #include <QtConcurrent/QtConcurrentRun>
 #include <QUrl>
+#include <QUrlQuery>
 
 #include "collection/collectionconfig.h"
 #include "collection/generalsettings.h"
@@ -810,11 +811,12 @@ void ScreenScraperProvider::runLookupAfterHash(const QString &query, const QStri
       filenameRegionOverride = ScreenScraperRegion::detectFromFilename(trimmed);
     }
 
-    fetchJeuInfos(url, filePath, filenameRegionOverride, std::move(callback));
+    fetchJeuInfos(url, filePath, {systemeid, hashes}, filenameRegionOverride, std::move(callback));
   });
 }
 
 void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filePath,
+                                          const JeuInfosIdentity &identity,
                                           const QString &filenameRegionOverride,
                                           LookupCallback callback) {
   // Derived from the URL actually dispatched, so a recorded miss names exactly
@@ -824,8 +826,8 @@ void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filePa
   // transient-retry loop (classification via RetryPolicy::isTransient, tracked
   // per-retry timers); this handler only sees the final Result.
   getWithRetry(userAgentHeader(), url,
-               [this, filePath, lookupKey, filenameRegionOverride, callback = std::move(callback),
-                alive = std::weak_ptr<int>(m_lifetimeToken)](
+               [this, filePath, lookupKey, identity, filenameRegionOverride,
+                callback = std::move(callback), alive = std::weak_ptr<int>(m_lifetimeToken)](
                    ErrorUtils::Result<QByteArray> response) mutable {
                  // Kartend audit cr950: the provider can be destroyed (cancel during a
                  // scrape) while this jeuInfos reply is in flight on the qApp-lifetime
@@ -840,8 +842,8 @@ void ScreenScraperProvider::fetchJeuInfos(const QUrl &url, const QString &filePa
                        "ScreenScraperProvider::fetchJeuInfos"));
                    return;
                  }
-                 handleJeuInfosResponse(std::move(response), filePath, lookupKey, callback,
-                                        filenameRegionOverride);
+                 handleJeuInfosResponse(std::move(response), filePath, lookupKey, identity,
+                                        callback, filenameRegionOverride);
                },
                Scraper::HttpClient::kDefaultMaxResponseBytes,
                // No Content-Type constraint: api2 returns JSON (output=json) but SS
@@ -885,14 +887,42 @@ bool isStructurallyEmptyJeuInfosReply(const QByteArray &bytes) {
   if (jeu.isArray()) return jeu.toArray().isEmpty();
   return false;
 }
+
+bool matchesRomHash(const Scraper::ScrapedItem &item, const RomHasher::Result &hashes) {
+  // The strongest comparable hash decides. A weaker hash cannot overrule
+  // a mismatch in a stronger one, even if the filename also matches.
+  const QString sha1 = item.customFields.value(QStringLiteral("rom_sha1"));
+  if (!sha1.isEmpty() && !hashes.sha1.isEmpty()) {
+    return sha1.compare(hashes.sha1, Qt::CaseInsensitive) == 0;
+  }
+  const QString md5 = item.customFields.value(QStringLiteral("rom_md5"));
+  if (!md5.isEmpty() && !hashes.md5.isEmpty()) {
+    return md5.compare(hashes.md5, Qt::CaseInsensitive) == 0;
+  }
+  const QString crc = item.customFields.value(QStringLiteral("rom_crc"));
+  return !crc.isEmpty() && !hashes.crc.isEmpty() &&
+         crc.compare(hashes.crc, Qt::CaseInsensitive) == 0;
+}
+
+bool matchesRequestedSystem(const Scraper::ScrapedItem &item, int systemId,
+                            const RomHasher::Result &hashes) {
+  // 75 is ScreenScraper's MAME/Arcade umbrella. Other parent IDs may denote
+  // related but distinct systems (for example, a console and its add-on).
+  constexpr int kArcadeSystemId = 75;
+  return systemId == 0 || item.providerSystemId.isEmpty() ||
+         item.providerSystemId.toLongLong() == systemId ||
+         (systemId == kArcadeSystemId && item.providerSystemParentId.toLongLong() == systemId) ||
+         matchesRomHash(item, hashes);
+}
 } // namespace
 
 void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response,
                                                    const QString &filePath,
                                                    const QString &lookupKey,
+                                                   const JeuInfosIdentity &identity,
                                                    const LookupCallback &callback,
                                                    const QString &filenameRegionOverride) {
-  // Kartend-bb8df: remember the sent key only for a genuine "no entry" answer.
+  // Remember the sent key when the response has no match for this request.
   // HTTP 430/431 (quota), 429, 5xx, timeouts, cancellation, "Erreur" bodies
   // and malformed replies say nothing about whether the game exists, so they
   // must never mark the item as missing.
@@ -998,16 +1028,30 @@ void ScreenScraperProvider::handleJeuInfosResponse(ErrorUtils::Result<QByteArray
     }
     return;
   }
+  // jeuInfos supplies one candidate. A different platform is a terminal
+  // miss for this lookup unless the response identifies the exact ROM.
+  const auto &item = detail.value();
+  if (!matchesRequestedSystem(item, identity.systemId, identity.hashes)) {
+    const QString romName =
+        QUrlQuery(lookupKey).queryItemValue(QStringLiteral("romnom"), QUrl::FullyDecoded);
+    qCInfo(lcScreenScraperProvider)
+        << "ScreenScraper returned a different platform for"
+        << ErrorUtils::sanitizedSingleLine(romName, 160) << "requested system" << identity.systemId
+        << "returned system" << item.providerSystemId << "parent" << item.providerSystemParentId;
+    rememberNoEntry();
+    callback(QList<Scraper::ScrapeCandidate>{});
+    return;
+  }
   // Record the editeur/developpeur id→name pairs this response carried —
   // there is no company listing endpoint, so scraped games are the only
   // source of the link that lets a manufacturer parent collection find its
   // company art by name later (Kartend-cnti4).
-  recordCompanies(detail.value());
-  const Scraper::ScrapeCandidate cand = ScreenScraperParser::candidateFromItem(detail.value());
+  recordCompanies(item);
+  const Scraper::ScrapeCandidate cand = ScreenScraperParser::candidateFromItem(item);
   const QString id = cand.providerSpecificId;
   if (!id.isEmpty()) {
     m_detailCacheOrder.removeAll(id); // refresh position if re-looked-up
-    m_detailCache.insert(id, detail.value());
+    m_detailCache.insert(id, item);
     m_detailCacheOrder.append(id);
     while (m_detailCacheOrder.size() > kMaxDetailCacheEntries) {
       m_detailCache.remove(m_detailCacheOrder.takeFirst());
