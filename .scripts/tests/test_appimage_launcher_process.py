@@ -24,6 +24,21 @@ like the AppImage runtime's mount point (.mount_...), run AppRun --help with
 a private HOME and XDG directories on the offscreen platform, and check the
 first line of its stdout.
 
+The smoke-name tests run packaging/appimage/process-name-check.sh, the check
+smoke-test.sh runs on the offscreen start of the unpacked AppImage, on the
+same AppDir with READY as its readiness line: it has to refuse the generated
+AppRun for the name AppRun.wrapped, accept the rewritten one, and refuse a
+process that ends, never gets ready, or is not the payload. The name is the
+whole /proc/<pid>/comm record, so the same ELF run through a link whose name
+holds or ends in a newline is refused although its first line reads
+"kartend".
+
+The offscreen-start test runs packaging/appimage/offscreen-start.sh, the
+offscreen start smoke-test.sh itself makes, on the built kartend (as for
+--help) with a caller QT_MESSAGE_PATTERN of '%{message}', which drops the
+logging category the readiness line needs: the start must still get ready,
+refuse the generated AppRun and pass the rewritten one.
+
 No AppImage is built, mounted or run here.
 
 stdlib unittest — pytest is not available in CI. Run directly
@@ -51,6 +66,15 @@ REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 APPIMAGE_DIR = REPO / "packaging" / "appimage"
 HANDOFF = APPIMAGE_DIR / "apprun-handoff.py"
 BUILDER = APPIMAGE_DIR / "build-appimage.sh"
+SMOKE_TEST = APPIMAGE_DIR / "smoke-test.sh"
+# The name check smoke-test.sh runs on the offscreen start of the unpacked AppImage.
+NAME_CHECK = APPIMAGE_DIR / "process-name-check.sh"
+# The offscreen start smoke-test.sh runs on the unpacked AppImage, with that name check.
+OFFSCREEN_START = APPIMAGE_DIR / "offscreen-start.sh"
+# How long the built kartend runs in that start before it quits itself, and
+# how long one such start may take in all.
+SMOKE_RUN_MS = 1500
+SMOKE_DEADLINE = 90.0
 
 HOOK_NAME = "kartend-own-qt.sh"
 QT_VARIABLES = ("QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH", "QML_IMPORT_PATH", "QML2_IMPORT_PATH")
@@ -249,6 +273,184 @@ class TestAppImageLauncherProcess(unittest.TestCase):
         self.assert_hook_ran(seen)
         self.assertFalse((pathlib.Path(self._tmp.name) / "injected").exists())
 
+    def run_name_check(self, seconds: int = 2) -> tuple[subprocess.CompletedProcess, str, bytes]:
+        """Run smoke-test.sh's process-name-check.sh on this AppDir's AppRun, with READY as readiness.
+
+        The fixture never ends by itself, so `timeout` ends it after `seconds`;
+        the helper waits for that. Returns the helper's result, the recorded
+        exit status of AppRun and its log.
+        """
+        status_file = pathlib.Path(self._tmp.name) / "run.status"
+        log = pathlib.Path(self._tmp.name) / "run.log"
+        env = {key: value for key, value in os.environ.items() if key not in QT_VARIABLES}
+        process = subprocess.Popen(
+            ["bash", str(NAME_CHECK), "--name", "kartend", "--exe", str(self.executable),
+             "--ready", "^" + READY.decode().strip() + "$", "--timeout", str(seconds),
+             "--log", str(log), "--status-file", str(status_file), "--", str(self.apprun), *ARGUMENTS],
+            env=env, cwd=self._tmp.name, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+        )
+        try:
+            stdout, stderr = process.communicate(timeout=seconds + DEADLINE)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGTERM)  # its trap ends its own timeout and that child
+            stdout, stderr = process.communicate(timeout=DEADLINE)
+            self.fail(f"process-name-check.sh did not finish; stderr: {stderr.decode(errors='replace')}")
+        result = subprocess.CompletedProcess(process.args, process.returncode,
+                                             stdout.decode(errors="replace"), stderr.decode(errors="replace"))
+        print(f"\n  {result.stderr.strip().replace(self._tmp.name, '<tmp>')}", file=sys.stderr)
+        status = status_file.read_text(encoding="utf-8").strip() if status_file.exists() else ""
+        self.assertFalse(status_file.with_name("run.status.pid").exists(), "the pid file was left behind")
+        for match in re.finditer(r"\bpid (\d+)\b", result.stderr):
+            exe = pathlib.Path("/proc") / match.group(1) / "exe"
+            try:
+                still = os.readlink(exe)
+            except OSError:
+                continue
+            self.assertNotEqual(still, os.path.realpath(self.executable), "the started process was left running")
+        return result, status, log.read_bytes() if log.exists() else b""
+
+    def test_smoke_name_check_rejects_apprun_wrapped(self) -> None:
+        result, status, log = self.run_name_check()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"runs {os.path.realpath(self.executable)} under the process name 'AppRun.wrapped', "
+                      "expected 'kartend'", result.stderr)
+        self.assertEqual(log, READY)
+        self.assertEqual(status, "124")  # ended by its own timeout, not by the check
+
+    def test_smoke_name_check_passes_after_handoff(self) -> None:
+        handoff = self.run_handoff()
+        self.assertEqual(handoff.returncode, 0, handoff.stderr)
+        result, status, log = self.run_name_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stderr, r"^process-name-check: pid \d+ runs "
+                         + re.escape(os.path.realpath(self.executable)) + r" under the process name 'kartend'\n\Z")
+        self.assertEqual(log, READY)
+        self.assertEqual(status, "124")
+
+    def test_smoke_name_check_needs_the_ready_process(self) -> None:
+        handoff = self.run_handoff()
+        self.assertEqual(handoff.returncode, 0, handoff.stderr)
+        ready = READY.decode().strip()
+        cases = {
+            # Ends at once: there is never a process to look at.
+            "ends before it is ready": ("#!/bin/sh\nexit 0\n", "0", "ended before it was ready"),
+            # Runs, but never writes the readiness line (sleep is not the payload).
+            "never ready": ("#!/bin/sh\nexec sleep 30\n", "124", "its name is unknown"),
+            # A shell that prints the line itself is not the payload either.
+            "shell prints the line": (f"#!/bin/sh\necho {ready}\nsleep 30\n", "124", ", not "),
+        }
+        for reason, (text, expected_status, message) in cases.items():
+            with self.subTest(reason=reason):
+                self.write_apprun(text)
+                result, status, _ = self.run_name_check(seconds=1)
+                self.assertEqual(result.returncode, 1, f"{reason}: {result.stderr}")
+                self.assertIn(message, result.stderr)
+                self.assertNotIn("under the process name 'kartend'\n", result.stderr)
+                self.assertEqual(status, expected_status, reason)
+
+    def test_smoke_name_check_compares_the_whole_comm_record(self) -> None:
+        # The same ELF, run through links whose names hold a newline: the file
+        # is the payload (exe matches), only the name is wrong. A first-line
+        # read of comm would see "kartend" in both.
+        bin_dir = self.appdir / "usr" / "bin"
+        cases = {
+            "ends in a newline": ("kartend\n", 1, "$'kartend\\n'"),
+            "newline inside": ("kartend\nAppRun", 1, "$'kartend\\nAppRun'"),
+            "exactly kartend": ("kartend", 0, "'kartend'"),
+        }
+        for reason, (name, expected, shown) in cases.items():
+            with self.subTest(reason=reason):
+                if name != "kartend":
+                    os.symlink("kartend", bin_dir / name)
+                quoted = "$'" + name.replace("\n", "\\n") + "'"
+                self.write_apprun(f'#!/usr/bin/env bash\nexec "${{0%/*}}/usr/bin/"{quoted} "$@"\n')
+                result, status, log = self.run_name_check(seconds=1)
+                self.assertEqual(result.returncode, expected, f"{reason}: {result.stderr}")
+                message = f"runs {os.path.realpath(self.executable)} under the process name {shown}"
+                if expected:
+                    self.assertIn(message + ", expected 'kartend'\n", result.stderr)
+                    self.assertNotIn("under the process name 'kartend'", result.stderr)
+                else:
+                    self.assertRegex(result.stderr, r"^process-name-check: pid \d+ " + re.escape(message) + r"\n\Z")
+                self.assertEqual(log, READY)
+                self.assertEqual(status, "124")
+
+    def private_env(self) -> dict:
+        """PATH, LANG and a private HOME with its XDG directories, nothing else."""
+        private = pathlib.Path(self._tmp.name) / "home"
+        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(private), "LANG": "C.UTF-8"}
+        for key, sub in (("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"),
+                         ("XDG_CACHE_HOME", "cache"), ("XDG_STATE_HOME", "state"), ("XDG_RUNTIME_DIR", "run")):
+            env[key] = str(private / sub)
+            (private / sub).mkdir(parents=True, mode=0o700, exist_ok=True)
+        return env
+
+    def run_offscreen_start(self, root: pathlib.Path, caller: dict) -> tuple[subprocess.CompletedProcess, str, str]:
+        """Run smoke-test.sh's offscreen start (offscreen-start.sh) on ROOT with the caller's extra environment.
+
+        Returns its result, the recorded exit status of AppRun and the log.
+        """
+        work = pathlib.Path(self._tmp.name) / "work"
+        foreign = work / "foreign-plugins"
+        (foreign / "platforms").mkdir(parents=True, exist_ok=True)
+        status_file, log = work / "offscreen.status", work / "offscreen.log"
+        env = {**self.private_env(), **caller}
+        process = subprocess.Popen(
+            ["bash", str(OFFSCREEN_START), str(root), str(foreign), str(SMOKE_RUN_MS), str(log), str(status_file)],
+            env=env, cwd=self._tmp.name, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True,
+        )
+        try:
+            stdout, stderr = process.communicate(timeout=SMOKE_DEADLINE)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGTERM)  # its trap ends its own timeout and that child
+            stdout, stderr = process.communicate(timeout=DEADLINE)
+            self.fail(f"offscreen-start.sh did not finish; stderr: {stderr.decode(errors='replace')}")
+        result = subprocess.CompletedProcess(process.args, process.returncode,
+                                             stdout.decode(errors="replace"), stderr.decode(errors="replace"))
+        print(f"\n  {result.stderr.strip().replace(self._tmp.name, '<tmp>')}", file=sys.stderr)
+        self.assertFalse(status_file.with_name("offscreen.status.pid").exists(), "the pid file was left behind")
+        status = status_file.read_text(encoding="utf-8").strip() if status_file.exists() else ""
+        text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
+        self.assertNotIn(str(foreign), text, "Qt searched the caller's QT_PLUGIN_PATH")
+        return result, status, text
+
+    def test_smoke_offscreen_start_ignores_the_callers_message_pattern(self) -> None:
+        # The built kartend, offscreen, through the start smoke-test.sh uses,
+        # with a caller pattern that drops the category from every message.
+        root = self.help_appdir()
+        exe = os.path.realpath(root / "usr" / "bin" / "kartend")
+        caller = {"QT_MESSAGE_PATTERN": "%{message}"}
+        for key in QT_VARIABLES:
+            caller[key] = "/caller/system-qt/plugins"  # the hook must drop these
+        # The generated AppRun: the real Qt app gets ready, and its name is refused.
+        result, status, log = self.run_offscreen_start(root, caller)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(f"runs {exe} under the process name 'AppRun.wrapped', expected 'kartend'\n", result.stderr)
+        self.assertEqual(status, "0", log[-2000:])
+        # The rewritten AppRun: ready, named kartend, and it quits by itself.
+        handoff = subprocess.run([sys.executable, "-I", str(HANDOFF), str(root)],
+                                 capture_output=True, text=True, check=False, timeout=DEADLINE)
+        self.assertEqual(handoff.returncode, 0, handoff.stderr)
+        result, status, log = self.run_offscreen_start(root, caller)
+        self.assertEqual(result.returncode, 0, f"{result.stderr}\nlog: {log[-2000:]}")
+        self.assertRegex(result.stderr, r"^process-name-check: pid \d+ runs " + re.escape(exe)
+                         + r" under the process name 'kartend'\n\Z")
+        self.assertEqual(status, "0", log[-2000:])
+        # What the plugin checks read is still there: a "loaded library" line
+        # with the quoted path of the offscreen platform plugin (loaded_plugins).
+        self.assertRegex(log, r'(?m)^(?=.*loaded library).*"/[^"]*/libqoffscreen\.so"')
+        self.assertRegex(log, r"(?m)^qt\.core\.(plugin|library)")
+
+    def test_smoke_test_checks_the_name_of_the_offscreen_start(self) -> None:
+        text = SMOKE_TEST.read_text(encoding="utf-8")
+        self.assertIn('"${app_env[@]}" bash "$HERE/offscreen-start.sh" "$ROOT" "$WORK/foreign-plugins" "$RUN_MS"', text)
+        self.assertIn('"$WORK/offscreen.log" "$WORK/offscreen.status" || name_ok=0', text)
+        start = OFFSCREEN_START.read_text(encoding="utf-8")
+        self.assertIn('bash "$HERE/process-name-check.sh" --name kartend --exe "$ROOT/usr/bin/kartend"', start)
+        self.assertIn('--status-file "$STATUS_FILE" -- "$ROOT/AppRun"', start)
+
     def help_appdir(self) -> pathlib.Path:
         """An AppDir under a .mount_-like directory with the built kartend as usr/bin/kartend."""
         if not KARTEND_EXECUTABLE:
@@ -267,12 +469,7 @@ class TestAppImageLauncherProcess(unittest.TestCase):
 
     def help_first_line(self, appdir: pathlib.Path) -> str:
         """Run AppRun --help offscreen with private HOME/XDG paths; return the first stdout line."""
-        private = pathlib.Path(self._tmp.name) / "home"
-        env = {"PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(private), "LANG": "C.UTF-8"}
-        for key, sub in (("XDG_CONFIG_HOME", "config"), ("XDG_DATA_HOME", "data"),
-                         ("XDG_CACHE_HOME", "cache"), ("XDG_STATE_HOME", "state"), ("XDG_RUNTIME_DIR", "run")):
-            env[key] = str(private / sub)
-            (private / sub).mkdir(parents=True, mode=0o700, exist_ok=True)
+        env = self.private_env()
         env["QT_QPA_PLATFORM"] = "offscreen"
         for key in QT_VARIABLES:
             env[key] = "/caller/system-qt/plugins"  # the hook must drop these

@@ -20,7 +20,9 @@
 #   3. The start used the AppImage's own Qt plugins: the offscreen platform
 #      and the SQLite driver were loaded from inside it, nothing was loaded
 #      from a Qt on this system, and a QT_PLUGIN_PATH pointing elsewhere is
-#      ignored.
+#      ignored. That start also has to run as the process named "kartend"
+#      (/proc/<pid>/comm), which is what process lists and the X11 window
+#      class show; process-name-check.sh does that check.
 #   4. With --probe: the probe that build-appimage.sh writes next to the
 #      AppImage is run inside the unpacked AppImage, against its Qt. It
 #      creates a SQLite database, asks Qt for a working TLS backend, checks
@@ -274,11 +276,29 @@ check_plugins() {
   fi
 }
 
-if run_unpacked "$WORK/offscreen.log" QT_QPA_PLATFORM=offscreen; then
+# The same start, through offscreen-start.sh and its process-name-check.sh,
+# also proves the name the app runs under: AppRun execs usr/bin/kartend, and
+# that process's Linux name (/proc/<pid>/comm) must be exactly "kartend", not
+# "AppRun.wrapped". It is read once Qt's plugin-loader log shows the app
+# itself is running (offscreen-start.sh fixes the log format for that); the
+# app still quits by itself after RUN_MS, or is ended by a 180 s timeout.
+name_ok=1
+"${app_env[@]}" bash "$HERE/offscreen-start.sh" "$ROOT" "$WORK/foreign-plugins" "$RUN_MS" \
+  "$WORK/offscreen.log" "$WORK/offscreen.status" || name_ok=0
+status=""
+if [ -f "$WORK/offscreen.status" ]; then
+  IFS= read -r status <"$WORK/offscreen.status" || status=""
+fi
+if ((name_ok)); then
+  pass "headless start (offscreen): the app runs under the process name kartend"
+else
+  fail "headless start (offscreen): the app does not run under the process name kartend, or that could not be checked (see above)"
+fi
+if [ "$status" = "0" ]; then
   check_plugins "$WORK/offscreen.log" "headless start (offscreen)" libqoffscreen.so libqsqlite.so
 else
   show_log "$WORK/offscreen.log"
-  fail "headless start of the unpacked app ended with an error"
+  fail "headless start of the unpacked app ended with an error (exit status ${status:-unknown}, 124 means it hung)"
 fi
 
 # --- 4. the probe ------------------------------------------------------------------
