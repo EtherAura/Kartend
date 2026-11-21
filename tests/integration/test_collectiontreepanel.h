@@ -102,6 +102,13 @@ private slots:
   // overlay scrollbars really replace the native ones on the tree, the
   // first row matches the toolbar's height, and the chrome is one colour.
   void navPanel_matchesToolbarHeightAndTone_andHidesNativeScrollbar();
+
+  // Kartend-b8955: the chrome row (the topmost root collection, "Games")
+  // wears the TOOLBAR's fill, not the desktop titlebar colour the bar usually
+  // matches. Measured on screen with the row selected, as it is whenever its
+  // collection is active, and again after the bar changes colour without a
+  // tree rebuild.
+  void chromeRow_matchesTheToolbarFill_whateverItsSource();
 };
 
 #endif // TEST_COLLECTIONTREEPANEL_H

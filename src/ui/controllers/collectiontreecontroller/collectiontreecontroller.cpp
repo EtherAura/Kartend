@@ -34,6 +34,7 @@
 #include "kdecolorscheme.h"
 #include "overlayscrollbars.h"
 #include "pathutils.h"
+#include "propertyutils.h"
 #include "retroarchicons.h"
 #include "retroarchutils.h"
 #include "uiconstants/detailspaneconstants.h"
@@ -176,6 +177,32 @@ void drawChevron(QPainter *painter, const QStyleOptionViewItem &option, const QM
   painter->restore();
 }
 
+/// The colour the items toolbar is painted, for the chrome row that continues
+/// it across the top of the panel (user request 2026-11-21, Kartend-b8955:
+/// "the 'Games' top level collection label background in the nav sidebar
+/// should be the same color as the toolbar background").
+///
+/// Read FROM the bar rather than worked out again here. The row used to take
+/// the desktop titlebar colour directly, while the bar follows its
+/// collection's toolbar colour source (titlebar, accent, highlight or the
+/// collection's own colour), so any source but the titlebar left the two
+/// different. The row already takes its height from the bar the same way.
+///
+/// The stylesheet fill comes first because the palette can disagree with it:
+/// MainWindow re-sets the bar's palette after the stylesheet on a desktop
+/// colour change. With no stylesheet fill the palette IS what the bar paints.
+/// No bar at all (headless) keeps the titlebar colour this row always had.
+QColor toolbarChromeFill(const QWidget *bar) {
+  if (!bar) {
+    return KdeColorScheme::activeTitlebarColor();
+  }
+  if (const QColor fill = bar->property(PropertyKeys::ToolbarChromeFill).value<QColor>();
+      fill.isValid()) {
+    return fill;
+  }
+  return bar->palette().color(bar->backgroundRole());
+}
+
 /// Keeps the ROOT collection row parked at the top of the tree while the
 /// rest of the list scrolls beneath it (user request 2026-08-19).
 ///
@@ -237,12 +264,14 @@ protected:
     QPainter painter(this);
     // Opaque base first: the widget is transparent by default, so a row
     // scrolling underneath showed through the pinned copy.
-    // TITLEBAR colour, matching the real root row's fill — the pinned copy is
+    // The real row's OWN fill, matching it exactly — the pinned copy is
     // always a root row, and the window colour showed through wherever the
-    // delegate's own fill did not reach (user request 2026-08-19).
-    const QColor titlebar = KdeColorScheme::activeTitlebarColor();
+    // delegate's own fill did not reach (user request 2026-08-19). Read from
+    // the row rather than resolved a second time here, so the two cannot
+    // disagree about which colour the toolbar is (Kartend-b8955).
+    const QColor rowFill = index.data(kRoleRootFill).value<QColor>();
     painter.fillRect(rect(),
-                     titlebar.isValid() ? titlebar : m_tree->palette().color(QPalette::Window));
+                     rowFill.isValid() ? rowFill : m_tree->palette().color(QPalette::Window));
     QStyleOptionViewItem opt;
     opt.initFrom(m_tree);
     // The REAL row's rect, moved to the top — not this widget's rect. The
@@ -536,15 +565,23 @@ protected:
       painter->restore();
     };
 
-    if (const QColor rootFill = index.data(kRoleRootFill).value<QColor>(); rootFill.isValid()) {
+    const QColor rootFill = index.data(kRoleRootFill).value<QColor>();
+    if (rootFill.isValid()) {
       fillBackdrop(rootFill);
     }
     if (const QColor band = index.data(kRoleCategoryBand).value<QColor>(); band.isValid()) {
       fillBackdrop(band);
     }
 
-    const QColor rowTint =
-        option.widget ? option.widget->property("kartendSelectionColor").value<QColor>() : QColor();
+    // The chrome row keeps the TOOLBAR's fill when selected or hovered too
+    // (Kartend-b8955). It is selected whenever its collection is the active
+    // one, and the selection tint is the desktop titlebar colour, so with any
+    // other toolbar colour the tint painted over the match this row exists
+    // for. With the default titlebar-coloured bar the two were the same colour
+    // and the tint was never visible here, so nothing is lost.
+    const QColor rowTint = (option.widget && !rootFill.isValid())
+                               ? option.widget->property("kartendSelectionColor").value<QColor>()
+                               : QColor();
     if ((option.state & QStyle::State_Selected) && rowTint.isValid()) {
       fillBackdrop(rowTint);
     } else if ((option.state & QStyle::State_MouseOver) && rowTint.isValid()) {
@@ -1253,7 +1290,8 @@ void CollectionTreeController::setupPanel() {
   m_tree->setMouseTracking(true);
   m_tree->installEventFilter(this);
   if (m_ctx && m_ctx->ui.itemsTopBar) {
-    m_ctx->ui.itemsTopBar->installEventFilter(this); // height changes re-bake
+    // Height changes re-bake; colour changes re-sync the chrome row's fill.
+    m_ctx->ui.itemsTopBar->installEventFilter(this);
   }
   m_tree->setItemDelegateForColumn(0, new TreeIconDelegate(m_tree));
   m_stickyRootHeader = new StickyRootHeader(m_tree);
@@ -1656,6 +1694,17 @@ bool CollectionTreeController::eventFilter(QObject *watched, QEvent *event) {
     QTimer::singleShot(0, this, [this]() { refreshIcons(); });
     return false;
   }
+  // ...and its colour. Either signal can be the one that moves the bar: the
+  // published stylesheet fill, or the palette when there is no stylesheet
+  // fill. Synchronous, so the row never paints a frame behind the bar.
+  if (m_ctx && watched == m_ctx->ui.itemsTopBar &&
+      (event->type() == QEvent::PaletteChange ||
+       (event->type() == QEvent::DynamicPropertyChange &&
+        static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName() ==
+            PropertyKeys::ToolbarChromeFill))) {
+    syncChromeRowFill();
+    return false;
+  }
   // Viewport RESIZE only. Deliberately scoped to Resize and deliberately
   // NOT an early return for everything else: a QTreeWidget delivers mouse
   // events to its VIEWPORT, never to the tree itself, so swallowing every
@@ -1864,10 +1913,11 @@ void CollectionTreeController::refreshIcons() {
     QFont rowFont = item->font(0);
     rowFont.setBold(isCategory);
     item->setFont(0, rowFont);
-    // ROOT-level collections carry the desktop TITLEBAR colour (user
-    // request 2026-08-19), the same fill as the toolbar and the selection,
-    // so the top of the sidebar reads as one continuous piece of chrome
-    // rather than a faintly washed row. Deeper categories keep the faint
+    // The ROOT collection row carries the TOOLBAR's fill (user requests
+    // 2026-08-19 and 2026-11-21), so the top of the sidebar reads as one
+    // continuous piece of chrome with the bar rather than a faintly washed
+    // row. Taken from the bar itself, not from the desktop titlebar colour it
+    // usually matches — see toolbarChromeFill. Deeper categories keep the faint
     // band that distinguishes them from leaves; the Playlists group header
     // (index < 0) keeps its text-only look.
     // NOT item->parent() == nullptr any more: the chrome row's children are
@@ -1883,7 +1933,8 @@ void CollectionTreeController::refreshIcons() {
     // chrome bars with no visual hierarchy. Lower roots keep the rest of their
     // root styling (centred, tinted, square) and simply lose the fill.
     const bool isTopRootRow = isRootCollection && m_tree && m_tree->indexOfTopLevelItem(item) == 0;
-    const QColor rootFill = isTopRootRow ? KdeColorScheme::activeTitlebarColor() : QColor();
+    const QColor rootFill =
+        isTopRootRow ? toolbarChromeFill(m_ctx ? m_ctx->ui.itemsTopBar : nullptr) : QColor();
     if (isTopRootRow && rootFill.isValid()) {
       // Handed to the delegate rather than set as the item's background:
       // an item background stops at the indented item rect and leaves a
@@ -2721,6 +2772,34 @@ void CollectionTreeController::refreshDesktopTint() {
   // desktop's colour.
   applyPrimaryColor(m_accentColor);
   refreshIcons();
+}
+
+void CollectionTreeController::syncChromeRowFill() {
+  // m_treeViewport rather than m_tree alone: the tree is destroyed before this
+  // controller, and only the viewport's QPointer notices (Kartend-6a2ci).
+  if (!m_treeViewport || !m_tree) {
+    return;
+  }
+  QTreeWidgetItem *top = m_tree->topLevelItem(0);
+  if (!top) {
+    return;
+  }
+  // Only a row refreshIcons already made the chrome row carries a fill. Which
+  // row that is stays refreshIcons' decision; this only moves the colour.
+  const QColor current = top->data(0, kRoleRootFill).value<QColor>();
+  if (!current.isValid()) {
+    return;
+  }
+  const QColor fill = toolbarChromeFill(m_ctx ? m_ctx->ui.itemsTopBar : nullptr);
+  if (!fill.isValid() || fill == current) {
+    return;
+  }
+  top->setData(0, kRoleRootFill, fill);
+  // The pinned copy covers the real row and paints that row's fill as its
+  // base, so it has to repaint with it.
+  if (m_stickyRootHeader) {
+    m_stickyRootHeader->update();
+  }
 }
 
 bool CollectionTreeController::isPanelVisible() const {

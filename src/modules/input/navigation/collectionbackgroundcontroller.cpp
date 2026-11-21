@@ -7,6 +7,7 @@
 #include "headerlogooverlay.h"
 #include "itemwidget.h"
 #include "kdecolorscheme.h"
+#include "propertyutils.h"
 #include "vignetteoverlay.h"
 #include <QAbstractSlider>
 #include <QBoxLayout>
@@ -292,7 +293,27 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
   }
 
   if (m_itemsTopBar) {
+    // The bar's own FILL. When the source yields nothing — the collection's
+    // own colour, left unset — it falls back to the titlebar colour HERE, in
+    // the style sheet, and no longer through the bar's palette, which
+    // MainWindow sets for exactly this case. Qt's style-sheet machinery puts
+    // back a saved palette whenever the bar's style sheet changes, discarding
+    // one set since (Qt documents setPalette as unsafe beside style sheets):
+    // after a desktop colour change, a trip through a collection whose sheet
+    // fills the bar and back left this bar on the previous titlebar colour,
+    // or on the plain window colour, until the next desktop change (field
+    // report 2026-11-21, Kartend-b8955; reproduced against Qt directly). Only
+    // the fill falls back: the controls keep their untinted look below.
+    QString barFill = chromeFill;
+    if (barFill.isEmpty()) {
+      if (const QColor titlebar = KdeColorScheme::activeTitlebarColor(); titlebar.isValid()) {
+        barFill = titlebar.name();
+      }
+    }
     QString toolbarStyle;
+    if (!blurActive && !barFill.isEmpty()) {
+      toolbarStyle = QString("QWidget#itemsTopBar { background-color: %1; }").arg(barFill);
+    }
     if (!blurActive && !chromeFill.isEmpty()) {
       const QColor base(chromeFill);
       // Controls sit a step off the bar rather than in a contrasting
@@ -300,22 +321,27 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
       const QString control = base.lighter(118).name();
       const QString edge = base.darker(118).name();
       const QString knob = base.lighter(155).name();
-      toolbarStyle = QString("QWidget#itemsTopBar { background-color: %1; }"
-                             // Padding + a floor on the width: an icon-only button
-                             // (the info "i") otherwise collapsed to a sliver next to
-                             // its wider neighbours (field report 2026-08-18).
-                             "QWidget#itemsTopBar QToolButton, QWidget#itemsTopBar QPushButton {"
-                             " background-color: %2; border: 1px solid %3; border-radius: 4px;"
-                             " padding: 4px 8px; min-width: 18px; }"
-                             "QWidget#itemsTopBar QToolButton:hover,"
-                             " QWidget#itemsTopBar QPushButton:hover { background-color: %4; }"
-                             "QWidget#itemsTopBar QSlider::groove:horizontal {"
-                             " background: %2; height: 4px; border-radius: 2px; }"
-                             "QWidget#itemsTopBar QSlider::handle:horizontal {"
-                             " background: %4; width: 12px; margin: -5px 0; border-radius: 6px; }")
-                         .arg(chromeFill, control, edge, knob);
+      toolbarStyle += QString(
+                          // Padding + a floor on the width: an icon-only button
+                          // (the info "i") otherwise collapsed to a sliver next to
+                          // its wider neighbours (field report 2026-08-18).
+                          "QWidget#itemsTopBar QToolButton, QWidget#itemsTopBar QPushButton {"
+                          " background-color: %1; border: 1px solid %2; border-radius: 4px;"
+                          " padding: 4px 8px; min-width: 18px; }"
+                          "QWidget#itemsTopBar QToolButton:hover,"
+                          " QWidget#itemsTopBar QPushButton:hover { background-color: %3; }"
+                          "QWidget#itemsTopBar QSlider::groove:horizontal {"
+                          " background: %1; height: 4px; border-radius: 2px; }"
+                          "QWidget#itemsTopBar QSlider::handle:horizontal {"
+                          " background: %3; width: 12px; margin: -5px 0; border-radius: 6px; }")
+                          .arg(control, edge, knob);
     }
     m_itemsTopBar->setStyleSheet(toolbarStyle);
+    // Publishes the fill actually painted, for surfaces that must match the
+    // bar (the collection tree's top row). Invalid when the style sheet sets
+    // no fill, which tells the reader to use the bar's palette instead.
+    m_itemsTopBar->setProperty(PropertyKeys::ToolbarChromeFill,
+                               toolbarStyle.isEmpty() ? QColor() : QColor(barFill));
   }
 
   // Menu bar takes the TOOLBAR's fill, not the collection's primary colour
@@ -445,11 +471,16 @@ void CollectionBackgroundController::refreshDesktopDerivedChrome() {
   if (m_lastAppliedIndex < 0 || !m_collections || m_lastAppliedIndex >= (*m_collections).size()) {
     return;
   }
-  const ToolbarColorSource source =
-      (*m_collections)[m_lastAppliedIndex].background.toolbarColorSource;
+  const auto &background = (*m_collections)[m_lastAppliedIndex].background;
+  const ToolbarColorSource source = background.toolbarColorSource;
+  // A collection on its OWN colour with none set is desktop-derived too: its
+  // bar falls back to the titlebar colour (see applyPrimaryColorForCollection).
+  const bool hasOwnColour =
+      !background.primaryColor.isEmpty() && QColor::isValidColorName(background.primaryColor);
   const bool desktopDerived =
       (source == ToolbarColorSource::Titlebar || source == ToolbarColorSource::Accent ||
-       source == ToolbarColorSource::Highlight);
+       source == ToolbarColorSource::Highlight ||
+       (source == ToolbarColorSource::CollectionPrimary && !hasOwnColour));
   if (!desktopDerived) {
     return;
   }
