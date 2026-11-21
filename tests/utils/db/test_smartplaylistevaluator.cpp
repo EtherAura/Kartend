@@ -8,11 +8,14 @@
 #include <QFileInfo>
 #include <QList>
 #include <QObject>
+#include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QString>
+#include <QStringList>
 #include <QTest>
+#include <QVariant>
 
 #include "../../support/migrateddb.h"
 #include "smartfilter.h"
@@ -126,6 +129,10 @@ private slots:
   void matchAny_unionsRulesWithoutDuplicates();
   void singleRuleSet_matchesTheBareFilter();
   void emptyRuleSet_returnsNothing();
+
+  // Three-rule composition (Kartend-sp3ju): the fold loop runs more than once
+  void matchAll_threeRules_keepsOnlyItemsMatchingEvery();
+  void matchAny_threeRules_unionsInRuleOrder();
 };
 
 void TestSmartPlaylistEvaluator::recentlyLaunched_returnsOrderedByLastPlayedDesc() {
@@ -648,6 +655,119 @@ void TestSmartPlaylistEvaluator::emptyRuleSet_returnsNothing() {
   QCOMPARE(SmartPlaylistEvaluator::evaluate(db, set).size(), 0);
 
   closeAndRemove(db, conn);
+}
+
+namespace {
+// Three-rule truth table over Pinned (P), HasArtwork (A) and ContinueLater (C),
+// seeded into the real on-disk production schema:
+//
+//   Mango   P A C   Kiwi  P A C   (all three)
+//   Lemon   P A     (first two only — must not survive an "all" of three)
+//   Olive   P   C   Fig     A C   (two)
+//   Cherry    A     Banana    C   Apricot   C   (one)
+//   Grape           (none)
+//
+// Every rule orders by name, so each rule alone is alphabetical. Rows are
+// inserted in a deliberately non-alphabetical order, and the path prefixes
+// follow insertion order, so an insertion-order or path-sorted result differs
+// from the expected one. The later rules' newcomers (Cherry, Fig from rule
+// two; Apricot, Banana from rule three) all sort BEFORE the first rule's
+// items, so a globally name-sorted union is distinguishable from rule order.
+void seedThreeRuleTable(QSqlDatabase &db) {
+  QSqlQuery q(db);
+  QVERIFY2(q.exec("INSERT INTO collections (id, name, last_scanned, uuid) "
+                  "VALUES (1, 'Games', '2026-01-01', 'u1')"),
+           qPrintable(q.lastError().text()));
+
+  struct Seed {
+    const char *path;
+    const char *name;
+    bool pinned;
+    bool artwork;
+    bool continueLater;
+  };
+  const Seed seeds[] = {
+      {"/t/01-mango", "Mango", true, true, true},
+      {"/t/02-olive", "Olive", true, false, true},
+      {"/t/03-lemon", "Lemon", true, true, false},
+      {"/t/04-kiwi", "Kiwi", true, true, true},
+      {"/t/05-fig", "Fig", false, true, true},
+      {"/t/06-grape", "Grape", false, false, false},
+      {"/t/07-banana", "Banana", false, false, true},
+      {"/t/08-cherry", "Cherry", false, true, false},
+      {"/t/09-apricot", "Apricot", false, false, true},
+  };
+  for (const auto &seed : seeds) {
+    const QString path = QString::fromUtf8(seed.path);
+    q.prepare("INSERT INTO items (collection_id, collection_uuid, path, name, last_modified, "
+              "artwork_path) VALUES (1, 'u1', ?, ?, '2026-01-01', ?)");
+    q.addBindValue(path);
+    q.addBindValue(QString::fromUtf8(seed.name));
+    q.addBindValue(seed.artwork ? QVariant(path + QStringLiteral(".png"))
+                                : QVariant(QMetaType(QMetaType::QString)));
+    QVERIFY2(q.exec(), qPrintable(q.lastError().text()));
+    if (seed.pinned || seed.continueLater) {
+      insertItemMetadata(db, "u1", path, seed.pinned, false, seed.continueLater);
+    }
+  }
+}
+
+SmartFilter::FilterSet threeRuleSet(SmartFilter::MatchMode mode) {
+  SmartFilter::FilterSet set;
+  set.match = mode;
+  set.rules = {ruleOf(SmartFilter::Kind::Pinned), ruleOf(SmartFilter::Kind::HasArtwork),
+               ruleOf(SmartFilter::Kind::ContinueLater)};
+  return set;
+}
+} // namespace
+
+void TestSmartPlaylistEvaluator::matchAll_threeRules_keepsOnlyItemsMatchingEvery() {
+  KartendTest::MigratedDb fixture(KartendTest::MigratedDb::OnDisk);
+  QVERIFY(fixture.isOpen());
+  QVERIFY(QFileInfo::exists(fixture.databasePath()));
+  auto db = fixture.database();
+  QVERIFY(db.isOpen());
+  seedThreeRuleTable(db);
+  if (QTest::currentTestFailed()) {
+    return;
+  }
+
+  // Only Kiwi and Mango match all three, in the first rule's alphabetical
+  // order (they were inserted Mango first). Lemon matches the first two
+  // rules only: a fold that stops after two rules (or an off-by-one loop
+  // bound) would keep it.
+  const QStringList expected{QStringLiteral("/t/04-kiwi"), QStringLiteral("/t/01-mango")};
+  const QStringList actual =
+      pathsOf(SmartPlaylistEvaluator::evaluate(db, threeRuleSet(SmartFilter::MatchMode::All)));
+  QCOMPARE(actual, expected);
+  QVERIFY(!actual.contains(QStringLiteral("/t/03-lemon")));
+}
+
+void TestSmartPlaylistEvaluator::matchAny_threeRules_unionsInRuleOrder() {
+  KartendTest::MigratedDb fixture(KartendTest::MigratedDb::OnDisk);
+  QVERIFY(fixture.isOpen());
+  QVERIFY(QFileInfo::exists(fixture.databasePath()));
+  auto db = fixture.database();
+  QVERIFY(db.isOpen());
+  seedThreeRuleTable(db);
+  if (QTest::currentTestFailed()) {
+    return;
+  }
+
+  // First rule (Pinned) alphabetically: Kiwi, Lemon, Mango, Olive. Then the
+  // second rule's newcomers (Cherry, Fig), then the third rule's (Apricot,
+  // Banana). Items matching several rules appear once, at their first rule.
+  // Grape matches none and stays out. Dropping the third rule would lose
+  // Apricot and Banana; a global sort would put Apricot first.
+  const QStringList expected{QStringLiteral("/t/04-kiwi"),    QStringLiteral("/t/03-lemon"),
+                             QStringLiteral("/t/01-mango"),   QStringLiteral("/t/02-olive"),
+                             QStringLiteral("/t/08-cherry"),  QStringLiteral("/t/05-fig"),
+                             QStringLiteral("/t/09-apricot"), QStringLiteral("/t/07-banana")};
+  const QStringList actual =
+      pathsOf(SmartPlaylistEvaluator::evaluate(db, threeRuleSet(SmartFilter::MatchMode::Any)));
+  QCOMPARE(actual, expected);
+  QCOMPARE(QSet<QString>(actual.begin(), actual.end()).size(), actual.size());
+  QVERIFY(!actual.contains(QStringLiteral("/t/06-grape")));
 }
 
 QTEST_MAIN(TestSmartPlaylistEvaluator)
