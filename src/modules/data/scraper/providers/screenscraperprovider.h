@@ -142,13 +142,18 @@ private:
   void runLookupAfterHash(const QString &query, const QString &filePath,
                           const RomHasher::Result &hashes, LookupCallback callback);
 
+  struct JeuInfosIdentity {
+    int systemId;
+    RomHasher::Result hashes;
+  };
+
   /// Issue the jeuInfos.php GET and route the response. Delegates to
   /// ProviderBase::getWithRetry, so a transient failure (timeout / 5xx /
   /// 423 / Retry-After'd 429) is retried a bounded number of times on the
   /// same idempotent URL (Kartend-1rtrt, loop hoisted to the base by
   /// Kartend-jjyst.10); permanent errors and successes fall straight
   /// through to handleJeuInfosResponse.
-  void fetchJeuInfos(const QUrl &url, const QString &filePath,
+  void fetchJeuInfos(const QUrl &url, const QString &filePath, const JeuInfosIdentity &identity,
                      const QString &filenameRegionOverride, LookupCallback callback);
 
   /// HTTP-response tail of runLookupAfterHash. Lifted out of the
@@ -160,11 +165,11 @@ private:
   /// refresh; and the search/detail parse-and-cache step that feeds
   /// fetchDetail() without a second roundtrip. A genuine "no entry"
   /// answer (HTTP 404, or a well-formed reply whose `response.jeu` is
-  /// absent / null / empty) also remembers @p lookupKey for @p filePath
-  /// (Kartend-bb8df, see takeNoEntryLookupKey); every other outcome —
-  /// including a `jeu` of the wrong type — remembers nothing.
+  /// absent / null / empty), or an explicit platform mismatch, remembers
+  /// @p lookupKey for @p filePath. Malformed replies never stamp a miss.
   void handleJeuInfosResponse(ErrorUtils::Result<QByteArray> response, const QString &filePath,
-                              const QString &lookupKey, const LookupCallback &callback,
+                              const QString &lookupKey, const JeuInfosIdentity &identity,
+                              const LookupCallback &callback,
                               const QString &filenameRegionOverride);
 
   /// Snapshot the user's current scraper preferences (image cap, JPG

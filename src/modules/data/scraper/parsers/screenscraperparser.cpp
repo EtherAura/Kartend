@@ -477,8 +477,7 @@ parseInner(const QByteArray &json, const ScreenScraperParser::ParseOptions &opti
   };
   item.publisherId = readCompanyId(jeu.value("editeur"));
   item.developerId = readCompanyId(jeu.value("developpeur"));
-  // Kartend-8hw6f: the platform SS actually matched. Parsed only; nothing
-  // compares it with the requested systemeid yet.
+  // Kartend-8hw6f: keep the platform SS matched for the provider's identity check.
   const QJsonObject systeme = jeu.value("systeme").toObject();
   item.providerSystemId = readSystemField(systeme.value("id"));
   item.providerSystemParentId = readSystemField(systeme.value("parentid"));
