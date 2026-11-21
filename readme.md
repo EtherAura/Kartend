@@ -13,7 +13,7 @@
 A Qt frontend for films, music, books and games. **Linux and Windows** releases are available, and a native **FreeBSD 15 amd64** build has passed install and launch tests.
 Bring your folders, choose your launchers, and make the library yours.
 
-[**Download**](https://github.com/EtherAura/Kartend/releases/latest) · [**Get started**](docs/user/Getting-Started.md) · [**User guide**](https://github.com/EtherAura/Kartend/wiki) · [**Feature tour**](docs/user/Features.md)
+[**Website**](https://agartha.digital/#kartend) · [**Download**](https://github.com/EtherAura/Kartend/releases/latest) · [**Get started**](docs/user/Getting-Started.md) · [**User guide**](https://github.com/EtherAura/Kartend/wiki) · [**Feature tour**](docs/user/Features.md)
 
 <img src="docs/media/library-grid.png" alt="Kartend's cover-art grid, collection tree and details pane" width="960" />
 </div>
