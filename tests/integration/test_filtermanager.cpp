@@ -228,6 +228,55 @@ void TestFilterManager::testSearchMatchesVirtualFolderByDisplayName() {
   QCOMPARE(mgr.filteredCount(), 0);
 }
 
+void TestFilterManager::testSearchMatchesMediaDisplayNameNotPath() {
+  // Display names come from the fileNames map ("Alpha", "Beta", "Gamma"); the
+  // raw entries' extension ("bin") and parent directory ("items") occur in
+  // every raw path but in no display name, so matching the raw entry would
+  // turn each of these empty results into (3, 3).
+  {
+    FilterManager mgr;
+    seedThreeItems(mgr);
+    QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+    QVERIFY(spy.isValid());
+
+    mgr.applyFilter(QStringLiteral("bin"));
+    QVERIFY(mgr.isFiltered());
+    QCOMPARE(mgr.filteredCount(), 0);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toInt(), 0);
+    QCOMPARE(spy.at(0).at(1).toInt(), 3);
+
+    mgr.applyFilter(QStringLiteral("items"));
+    QVERIFY(mgr.isFiltered());
+    QCOMPARE(mgr.filteredCount(), 0);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.at(1).at(0).toInt(), 0);
+    QCOMPARE(spy.at(1).at(1).toInt(), 3);
+  }
+
+  // showAllSubcollectionItems mode reads the display-name map instead: the
+  // raw basename ("disc") and extension ("img") don't match, the mapped
+  // display name does. Declared before the manager so they outlive it
+  // (setSourceData stores pointers).
+  const QStringList paths = {QStringLiteral("/library/disc-07.img")};
+  const QHash<QString, QString> displayNames = {
+      {paths.at(0), QStringLiteral("Nebula Quest")},
+  };
+  CollectionContext ctx;
+  ctx.config.showAllSubcollectionItems = true;
+
+  FilterManager mgr;
+  mgr.setContext(ctx);
+  mgr.setSourceData(&paths, &seedEmptyDisplayNames(), &displayNames, &seedEmptySubcollections(),
+                    &seedEmptyFolders());
+  mgr.applyFilter(QStringLiteral("disc"));
+  QVERIFY(mgr.filteredIndices().isEmpty());
+  mgr.applyFilter(QStringLiteral("img"));
+  QVERIFY(mgr.filteredIndices().isEmpty());
+  mgr.applyFilter(QStringLiteral("quest"));
+  QCOMPARE(mgr.filteredIndices(), (QList<int>{0}));
+}
+
 void TestFilterManager::testHideMissingArtworkBaselineKeepsPrefixBands() {
   QTemporaryDir artDir;
   QVERIFY(artDir.isValid());

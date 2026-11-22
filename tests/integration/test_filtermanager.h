@@ -29,6 +29,9 @@ private slots:
   // [subcollections][virtualFolders][media] index-space coverage.
   void testSearchWithVirtualFoldersOffsetsMediaIndices();
   void testSearchMatchesVirtualFolderByDisplayName();
+  // Media items match on their display name only, never on the raw entry's
+  // parent path or extension (Kartend-ulvub).
+  void testSearchMatchesMediaDisplayNameNotPath();
   void testHideMissingArtworkBaselineKeepsPrefixBands();
   void testHideMissingArtworkKeepsUnloadedRowsVisible();
   void testHideMissingArtworkColdCascadeFailsOpen();
