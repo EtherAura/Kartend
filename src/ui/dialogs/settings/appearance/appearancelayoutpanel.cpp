@@ -4,15 +4,36 @@
 #include "settingsmodel.h"
 #include "ui_appearancelayoutpanel.h"
 #include "uiconstants/grid.h"
+#include "uiconstants/item.h"
 #include "uiconstants/viewport.h"
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QSpinBox>
 
+namespace {
+
+// Upper gap bound CollectionConfig::clampValues() accepts. Viewport::SPACING_MAX
+// (50) is a narrower UI default, not the loader's ceiling.
+constexpr int kLoaderSpacingMax = 200;
+
+// Kartend-t4u6m: the item-size and gap spin boxes must accept every value the
+// loader keeps (CollectionConfig::clampValues()). A narrower range clips the
+// value on load() and save() then writes the clipped number back, silently
+// changing a collection the user never touched.
+void applyLoaderRanges(Ui::AppearanceLayoutPanel *ui) {
+  ui->itemWidthSpinBox->setRange(UIConstants::Item::MIN_WIDTH, UIConstants::Item::MAX_WIDTH);
+  ui->itemHeightSpinBox->setRange(UIConstants::Item::MIN_HEIGHT, UIConstants::Item::MAX_HEIGHT);
+  ui->horizontalSpacingSpinBox->setRange(UIConstants::Viewport::SPACING_MIN, kLoaderSpacingMax);
+  ui->verticalSpacingSpinBox->setRange(UIConstants::Viewport::SPACING_MIN, kLoaderSpacingMax);
+}
+
+} // namespace
+
 AppearanceLayoutPanel::AppearanceLayoutPanel(QWidget *parent)
     : QWidget(parent), ui(new Ui::AppearanceLayoutPanel) {
   ui->setupUi(this);
+  applyLoaderRanges(ui);
   const auto onSpin = QOverload<int>::of(&QSpinBox::valueChanged);
   const auto onCombo = QOverload<int>::of(&QComboBox::currentIndexChanged);
 
@@ -48,6 +69,10 @@ void AppearanceLayoutPanel::load() {
   const CollectionConfig *current = m_model ? m_model->currentWorkingCollection() : nullptr;
   if (!current) return;
   const CollectionConfig &config = *current;
+  // Re-applied here rather than trusted from construction: the hosting dialog's
+  // setup may narrow the gap boxes (to Viewport::SPACING_MAX) after the panel
+  // is built, and the ranges must be the loader's when the values go in.
+  applyLoaderRanges(ui);
   SettingsFormBinding::loadIntoIndex(ui->viewTypeComboBox, static_cast<int>(config.viewType));
   SettingsFormBinding::loadIntoIndex(ui->horizontalAlignmentComboBox,
                                      static_cast<int>(config.horizontalAlignment));

@@ -209,6 +209,13 @@ kartend_add_test(NAME ScraperSettingsPanel
   LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
 )
 
+# AppearanceLayoutPanel (Kartend-t4u6m): item-size and gap spin boxes accept
+# the loader's full ranges, so load() + save() keeps limit values exactly.
+kartend_add_test(NAME AppearanceLayoutPanel
+  SOURCES ui/dialogs/test_appearancelayoutpanel.cpp
+  LINK kartend_ui kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+
 # SettingsModel::currentWorkingCollection(): the canonical working-row guard
 # every settings panel's load()/save() path uses — nullptr for each unwired
 # model part / out-of-range index, live row (write-through) when valid.
