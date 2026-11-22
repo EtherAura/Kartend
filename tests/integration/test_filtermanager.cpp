@@ -619,6 +619,50 @@ void TestFilterManager::testActualIndexRoundTripAcrossPrefixBands() {
   QCOMPARE(mgr.getActualIndex(mgr.filteredCount()), -1);
 }
 
+void TestFilterManager::testSearchExcludesNonMatchingSubcollections() {
+  static const QList<CollectionConfig> collections = [] {
+    QList<CollectionConfig> out;
+    CollectionConfig first;
+    first.name = QStringLiteral("Alpha Shelf");
+    out.append(first);
+    CollectionConfig second;
+    second.name = QStringLiteral("Beta Shelf");
+    out.append(second);
+    return out;
+  }();
+  static const QList<int> subs = {0, 1};
+
+  FilterManager mgr;
+  mgr.setCollections(&collections);
+  mgr.setSourceData(&seedPaths(), &seedNames(), &seedEmptyDisplayNames(), &subs, &seedFolders());
+  // Actual-index space: [Alpha Shelf(0) Beta Shelf(1)][Docs(2) Extras(3)]
+  // [Alpha(4) Beta(5) Gamma(6)].
+
+  {
+    // "beta" keeps only the matching shelf and the matching media item; the
+    // "Alpha Shelf" subcollection is excluded, and the count covers media only.
+    QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+    mgr.applyFilter(QStringLiteral("beta"));
+    QVERIFY(mgr.isFiltered());
+    QCOMPARE(mgr.filteredIndices(), (QList<int>{1, 5}));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toInt(), 1);
+    QCOMPARE(spy.at(0).at(1).toInt(), 3);
+  }
+
+  {
+    // "shelf" matches both subcollections and no media item, so the media
+    // count is zero even though two rows stay visible.
+    QSignalSpy spy(&mgr, &FilterManager::filterChanged);
+    mgr.applyFilter(QStringLiteral("shelf"));
+    QVERIFY(mgr.isFiltered());
+    QCOMPARE(mgr.filteredIndices(), (QList<int>{0, 1}));
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toInt(), 0);
+    QCOMPARE(spy.at(0).at(1).toInt(), 3);
+  }
+}
+
 void TestFilterManager::testUnifiedSortMapRemapsFilteredIndices() {
   FilterManager mgr;
   // Pretend the store's unified sort interleaved the items name-ascending:

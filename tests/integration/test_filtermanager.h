@@ -36,6 +36,9 @@ private slots:
   void testHideMissingArtworkKeepsUnloadedRowsVisible();
   void testHideMissingArtworkColdCascadeFailsOpen();
   void testActualIndexRoundTripAcrossPrefixBands();
+  // A search drops subcollections whose configured name does not match and
+  // reports only media rows in filterChanged (Kartend-ixs2d).
+  void testSearchExcludesNonMatchingSubcollections();
   void testUnifiedSortMapRemapsFilteredIndices();
   // Re-running the active filter keeps a subcollection filter a subcollection
   // filter instead of turning it into a text search on its name (Kartend-3ve3n).
