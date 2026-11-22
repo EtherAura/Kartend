@@ -6,6 +6,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -27,6 +28,7 @@ private slots:
   void testRoundTrip_pathVariants_data();
   void testRoundTrip_pathVariants();
   void testJsonExport_omitsReservedKind();
+  void testJsonExport_preservesGivenItemOrderInFile();
   void testParseJson_v1DocumentFallsBackToStatic();
   void testParseJson_missingVersionIsError();
   void testParseJson_malformedJsonIsError();
@@ -202,6 +204,70 @@ void TestPlaylistSerializer::testJsonExport_omitsReservedKind() {
   const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
   QVERIFY(!root.contains(QStringLiteral("reserved_kind")));
   QCOMPARE(root.value(QStringLiteral("kartend_playlist_version")).toInt(), 2);
+}
+
+void TestPlaylistSerializer::testJsonExport_preservesGivenItemOrderInFile() {
+  // The other JSON fixtures are already sorted by uuid, path and basename, so
+  // a sort in exportJson or parseJsonFile would slip past them (Kartend-58qc8).
+  // These items are deliberately unsorted on every one of those keys. JSON
+  // stores no title: the displayed title (the basename) lives in source_path.
+  const QString out = path(QStringLiteral("order.json"));
+
+  PlaylistItemRef zebra;
+  zebra.position = 0;
+  zebra.sourceCollectionUuid = QStringLiteral("uuid-c");
+  zebra.sourcePath = QStringLiteral("/media/c/Zebra.mkv");
+  zebra.addedAt = QStringLiteral("2026-06-03T09:15:00Z");
+  PlaylistItemRef apple;
+  apple.position = 1;
+  apple.sourceCollectionUuid = QStringLiteral("uuid-a");
+  apple.sourcePath = QStringLiteral("/media/a/Apple.mkv");
+  apple.addedAt = QStringLiteral("2026-06-01T08:00:00Z");
+  PlaylistItemRef mango;
+  mango.position = 2;
+  mango.sourceCollectionUuid = QStringLiteral("uuid-b");
+  mango.sourcePath = QStringLiteral("/media/b/Mango.mkv");
+  mango.addedAt = QStringLiteral("2026-06-02T17:45:00Z");
+  const QList<PlaylistItemRef> items{zebra, apple, mango};
+
+  const auto exported = PlaylistSerializer::exportJson(makeRow(), items, out);
+  QVERIFY2(!exported.isError(), "exportJson failed");
+  QCOMPARE(exported.value(), 3);
+
+  // Read the file directly, independently of parseJsonFile.
+  QFile f(out);
+  QVERIFY(f.open(QIODevice::ReadOnly));
+  QJsonParseError parseError;
+  const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &parseError);
+  QCOMPARE(parseError.error, QJsonParseError::NoError);
+  QVERIFY(doc.isObject());
+  const QJsonValue itemsValue = doc.object().value(QStringLiteral("items"));
+  QVERIFY(itemsValue.isArray());
+  const QJsonArray fileItems = itemsValue.toArray();
+  QCOMPARE(fileItems.size(), 3);
+
+  const QStringList expectedTitles{QStringLiteral("Zebra"), QStringLiteral("Apple"),
+                                   QStringLiteral("Mango")};
+  for (int i = 0; i < 3; ++i) {
+    QVERIFY(fileItems.at(i).isObject());
+    const QJsonObject obj = fileItems.at(i).toObject();
+    const QString filePath = obj.value(QStringLiteral("source_path")).toString();
+    QCOMPARE(filePath, items[i].sourcePath);
+    QCOMPARE(obj.value(QStringLiteral("source_collection_uuid")).toString(),
+             items[i].sourceCollectionUuid);
+    QCOMPARE(obj.value(QStringLiteral("added_at")).toString(), items[i].addedAt);
+    QCOMPARE(QFileInfo(filePath).completeBaseName(), expectedTitles[i]);
+  }
+
+  // parseJsonFile, checked separately, must keep the same order.
+  const auto parsed = PlaylistSerializer::parseJsonFile(out);
+  QVERIFY2(!parsed.isError(), "parseJsonFile failed");
+  const auto &pl = parsed.value();
+  QCOMPARE(pl.items.size(), 3);
+  for (int i = 0; i < 3; ++i) {
+    QCOMPARE(pl.items[i].sourceCollectionUuid, items[i].sourceCollectionUuid);
+    QCOMPARE(pl.items[i].sourcePath, items[i].sourcePath);
+  }
 }
 
 void TestPlaylistSerializer::testParseJson_v1DocumentFallsBackToStatic() {
