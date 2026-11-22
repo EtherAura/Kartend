@@ -33,6 +33,7 @@ private slots:
   void hierarchyCache_directChildren_skipsLinkEqualToPrimary();
   void hierarchyCache_directChildren_duplicateNameResolvesToFirst();
   void hierarchyCache_directChildren_outOfRangeParentTreatedAsRoot();
+  void hierarchyCache_directChildren_twoLinkedParentsAndPrimary();
   void hierarchyCache_allDescendants_handlesMutualLinkCycle();
   void hierarchyCache_allDescendants_excludesSelf();
 
@@ -240,6 +241,42 @@ void TestCollectionUtilsAncestry::hierarchyCache_directChildren_skipsLinkEqualTo
   cache.rebuild(cs);
 
   QCOMPARE(cache.directChildren(0), QList<int>{1});
+}
+
+void TestCollectionUtilsAncestry::hierarchyCache_directChildren_twoLinkedParentsAndPrimary() {
+  // Movies has a primary parent (Video) and two additional parents
+  // (Reference, Favorites); Trailers is an ordinary nested child of Movies.
+  // rebuild() must apply every link, not just the first, without pushing
+  // Movies twice into any bucket, and the grandchild must be reachable from
+  // all three parents (Kartend-o7kwe). Membership is asserted, not order.
+  QList<CollectionConfig> cs;
+  cs << makeCollection("Video", /*isSub=*/false, -1);     // 0
+  cs << makeCollection("Reference", /*isSub=*/false, -1); // 1
+  cs << makeCollection("Favorites", /*isSub=*/false, -1); // 2
+  CollectionConfig movies = makeCollection("Movies", /*isSub=*/true, 0);
+  movies.additionalParentNames << QStringLiteral("Reference") << QStringLiteral("Favorites");
+  cs << movies;                                        // 3
+  cs << makeCollection("Trailers", /*isSub=*/true, 3); // 4
+
+  CollectionHierarchyCache cache;
+  cache.rebuild(cs);
+
+  for (int parent : {0, 1, 2}) {
+    const QList<int> children = cache.directChildren(parent);
+    QCOMPARE(children.size(), 1);
+    QCOMPARE(children.count(3), 1);
+  }
+  QCOMPARE(cache.directChildren(3), QList<int>{4});
+
+  const QSet<int> expectedDescendants{3, 4};
+  for (int parent : {0, 1, 2}) {
+    const QList<int> descendants = cache.allDescendants(parent);
+    QCOMPARE(QSet<int>(descendants.cbegin(), descendants.cend()), expectedDescendants);
+  }
+
+  const QList<int> moviesDescendants = cache.allDescendants(3);
+  QVERIFY(!moviesDescendants.contains(1));
+  QVERIFY(!moviesDescendants.contains(2));
 }
 
 void TestCollectionUtilsAncestry::hierarchyCache_allDescendants_handlesMutualLinkCycle() {
