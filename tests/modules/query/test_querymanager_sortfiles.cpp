@@ -44,6 +44,9 @@
 //   nameDescendingIsExactReverse / nameSortIsCaseInsensitive
 //   dateSortBreaksTiesByName
 //     Equal mtimes fall back to the same name order (reversed descending).
+//
+//   sizeDescendingBreaksTiesByName (Kartend-cfdac)
+//     Equal sizes, largest first, fall back to descending name order.
 
 #include <algorithm>
 
@@ -76,6 +79,7 @@ private slots:
   void nameDescendingIsExactReverse();
   void nameSortIsCaseInsensitive();
   void dateSortBreaksTiesByName();
+  void sizeDescendingBreaksTiesByName();
 
 private:
   // Absolute paths for @p names under a subdirectory of m_dir that is never
@@ -406,6 +410,35 @@ void TestQueryManagerSortFiles::dateSortBreaksTiesByName() {
 
   sortFiles(files, SortMode::DateDescending, &mtimes, nullptr);
   QCOMPARE(files, (QStringList{newest, zebra, apple, oneTwo, beta, oldest}));
+}
+
+void TestQueryManagerSortFiles::sizeDescendingBreaksTiesByName() {
+  // Kartend-cfdac: the three 500-byte items arrive in neither name order, so
+  // only a descending case-insensitive name tie-break yields Zebra, mango,
+  // apple; the untied sizes must still win first.
+  const QStringList paths = namePaths({
+      QStringLiteral("apple.zip"),
+      QStringLiteral("Zebra.zip"),
+      QStringLiteral("mango.zip"),
+      QStringLiteral("big.zip"),
+      QStringLiteral("tiny.zip"),
+  });
+  const QString &apple = paths[0];
+  const QString &zebra = paths[1];
+  const QString &mango = paths[2];
+  const QString &big = paths[3];
+  const QString &tiny = paths[4];
+
+  QHash<QString, qint64> sizes;
+  sizes[apple] = 500;
+  sizes[zebra] = 500;
+  sizes[mango] = 500;
+  sizes[big] = 900;
+  sizes[tiny] = 100;
+
+  QStringList files = paths;
+  sortFiles(files, SortMode::SizeDescending, nullptr, &sizes);
+  QCOMPARE(files, (QStringList{big, zebra, mango, apple, tiny}));
 }
 
 QTEST_GUILESS_MAIN(TestQueryManagerSortFiles)
