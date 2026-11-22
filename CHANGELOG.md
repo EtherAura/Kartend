@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the desktop colours changed and you visited another collection. It stayed
   that way until the desktop colours changed again. The top row of the
   collection tree now always matches the toolbar, including while selected.
+- **Saving Settings no longer shrinks tile sizes or gaps.** Appearance > Item
+  Dimensions could not show tiles wider or taller than 400 px or gaps over
+  50 px, so saving Settings, even after changing something else, cut a
+  collection's larger values down to those caps. These fields now accept tiles
+  up to 3840 × 2160 px and gaps up to 200 px, and saving keeps the values the
+  collection already had.
 
 ### Security
 
