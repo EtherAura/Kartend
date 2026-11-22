@@ -1401,9 +1401,11 @@ void TestLaunchManager::testPreview_resolvesAbsoluteLauncher() {
   launcher.launcherPath = m_tempExecutable; // absolute path created in initTestCase
   const auto preview = LaunchManager::previewLaunchCommand(collection, launcher, m_tempExecutable);
   QVERIFY(preview.buildOk);
-  // The resolved path must match the absolute launcher path the user
-  // provided — no PATH lookup, no rewriting.
-  QCOMPARE(preview.resolvedProgram, m_tempExecutable);
+  // The resolved path is the absolute launcher path the user provided, with
+  // symlinks resolved and no PATH lookup. Compare canonical forms: on macOS
+  // the temp dir is /var/folders/..., a symlink to /private/var/folders/...,
+  // and Qt 6.12's QDir::tempPath() no longer resolves it.
+  QCOMPARE(preview.resolvedProgram, QFileInfo(m_tempExecutable).canonicalFilePath());
   QVERIFY(preview.fileExists);
 }
 
@@ -2327,7 +2329,11 @@ void TestLaunchManager::testExtractArchive_honoursConfiguredExtractionDir() {
       LaunchManager::extractArchiveToTemp(zip, ".iso", nullptr, /*maxBytes=*/-1, root->path());
   QVERIFY2(!result.isError(),
            qPrintable(result.isError() ? result.error().userFacingSummary() : QString()));
-  QVERIFY2(result.value().startsWith(root->path() + QLatin1Char('/')),
+  // Canonical root: the extractor returns canonical paths, and on macOS the
+  // temp dir (/var/folders/...) is a symlink to /private/var/folders/....
+  const QString rootCanonical = QFileInfo(root->path()).canonicalFilePath();
+  QVERIFY2(!rootCanonical.isEmpty(), "Test setup failed: canonical root is empty");
+  QVERIFY2(result.value().startsWith(rootCanonical + QLatin1Char('/')),
            "the extracted file must live under the configured extraction dir");
   QVERIFY2(!QDir(extractionDirFor(QStringLiteral("kartend_cfgdir"))).exists(),
            "nothing may be written to the default root when one is configured");
