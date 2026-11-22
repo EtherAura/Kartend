@@ -3,12 +3,16 @@
 // Uses an in-memory SQLite database with the full migration chain applied so
 // the schema mirrors what the live app sees. The Most Launched tie-break case
 // uses the shared on-disk MigratedDb fixture (production bootstrap).
+#include <QDate>
+#include <QDateTime>
 #include <QFileInfo>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QString>
 #include <QTest>
+#include <QTime>
+#include <QTimeZone>
 
 #include "../../support/migrateddb.h"
 #include "dbmigrations.h"
@@ -57,6 +61,7 @@ class TestUsageStatsStore : public QObject {
 private slots:
   void loadForItem_returnsZeroForUnseenItem();
   void recordLaunch_incrementsCountAndStampsTimestamp();
+  void recordLaunch_samePathInTwoCollectionsKeepsCountsSeparate();
   void recordPlaySession_accumulatesSeconds();
   void recordPlaySession_rejectsNonPositiveDuration();
   void loadAggregate_summarizesAcrossLibrary();
@@ -104,6 +109,88 @@ void TestUsageStatsStore::recordLaunch_incrementsCountAndStampsTimestamp() {
   QVERIFY(QDateTime::fromString(stats.lastPlayed, Qt::ISODate).isValid());
 
   closeAndRemove(db, conn);
+}
+
+void TestUsageStatsStore::recordLaunch_samePathInTwoCollectionsKeepsCountsSeparate() {
+  // Kartend-kr9dm: items are keyed on (collection_uuid, path) and
+  // uniq_items_uuid_path allows one path in two collections. Launching it in
+  // one collection must not raise the other's count. Real on-disk SQLite
+  // through the production bootstrap; the path is only a fixture value.
+  KartendTest::MigratedDb fixture(KartendTest::MigratedDb::OnDisk);
+  QVERIFY(fixture.isOpen());
+  QVERIFY(!fixture.databasePath().isEmpty());
+  auto db = fixture.database();
+  QVERIFY(db.isOpen());
+  QCOMPARE(db.databaseName(), fixture.databasePath());
+  QVERIFY(QFileInfo::exists(fixture.databasePath()));
+
+  QSqlQuery q(db);
+  QVERIFY2(q.exec("INSERT INTO collections (id, name, last_scanned, uuid) "
+                  "VALUES (1, 'A', '2026-01-01', 'ua')"),
+           qPrintable(q.lastError().text()));
+  QVERIFY2(q.exec("INSERT INTO collections (id, name, last_scanned, uuid) "
+                  "VALUES (2, 'B', '2026-01-01', 'ub')"),
+           qPrintable(q.lastError().text()));
+
+  const QString sharedPath = QStringLiteral("/shared/game.bin");
+  struct Seed {
+    int collectionId;
+    const char *uuid;
+    const char *name;
+  };
+  const Seed seeds[] = {{1, "ua", "Game A"}, {2, "ub", "Game B"}};
+  for (const auto &seed : seeds) {
+    QVERIFY(q.prepare("INSERT INTO items (collection_id, collection_uuid, path, name, "
+                      "last_modified) VALUES (?, ?, ?, ?, '2026-01-01')"));
+    q.addBindValue(seed.collectionId);
+    q.addBindValue(QString::fromUtf8(seed.uuid));
+    q.addBindValue(sharedPath);
+    q.addBindValue(QString::fromUtf8(seed.name));
+    QVERIFY2(q.exec(), qPrintable(q.lastError().text()));
+    QCOMPARE(q.numRowsAffected(), 1);
+  }
+  QVERIFY2(q.exec("SELECT COUNT(*) FROM items WHERE path = '/shared/game.bin'"),
+           qPrintable(q.lastError().text()));
+  QVERIFY(q.next());
+  QCOMPARE(q.value(0).toInt(), 2);
+
+  const QDateTime stamp(QDate(2026, 5, 1), QTime(0, 0), QTimeZone::utc());
+  QVERIFY(stamp.isValid());
+
+  QVERIFY(UsageStatsStore::recordLaunch(db, "ua", sharedPath, stamp).isOk());
+  QVERIFY(UsageStatsStore::recordLaunch(db, "ua", sharedPath, stamp).isOk());
+  QVERIFY(UsageStatsStore::recordLaunch(db, "ua", sharedPath, stamp).isOk());
+
+  // The three A launches landed on A and left B untouched.
+  auto aAfterA = UsageStatsStore::loadForItem(db, "ua", sharedPath);
+  QVERIFY(aAfterA.isOk());
+  QCOMPARE(aAfterA.value().playCount, qint64(3));
+  auto bBeforeB = UsageStatsStore::loadForItem(db, "ub", sharedPath);
+  QVERIFY(bBeforeB.isOk());
+  QCOMPARE(bBeforeB.value().playCount, qint64(0));
+  QVERIFY(bBeforeB.value().lastPlayed.isEmpty());
+
+  QVERIFY(UsageStatsStore::recordLaunch(db, "ub", sharedPath, stamp).isOk());
+
+  auto aStats = UsageStatsStore::loadForItem(db, "ua", sharedPath);
+  QVERIFY(aStats.isOk());
+  QCOMPARE(aStats.value().playCount, qint64(3));
+  QCOMPARE(aStats.value().lastPlayed, stamp.toString(Qt::ISODate));
+  auto bStats = UsageStatsStore::loadForItem(db, "ub", sharedPath);
+  QVERIFY(bStats.isOk());
+  QCOMPARE(bStats.value().playCount, qint64(1));
+  QCOMPARE(bStats.value().lastPlayed, stamp.toString(Qt::ISODate));
+
+  auto breakdown = UsageStatsStore::loadCollectionBreakdown(db);
+  QVERIFY(breakdown.isOk());
+  const auto byUuid = breakdown.value();
+  QCOMPARE(byUuid.size(), 2);
+  QVERIFY(byUuid.contains("ua"));
+  QVERIFY(byUuid.contains("ub"));
+  QCOMPARE(byUuid.value("ua").itemCount, qint64(1));
+  QCOMPARE(byUuid.value("ua").totalLaunches, qint64(3));
+  QCOMPARE(byUuid.value("ub").itemCount, qint64(1));
+  QCOMPARE(byUuid.value("ub").totalLaunches, qint64(1));
 }
 
 void TestUsageStatsStore::recordPlaySession_accumulatesSeconds() {
