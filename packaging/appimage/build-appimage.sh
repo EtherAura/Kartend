@@ -342,10 +342,17 @@ EOF
 # point Qt at plugin directories of the user's system would make it try
 # those first, and a platform plugin built for another Qt can crash at
 # startup, so they are dropped for this process only.
+# Unless the user chose a platform theme (QT_QPA_PLATFORMTHEME set, even to
+# an empty value), the hook asks for the bundled XDG desktop portal theme so
+# file dialogs go through the desktop portal. A theme the user set wins.
 mkdir -p "$APPDIR/apprun-hooks"
 cat >"$APPDIR/apprun-hooks/kartend-own-qt.sh" <<'EOF'
 # Kartend's AppImage uses the Qt inside it, never plugins of the system's Qt.
 unset QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH QML_IMPORT_PATH QML2_IMPORT_PATH
+# The bundled portal theme by default; a QT_QPA_PLATFORMTHEME the user set, even empty, is kept.
+if [ -z "${QT_QPA_PLATFORMTHEME+set}" ]; then
+  export QT_QPA_PLATFORMTHEME=xdgdesktopportal
+fi
 EOF
 
 # Libraries that are loaded at run time by name, so no file lists them as a
