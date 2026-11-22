@@ -50,6 +50,7 @@ private slots:
   void ensureFavoritesPlaylist_createsExactlyOnce();
   void ensureFavoritesPlaylist_returnsExistingRow();
   void deletePlaylist_refusesReservedRow();
+  void favoritesMembership_survivesReopen();
   void exportToJson_writesAllItemsAndRoundTrips();
   void exportToM3U_writesExtendedFormatWithBasenameTitles();
   void importFromM3U_skipsUnresolvableEntries();
@@ -496,6 +497,32 @@ void TestPlaylistManager::deletePlaylist_refusesReservedRow() {
   QVERIFY(m_pm->renamePlaylist(favId, "Bookmarks"));
   QCOMPARE(m_pm->loadAll().first().name, QString("Bookmarks"));
   QCOMPARE(m_pm->loadAll().first().reservedKind, QString("favorites"));
+}
+
+void TestPlaylistManager::favoritesMembership_survivesReopen() {
+  // Starring and unstarring must reach media.db, not just the manager's
+  // in-memory state: a fresh PlaylistManager on the same file (a new session)
+  // sees the kept star and not the dropped one (Kartend-u2jv8).
+  const QString favId = m_pm->ensureFavoritesPlaylist();
+  QVERIFY(!favId.isEmpty());
+  QVERIFY(m_pm->addItem(favId, "uuid-a", "/games/kept.rom"));
+  QVERIFY(m_pm->addItem(favId, "uuid-a", "/games/dropped.rom"));
+  QVERIFY(m_pm->removeItem(favId, "uuid-a", "/games/dropped.rom"));
+
+  // Reopen against the same database; init() is not re-run, so the file stays.
+  delete m_pm;
+  m_pm = new PlaylistManager();
+  QVERIFY(m_pm->initialize());
+
+  QCOMPARE(m_pm->ensureFavoritesPlaylist(), favId);
+  QVERIFY(m_pm->containsItem(favId, "uuid-a", "/games/kept.rom"));
+  QVERIFY(!m_pm->containsItem(favId, "uuid-a", "/games/dropped.rom"));
+
+  const auto items = m_pm->loadItems(favId);
+  QCOMPARE(items.size(), 1);
+  QCOMPARE(items[0].sourceCollectionUuid, QString("uuid-a"));
+  QCOMPARE(items[0].sourcePath, QString("/games/kept.rom"));
+  QCOMPARE(items[0].position, 0);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
