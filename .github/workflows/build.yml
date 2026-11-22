@@ -5,7 +5,7 @@ name: Build and Test
 # `runs-on:` across jobs without a reusable workflow or repo-level `vars`, so
 # the literal is repeated; when bumping, update all the Linux jobs together.
 # Kartend-elluw: coverage spans Qt 6.4.2 (apt) + Qt 6.8 (linux-qt-newer) on
-# Linux, Qt 6.7 on Windows (windows-build-test), and Qt 6.8 on macOS
+# Linux and Qt 6.12.1 on Windows (windows-build-test) and macOS
 # (macos-build-test) so a version- or platform-specific regression is caught
 # before release.
 
@@ -851,7 +851,7 @@ jobs:
           du -sh build/ninja-maintenance || true
           df -h /
 
-  # Full Windows MSVC build + test job. Pulls Qt 6.7 LTS via
+  # Full Windows MSVC build + test job. Pulls Qt 6.12.1 via
   # install-qt-action (its official binaries are faster than vcpkg can
   # build Qt from source) and SDL2 + zstd via vcpkg manifest mode
   # (vcpkg.json at repo root). Qt6Keychain comes in via FetchContent
@@ -1227,10 +1227,10 @@ jobs:
       - name: Install build deps
         run: brew install ninja ccache zstd
 
-      - name: Install Qt 6.8
+      - name: Install Qt 6.12.1
         uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
         with:
-          version: '6.8.*'
+          version: '6.12.1'
           host: mac
           target: desktop
           # Universal (arm64 + x86_64) clang build; runs natively on the

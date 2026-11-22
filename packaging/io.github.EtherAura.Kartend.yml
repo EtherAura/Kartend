@@ -5,7 +5,7 @@
 # different Qt versions across targets; keep this in mind when changing
 # Qt-version-sensitive code:
 #   - Linux CI (the conformance floor): Qt 6.4 (ubuntu-24.04 qt6-base-dev), see .github/workflows/build.yml
-#   - Windows release:                  Qt 6.7 LTS (install-qt-action),    see .github/workflows/build.yml
+#   - Windows release:                  Qt 6.12.1 (install-qt-action),     see .github/workflows/build.yml
 #   - Flatpak runtime (this file):      Qt 6.8 (org.kde.Platform 6.8)
 app-id: io.github.EtherAura.Kartend
 runtime: org.kde.Platform
