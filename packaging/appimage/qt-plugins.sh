@@ -27,10 +27,9 @@ readonly KARTEND_APPIMAGE_QT_PLUGINS=(
   # input methods
   platforminputcontexts/libcomposeplatforminputcontextplugin.so
   platforminputcontexts/libibusplatforminputcontextplugin.so
-  # The XDG desktop portal theme (needs only QtDBus, which is bundled). It is
-  # not chosen by default: it is used when the user starts the AppImage with
-  # QT_QPA_PLATFORMTHEME=xdgdesktopportal, and then file dialogs are the
-  # desktop's own, through the portal.
+  # The XDG desktop portal theme (needs only QtDBus, which is bundled). The
+  # AppRun hook asks for it when the user has not set QT_QPA_PLATFORMTHEME, so
+  # file dialogs go through the desktop portal; a theme the user set wins.
   platformthemes/libqxdgdesktopportal.so
   # artwork formats and the SVG icon engine
   imageformats/libqgif.so

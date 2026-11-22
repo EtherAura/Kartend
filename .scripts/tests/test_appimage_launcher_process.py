@@ -25,7 +25,8 @@ a private HOME and XDG directories on the offscreen platform, and check the
 first line of its stdout.
 
 The same tests start AppRun with and without QT_QPA_PLATFORMTHEME: the hook
-passes a caller's theme on and supplies none of its own.
+passes a caller's theme on unchanged (an empty one too) and, only when the
+variable is not set at all, asks for the bundled xdgdesktopportal theme.
 
 TestAppImageQtPluginStaging runs the Qt plugin steps of build-appimage.sh
 (qt-plugins.sh, sourced as the builder sources it) on a fixture plugin tree:
@@ -92,8 +93,10 @@ ARGUMENTS = ["--help", "two words", "*", "$HOME", "", "; touch injected", "--"]
 DEADLINE = 10.0
 # Set for the launched process; the hook must leave it alone.
 MARKER = "KARTEND_TEST_UNRELATED"
-# The caller's choice of Qt platform theme; the hook must pass it on and never set one.
+# The caller's choice of Qt platform theme; the hook must pass it on, and set
+# DEFAULT_THEME (the bundled portal theme) only when the caller set none.
 THEME_VARIABLE = "QT_QPA_PLATFORMTHEME"
+DEFAULT_THEME = "xdgdesktopportal"
 
 # The plugin staging build-appimage.sh sources, and the pins it needs.
 COMMON = APPIMAGE_DIR / "common.sh"
@@ -270,20 +273,23 @@ class TestAppImageLauncherProcess(unittest.TestCase):
         self.assert_hook_ran(seen)
         self.assertFalse((pathlib.Path(self._tmp.name) / "injected").exists())
 
-    def test_caller_theme_passes_through_and_none_is_added(self) -> None:
-        # The portal theme is bundled for callers who ask for it; the hook neither drops
-        # an explicit choice nor makes one when the caller has none.
+    def test_caller_theme_passes_through_and_the_portal_is_the_default(self) -> None:
+        # The hook asks for the bundled portal theme only when the caller set no
+        # QT_QPA_PLATFORMTHEME at all; any value the caller set, empty included, wins.
         for handoff in (False, True):
             with self.subTest(handoff=handoff):
                 if handoff:
                     result = self.run_handoff()
                     self.assertEqual(result.returncode, 0, result.stderr)
-                for theme in ("xdgdesktopportal", "gtk3"):
+                for theme in ("xdgdesktopportal", "gtk3", ""):
                     seen = self.launch(theme=theme)
-                    self.assertEqual(seen["environ"].get(THEME_VARIABLE), theme)
+                    # Set, even to an empty string, is the caller's choice and arrives unchanged.
+                    self.assertIn(THEME_VARIABLE, seen["environ"], f"the hook dropped the caller's {theme!r}")
+                    self.assertEqual(seen["environ"][THEME_VARIABLE], theme)
                     self.assert_hook_ran(seen)
                 seen = self.launch(theme=None)
-                self.assertNotIn(THEME_VARIABLE, seen["environ"], "the hook supplied a platform theme")
+                self.assertEqual(seen["environ"].get(THEME_VARIABLE), DEFAULT_THEME,
+                                 "the hook did not ask for the bundled portal theme")
                 self.assert_hook_ran(seen)
 
     def help_appdir(self) -> pathlib.Path:

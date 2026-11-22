@@ -14,11 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bar stayed for the rest of the session. The choice is remembered across
   restarts; while the bar is hidden, those messages are not shown.
 
-- **The AppImage can use your desktop's file dialogs if you ask for them.**
-  It now carries Qt's XDG desktop portal theme. Start it with
-  `QT_QPA_PLATFORMTHEME=xdgdesktopportal` to have file dialogs opened through
-  the desktop portal, so they can be the desktop's own. Without that setting
-  the AppImage starts as before, with Qt's own dialogs.
+- **The AppImage asks for your desktop's file dialogs.** It now carries Qt's
+  XDG desktop portal theme and starts with `QT_QPA_PLATFORMTHEME=xdgdesktopportal`
+  unless you set `QT_QPA_PLATFORMTHEME` yourself, so file dialogs are opened
+  through the desktop portal and can be the desktop's own. A value you set,
+  for example `QT_QPA_PLATFORMTHEME=gtk3` or an empty one, is used unchanged.
 
 ### Fixed
 
