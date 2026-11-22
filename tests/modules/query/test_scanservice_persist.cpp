@@ -125,12 +125,25 @@ CollectionConfig makeConfig(const QString &mediaDir) {
 
 // Full scan + save round trip, exactly as the app's load-or-scan path does:
 // scanMediaDirectory returns the relative paths + timestamps + signature that
-// saveItemsToDatabase consumes verbatim.
-void scanAndSave(ScanService *svc, const CollectionConfig &cfg) {
+// saveItemsToDatabase consumes verbatim. Returns that first walk's list so a
+// test can pin it alongside what the save-time walk persisted; existing
+// callers ignore it.
+QStringList scanAndSave(ScanService *svc, const CollectionConfig &cfg) {
   QHash<QString, QDateTime> timestamps;
   QString signature;
   const QStringList found = svc->scanMediaDirectory(cfg, timestamps, &signature);
   svc->saveItemsToDatabase(/*collectionIndex=*/0, found, timestamps, cfg, signature);
+  return found;
+}
+
+// File names (case preserved) of the paths a scan returned, as a set for
+// order-independent comparison.
+QSet<QString> baseNames(const QStringList &paths) {
+  QSet<QString> names;
+  for (const QString &p : paths) {
+    names.insert(QFileInfo(p).fileName());
+  }
+  return names;
 }
 
 } // namespace
@@ -140,6 +153,7 @@ class TestScanServicePersist : public QObject {
 private slots:
   void initTestCase();
   void scanThenSave_persistsMatchingFiles();
+  void scanThenSave_matchesExtensionCaseInsensitively();
   void deleteThenRescan_prunesMissingFile();
   void cancelledSave_leavesCommittedStateIntact();
   void cancelledScan_doesNotPoisonRescan();
@@ -174,6 +188,36 @@ void TestScanServicePersist::scanThenSave_persistsMatchingFiles() {
   QCOMPARE(itemCount(fx.db()), 2);
   QCOMPARE(itemBaseNames(fx.db()),
            (QSet<QString>{QStringLiteral("game-a.bin"), QStringLiteral("game-b.bin")}));
+}
+
+void TestScanServicePersist::scanThenSave_matchesExtensionCaseInsensitively() {
+  // Kartend-fbuxd: ExtensionUtils stores configured extensions lowercased
+  // and ScanService builds its QDirIterator name filters without
+  // QDir::CaseSensitive, so a suffix that differs only in case must match
+  // while any other suffix must not — in both the first walk
+  // (scanMediaDirectory) and the save-time stageFlatScan walk.
+  PersistFixture fx;
+  QVERIFY2(fx.opened(), "failed to open + seed the test SQLite database");
+
+  QTemporaryDir media;
+  QVERIFY(media.isValid());
+  const QDir dir(media.path());
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("lower.bin")), QByteArray()));
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("UPPER.BIN")), QByteArray()));
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("Mixed.Bin")), QByteArray()));
+  // Other suffixes, whatever their case — must not be matched.
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("art.png")), QByteArray()));
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("COVER.PNG")), QByteArray()));
+  QVERIFY(writeFile(dir.filePath(QStringLiteral("notes.txt")), QByteArray()));
+
+  const QStringList found = scanAndSave(fx.service(), makeConfig(media.path()));
+
+  const QSet<QString> expected{QStringLiteral("lower.bin"), QStringLiteral("UPPER.BIN"),
+                               QStringLiteral("Mixed.Bin")};
+  QCOMPARE(found.size(), 3);
+  QCOMPARE(baseNames(found), expected);
+  QCOMPARE(itemCount(fx.db()), 3);
+  QCOMPARE(itemBaseNames(fx.db()), expected);
 }
 
 void TestScanServicePersist::deleteThenRescan_prunesMissingFile() {
