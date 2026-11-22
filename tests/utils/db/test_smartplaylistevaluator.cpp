@@ -8,6 +8,7 @@
 #include <QFileInfo>
 #include <QList>
 #include <QObject>
+#include <QPair>
 #include <QSet>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -133,6 +134,10 @@ private slots:
   // Three-rule composition (Kartend-sp3ju): the fold loop runs more than once
   void matchAll_threeRules_keepsOnlyItemsMatchingEvery();
   void matchAny_threeRules_unionsInRuleOrder();
+
+  // Same path in two collections (Kartend-3qyjj): items are keyed by
+  // collection_uuid + path, never by path alone
+  void matchAllAny_samePathInTwoCollections_staysDistinct();
 };
 
 void TestSmartPlaylistEvaluator::recentlyLaunched_returnsOrderedByLastPlayedDesc() {
@@ -768,6 +773,83 @@ void TestSmartPlaylistEvaluator::matchAny_threeRules_unionsInRuleOrder() {
   QCOMPARE(actual, expected);
   QCOMPARE(QSet<QString>(actual.begin(), actual.end()).size(), actual.size());
   QVERIFY(!actual.contains(QStringLiteral("/t/06-grape")));
+}
+
+namespace {
+// One file path, '/shared/game.zip', in two collections: the u1 copy has no
+// artwork, the u2 copy does. A rule fold that keys items by path alone would
+// confuse the two rows.
+void seedSamePathTwoCollections(QSqlDatabase &db) {
+  QSqlQuery q(db);
+  QVERIFY2(q.exec("INSERT INTO collections (id, name, last_scanned, uuid) "
+                  "VALUES (1, 'Games One', '2026-01-01', 'u1')"),
+           qPrintable(q.lastError().text()));
+  QVERIFY2(q.exec("INSERT INTO collections (id, name, last_scanned, uuid) "
+                  "VALUES (2, 'Games Two', '2026-01-01', 'u2')"),
+           qPrintable(q.lastError().text()));
+
+  QVERIFY(q.prepare("INSERT INTO items (collection_id, collection_uuid, path, name, "
+                    "last_modified, artwork_path) VALUES (?, ?, ?, ?, '2026-01-01', ?)"));
+  q.addBindValue(1);
+  q.addBindValue(QStringLiteral("u1"));
+  q.addBindValue(QStringLiteral("/shared/game.zip"));
+  q.addBindValue(QStringLiteral("Game"));
+  q.addBindValue(QVariant(QMetaType(QMetaType::QString)));
+  QVERIFY2(q.exec(), qPrintable(q.lastError().text()));
+
+  q.addBindValue(2);
+  q.addBindValue(QStringLiteral("u2"));
+  q.addBindValue(QStringLiteral("/shared/game.zip"));
+  q.addBindValue(QStringLiteral("Game"));
+  q.addBindValue(QStringLiteral("/art/game.png"));
+  QVERIFY2(q.exec(), qPrintable(q.lastError().text()));
+}
+
+SmartFilter::FilterSet collectionAndArtworkSet(SmartFilter::MatchMode mode) {
+  SmartFilter::Filter byCollection = ruleOf(SmartFilter::Kind::ByCollection);
+  byCollection.collectionUuid = QStringLiteral("u1");
+  SmartFilter::FilterSet set;
+  set.match = mode;
+  set.rules = {byCollection, ruleOf(SmartFilter::Kind::HasArtwork)};
+  return set;
+}
+
+QList<QPair<QString, QString>> keysOf(const QList<SmartPlaylistEvaluator::Match> &matches) {
+  QList<QPair<QString, QString>> out;
+  out.reserve(matches.size());
+  for (const auto &m : matches) {
+    out.append(qMakePair(m.collectionUuid, m.path));
+  }
+  return out;
+}
+} // namespace
+
+void TestSmartPlaylistEvaluator::matchAllAny_samePathInTwoCollections_staysDistinct() {
+  KartendTest::MigratedDb fixture(KartendTest::MigratedDb::OnDisk);
+  QVERIFY(fixture.isOpen());
+  QVERIFY(QFileInfo::exists(fixture.databasePath()));
+  auto db = fixture.database();
+  QVERIFY(db.isOpen());
+  seedSamePathTwoCollections(db);
+  if (QTest::currentTestFailed()) {
+    return;
+  }
+
+  // All: the u1 copy is in the collection but has no art; the u2 copy has art
+  // but is in the wrong collection. Neither row satisfies both rules. A
+  // path-only key would see '/shared/game.zip' in both rule results and keep it.
+  const auto all =
+      SmartPlaylistEvaluator::evaluate(db, collectionAndArtworkSet(SmartFilter::MatchMode::All));
+  QVERIFY(all.isEmpty());
+
+  // Any: the u1 copy comes from the first rule, the u2 copy is the second rule's
+  // newcomer. A path-only key would drop the u2 copy as a duplicate.
+  const QList<QPair<QString, QString>> expected{
+      qMakePair(QStringLiteral("u1"), QStringLiteral("/shared/game.zip")),
+      qMakePair(QStringLiteral("u2"), QStringLiteral("/shared/game.zip"))};
+  QCOMPARE(keysOf(SmartPlaylistEvaluator::evaluate(
+               db, collectionAndArtworkSet(SmartFilter::MatchMode::Any))),
+           expected);
 }
 
 QTEST_MAIN(TestSmartPlaylistEvaluator)
