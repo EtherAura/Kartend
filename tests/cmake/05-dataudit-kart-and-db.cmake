@@ -337,7 +337,7 @@ kartend_add_test(NAME SqlLike
 # HistoryStore tests
 kartend_add_test(NAME HistoryStore
   SOURCES utils/db/test_historystore.cpp
-  LINK kartend_utils
+  LINK kartend_utils kartend_data
 )
 
 # StatisticsService tests (Kartend-vy7d7): the off-thread aggregation that backs
