@@ -1,13 +1,15 @@
 // Tests for HistoryStore.
 //
 // Uses an in-memory SQLite database with the full migration chain applied so
-// the schema mirrors what the live app sees.
+// the schema mirrors what the live app sees; the repeat-launch slot uses the
+// shared on-disk MigratedDb fixture (production bootstrap).
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QString>
 #include <QTest>
 
+#include "../../support/migrateddb.h"
 #include "dbmigrations.h"
 #include "historystore.h"
 
@@ -43,6 +45,7 @@ class TestHistoryStore : public QObject {
 private slots:
   void recordLaunch_appendsRowAndStampsTimestamp();
   void recordLaunch_allowsDuplicateUuidPath();
+  void recordLaunch_repeatLaunchAddsDistinctRowWithGivenStamp();
   void recordLaunch_rejectsEmptyKeys();
   void recordLaunch_fallsBackToBasenameWhenNameEmpty();
   void loadRecent_returnsNewestFirst();
@@ -88,6 +91,55 @@ void TestHistoryStore::recordLaunch_allowsDuplicateUuidPath() {
   QCOMPARE(HistoryStore::count(db).value(), qint64(3));
 
   closeAndRemove(db, conn);
+}
+
+void TestHistoryStore::recordLaunch_repeatLaunchAddsDistinctRowWithGivenStamp() {
+  // Kartend-19hku: the sibling above only counts rows. A repeat launch of the
+  // same item must add a NEW row carrying its own stamp exactly as given,
+  // while the earlier row for that item keeps its original values. Runs on the
+  // real on-disk migrated database (production bootstrap), fixed stamps only.
+  KartendTest::MigratedDb fixture(KartendTest::MigratedDb::OnDisk);
+  QVERIFY(fixture.isOpen());
+  auto db = fixture.database();
+  QCOMPARE(HistoryStore::count(db).value(), qint64(0));
+
+  const QDateTime t1 = QDateTime::fromString(QStringLiteral("2026-06-01T10:00:00Z"), Qt::ISODate);
+  const QDateTime t2 = QDateTime::fromString(QStringLiteral("2026-06-01T10:05:00Z"), Qt::ISODate);
+  const QDateTime t3 = QDateTime::fromString(QStringLiteral("2026-06-01T10:10:00Z"), Qt::ISODate);
+  QVERIFY(t1.isValid());
+  QVERIFY(t2.isValid());
+  QVERIFY(t3.isValid());
+
+  QVERIFY(HistoryStore::recordLaunch(db, "u1", "/g/1", "Game 1", t1).isOk());
+  QVERIFY(HistoryStore::recordLaunch(db, "u1", "/g/2", "Game 2", t2).isOk());
+  QVERIFY(HistoryStore::recordLaunch(db, "u1", "/g/1", "Game 1", t3).isOk());
+
+  QCOMPARE(HistoryStore::count(db).value(), qint64(3));
+
+  auto recent = HistoryStore::loadRecent(db, 10);
+  QVERIFY(recent.isOk());
+  const auto rows = recent.value();
+  QCOMPARE(rows.size(), 3);
+
+  QCOMPARE(rows[0].collectionUuid, QStringLiteral("u1"));
+  QCOMPARE(rows[0].path, QStringLiteral("/g/1"));
+  QCOMPARE(rows[0].name, QStringLiteral("Game 1"));
+  QCOMPARE(rows[0].launchedAt, QStringLiteral("2026-06-01T10:10:00Z"));
+
+  QCOMPARE(rows[1].collectionUuid, QStringLiteral("u1"));
+  QCOMPARE(rows[1].path, QStringLiteral("/g/2"));
+  QCOMPARE(rows[1].name, QStringLiteral("Game 2"));
+  QCOMPARE(rows[1].launchedAt, QStringLiteral("2026-06-01T10:05:00Z"));
+
+  // The earlier launch of the same item is untouched by the repeat.
+  QCOMPARE(rows[2].collectionUuid, QStringLiteral("u1"));
+  QCOMPARE(rows[2].path, QStringLiteral("/g/1"));
+  QCOMPARE(rows[2].name, QStringLiteral("Game 1"));
+  QCOMPARE(rows[2].launchedAt, QStringLiteral("2026-06-01T10:00:00Z"));
+
+  QVERIFY(rows[0].id != rows[1].id);
+  QVERIFY(rows[0].id != rows[2].id);
+  QVERIFY(rows[1].id != rows[2].id);
 }
 
 void TestHistoryStore::recordLaunch_rejectsEmptyKeys() {
