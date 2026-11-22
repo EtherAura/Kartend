@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that way until the desktop colours changed again. The top row of the
   collection tree now always matches the toolbar, including while selected.
 
+### Security
+
+- **The Windows package uses Qt 6.12.1 and FFmpeg 9.0.2** (it had Qt 6.7.3 and
+  FFmpeg 7.0.2). They include the fixes for CVE-2026-8461, CVE-2026-105946,
+  CVE-2026-116337, CVE-2026-16762 and CVE-2026-107157. The macOS build uses
+  Qt 6.12.1 too.
+
 ## [0.0.23] - 2026-11-20
 
 ### Added

@@ -176,14 +176,19 @@ sh packaging/test-freebsd-installed.sh
 
 ### Windows (MSVC)
 
-Native Windows builds use **MSVC 2019 or 2022 + Qt 6.7 LTS + Ninja**.
+Native Windows builds use **MSVC 2022 + Qt 6.12.1 + Ninja**.
 The CI job pulls Qt through `install-qt-action` and the optional
 native deps (SDL2 gamepad backend, zstd compression) through vcpkg —
 both are reproducible locally:
 
-- **Qt 6.7 LTS** — install via the official Qt online installer
-  (component `Qt 6.7.x` → `MSVC 2019 64-bit`), or via [`aqtinstall`](https://github.com/miurahr/aqtinstall):
-  `pip install aqtinstall && aqt install-qt windows desktop 6.7.3 win64_msvc2019_64 --modules qtmultimedia qtimageformats`.
+- **Qt 6.12.1** — install the `MSVC 2022 64-bit` kit with Qt Multimedia and
+  Qt Image Formats via the official Qt online installer, or use the same
+  [`aqtinstall`](https://github.com/miurahr/aqtinstall) revision as CI:
+
+  ```powershell
+  pip install 'git+https://github.com/miurahr/aqtinstall.git@5a49f2b391ae8ee1d3c0dd87f8b33c1d49a4deb7'
+  aqt install-qt windows desktop 6.12.1 win64_msvc2022_64 --modules qtmultimedia qtimageformats
+  ```
 - **Visual Studio 2022 Build Tools** with the `Desktop development with C++` workload (provides MSVC, the Windows SDK, and Ninja).
 - **vcpkg** in manifest mode — point at the [`vcpkg.json`](../../vcpkg.json) at the repo root via `CMAKE_TOOLCHAIN_FILE`; SDL2 and zstd auto-install on the first cmake configure.
 
@@ -342,7 +347,7 @@ cmake --build build/ninja-release --parallel $(nproc)
 
 From a **Developer Command Prompt for VS 2022** (so `cl.exe` and
 `ninja.exe` are on `PATH`) with `Qt6_DIR` pointing at the
-`...\6.7.x\msvc2019_64\lib\cmake\Qt6` directory (or `QT_ROOT_DIR`
+`...\6.12.1\msvc2022_64\lib\cmake\Qt6` directory (or `QT_ROOT_DIR`
 exported by `aqtinstall`):
 
 ```powershell

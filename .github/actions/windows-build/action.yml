@@ -1,7 +1,7 @@
 name: 'Build Kartend (Windows / MSVC)'
 description: >-
   Shared Windows build pipeline for build.yml's windows-build-test and
-  release.yml's windows-release. Installs Qt 6.7 LTS, sets up the MSVC dev
+  release.yml's windows-release. Installs Qt 6.12.1, sets up the MSVC dev
   environment, restores the vcpkg cache and syncs its baseline, configures with
   Ninja + the vcpkg toolchain, builds, and optionally stages a portable
   dist\kartend via windeployqt + co-located vcpkg DLLs.
@@ -52,13 +52,16 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - name: Install Qt 6.7 LTS
+    - name: Install Qt 6.12.1
       uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
       with:
-        version: '6.7.*'
+        version: '6.12.1'
         host: windows
         target: desktop
-        arch: win64_msvc2019_64
+        arch: win64_msvc2022_64
+        # aqtinstall 3.3.0 cannot find the separate MSVC repository used
+        # by Qt 6.11 and later. Pin upstream until a release includes support.
+        aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@5a49f2b391ae8ee1d3c0dd87f8b33c1d49a4deb7'
         # Only aqt-recognized addons go here. qttools / qtsvg / qttranslations
         # ship inside the qtbase tarball by default — listing them as modules
         # makes install-qt-action fail with "packages ... not found while

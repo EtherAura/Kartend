@@ -418,7 +418,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
   # ─── Windows portable .zip ──────────────────────────────────────────
-  # Mirrors build.yml's windows-build-test job: Qt 6.7 LTS via
+  # Mirrors build.yml's windows-build-test job: Qt 6.12.1 via
   # install-qt-action, MSVC via msvc-dev-cmd, SDL2 + zstd via vcpkg
   # manifest mode, Ninja generator, KARTEND_PORTABLE_RELEASE=ON. Stages
   # via windeployqt + co-located vcpkg DLLs, zips, and attaches to the
