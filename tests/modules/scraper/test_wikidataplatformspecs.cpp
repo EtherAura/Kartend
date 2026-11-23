@@ -4,6 +4,9 @@
 // not-found. A resolved entity with nothing usable — including one whose only
 // units-sold claim the parser rejects — stays not-found, and an art- and
 // metadata-bearing platform keeps its logo, its metadata and its units sold.
+// CPU-only slice: a platform whose only usable data is the P880 CPU reference
+// succeeds with the CPU label the batched labels hop resolves; with no usable
+// resolved label it stays not-found, and GPU alone does not admit an entity.
 // Driven offline through ProviderBase's fetch seam; any request the fixture
 // does not know fails the test. Fixture names and entity ids are generic
 // placeholders.
@@ -59,6 +62,7 @@ std::optional<ErrorUtils::Result<Scraper::ScrapedItem>> runFetch() {
 }
 
 const QString kUnitsSoldKey = QLatin1String(EntityMetadataStore::kFieldUnitsSold);
+const QString kCpuKey = QLatin1String(EntityMetadataStore::kFieldCpu);
 
 } // namespace
 
@@ -71,6 +75,12 @@ private slots:
   void emptyEntityIsNotFound_data();
   void emptyEntityIsNotFound();
   void artAndMetadataEntityKeepsUnitsSold();
+  void cpuOnlyEntityIsRetained();
+  void cpuOnlyEntityWithoutUsableLabelIsNotFound_data();
+  void cpuOnlyEntityWithoutUsableLabelIsNotFound();
+  void gpuOnlyEntityStaysNotFound();
+  void cpuWithPhotoKeepsPhoto_data();
+  void cpuWithPhotoKeepsPhoto();
 };
 
 void TestWikidataPlatformSpecs::cleanup() {
@@ -139,6 +149,104 @@ void TestWikidataPlatformSpecs::artAndMetadataEntityKeepsUnitsSold() {
   QCOMPARE(logo.scope, Scraper::MediaScope::Collection);
   QCOMPARE(logo.scopeKey, QStringLiteral("uuid-console"));
   QCOMPARE(logo.entityRole, Scraper::EntityArtRole::Logo);
+}
+
+// CPU-only slice: a platform whose only usable data is the P880 CPU reference
+// must survive the provider's usable-data gate, resolve the CPU's label
+// through the batched labels hop, and come back as a metadata-only success.
+void TestWikidataPlatformSpecs::cpuOnlyEntityIsRetained() {
+  installFetch(QByteArrayLiteral(R"("claims":{
+      "P880":[{"mainsnak":{"datavalue":{"value":{"id":"Q900100"}}}}]})"),
+               QByteArrayLiteral(R"({"entities":{
+        "Q900100":{"labels":{"en":{"value":"Example CPU 32-bit"}}}}})"));
+
+  const auto result = runFetch();
+  QVERIFY(result.has_value());
+  QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
+  const Scraper::ScrapedItem &item = result->value();
+  QCOMPARE(item.sourceProviderId, QStringLiteral("wikidata"));
+  QCOMPARE(item.customFields.value(kCpuKey), QStringLiteral("Example CPU 32-bit"));
+  QCOMPARE(item.customFields.size(), 1);
+  QVERIFY(item.description.isEmpty());
+  QVERIFY(item.media.isEmpty());
+  // CPU-only: the saved row's title, description, art and other specs must
+  // survive the save.
+  QVERIFY(item.cpuOnlyEntityMetadata);
+}
+
+void TestWikidataPlatformSpecs::cpuOnlyEntityWithoutUsableLabelIsNotFound_data() {
+  QTest::addColumn<QByteArray>("labels");
+  // The labels hop succeeds but supplies no usable label for the CPU.
+  QTest::newRow("entity without labels") << QByteArrayLiteral(R"({"entities":{"Q900100":{}}})");
+  QTest::newRow("no English label") << QByteArrayLiteral(R"({"entities":{
+        "Q900100":{"labels":{"de":{"value":"Beispiel-CPU"}}}}})");
+  QTest::newRow("empty English label") << QByteArrayLiteral(R"({"entities":{
+        "Q900100":{"labels":{"en":{"value":""}}}}})");
+  QTest::newRow("label for another entity only") << QByteArrayLiteral(R"({"entities":{
+        "Q900101":{"labels":{"en":{"value":"Unrelated"}}}}})");
+  QTest::newRow("no entities") << QByteArrayLiteral(R"({"entities":{}})");
+  // A body the labels parser cannot read degrades to no labels, exactly as
+  // it does for every other entity; with nothing else usable that is still
+  // not a success.
+  QTest::newRow("unparseable labels body") << QByteArrayLiteral("not json");
+}
+
+void TestWikidataPlatformSpecs::cpuOnlyEntityWithoutUsableLabelIsNotFound() {
+  QFETCH(QByteArray, labels);
+  installFetch(QByteArrayLiteral(R"("claims":{
+      "P880":[{"mainsnak":{"datavalue":{"value":{"id":"Q900100"}}}}]})"),
+               labels);
+
+  const auto result = runFetch();
+  QVERIFY(result.has_value());
+  QVERIFY2(result->isError(), "a CPU-only entity with no usable CPU label must not succeed");
+  QCOMPARE(result->error().code, ErrorUtils::ErrorCode::RemoteResourceNotFound);
+}
+
+// GPU is not made eligible by the CPU slice: a GPU-only entity stays
+// not-found without even asking for labels (the fixture fails any request it
+// was not given a labels body for).
+void TestWikidataPlatformSpecs::gpuOnlyEntityStaysNotFound() {
+  installFetch(QByteArrayLiteral(R"("claims":{
+      "P2560":[{"mainsnak":{"datavalue":{"value":{"id":"Q900100"}}}}]})"));
+
+  const auto result = runFetch();
+  QVERIFY(result.has_value());
+  QVERIFY(result->isError());
+  QCOMPARE(result->error().code, ErrorUtils::ErrorCode::RemoteResourceNotFound);
+}
+
+// The CPU-only gate must not swallow a CPU that rides along with ordinary
+// data: a photo-bearing entity whose CPU label is missing still succeeds with
+// its photo, and one whose CPU label resolves carries both.
+void TestWikidataPlatformSpecs::cpuWithPhotoKeepsPhoto_data() {
+  QTest::addColumn<QByteArray>("labels");
+  QTest::addColumn<QString>("expectedCpu");
+  QTest::newRow("CPU label resolved") << QByteArrayLiteral(R"({"entities":{
+        "Q900100":{"labels":{"en":{"value":"Example CPU"}}}}})")
+                                      << QStringLiteral("Example CPU");
+  QTest::newRow("CPU label missing")
+      << QByteArrayLiteral(R"({"entities":{"Q900100":{}}})") << QString();
+}
+
+void TestWikidataPlatformSpecs::cpuWithPhotoKeepsPhoto() {
+  QFETCH(QByteArray, labels);
+  QFETCH(QString, expectedCpu);
+  installFetch(QByteArrayLiteral(R"("claims":{
+      "P18":[{"mainsnak":{"datavalue":{"value":"Example console.jpg"}}}],
+      "P880":[{"mainsnak":{"datavalue":{"value":{"id":"Q900100"}}}}]})"),
+               labels);
+
+  const auto result = runFetch();
+  QVERIFY(result.has_value());
+  QVERIFY2(result->isOk(), qPrintable(result->isError() ? result->error().message : QString()));
+  const Scraper::ScrapedItem &item = result->value();
+  QCOMPARE(item.customFields.value(kCpuKey), expectedCpu);
+  QCOMPARE(item.customFields.contains(kCpuKey), !expectedCpu.isEmpty());
+  QCOMPARE(item.media.size(), 1);
+  QCOMPARE(item.media.first().type, QStringLiteral("photo"));
+  // Ordinary (non-CPU-only) results keep the full upsert.
+  QVERIFY(!item.cpuOnlyEntityMetadata);
 }
 
 QTEST_MAIN(TestWikidataPlatformSpecs)

@@ -138,6 +138,19 @@ bool DatabaseManager::saveEntityMetadata(const EntityMetadataStore::EntityMetada
   return true;
 }
 
+ErrorUtils::Result<EntityMetadataStore::EntityMetadata>
+DatabaseManager::loadEntityMetadata(const QString &entityType, const QString &entityIdentity,
+                                    const QString &collectionUuid) const {
+  // Same const_cast convention as loadItemMetadata. The error is logged and
+  // handed back (not flattened to "no row") so a sparse writer can tell a
+  // failed read from an absent row and refuse to overwrite what it could
+  // not read.
+  auto result = EntityMetadataStore::load(const_cast<QSqlDatabase &>(m_db), entityType,
+                                          entityIdentity, collectionUuid);
+  if (result.isError()) ErrorUtils::logError(result.error());
+  return result;
+}
+
 EntityMetadataStore::EntityMetadata
 DatabaseManager::loadEntityMetadataForCollection(const QString &collectionUuid) const {
   // Same const_cast convention as loadItemMetadata above: QSqlDatabase's

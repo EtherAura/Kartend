@@ -130,7 +130,37 @@ void WikidataLogoProvider::fetchEntity(const Scraper::EntityScrapeTarget &target
             // whose only claim is the P18 photo still has art to retain
             // (Kartend-5b5r1). The parsed units-sold quantity counts too:
             // it needs no label hop and lands in customFields as is.
-            callback(notFound("logo or descriptive data"));
+            if (data.cpuId.isEmpty()) {
+              callback(notFound("logo or descriptive data"));
+              return;
+            }
+            // Kartend-5b5r1 (CPU-only slice): a P880 CPU reference is
+            // usable only once the batched labels hop names it, so the
+            // entity is admitted on its CPU alone and judged after that
+            // hop — no resolved CPU label means there is still nothing
+            // usable, and not-found stays the honest answer. Other spec
+            // references do not admit an entity on their own.
+            finishEntityWithData(
+                name, scopeKey, data,
+                DetailCallback(
+                    [notFound, callback](const ErrorUtils::Result<Scraper::ScrapedItem> &item) {
+                      if (item.isOk() && !item.value().customFields.contains(
+                                             QLatin1String(EntityMetadataStore::kFieldCpu))) {
+                        callback(notFound("logo or descriptive data"));
+                        return;
+                      }
+                      if (item.isError()) {
+                        callback(item);
+                        return;
+                      }
+                      // Admitted on its CPU alone, the answer says nothing
+                      // about title, description, art or other specs: mark
+                      // it CPU-only so the save updates just the CPU of the
+                      // job's saved row instead of replacing that row.
+                      Scraper::ScrapedItem cpuOnly = item.value();
+                      cpuOnly.cpuOnlyEntityMetadata = true;
+                      callback(ErrorUtils::Result<Scraper::ScrapedItem>(std::move(cpuOnly)));
+                    }));
             return;
           }
           // No std::move: finishEntityWithData takes the callback by CONST

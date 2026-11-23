@@ -125,6 +125,9 @@ public:
   bool saveItemMetadata(const ItemMetadataStore::ItemMetadata &metadata) override;
   // Kartend-445su: entity_metadata wrappers (see EntityMetadataStore).
   bool saveEntityMetadata(const EntityMetadataStore::EntityMetadata &metadata) override;
+  [[nodiscard]] ErrorUtils::Result<EntityMetadataStore::EntityMetadata>
+  loadEntityMetadata(const QString &entityType, const QString &entityIdentity,
+                     const QString &collectionUuid) const override;
   [[nodiscard]] EntityMetadataStore::EntityMetadata
   loadEntityMetadataForCollection(const QString &collectionUuid) const override;
 

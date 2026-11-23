@@ -97,6 +97,20 @@ public:
     (void)metadata;
     return false;
   }
+  /// The row for the exact (entityType, entityIdentity, collectionUuid) key —
+  /// an empty-but-keyed value when none exists, an error only on a real
+  /// database failure. A sparse entity scrape (Kartend-5b5r1) reads it to
+  /// keep what that same row already holds. Defaulted like the pair above
+  /// (no row) so unrelated test doubles keep compiling.
+  [[nodiscard]] virtual ErrorUtils::Result<EntityMetadataStore::EntityMetadata>
+  loadEntityMetadata(const QString &entityType, const QString &entityIdentity,
+                     const QString &collectionUuid) const {
+    EntityMetadataStore::EntityMetadata empty;
+    empty.entityType = entityType;
+    empty.entityIdentity = entityIdentity;
+    empty.collectionUuid = collectionUuid;
+    return empty;
+  }
   /// Newest entity row describing @p collectionUuid (collection-typed rows
   /// preferred) — an empty-but-keyed value when none exists.
   [[nodiscard]] virtual EntityMetadataStore::EntityMetadata

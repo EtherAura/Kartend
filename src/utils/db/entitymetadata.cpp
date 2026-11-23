@@ -4,6 +4,8 @@
 #include "entitymetadata.h"
 
 #include <QDateTime>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
@@ -48,6 +50,18 @@ EntityMetadata fromQuery(QSqlQuery &q) {
   m.source = q.value(7).toString();
   m.updatedAt = q.value(8).toString();
   return m;
+}
+
+/// A collection-typed row whose only content is the CPU custom field: no
+/// title, description or art, and custom_fields a JSON object with the CPU
+/// key alone (Kartend-5b5r1, CPU-only slice).
+bool isCpuOnlyCollectionRow(const EntityMetadata &m) {
+  if (m.entityType != QLatin1String(kTypeCollection)) return false;
+  if (!m.title.isEmpty() || !m.description.isEmpty() || !m.artPath.isEmpty()) return false;
+  const QJsonDocument doc = QJsonDocument::fromJson(m.customFields.toUtf8());
+  if (!doc.isObject()) return false;
+  const QJsonObject obj = doc.object();
+  return obj.size() == 1 && obj.contains(QLatin1String(kFieldCpu));
 }
 
 } // namespace
@@ -100,10 +114,13 @@ ErrorUtils::Result<EntityMetadata> loadForCollection(QSqlDatabase &db,
   // Collection-typed rows outrank platform rows of any age (a franchise /
   // collection description beats console boilerplate for the card that
   // describes the collection); within a type the newest scrape wins.
+  // Kartend-5b5r1: a collection row holding nothing but the CPU (what a
+  // CPU-only Wikidata scrape writes when the collection had no row yet) does
+  // not outrank a row that describes more; it is still chosen when it is all
+  // there is.
   if (!q.prepare(QStringLiteral("SELECT") + QLatin1String(SELECT_COLUMNS) +
                  QStringLiteral("FROM entity_metadata WHERE collection_uuid = ? "
-                                "ORDER BY (entity_type = 'collection') DESC, updated_at DESC "
-                                "LIMIT 1"))) {
+                                "ORDER BY (entity_type = 'collection') DESC, updated_at DESC"))) {
     return ErrorContext::error(ErrorCode::DatabaseQueryFailed,
                                "Failed to prepare entity_metadata collection select",
                                "EntityMetadataStore::loadForCollection")
@@ -121,7 +138,13 @@ ErrorUtils::Result<EntityMetadata> loadForCollection(QSqlDatabase &db,
     empty.collectionUuid = collectionUuid;
     return empty;
   }
-  return fromQuery(q);
+  const EntityMetadata first = fromQuery(q);
+  if (!isCpuOnlyCollectionRow(first)) return first;
+  while (q.next()) {
+    EntityMetadata next = fromQuery(q);
+    if (!isCpuOnlyCollectionRow(next)) return next;
+  }
+  return first;
 }
 
 ErrorUtils::Result<bool> save(QSqlDatabase &db, const EntityMetadata &metadata) {
