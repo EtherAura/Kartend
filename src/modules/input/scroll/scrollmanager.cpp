@@ -448,7 +448,16 @@ void ScrollManager::onGridLayoutChanged(int collectionIndex,
   // recompute metrics + reposition active widgets. Spacing / itemDim /
   // font / cornerRadius changes flow through the next recalculateMetrics
   // (which the setter cascade triggers).
-  updateGridWidth(gridLayout.gridWidth);
+  //
+  // Kartend-utd3p: feed updateGridWidth the incoming cluster's EFFECTIVE
+  // width (pane-hidden override while the sidebar is hidden in Expand mode),
+  // as navigation does. Passing the primary gridWidth here routed it into the
+  // active override field and reflowed the grid to the pane-open count on
+  // every Settings Save; the cluster write below then restored the stored
+  // override without re-laying out. Horizontal height is left as it was.
+  CollectionConfig incoming = m_context.config;
+  incoming.gridLayout = gridLayout;
+  updateGridWidth(CollectionUtils::effectiveGridWidth(incoming, m_sidebarShrinkingActive));
   updateHorizontalGridHeight(gridLayout.horizontalGridHeight);
   // Cluster-wide write so subsequent reads (calculateMetrics, paint, etc.)
   // see the full new state without per-field setters for every knob.
