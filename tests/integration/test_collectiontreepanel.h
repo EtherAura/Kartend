@@ -109,6 +109,13 @@ private slots:
   // collection is active, and again after the bar changes colour without a
   // tree rebuild.
   void chromeRow_matchesTheToolbarFill_whateverItsSource();
+
+  // Kartend-auh7u: with the navigation sidebar AND the details pane both
+  // fixed, full-height and docked LEFT, the outermost row stacks them
+  // deterministically — navigation sidebar outermost, then the details pane,
+  // then the toolbar/content column. Layout membership and order only; the
+  // right-side case and the on-screen look are not covered here.
+  void bothFullHeightLeft_stackNavOutermostThenPaneThenColumn();
 };
 
 #endif // TEST_COLLECTIONTREEPANEL_H

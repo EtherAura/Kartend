@@ -1,18 +1,24 @@
 #include "test_collectiontreepanel.h"
 
+#include "applicationcontext.h"
 #include "applicationmanager.h"
 #include "artworkpreviewoverlay.h"
 #include "collection/collectionconfig.h"
 #include "collectiontreecontroller.h"
 #include "detailspane.h"
+#include "detailspanemanager.h"
 #include "interactionmanager.h"
 #include "keyboardmanager.h"
 #include "mainwindow.h"
+#include "mainwindowfixture.h"
 #include "mocks/mockedmainwindowfixture.h"
 #include "navigationmanager.h"
 #include "overlayscrollbars.h"
+#include "settingsmanager.h"
 
 #include <QDir>
+#include <QFile>
+#include <QHBoxLayout>
 #include <QImage>
 #include <QLabel>
 #include <QPainter>
@@ -1162,4 +1168,101 @@ void TestCollectionTreePanel::chromeRow_matchesTheToolbarFill_whateverItsSource(
   nav->applyPrimaryColorForCollection(0);
   QTest::qWait(30);
   QCOMPARE(topRowPixel(tree).name(), barPixel(topBar).name());
+}
+
+void TestCollectionTreePanel::bothFullHeightLeft_stackNavOutermostThenPaneThenColumn() {
+  // A real collection on disk, so the window's own start-up load can make it
+  // the current collection: a collection with no media fails the navigation
+  // guard and the window stays in the root view (index -1).
+  QTemporaryDir mediaDir;
+  QVERIFY(mediaDir.isValid());
+  {
+    QFile media(QDir(mediaDir.path()).filePath(QStringLiteral("clip.mp4")));
+    QVERIFY(media.open(QIODevice::WriteOnly));
+    media.write("fake video bytes");
+  }
+
+  // Seeded tree width, distinct from the struct default, so the tree's
+  // per-collection state is observable once applied.
+  constexpr int kTreeWidth = 300;
+  QVERIFY(kTreeWidth != CollectionTreeSettings{}.treeWidth);
+  CollectionConfig cfg;
+  cfg.name = QStringLiteral("Clips");
+  cfg.type = QStringLiteral("video");
+  cfg.mediaDirectory = mediaDir.path();
+  cfg.extensions = QStringList{QStringLiteral("mp4")};
+  // Both panels visible, fixed (docked into the layout), full-height, left.
+  cfg.sidebar.sidebarVisible = true;
+  cfg.sidebar.sidebarMode = DetailsPaneMode::Expand;
+  cfg.sidebar.sidebarPosition = DetailsPanePosition::Left;
+  cfg.sidebar.sidebarJustification = SidebarJustification::FullHeight;
+  cfg.collectionTree.treeVisible = true;
+  cfg.collectionTree.treeMode = DetailsPaneMode::Expand;
+  cfg.collectionTree.treePosition = DetailsPanePosition::Left;
+  cfg.collectionTree.treeJustification = SidebarJustification::FullHeight;
+  cfg.collectionTree.treeWidth = kTreeWidth;
+
+  // Real fixture, real on-disk SQLite sandbox: the collection must be in the
+  // sandbox INI before MainWindow loads it.
+  KartendTest::MainWindowFixture fixture([&cfg]() {
+    ApplicationContext seedCtx; // saveCollections never reads ctx
+    SettingsManager seedSettings(&seedCtx);
+    if (seedSettings.saveCollections({cfg}).isError()) {
+      qFatal("failed to seed the sandbox collection INI");
+    }
+  });
+  MainWindow *win = fixture.window();
+  QVERIFY(win);
+  DetailsPaneManager *paneMgr = win->getApplicationManager()->getDetailsPaneManager();
+  QVERIFY(paneMgr);
+  QHBoxLayout *row = win->m_sidebarRowLayout;
+  QWidget *column = win->m_toolbarColumnWidget;
+  QVERIFY(row);
+  QVERIFY(column);
+  QWidget *panel = win->findChild<QWidget *>(QStringLiteral("collectionTreePanel"));
+  QVERIFY(panel);
+  auto *pane = win->findChild<DetailsPane *>();
+  QVERIFY(pane);
+
+  // Loaded into the config, but not applied yet: start-up is queued on the
+  // event loop, and the pane still sits in its root-view (non-row) layout.
+  QCOMPARE(win->m_collections.size(), 1);
+  QCOMPARE(win->m_collections[0].sidebar.sidebarJustification, SidebarJustification::FullHeight);
+  QCOMPARE(win->m_collections[0].sidebar.sidebarPosition, DetailsPanePosition::Left);
+  QCOMPARE(win->m_collections[0].sidebar.sidebarMode, DetailsPaneMode::Expand);
+  QCOMPARE(win->m_collections[0].collectionTree.treeJustification,
+           SidebarJustification::FullHeight);
+  QCOMPARE(win->m_collections[0].collectionTree.treePosition, DetailsPanePosition::Left);
+  QCOMPARE(win->m_collections[0].collectionTree.treeWidth, kTreeWidth);
+  QCOMPARE(win->m_currentCollectionIndex, -1);
+  QCOMPARE(row->indexOf(pane), -1);
+
+  win->show();
+  QVERIFY(QTest::qWaitForWindowExposed(win));
+
+  // Ready: the window's own start-up made the seeded collection current and
+  // the details pane manager applied its sidebar state.
+  QTRY_VERIFY_WITH_TIMEOUT(win->m_currentCollectionIndex == 0 && paneMgr->isSidebarVisible() &&
+                               row->indexOf(pane) != -1,
+                           10000);
+  // The tree's per-collection state was applied too, not just the root-view
+  // default insert (which is already left + full-height).
+  QTRY_COMPARE_WITH_TIMEOUT(panel->maximumWidth(), kTreeWidth, 10000);
+  QCOMPARE(panel->minimumWidth(), kTreeWidth);
+  QVERIFY(panel->isVisible());
+  QVERIFY(pane->isVisible());
+
+  // Both panels belong to the outermost row, not the below-toolbar row.
+  QCOMPARE(win->m_mainHorizontalLayout->indexOf(panel), -1);
+  QCOMPARE(win->m_mainHorizontalLayout->indexOf(pane), -1);
+  const int panelAt = row->indexOf(panel);
+  const int paneAt = row->indexOf(pane);
+  const int columnAt = row->indexOf(column);
+  QVERIFY2(panelAt != -1, "the navigation panel must dock in the full-height row");
+  QVERIFY2(columnAt != -1, "the toolbar/content column must stay in the full-height row");
+  // Navigation sidebar outermost, then the details pane, then the column.
+  QCOMPARE(panelAt, 0);
+  QCOMPARE(paneAt, 1);
+  QCOMPARE(columnAt, 2);
+  QCOMPARE(row->count(), 3);
 }
