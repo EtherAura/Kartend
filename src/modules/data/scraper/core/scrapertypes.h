@@ -247,6 +247,13 @@ struct ScrapedItem {
   /// and re-burn quota (Kartend-jjyst.1). Stamped by BatchScrapeRunner's media
   /// aggregator; empty on paths that don't track per-asset download outcomes.
   QStringList mediaFetchFailedThisRun;
+  /// Entity results only (Kartend-5b5r1, CPU-only slice): Wikidata admitted
+  /// this entity on its resolved P880 CPU label alone. Its CPU custom field
+  /// is the only new metadata (the title is the local collection name, not
+  /// catalog data), so the entity_metadata write updates just the CPU key of
+  /// the job's own row and keeps everything else that row holds. False =
+  /// ordinary full upsert.
+  bool cpuOnlyEntityMetadata = false;
 };
 
 /// Snapshot of the provider's per-account request quota, surfaced live

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A console's Wikidata scrape no longer reports "nothing found" when the
+  console's processor is the only detail Wikidata has. The processor's name is
+  now saved as the collection's CPU, and rescraping such a console keeps the
+  title, description, artwork and other details saved for it before. When the
+  console's details came from a platform scrape, they stay visible in the
+  collection summary.
+
 ## [0.0.24] - 2026-11-22
 
 ### Added

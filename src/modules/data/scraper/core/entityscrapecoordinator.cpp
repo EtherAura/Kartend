@@ -778,6 +778,56 @@ QString EntityScrapeCoordinator::applyEntityArtToConfig(const QString &collectio
   return logo;
 }
 
+namespace {
+
+/// Kartend-5b5r1 (CPU-only slice): Wikidata admitted the entity on its
+/// resolved P880 CPU label alone, so the CPU is the one new value. Update
+/// only that custom-field key of the job's own row (@p key's type, identity
+/// and collection — never another row) and keep its title, description, art
+/// path, source and every other key as saved: the item's title is the local
+/// collection name, not catalog data. A failed read, or saved custom fields
+/// that cannot be parsed, skips the write rather than replacing what could
+/// not be read.
+void persistCpuOnly(IDatabaseManager *db, const Scraper::ScrapedItem &item,
+                    const EntityMetadataStore::EntityMetadata &key) {
+  const QString cpuKey = QLatin1String(EntityMetadataStore::kFieldCpu);
+  const QString cpu = item.customFields.value(cpuKey);
+  if (cpu.isEmpty()) return; // the provider never sends this; nothing to write
+  const auto existing =
+      db->loadEntityMetadata(key.entityType, key.entityIdentity, key.collectionUuid);
+  if (existing.isError()) {
+    qCWarning(lcEntityScrape) << "entity metadata for" << key.entityIdentity
+                              << "not updated: the saved row could not be read";
+    return;
+  }
+  EntityMetadataStore::EntityMetadata row = existing.value();
+  row.entityType = key.entityType;
+  row.entityIdentity = key.entityIdentity;
+  row.collectionUuid = key.collectionUuid;
+  ItemMetadataStore::CustomFieldList fields =
+      ItemMetadataStore::parseCustomFields(row.customFields);
+  if (fields.isEmpty() && !row.customFields.trimmed().isEmpty()) {
+    qCWarning(lcEntityScrape) << "entity metadata for" << key.entityIdentity
+                              << "not updated: its saved custom fields could not be read";
+    return;
+  }
+  const auto it = std::find_if(fields.begin(), fields.end(),
+                               [&cpuKey](const auto &pair) { return pair.first == cpuKey; });
+  if (it != fields.end()) {
+    it->second = cpu;
+  } else {
+    fields.append({cpuKey, cpu});
+  }
+  row.customFields = ItemMetadataStore::serializeCustomFields(fields);
+  if (row.source.isEmpty()) row.source = item.sourceProviderId;
+  if (!db->saveEntityMetadata(row)) {
+    qCWarning(lcEntityScrape) << "entity metadata for" << key.entityIdentity
+                              << "did not persist (see database log)";
+  }
+}
+
+} // namespace
+
 void EntityScrapeCoordinator::persistEntityMetadata(const Scraper::ScrapedItem &item,
                                                     const Scraper::EntityScrapeTarget &target,
                                                     const QString &collectionUuid,
@@ -803,6 +853,10 @@ void EntityScrapeCoordinator::persistEntityMetadata(const Scraper::ScrapedItem &
   }
   meta.entityIdentity = target.identity.isEmpty() ? collectionUuid : target.identity;
   meta.collectionUuid = collectionUuid;
+  if (item.cpuOnlyEntityMetadata) {
+    persistCpuOnly(db, item, meta);
+    return;
+  }
   meta.title = item.title;
   meta.description = item.description;
   meta.artPath = artPath;
