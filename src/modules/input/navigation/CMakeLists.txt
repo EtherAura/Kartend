@@ -1,5 +1,6 @@
 target_sources(kartend_input PRIVATE
   backdropbluroverlay.cpp
+  backgroundimagewidget.cpp
   backgroundvideowidget.cpp
   collectionbackgroundcontroller.cpp
   emptystatewidget.cpp
@@ -17,6 +18,7 @@ target_sources(kartend_input PRIVATE
   navigationmanagertitle.cpp
   vignetteoverlay.cpp
   backdropbluroverlay.h
+  backgroundimagewidget.h
   backgroundvideowidget.h
   collectionbackgroundcontroller.h
   emptystatewidget.h

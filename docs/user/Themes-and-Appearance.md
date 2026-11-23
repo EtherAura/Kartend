@@ -70,10 +70,18 @@ once on collection open and held as a QPixmap.
 | Setting | INI key | Effect |
 |---------|---------|--------|
 | Wallpaper Parallax | `wallpaperParallax` | Boolean toggle |
-| Parallax Strength | `parallaxStrength` | 0–100; 0 = no parallax, 100 = matches scroll speed |
+| Parallax Strength | `parallaxStrength` | 0–100; how far the wallpaper drifts over the whole list, as a percentage of the grid's height. 0 = no drift |
 
-When enabled, scrolling the items grid moves the background at a
-percentage of the scroll speed (default 30%). Gives a sense of depth.
+When enabled, the wallpaper drifts up more slowly than the tiles as you
+scroll the items grid, which gives a sense of depth. To make room, Kartend
+zooms the wallpaper in by the strength's share of the grid height (default
+30%). The wallpaper then slides through that extra height from the top of
+the list to the bottom, so it never runs out. On a long list it drifts
+slowly, and on a short one it drifts faster. A grid that fits without
+scrolling shows a still wallpaper.
+
+With parallax off, the wallpaper stays still while the tiles scroll over
+it.
 
 Parallax has no effect when the background type is `color` or `video`.
 

@@ -471,8 +471,8 @@ here. See [Scraper](Scraper.md) for the workflow side.
 | `selectionColor` | hex | derived | Selection rectangle color. |
 | `vignetteEnabled` | bool | `false` | Darken the viewport corners. |
 | `vignetteIntensity` | int (0–100) | `60` | Vignette strength. `0` = no effect, `100` = pitch black at the corners. |
-| `wallpaperParallax` | bool | `false` | Background image scrolls slower than items. |
-| `parallaxStrength` | int (0–100) | `30` | Parallax scrolling factor. |
+| `wallpaperParallax` | bool | `false` | Background image drifts more slowly than the items as the grid scrolls. Off = the image stays still. |
+| `parallaxStrength` | int (0–100) | `30` | How far the image drifts over the whole list, as a percentage of the grid's height. The image is zoomed in by the same amount to make room. |
 | `toolbarBackdropBlur` | bool | `false` | Blur the toolbar background. |
 | `backdropBlurRadius` | int | `12` | Blur radius (pixels). |
 

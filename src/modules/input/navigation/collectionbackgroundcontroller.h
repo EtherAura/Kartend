@@ -5,8 +5,6 @@
 #include <QList>
 #include <QObject>
 
-#include <QTimer>
-
 QT_BEGIN_NAMESPACE
 class QLineEdit;
 class QMenuBar;
@@ -14,6 +12,7 @@ class QScrollArea;
 class QWidget;
 QT_END_NAMESPACE
 
+class BackgroundImageWidget;
 class BackgroundVideoWidget;
 class HeaderLogoOverlay;
 class VignetteOverlay;
@@ -22,9 +21,8 @@ class BackdropBlurOverlay;
 /**
  * @brief Setup struct for CollectionBackgroundController dependencies.
  *
- * Every field is borrowed — the controller owns only the four lazily-created
- * overlay widgets (Qt-parented to the items viewport / toolbar) and the
- * parallax throttle timer.
+ * Every field is borrowed — the controller owns only the lazily-created
+ * overlay widgets (Qt-parented to the items viewport / toolbar).
  */
 struct CollectionBackgroundControllerSetup {
   QScrollArea *itemScrollArea = nullptr;
@@ -39,17 +37,17 @@ struct CollectionBackgroundControllerSetup {
  * @brief Drives the items-page background/overlay UI surface for a collection.
  *
  * Extracted from NavigationManager. Owns the per-collection background render:
- * the video-background widget, header-logo overlay, vignette overlay, and
- * toolbar backdrop-blur overlay, plus the viewport/toolbar/menubar/search-bar
- * stylesheets that carry the wallpaper and primary-color theming. Each overlay
+ * the video- and image-background widgets, header-logo overlay, vignette
+ * overlay, and toolbar backdrop-blur overlay, plus the viewport/toolbar/
+ * menubar/search-bar stylesheets that carry the colour background and
+ * primary-color theming. Each overlay
  * widget is lazily created on first need and hidden (decoder released, for
  * video) whenever the active collection doesn't use it, so collections without
  * a given effect pay zero cost.
  *
  * Borrows every dependency; holds no back-pointer into NavigationManager. The
- * items scroll bar is connected once so wallpaper parallax can re-position the
- * background image as the user scrolls; the throttled handler self-bails when
- * parallax is disabled for the active collection.
+ * items scroll bar is connected once so the image wallpaper can follow the
+ * grid for parallax; a static wallpaper ignores the position.
  */
 class CollectionBackgroundController : public QObject {
   Q_OBJECT
@@ -61,8 +59,8 @@ public:
   void setupReferences(const CollectionBackgroundControllerSetup &setup);
 
   /// Apply the collection's background (video / image / color) plus the
-  /// header-logo, vignette, and toolbar-blur overlays, and wire the parallax
-  /// scroll listener.
+  /// header-logo, vignette, and toolbar-blur overlays, and wire the scroll
+  /// listener that drives wallpaper parallax.
   void applyBackgroundForCollection(int collectionIndex);
 
   /// Apply the collection's primary color to the ItemWidget static palette and
@@ -86,9 +84,8 @@ private:
   /// repaint it without the caller re-supplying the index.
   int m_lastAppliedIndex = -1;
 
-  // throttled scroll handler for wallpaper parallax (coalesced to ~60Hz).
-  void onItemsScrolled();
-  void applyParallaxOffset();
+  // Pass the items grid's scroll position to the image wallpaper.
+  void syncWallpaperToScroll();
 
   // Borrowed dependencies — never owned, never deleted through these.
   QScrollArea *m_itemScrollArea = nullptr;
@@ -102,6 +99,10 @@ private:
   // Parented to the items viewport so its lifetime mirrors the scroll area's.
   // Hidden + decoder-released when the active collection doesn't use video.
   BackgroundVideoWidget *m_backgroundVideo = nullptr;
+  // lazy-created on first collection with an image background; same
+  // parenting and lifetime as the video widget. Hidden + image released when
+  // the active collection doesn't use one.
+  BackgroundImageWidget *m_backgroundImage = nullptr;
   // lazy-created header logo overlay; parented to the items top bar.
   HeaderLogoOverlay *m_headerLogo = nullptr;
   // lazy-created vignette overlay layered above the logo so the logo isn't
@@ -110,10 +111,6 @@ private:
   // lazy-created toolbar backdrop blur. Hidden whenever the active collection
   // has the toggle off or uses a video bg.
   BackdropBlurOverlay *m_toolbarBlur = nullptr;
-  // throttle for parallax stylesheet rebuilds. Lazy-created on first scroll
-  // while parallax is active. Caps QSS updates at ~60Hz.
-  QTimer m_parallaxThrottle; // Kartend-a911.5: value member; lifetime tracks owner
-  bool m_parallaxThrottleInited = false;
   bool m_scrollListenerConnected = false;
 };
 
