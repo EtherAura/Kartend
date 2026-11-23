@@ -2,6 +2,7 @@
 // Extracted from NavigationManager (navigationmanagerappearance.cpp seam).
 #include "collectionbackgroundcontroller.h"
 #include "backdropbluroverlay.h"
+#include "backgroundimagewidget.h"
 #include "backgroundvideowidget.h"
 #include "collection/typehelpers.h"
 #include "headerlogooverlay.h"
@@ -20,7 +21,6 @@
 #include <QScrollBar>
 #include <QString>
 #include <QStringLiteral>
-#include <QTimer>
 #include <QWidget>
 
 CollectionBackgroundController::CollectionBackgroundController(QObject *parent) : QObject(parent) {}
@@ -70,6 +70,31 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
   } else if (m_backgroundVideo) {
     m_backgroundVideo->clear();
     m_backgroundVideo->hide();
+  }
+
+  // Image wallpaper, loaded once for both the wallpaper widget and the
+  // toolbar blur below. Painted by BackgroundImageWidget rather than a
+  // viewport stylesheet, which scrolled the image 1:1 with the tiles and
+  // could not offset it for parallax (Kartend-w0zi1; see the widget).
+  const QPixmap wallpaper = (collection.background.backgroundType == BackgroundType::Image &&
+                             !collection.background.backgroundImage.isEmpty())
+                                ? QPixmap(CollectionUtils::resolvedAssetPath(
+                                      collection.background.backgroundImage, collection.name))
+                                : QPixmap();
+  const bool wantsImage = !wallpaper.isNull();
+  if (wantsImage) {
+    if (!m_backgroundImage) {
+      m_backgroundImage = new BackgroundImageWidget(viewport);
+    }
+    m_backgroundImage->setImage(wallpaper);
+    m_backgroundImage->setParallaxStrength(
+        collection.background.wallpaperParallax ? collection.background.parallaxStrength : 0);
+    syncWallpaperToScroll();
+    m_backgroundImage->show();
+    m_backgroundImage->lower();
+  } else if (m_backgroundImage) {
+    m_backgroundImage->clear();
+    m_backgroundImage->hide();
   }
 
   // header logo as a real toolbar layout member. Insertion
@@ -142,10 +167,14 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
 
   // Re-establish viewport z-order every apply so any external raise()/lower()
   // since last navigation can't leave the layers stacked wrong. Order:
-  // video → (scroll widget, default) → vignette. The header logo lives on
-  // m_itemsTopBar instead, so it isn't part of this stack.
+  // video / image wallpaper (only one is ever shown) → (scroll widget,
+  // default) → vignette. The header logo lives on m_itemsTopBar instead, so
+  // it isn't part of this stack.
   if (m_backgroundVideo) {
     m_backgroundVideo->lower();
+  }
+  if (m_backgroundImage) {
+    m_backgroundImage->lower();
   }
   if (m_vignette) {
     m_vignette->raise();
@@ -155,67 +184,38 @@ void CollectionBackgroundController::applyBackgroundForCollection(int collection
   // frames every paint is too expensive without GPU shaders, so the
   // toggle is treated as a no-op for video bgs. Parented to m_itemsTopBar
   // and lowered behind the toolbar's button widgets so they render on top.
-  const bool wantsBlur = collection.background.toolbarBackdropBlur && m_itemsTopBar &&
-                         collection.background.backgroundType == BackgroundType::Image &&
-                         !collection.background.backgroundImage.isEmpty();
+  const bool wantsBlur = collection.background.toolbarBackdropBlur && m_itemsTopBar && wantsImage;
   if (wantsBlur) {
     if (!m_toolbarBlur) {
       m_toolbarBlur = new BackdropBlurOverlay(m_itemsTopBar);
     }
-    QPixmap source(
-        CollectionUtils::resolvedAssetPath(collection.background.backgroundImage, collection.name));
-    if (!source.isNull()) {
-      m_toolbarBlur->setSource(source, collection.background.backdropBlurRadius);
-      m_toolbarBlur->show();
-      m_toolbarBlur->lower();
-    } else if (m_toolbarBlur) {
-      m_toolbarBlur->clear();
-      m_toolbarBlur->hide();
-    }
+    m_toolbarBlur->setSource(wallpaper, collection.background.backdropBlurRadius);
+    m_toolbarBlur->show();
+    m_toolbarBlur->lower();
   } else if (m_toolbarBlur) {
     m_toolbarBlur->clear();
     m_toolbarBlur->hide();
   }
 
-  // connect the items scroll bar once so parallax can adjust
-  // the wallpaper's vertical position as the user scrolls. The handler
-  // self-bails when parallax is disabled for the active collection, so
-  // the connection is harmless when no collection wants the effect.
-  if (!m_scrollListenerConnected && m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
-    connect(m_itemScrollArea->verticalScrollBar(), &QAbstractSlider::valueChanged, this,
-            [this](int /*v*/) { onItemsScrolled(); });
+  // Connect the items scroll bar once so the wallpaper follows the grid's
+  // position. rangeChanged as well as valueChanged: loading or filtering
+  // items changes the range without moving the value, which moves the
+  // fraction the drift is computed from.
+  if (!m_scrollListenerConnected && m_itemScrollArea->verticalScrollBar()) {
+    QScrollBar *bar = m_itemScrollArea->verticalScrollBar();
+    connect(bar, &QAbstractSlider::valueChanged, this, [this](int) { syncWallpaperToScroll(); });
+    connect(bar, &QAbstractSlider::rangeChanged, this,
+            [this](int, int) { syncWallpaperToScroll(); });
     m_scrollListenerConnected = true;
   }
 
   QString styleSheet;
-  if (wantsVideo) {
+  if (wantsVideo || wantsImage) {
     // Make the viewport (and its descendants — the scroll widget and grid
-    // container) transparent so the BackgroundVideoWidget child shows
+    // container) transparent so the video / image widget behind them shows
     // through. ItemWidgets paint their own pixmaps so they stay opaque
     // where they need to be.
     styleSheet = QStringLiteral("QWidget { background-color: transparent; }");
-  } else if (collection.background.backgroundType == BackgroundType::Image &&
-             !collection.background.backgroundImage.isEmpty()) {
-    // Background image mode. Parallax adjusts the vertical
-    // position by `scrollValue * strength / 100` — strength 0 keeps the bg
-    // locked (fully static), strength 100 makes it move at content speed.
-    QString imagePath =
-        CollectionUtils::resolvedAssetPath(collection.background.backgroundImage, collection.name);
-    imagePath.replace("\\", "/");
-    int parallaxOffset = 0;
-    if (collection.background.wallpaperParallax && collection.background.parallaxStrength > 0 &&
-        m_itemScrollArea && m_itemScrollArea->verticalScrollBar()) {
-      const int v = m_itemScrollArea->verticalScrollBar()->value();
-      parallaxOffset = (v * collection.background.parallaxStrength) / 100;
-    }
-    styleSheet = QString("QWidget { "
-                         "background-image: url(\"%1\"); "
-                         "background-repeat: no-repeat; "
-                         "background-position: center -%2px; "
-                         "background-attachment: fixed; "
-                         "}")
-                     .arg(imagePath)
-                     .arg(parallaxOffset);
   } else if (!collection.background.backgroundColor.isEmpty()) {
     // Background color mode
     styleSheet =
@@ -397,74 +397,19 @@ void CollectionBackgroundController::applyPrimaryColorForCollection(int collecti
   }
 }
 
-// throttled scroll handler for wallpaper parallax. The
-// scroll bar can emit valueChanged dozens of times per second; rebuilding
-// the viewport stylesheet that often is wasteful, so we coalesce updates
-// to ~60Hz. The first edge fires immediately so the bg responds without
-// perceptible lag; subsequent emissions inside the window are dropped
-// and the timeout flush picks up the latest value.
-void CollectionBackgroundController::onItemsScrolled() {
-  if (!m_currentCollectionIndex || !m_collections || !m_itemScrollArea) {
+// Hand the grid's scroll position to the wallpaper. No throttle: setting the
+// fraction only schedules a repaint, which Qt coalesces, and the widget
+// skips even that when its wallpaper is static.
+void CollectionBackgroundController::syncWallpaperToScroll() {
+  if (!m_backgroundImage || !m_itemScrollArea) {
     return;
   }
-  const int idx = *m_currentCollectionIndex;
-  if (idx < 0 || idx >= m_collections->size()) {
+  const QScrollBar *bar = m_itemScrollArea->verticalScrollBar();
+  if (!bar) {
     return;
   }
-  const CollectionConfig &c = (*m_collections)[idx];
-  if (!c.background.wallpaperParallax || c.background.parallaxStrength <= 0 ||
-      c.background.backgroundType != BackgroundType::Image ||
-      c.background.backgroundImage.isEmpty()) {
-    return;
-  }
-
-  if (!m_parallaxThrottleInited) {
-    m_parallaxThrottle.setSingleShot(true);
-    connect(&m_parallaxThrottle, &QTimer::timeout, this,
-            &CollectionBackgroundController::applyParallaxOffset);
-    m_parallaxThrottleInited = true;
-  }
-  if (m_parallaxThrottle.isActive()) {
-    // An update is already queued; the timeout will pick up the latest
-    // scroll value when it fires.
-    return;
-  }
-  applyParallaxOffset();
-  // ~60Hz throttle. Higher cadence wastes QSS rebuilds; lower starts to
-  // feel laggy on fast scrolls.
-  m_parallaxThrottle.start(16);
-}
-
-void CollectionBackgroundController::applyParallaxOffset() {
-  if (!m_currentCollectionIndex || !m_collections || !m_itemScrollArea ||
-      !m_itemScrollArea->viewport() || !m_itemScrollArea->verticalScrollBar()) {
-    return;
-  }
-  const int idx = *m_currentCollectionIndex;
-  if (idx < 0 || idx >= m_collections->size()) {
-    return;
-  }
-  const CollectionConfig &c = (*m_collections)[idx];
-  if (c.background.backgroundType != BackgroundType::Image ||
-      c.background.backgroundImage.isEmpty()) {
-    return;
-  }
-  const int strength =
-      c.background.wallpaperParallax ? qBound(0, c.background.parallaxStrength, 100) : 0;
-  const int v = m_itemScrollArea->verticalScrollBar()->value();
-  const int offset = (v * strength) / 100;
-
-  QString imagePath = CollectionUtils::resolvedAssetPath(c.background.backgroundImage, c.name);
-  imagePath.replace("\\", "/");
-  const QString styleSheet = QString("QWidget { "
-                                     "background-image: url(\"%1\"); "
-                                     "background-repeat: no-repeat; "
-                                     "background-position: center -%2px; "
-                                     "background-attachment: fixed; "
-                                     "}")
-                                 .arg(imagePath)
-                                 .arg(offset);
-  m_itemScrollArea->viewport()->setStyleSheet(styleSheet);
+  m_backgroundImage->setScrollFraction(
+      BackgroundImageWidget::scrollFractionOf(bar->value(), bar->minimum(), bar->maximum()));
 }
 
 void CollectionBackgroundController::refreshDesktopDerivedChrome() {

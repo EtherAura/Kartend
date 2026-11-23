@@ -421,24 +421,27 @@
         <translation>Wallpaper Parallax</translation>
     </message>
     <message>
-        <location line="+8"/>
         <source>Tie the image background&apos;s vertical position to the items scroll offset. Image bg only — video bgs are unaffected.</source>
-        <translation>Tie the image background&apos;s vertical position to the items scroll offset. Image bg only — video bgs are unaffected.</translation>
+        <translation type="vanished">Tie the image background&apos;s vertical position to the items scroll offset. Image bg only — video bgs are unaffected.</translation>
     </message>
     <message>
-        <location line="-2"/>
+        <location line="+6"/>
         <source>Strength:</source>
         <translation>Strength:</translation>
     </message>
     <message>
-        <location line="+1"/>
         <source>0 = bg locked (no parallax movement); 100 = bg moves in lockstep with content. 30 is a subtle default.</source>
-        <translation>0 = bg locked (no parallax movement); 100 = bg moves in lockstep with content. 30 is a subtle default.</translation>
+        <translation type="vanished">0 = bg locked (no parallax movement); 100 = bg moves in lockstep with content. 30 is a subtle default.</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="+2"/>
         <source>Enable wallpaper parallax</source>
         <translation>Enable wallpaper parallax</translation>
+    </message>
+    <message>
+        <location line="+0"/>
+        <source>Drift the image background more slowly than the items as the grid scrolls. Image backgrounds only; video backgrounds are unaffected.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <location line="+6"/>
@@ -461,7 +464,12 @@
         <translation>Radius:</translation>
     </message>
     <message>
-        <location line="+1"/>
+        <location line="-13"/>
+        <source>How far the wallpaper drifts over the whole list, as a percentage of the grid&apos;s height. The wallpaper is zoomed in by the same amount to make room. 0 = no drift; 30 is a subtle default.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location line="+14"/>
         <source>Blur radius (4 = barely perceptible; 32 = source becomes unreadable).</source>
         <translation>Blur radius (4 = barely perceptible; 32 = source becomes unreadable).</translation>
     </message>
@@ -1672,12 +1680,12 @@ Skipped %3 items that already had artwork.</translation>
 <context>
     <name>CollectionTreeController</name>
     <message>
-        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+1590"/>
+        <location filename="../src/ui/controllers/collectiontreecontroller/collectiontreecontroller.cpp" line="+1628"/>
         <source>Playlists</source>
         <translation>Playlists</translation>
     </message>
     <message>
-        <location line="+766"/>
+        <location line="+779"/>
         <source>Set Custom Icon…</source>
         <translation>Set Custom Icon…</translation>
     </message>

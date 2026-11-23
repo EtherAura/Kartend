@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is set, the grid keeps that column count after Save and OK, including when
   you change Grid Width itself; the new Grid Width applies once the pane opens.
 
+- **Wallpaper parallax works.** The image wallpaper used to scroll with the
+  tiles at full speed, whether parallax was on or off and whatever the
+  strength. With parallax on it now drifts more slowly than the tiles, and with
+  it off it stays still while the tiles scroll over it. Strength sets how far
+  the wallpaper drifts over the whole list, as a share of the grid's height;
+  Kartend zooms the wallpaper in by that much to make room, so it never runs
+  out on a long list. Image wallpapers are now scaled to fill the grid as the
+  documentation describes, instead of being drawn at their pixel size, which
+  showed a 4K wallpaper magnified on a HiDPI screen.
+
 ## [0.0.24] - 2026-11-22
 
 ### Added

@@ -24,6 +24,17 @@ kartend_add_test(NAME ChromeFollowsDesktopColor
 )
 target_include_directories(test_chromefollowsdesktopcolor PRIVATE ${SRC_DIR}/chrome/overlays)
 
+# Image wallpaper parallax: geometry, and where the wallpaper lands as the
+# grid scrolls (Kartend-w0zi1). Renders widgets, so it pins the offscreen
+# platform rather than relying on the caller's environment.
+kartend_add_test(NAME WallpaperParallax
+  SOURCES modules/navigation/test_wallpaperparallax.cpp
+  LINK kartend_input kartend_data kartend_chrome kartend_api kartend_utils
+)
+set_tests_properties(WallpaperParallax PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+)
+
 # Overlay scrollbars reserve a lane instead of covering content.
 kartend_add_test(NAME OverlayScrollbarGutter
   SOURCES chrome/test_overlayscrollbargutter.cpp
