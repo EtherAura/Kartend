@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   console's details came from a platform scrape, they stay visible in the
   collection summary.
 
+- Saving Settings while the details pane is hidden in Fixed mode no longer
+  reflows the grid to the pane-open Grid Width. When "Grid Width (pane hidden)"
+  is set, the grid keeps that column count after Save and OK, including when
+  you change Grid Width itself; the new Grid Width applies once the pane opens.
+
 ## [0.0.24] - 2026-11-22
 
 ### Added

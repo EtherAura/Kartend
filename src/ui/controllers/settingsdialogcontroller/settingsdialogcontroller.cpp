@@ -14,6 +14,7 @@
 #include "collection/collectionconfig.h"
 #include "collection/hierarchyhelpers.h"
 #include "collection/typehelpers.h"
+#include "collection/validationhelpers.h"
 #include "errorpresentation.h"
 #include "iartworkmanager.h"
 #include "icachemanager.h"
@@ -251,7 +252,12 @@ void handleScrollBranch(IScrollManager *scrollManager, IArtworkManager *artworkM
     return;
   }
   if (gridWidthChanged) {
-    scrollManager->updateGridWidth(collections[viewingIndex].gridLayout.gridWidth);
+    // Kartend-utd3p: apply the effective width (pane-hidden override while
+    // the sidebar is hidden in Expand mode), as navigation does. The primary
+    // value here would land in the live override field and reflow the grid
+    // to the pane-open count.
+    scrollManager->updateGridWidth(CollectionUtils::effectiveGridWidth(
+        collections[viewingIndex], scrollManager->sidebarShrinkingActive()));
     scheduleGridWidthRefresh(scrollManager, artworkManager, viewingIndex, &collections);
     return;
   }
