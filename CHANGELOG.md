@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.25] - 2026-11-24
+
 ### Fixed
 
 - **A controller used in another app no longer drives Kartend.** Kartend
@@ -286,7 +288,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Releases 0.0.1 through 0.0.20 are archived in
 [docs/changelogs/v0.0.x.md](docs/changelogs/v0.0.x.md).
 
-[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.24...HEAD
+[Unreleased]: https://github.com/EtherAura/Kartend/compare/v0.0.25...HEAD
+[0.0.25]: https://github.com/EtherAura/Kartend/compare/v0.0.24...v0.0.25
 [0.0.24]: https://github.com/EtherAura/Kartend/compare/v0.0.23...v0.0.24
 [0.0.23]: https://github.com/EtherAura/Kartend/compare/v0.0.22...v0.0.23
 [0.0.22]: https://github.com/EtherAura/Kartend/compare/v0.0.21...v0.0.22
