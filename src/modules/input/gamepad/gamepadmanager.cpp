@@ -4,6 +4,7 @@
 #include "uiconstants/gamepad.h"
 
 #include <QApplication>
+#include <QGuiApplication>
 
 #ifdef KARTEND_HAS_SDL2_GAMEPAD
 #include <QTimer>
@@ -25,6 +26,15 @@ IKeyboardManager *GamepadManager::keyboardMgr() const {
 }
 
 GamepadManager::GamepadManager(QObject *parent) : QObject(parent) {
+  // Kartend-4nf4a: follow application focus. Constructed during MainWindow
+  // construction, before any window is shown, so this normally seeds
+  // "inactive" and the first focus-in lifts it.
+  if (auto *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+    m_appInactive = QGuiApplication::applicationState() != Qt::ApplicationActive;
+    connect(app, &QGuiApplication::applicationStateChanged, this,
+            &GamepadManager::onApplicationStateChanged);
+  }
+
 #ifdef KARTEND_HAS_QT_GAMEPAD
   m_manager = QGamepadManager::instance();
   if (m_manager) {
@@ -256,17 +266,21 @@ void GamepadManager::pollSdlState() {
   const bool l3Now = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_LEFTSTICK);
   const bool r3Now = SDL_GameControllerGetButton(controller, SDL_CONTROLLER_BUTTON_RIGHTSTICK);
 
-  const bool pressA = aNow && !m_buttonA;
-  const bool pressB = bNow && !m_buttonB;
-  const bool pressX = xNow && !m_buttonX;
-  const bool pressY = yNow && !m_buttonY;
-  const bool pressBack = backNow && !m_buttonBack;
-  const bool pressStart = startNow && !m_buttonStart;
-  const bool pressGuide = guideNow && !m_buttonGuide;
-  const bool pressL1 = l1Now && !m_buttonL1;
-  const bool pressR1 = r1Now && !m_buttonR1;
-  const bool pressL3 = l3Now && !m_buttonL3;
-  const bool pressR3 = r3Now && !m_buttonR3;
+  // Kartend-4nf4a: while blocked (launch suspension or another window has
+  // focus) no press counts, not even toward binding capture; the state
+  // below still updates, so a button held across the refocus is no edge.
+  const bool live = !dispatchBlocked();
+  const bool pressA = live && aNow && !m_buttonA;
+  const bool pressB = live && bNow && !m_buttonB;
+  const bool pressX = live && xNow && !m_buttonX;
+  const bool pressY = live && yNow && !m_buttonY;
+  const bool pressBack = live && backNow && !m_buttonBack;
+  const bool pressStart = live && startNow && !m_buttonStart;
+  const bool pressGuide = live && guideNow && !m_buttonGuide;
+  const bool pressL1 = live && l1Now && !m_buttonL1;
+  const bool pressR1 = live && r1Now && !m_buttonR1;
+  const bool pressL3 = live && l3Now && !m_buttonL3;
+  const bool pressR3 = live && r3Now && !m_buttonR3;
 
   if (m_bindingCaptureActive) {
     if (pressA) {
@@ -351,7 +365,7 @@ void GamepadManager::pollSdlState() {
     handleMappedButtonPress(QStringLiteral("R3"));
   }
 
-  if (backNow != m_buttonBack && !m_suspended && !m_bindingCaptureActive) {
+  if (backNow != m_buttonBack && live && !m_bindingCaptureActive) {
     emit modifierHeldChanged(backNow);
   }
   m_buttonA = aNow;

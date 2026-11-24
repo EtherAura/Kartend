@@ -10,28 +10,72 @@ void GamepadManager::setSuspended(bool suspended) {
   if (m_suspended == suspended) {
     return;
   }
+  const bool wasBlocked = dispatchBlocked();
   m_suspended = suspended;
-  if (suspended) {
-    // Drop any held direction + keyboard repeat so movement doesn't stick
-    // under the launched program. Reset directly rather than through
-    // applyActiveDirection(None): that path early-returns during binding
-    // capture, which would leave the held direction and repeat running (and
-    // m_activeDirection stale on resume). Gating the dispatch chokepoints
-    // keeps further presses/directions from routing until resume.
-    if (m_activeDirection != Direction::None) {
-      emit requestScrollAnimationStop();
-      m_activeDirection = Direction::None;
-      if (auto *kb = keyboardMgr()) {
-        kb->setPhysicalKeyDown(false);
-        kb->stopRepeat(false);
-      }
+  handleDispatchGateChange(wasBlocked);
+}
+
+void GamepadManager::onApplicationStateChanged(Qt::ApplicationState state) {
+  const bool inactive = state != Qt::ApplicationActive;
+  if (m_appInactive == inactive) {
+    return;
+  }
+  const bool wasBlocked = dispatchBlocked();
+  m_appInactive = inactive;
+  handleDispatchGateChange(wasBlocked);
+}
+
+void GamepadManager::handleDispatchGateChange(bool wasBlocked) {
+  const bool blocked = dispatchBlocked();
+  if (blocked == wasBlocked) {
+    return; // the other gate already holds it; nothing to enter or leave
+  }
+  // Focus is lost as the windows close on exit. The keyboard-manager calls
+  // below reach sibling managers that may already be destroyed by then
+  // (same hazard detachController guards against), so only the flag moves.
+  if (shuttingDown()) {
+    return;
+  }
+  // The modifier HUD follows Select's level, but its edges are only
+  // forwarded while unblocked — so hand it over at the gate instead: hide it
+  // on block (a release under the other window would never reach it) and
+  // show it again on unblock if Select is still down, since the
+  // Select+direction chord reads that level directly.
+  const bool hudFollowsSelect = m_buttonBack && !m_bindingCaptureActive;
+  if (!blocked) {
+    if (hudFollowsSelect) {
+      emit modifierHeldChanged(true);
     }
+    return;
+  }
+  // Drop any held direction + keyboard repeat so movement doesn't stick
+  // under the launched program or the focused window. Reset directly rather
+  // than through applyActiveDirection(None): that path early-returns during
+  // binding capture, which would leave the held direction and repeat running
+  // (and m_activeDirection stale on resume). Gating the dispatch chokepoints
+  // keeps further presses/directions from routing until resume.
+  if (m_activeDirection != Direction::None) {
+    emit requestScrollAnimationStop();
+    m_activeDirection = Direction::None;
+    if (auto *kb = keyboardMgr()) {
+      kb->setPhysicalKeyDown(false);
+      kb->stopRepeat(false);
+    }
+  }
+  // updateRightStickSection is gated off while blocked, so it could never
+  // stop this itself. m_rightStickDirection stays: a deflection held across
+  // the gate must not count as a fresh flick on resume.
+  if (m_rightStickScrollTimer) {
+    m_rightStickScrollTimer->stop();
+  }
+  if (hudFollowsSelect) {
+    emit modifierHeldChanged(false);
   }
 }
 
 void GamepadManager::updateDirectionFromInputs() {
 #if defined(KARTEND_HAS_QT_GAMEPAD) || defined(KARTEND_HAS_SDL2_GAMEPAD)
-  if (shuttingDown() || m_suspended) {
+  if (shuttingDown() || dispatchBlocked()) {
     return;
   }
 
@@ -55,7 +99,7 @@ void GamepadManager::updateDirectionFromInputs() {
 
 void GamepadManager::updateRightStickSection() {
 #if defined(KARTEND_HAS_QT_GAMEPAD) || defined(KARTEND_HAS_SDL2_GAMEPAD)
-  if (shuttingDown() || m_suspended || m_bindingCaptureActive) {
+  if (shuttingDown() || dispatchBlocked() || m_bindingCaptureActive) {
     return;
   }
   const bool enabled = !m_generalSettings || m_generalSettings->gamepad.gamepadRightStickSections;
@@ -73,7 +117,7 @@ void GamepadManager::updateRightStickSection() {
       m_rightStickScrollTimer = new QTimer(this);
       m_rightStickScrollTimer->setInterval(UIConstants::Gamepad::PANE_SCROLL_REPEAT_MS);
       connect(m_rightStickScrollTimer, &QTimer::timeout, this, [this]() {
-        if (shuttingDown() || m_suspended) {
+        if (shuttingDown() || dispatchBlocked()) {
           return;
         }
         emit requestPaneScroll(m_rightStickDirection == Direction::Up ? -1 : 1);
@@ -153,7 +197,7 @@ void GamepadManager::applyActiveDirection(Direction newDirection) {
 }
 
 void GamepadManager::handleMappedButtonPress(const QString &buttonName) {
-  if (shuttingDown() || m_suspended) {
+  if (shuttingDown() || dispatchBlocked()) {
     return;
   }
 
