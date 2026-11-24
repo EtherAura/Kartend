@@ -171,7 +171,7 @@ void GamepadManager::onButtonSelectChanged(bool pressed) {
   // also drives the modifier HUD.
   if (m_buttonBack != pressed) {
     m_buttonBack = pressed;
-    if (!shuttingDown() && !m_suspended && !m_bindingCaptureActive) {
+    if (!shuttingDown() && !dispatchBlocked() && !m_bindingCaptureActive) {
       emit modifierHeldChanged(pressed);
     }
   }

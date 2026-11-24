@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A controller used in another app no longer drives Kartend.** Kartend
+  read the controller even while another window had focus, so playing a game
+  started outside Kartend, from Steam or a browser for example, also moved
+  Kartend's selection, opened its sidebars and could launch items behind the
+  game. Kartend now ignores the controller until one of its windows has focus
+  again. The button press that closes the other app doesn't count in Kartend
+  either.
+
 - A console's Wikidata scrape no longer reports "nothing found" when the
   console's processor is the only detail Wikidata has. The processor's name is
   now saved as the collection's CPU, and rescraping such a console keeps the

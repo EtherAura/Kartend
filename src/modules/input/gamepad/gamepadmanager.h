@@ -63,6 +63,9 @@ public:
   // button edge-state stays synced (no phantom press on resume), but presses /
   // directions are not routed to the frontend. Entering suspend also clears any
   // held direction so movement doesn't stick under the launched program.
+  //
+  // Independent of the focus gate (Kartend-4nf4a): input is also blocked while
+  // no Kartend window has focus, and dispatch resumes only once BOTH are clear.
   void setSuspended(bool suspended);
 
 signals:
@@ -103,6 +106,20 @@ private:
   void handleMappedButtonPress(const QString &buttonName);
 
   [[nodiscard]] bool shuttingDown() const;
+
+  /// True while presses / directions must not reach the frontend: a launch
+  /// suspension (setSuspended) or no Kartend window having focus.
+  [[nodiscard]] bool dispatchBlocked() const { return m_suspended || m_appInactive; }
+
+  /// Kartend-4nf4a: the backends read the controller globally (SDL polls, Qt
+  /// Gamepad reads evdev), so without this a game played in ANOTHER window
+  /// drove Kartend's selection, sidebars and launches behind it. Wired to
+  /// QGuiApplication::applicationStateChanged; anything but Active blocks.
+  void onApplicationStateChanged(Qt::ApplicationState state);
+
+  /// Shared by setSuspended and onApplicationStateChanged: runs the
+  /// enter/leave side effects once, on the transition of dispatchBlocked().
+  void handleDispatchGateChange(bool wasBlocked);
 
   // Kartend-davi: read through the app context rather than caching the
   // sibling pointer. Stops the manager from drifting out of sync if
@@ -154,6 +171,9 @@ private:
 
   bool m_bindingCaptureActive = false;
   bool m_suspended = false;
+  // Seeded from QGuiApplication::applicationState() at construction, so a
+  // Kartend that starts behind another window ignores the pad until focused.
+  bool m_appInactive = false;
 
   Direction m_activeDirection = Direction::None;
 

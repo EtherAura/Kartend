@@ -6,7 +6,8 @@
  * combine, button-action resolution). These tests cover the manager logic
  * around it: settings-driven button→action dispatch, binding-capture mode,
  * suspend gating, the keyboard-repeat handshake on direction changes, and
- * the dpad/stick→signal pipeline. The backend callbacks (Qt6 Gamepad signals
+ * the dpad/stick→signal pipeline, and the application-focus gate
+ * (Kartend-4nf4a). The backend callbacks (Qt6 Gamepad signals
  * / SDL polling) need real hardware, so the test is a friend of the manager
  * and injects the same private state / calls the backends would.
  *
@@ -20,13 +21,11 @@
 #include "ikeyboardmanager.h"
 
 #include <memory>
+#include <QGuiApplication>
 #include <QSignalSpy>
 #include <QStringList>
 #include <QTest>
-
-#if defined(KARTEND_HAS_SDL2_GAMEPAD)
 #include <QTimer>
-#endif
 
 namespace {
 
@@ -111,6 +110,17 @@ private slots:
   void suspend_clearsHeldDirectionAndReleasesKeyboard();
   void suspend_resumeRestoresButtonDispatch();
 
+  // Application-focus gate (Kartend-4nf4a)
+  void focus_seededFromApplicationState();
+  void focus_applicationSignalDrivesGate();
+  void focus_lostDropsButtonsDirectionsAndRightStick();
+  void focus_lostClearsHeldDirectionAndReleasesKeyboard();
+  void focus_lostStopsRightStickPaneScroll();
+  void focus_heldDeflectionIsNoFreshFlickOnRefocus();
+  void focus_lostDropsBindingCapture();
+  void focus_handsModifierHudOverAtTheGate();
+  void focus_composesWithSuspend();
+
 private:
   // Calls the gated body; helper so backend-dependent slots can QSKIP in
   // one place on no-backend builds.
@@ -151,6 +161,10 @@ void TestGamepadManager::init() {
   setup.generalSettings = &m_settings;
   setup.isShuttingDown = &m_shutdown;
   m_mgr->setupReferences(setup);
+  // The manager seeds its focus gate from QGuiApplication::applicationState(),
+  // and nothing is focused under the test runner, so it starts blocked.
+  // Every slot except the focus_* ones wants a focused frontend.
+  m_mgr->onApplicationStateChanged(Qt::ApplicationActive);
   m_kb.log.clear();
 }
 
@@ -537,6 +551,170 @@ void TestGamepadManager::suspend_resumeRestoresButtonDispatch() {
   m_mgr->setSuspended(false);
   m_mgr->handleMappedButtonPress(QStringLiteral("A"));
   QCOMPARE(enter.count(), 1);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Application-focus gate (Kartend-4nf4a)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TestGamepadManager::focus_seededFromApplicationState() {
+  const GamepadManager fresh;
+  QCOMPARE(fresh.m_appInactive, QGuiApplication::applicationState() != Qt::ApplicationActive);
+}
+
+void TestGamepadManager::focus_applicationSignalDrivesGate() {
+  // Through the real QGuiApplication signal, not the private slot, so the
+  // constructor's connection is what's under test.
+  QSignalSpy enter(m_mgr.get(), &GamepadManager::requestEnterAction);
+
+  emit qApp->applicationStateChanged(Qt::ApplicationInactive);
+  m_mgr->handleMappedButtonPress(QStringLiteral("A"));
+  QCOMPARE(enter.count(), 0);
+
+  emit qApp->applicationStateChanged(Qt::ApplicationActive);
+  m_mgr->handleMappedButtonPress(QStringLiteral("A"));
+  QCOMPARE(enter.count(), 1);
+}
+
+void TestGamepadManager::focus_lostDropsButtonsDirectionsAndRightStick() {
+  QSignalSpy enter(m_mgr.get(), &GamepadManager::requestEnterAction);
+  QSignalSpy escape(m_mgr.get(), &GamepadManager::requestEscapeAction);
+  QSignalSpy sidebar(m_mgr.get(), &GamepadManager::requestToggleSidebarAction);
+  QSignalSpy move(m_mgr.get(), &GamepadManager::requestSelectionMove);
+  QSignalSpy flick(m_mgr.get(), &GamepadManager::requestRightStickFlick);
+
+  // Every state but Active blocks, not just Inactive.
+  m_mgr->onApplicationStateChanged(Qt::ApplicationHidden);
+  m_mgr->handleMappedButtonPress(QStringLiteral("A"));
+  m_mgr->handleMappedButtonPress(QStringLiteral("B"));
+  m_mgr->handleMappedButtonPress(QStringLiteral("R1"));
+  QCOMPARE(enter.count(), 0);
+  QCOMPARE(escape.count(), 0);
+  QCOMPARE(sidebar.count(), 0);
+
+  if (backendCompiledIn()) {
+    m_mgr->m_left = true;
+    m_mgr->updateDirectionFromInputs();
+    m_mgr->m_axisRightX = 1.0;
+    m_mgr->updateRightStickSection();
+    QCOMPARE(move.count(), 0);
+    QCOMPARE(flick.count(), 0);
+  }
+}
+
+void TestGamepadManager::focus_lostClearsHeldDirectionAndReleasesKeyboard() {
+  m_mgr->applyActiveDirection(GamepadHelpers::Direction::Right);
+
+  QSignalSpy scrollStop(m_mgr.get(), &GamepadManager::requestScrollAnimationStop);
+  m_kb.log.clear();
+
+  m_mgr->onApplicationStateChanged(Qt::ApplicationInactive);
+
+  // Same drop as a launch suspension: no repeat keeps scrolling the frontend
+  // underneath the window that took focus.
+  QCOMPARE(scrollStop.count(), 1);
+  const QStringList expected{QStringLiteral("physDown(false)"),
+                             QStringLiteral("stopRepeat(recenter)")};
+  QCOMPARE(m_kb.log, expected);
+  QCOMPARE(m_mgr->m_activeDirection, GamepadHelpers::Direction::None);
+}
+
+void TestGamepadManager::focus_lostStopsRightStickPaneScroll() {
+  if (!backendCompiledIn()) {
+    QSKIP("No gamepad backend compiled in; updateRightStickSection is a no-op");
+  }
+
+  m_mgr->m_axisRightY = 1.0; // held down: starts the pane-scroll repeat
+  m_mgr->updateRightStickSection();
+  QVERIFY(m_mgr->m_rightStickScrollTimer);
+  QVERIFY(m_mgr->m_rightStickScrollTimer->isActive());
+
+  // updateRightStickSection is gated off while blocked, so the gate itself
+  // has to stop the repeat.
+  m_mgr->onApplicationStateChanged(Qt::ApplicationInactive);
+  QVERIFY(!m_mgr->m_rightStickScrollTimer->isActive());
+}
+
+void TestGamepadManager::focus_heldDeflectionIsNoFreshFlickOnRefocus() {
+  if (!backendCompiledIn()) {
+    QSKIP("No gamepad backend compiled in; updateRightStickSection is a no-op");
+  }
+
+  QSignalSpy flick(m_mgr.get(), &GamepadManager::requestRightStickFlick);
+  m_mgr->m_axisRightX = 1.0;
+  m_mgr->updateRightStickSection();
+  QCOMPARE(flick.count(), 1);
+
+  // Still deflected across a focus round-trip: the same deflection, so no
+  // second hop on the way back.
+  m_mgr->onApplicationStateChanged(Qt::ApplicationInactive);
+  m_mgr->updateRightStickSection();
+  m_mgr->onApplicationStateChanged(Qt::ApplicationActive);
+  m_mgr->updateRightStickSection();
+  QCOMPARE(flick.count(), 1);
+}
+
+void TestGamepadManager::focus_lostDropsBindingCapture() {
+  QSignalSpy capture(m_mgr.get(), &GamepadManager::bindingCaptureButtonPressed);
+  m_mgr->beginBindingCapture();
+
+  // A press made in the other window must not become the new binding.
+  m_mgr->onApplicationStateChanged(Qt::ApplicationInactive);
+  m_mgr->handleMappedButtonPress(QStringLiteral("X"));
+  QCOMPARE(capture.count(), 0);
+
+  m_mgr->onApplicationStateChanged(Qt::ApplicationActive);
+  m_mgr->handleMappedButtonPress(QStringLiteral("X"));
+  QCOMPARE(capture.count(), 1);
+  QCOMPARE(capture.at(0).at(0).toString(), QStringLiteral("X"));
+}
+
+void TestGamepadManager::focus_handsModifierHudOverAtTheGate() {
+  QSignalSpy hud(m_mgr.get(), &GamepadManager::modifierHeldChanged);
+
+  // Nothing held: crossing the gate says nothing about the HUD.
+  m_mgr->onApplicationStateChanged(Qt::ApplicationInactive);
+  m_mgr->onApplicationStateChanged(Qt::ApplicationActive);
+  QCOMPARE(hud.count(), 0);
+
+  // Select held: the HUD hides on block (its release would arrive while
+  // blocked and never reach it) and returns on refocus while still held.
+  m_mgr->m_buttonBack = true;
+  m_mgr->onApplicationStateChanged(Qt::ApplicationInactive);
+  QCOMPARE(hud.count(), 1);
+  QCOMPARE(hud.at(0).at(0).toBool(), false);
+  m_mgr->onApplicationStateChanged(Qt::ApplicationActive);
+  QCOMPARE(hud.count(), 2);
+  QCOMPARE(hud.at(1).at(0).toBool(), true);
+}
+
+void TestGamepadManager::focus_composesWithSuspend() {
+  QSignalSpy enter(m_mgr.get(), &GamepadManager::requestEnterAction);
+  QSignalSpy hud(m_mgr.get(), &GamepadManager::modifierHeldChanged);
+  m_mgr->m_buttonBack = true; // makes each real gate transition observable
+
+  // Launch suspension first, then the launched program takes focus.
+  m_mgr->setSuspended(true);
+  m_mgr->onApplicationStateChanged(Qt::ApplicationInactive);
+  QCOMPARE(hud.count(), 1); // one transition, not one per gate
+
+  // Kartend regains focus while the tracked child still runs: stays blocked.
+  m_mgr->onApplicationStateChanged(Qt::ApplicationActive);
+  m_mgr->handleMappedButtonPress(QStringLiteral("A"));
+  QCOMPARE(enter.count(), 0);
+
+  // Lifting the suspension while another window has focus: still blocked.
+  m_mgr->onApplicationStateChanged(Qt::ApplicationInactive);
+  m_mgr->setSuspended(false);
+  m_mgr->handleMappedButtonPress(QStringLiteral("A"));
+  QCOMPARE(enter.count(), 0);
+  QCOMPARE(hud.count(), 1);
+
+  // Only with both gates clear does input reach the frontend again.
+  m_mgr->onApplicationStateChanged(Qt::ApplicationActive);
+  m_mgr->handleMappedButtonPress(QStringLiteral("A"));
+  QCOMPARE(enter.count(), 1);
+  QCOMPARE(hud.count(), 2);
 }
 
 QTEST_MAIN(TestGamepadManager)

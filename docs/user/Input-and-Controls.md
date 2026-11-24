@@ -318,6 +318,19 @@ next button event. Press `Escape` (or click outside) to cancel.
 Kartend listens to the first connected device. Hot-plugging is
 supported — connect or disconnect mid-session and the backend reattaches.
 
+### When another app has focus
+
+Kartend only acts on the controller while one of its own windows has
+focus. Switch to another app, such as a game started from Steam or a
+browser, and Kartend ignores the controller until you switch back.
+
+A button press made in the other app never counts in Kartend. That
+includes the press that closes the app, even if you are still holding
+the button when Kartend gets focus back. A D-pad direction or stick you
+are still holding does move the selection once Kartend has focus.
+
+The same applies while a program launched from Kartend is running.
+
 ## Binding visualizer
 
 **Help → Binding Visualizer…** opens an interactive reference for the
